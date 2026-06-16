@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-const ALLOWED_EMAIL = (process.env.ALLOWED_USER_EMAIL || 'andriosuroyo@gmail.com').toLowerCase();
+// The allowed-login set (UX gate). ALLOWED_USER_EMAIL is comma-separated — trim + lowercase each.
+// The AUTHORITATIVE gate is the DB's is_allowed_user() RLS function (migration 0016); keep its
+// email list in sync with this env var, or a user that passes here will be blocked by RLS.
+const ALLOWED_EMAILS = (process.env.ALLOWED_USER_EMAIL || 'andriosuroyo@gmail.com')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({ request: { headers: req.headers } });
@@ -47,7 +53,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if ((user.email || '').toLowerCase() !== ALLOWED_EMAIL) {
+  if (!ALLOWED_EMAILS.includes((user.email || '').toLowerCase())) {
     await supabase.auth.signOut();
     const url = req.nextUrl.clone();
     url.pathname = '/login';
