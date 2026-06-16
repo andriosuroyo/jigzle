@@ -8,7 +8,9 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "dev:calculator": "turbo run dev --filter=calculator",
     "build": "turbo run build",
+    "build:calculator": "turbo run build --filter=calculator",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && rm -rf node_modules"
