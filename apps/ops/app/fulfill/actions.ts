@@ -12,6 +12,7 @@ import type {
   Hold,
   PaymentStatus,
 } from '@jigzle/db/types';
+import type { FulfillDetail, FulfillInput, FulfillResult } from './types';
 
 // Most-recent N 'Need send' orders with unfulfilled lines. The queue is timestamp-derived
 // (D1), so there is no status to page on; cap the worklist and order by recency.
@@ -83,19 +84,7 @@ export async function getFulfillQueue(filterReadyOnly = false): Promise<FulfillQ
   return filterReadyOnly ? rows.filter((r) => r.ready) : rows;
 }
 
-// ── the detail pane ──
-export interface FulfillDetail {
-  sales_id: string;
-  customer_id: number | null;
-  customer_name: string | null;
-  customer_phone: string | null;
-  payment_status: PaymentStatus | null;
-  default_address_id: number | null; // the order's current address_id
-  lines: FulfillLine[];
-  addresses: CustomerAddress[];
-  holds: Hold[]; // active holds matching a line's item_code (and this customer / customer-agnostic)
-}
-
+// ── the detail pane ── (FulfillDetail lives in ./types)
 export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail | null> {
   const supabase = createSupabaseServerClient();
 
@@ -171,20 +160,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
   };
 }
 
-// ── commit the stock cut ──
-export interface FulfillInput {
-  sales_id: string;
-  line_ids: string[];
-  address_id: number;
-  courier: string | null;
-  tracking?: string | null;
-}
-
-export interface FulfillResult {
-  affected: string[]; // item_codes whose stock moved
-  stock: { item_code: string; available: number; reserved: number; physical: number }[];
-}
-
+// ── commit the stock cut ── (FulfillInput / FulfillResult live in ./types)
 export async function fulfillOrder(payload: FulfillInput): Promise<FulfillResult> {
   if (!payload.line_ids?.length) throw new Error('fulfillOrder: select at least one line');
   if (!payload.address_id) throw new Error('fulfillOrder: an address is required');

@@ -7,8 +7,16 @@
 // the second, authoritative gate.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { normalizePhone, tierFor, toNextTier, type Tier, type NextTier } from '@jigzle/lib';
+import { normalizePhone, tierFor, toNextTier } from '@jigzle/lib';
 import type { Customer, CustomerAddress } from '@jigzle/db/types';
+import type {
+  CustomerHit,
+  LoyaltyReadout,
+  NewCustomerInput,
+  NewAddressInput,
+  SkuHit,
+  CreateOrderInput,
+} from './types';
 
 type Supabase = ReturnType<typeof createSupabaseServerClient>;
 
@@ -36,15 +44,7 @@ async function lifetimeSpend(supabase: Supabase, customerIds: number[]): Promise
   return out;
 }
 
-// ── Panel 1: customer search (normalized phone + name, case-insensitive contains) ──
-export interface CustomerHit {
-  id: number;
-  name: string | null;
-  phone: string | null;
-  tier: Tier | null;
-  lifetime_spend: number;
-}
-
+// ── Panel 1: customer search (normalized phone + name, case-insensitive contains) ── (types in ./types)
 export async function searchCustomers(q: string): Promise<CustomerHit[]> {
   const raw = sanitize(q);
   if (raw.length < 2) return [];
@@ -78,12 +78,6 @@ export async function searchCustomers(q: string): Promise<CustomerHit[]> {
 }
 
 // ── Panel 1: loyalty readout for the selected customer ──
-export interface LoyaltyReadout {
-  tier: Tier | null;
-  lifetime_spend: number;
-  to_next_tier: NextTier | null;
-}
-
 export async function getLoyalty(customerId: number): Promise<LoyaltyReadout> {
   const supabase = createSupabaseServerClient();
   const spend = await lifetimeSpend(supabase, [customerId]);
@@ -92,12 +86,6 @@ export async function getLoyalty(customerId: number): Promise<LoyaltyReadout> {
 }
 
 // ── Panel 1: create-or-return customer (dedup on the normalized-phone unique index) ──
-export interface NewCustomerInput {
-  name: string;
-  phone: string;
-  channel?: string;
-}
-
 export async function createCustomer(
   input: NewCustomerInput
 ): Promise<{ customer: Customer; existed: boolean }> {
@@ -149,14 +137,6 @@ export async function getCustomerAddresses(customerId: number): Promise<Customer
   return data as CustomerAddress[];
 }
 
-export interface NewAddressInput {
-  recipient_name?: string;
-  contact_phone?: string;
-  raw_address: string;
-  kota?: string;
-  kode_pos?: string;
-}
-
 export async function createAddress(
   customerId: number,
   input: NewAddressInput
@@ -179,12 +159,6 @@ export async function createAddress(
 }
 
 // ── Panel 2: SKU search (catalogue text + barcode), with live stock_check.available ──
-export interface SkuHit {
-  item_code: string;
-  name: string;
-  available: number;
-}
-
 export async function searchSkus(q: string): Promise<SkuHit[]> {
   const raw = sanitize(q);
   if (raw.length < 2) return [];
@@ -239,29 +213,7 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
   }));
 }
 
-// ── Panel 5: save the order (atomic, via the create_order RPC) ──
-export interface OrderLineInput {
-  item_code: string;
-  qty: number;
-  unit_price_idr: number;
-  item_link?: string | null;
-  line_note?: string | null;
-}
-
-export interface OrderPaymentInput {
-  amount_idr: number;
-  method: string | null;
-  note?: string | null;
-}
-
-export interface CreateOrderInput {
-  customer_id: number | null;
-  address_id: number;
-  order_note?: string | null;
-  lines: OrderLineInput[];
-  payment: OrderPaymentInput | null;
-}
-
+// ── Panel 5: save the order (atomic, via the create_order RPC) ── (types in ./types)
 export async function createOrder(payload: CreateOrderInput): Promise<{ sales_id: string }> {
   if (!payload.lines?.length) throw new Error('createOrder: at least one line is required');
   if (!payload.address_id) throw new Error('createOrder: an address is required');

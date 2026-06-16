@@ -5,13 +5,8 @@ import Link from 'next/link';
 import { createSupabaseBrowserClient } from '@jigzle/db/client';
 import { volWeight, chargeable } from '@jigzle/lib';
 import type { ShipQueueRow } from '@jigzle/db/types';
-import {
-  getShipQueue,
-  getOrderForShip,
-  recordShipment,
-  type ShipDetail,
-  type ShipResult,
-} from '@/app/outbound/actions';
+import { getShipQueue, getOrderForShip, recordShipment } from '@/app/outbound/actions';
+import type { ShipDetail, ShipResult } from '@/app/outbound/types';
 
 const COURIERS = ['JNE', 'J&T', 'SiCepat', 'AnterAja', 'Ninja Xpress', 'POS Indonesia', 'TIKI', 'GoSend', 'GrabExpress', 'Lion Parcel', 'ID Express', 'Other'];
 

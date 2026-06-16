@@ -6,12 +6,16 @@
 // service-role key is never used here (the smoke harness uses it as a TEST harness only).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
+import type { ExpectedLine, ReceiveQueueRow, ShipmentContentLine } from '@jigzle/db/types';
 import type {
-  ExpectedLine,
-  InboundLabel,
-  ReceiveQueueRow,
-  ShipmentContentLine,
-} from '@jigzle/db/types';
+  ReceiveDetail,
+  ResolvedSku,
+  ResolveResult,
+  SkuHit,
+  StubInput,
+  RecordReceiptInput,
+  RecordReceiptResult,
+} from './types';
 
 type Supabase = ReturnType<typeof createSupabaseServerClient>;
 
@@ -83,17 +87,7 @@ export async function getReceiveQueue(): Promise<ReceiveQueueRow[]> {
   });
 }
 
-// ── the receive detail: the expected list (contents ∪ POs) + barcodes for scan resolution ──
-export interface ReceiveDetail {
-  ship_id: string;
-  origin_country: string | null;
-  ship_date: string | null;
-  tracking: string | null;
-  is_shipment: boolean; // the ship_id is a real shipments-ledger row (vs an ad-hoc id)
-  expected: ExpectedLine[];
-  barcodes: { barcode: string; item_code: string }[]; // for the expected SKUs (instant scan)
-}
-
+// ── the receive detail: the expected list (contents ∪ POs) + barcodes for scan resolution ── (types in ./types)
 export async function getShipmentForReceive(shipId: string): Promise<ReceiveDetail | null> {
   const supabase = createSupabaseServerClient();
   const sid = shipId.trim();
@@ -195,17 +189,7 @@ export async function getShipmentForReceive(shipId: string): Promise<ReceiveDeta
   };
 }
 
-// ── scan resolution: barcode → SKU, a collision picker (D1), or not-found (D2) ──
-export interface ResolvedSku {
-  item_code: string;
-  name: string;
-  is_verified: boolean;
-}
-export type ResolveResult =
-  | { status: 'resolved'; sku: ResolvedSku }
-  | { status: 'collision'; skus: ResolvedSku[] }
-  | { status: 'not_found'; code: string };
-
+// ── scan resolution: barcode → SKU, a collision picker (D1), or not-found (D2) ── (types in ./types)
 export async function resolveBarcode(code: string): Promise<ResolveResult> {
   const supabase = createSupabaseServerClient();
   const c = code.trim();
@@ -245,13 +229,7 @@ export async function resolveBarcode(code: string): Promise<ResolveResult> {
   return skus.length === 1 ? { status: 'resolved', sku: skus[0] } : { status: 'collision', skus };
 }
 
-// ── manual SKU search (catalogue text + barcode), with live available, for adding a line ──
-export interface SkuHit {
-  item_code: string;
-  name: string;
-  available: number;
-}
-
+// ── manual SKU search (catalogue text + barcode), with live available, for adding a line ── (SkuHit in ./types)
 export async function searchSkus(q: string): Promise<SkuHit[]> {
   const raw = sanitize(q);
   if (raw.length < 2) return [];
@@ -286,14 +264,7 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
   return codes.map((item_code) => ({ item_code, name: named.get(item_code)!, available: avail.get(item_code) ?? 0 }));
 }
 
-// ── D2: create a minimal needs_review SKU stub for an unknown barcode ──
-export interface StubInput {
-  item_code: string;
-  name: string;
-  brand_prefix?: string | null;
-  barcode?: string | null; // the scanned barcode to link to the new SKU
-}
-
+// ── D2: create a minimal needs_review SKU stub for an unknown barcode ── (StubInput in ./types)
 export async function createCatalogueStub(input: StubInput): Promise<SkuHit> {
   const supabase = createSupabaseServerClient();
   const item_code = input.item_code.trim();
@@ -336,25 +307,7 @@ export async function newAdhocShipId(): Promise<string> {
   return data as string;
 }
 
-// ── commit the receipt (atomic, via record_receipt) → refreshed stock ──
-export interface RecordReceiptLine {
-  item_code: string;
-  qty: number; // signed
-  excluded: boolean;
-  label: InboundLabel | null;
-  dimension_weight: string | null;
-}
-export interface RecordReceiptInput {
-  ship_id: string;
-  receive_date: string; // 'YYYY-MM-DD'
-  lines: RecordReceiptLine[];
-  close_shipment: boolean;
-}
-export interface RecordReceiptResult {
-  affected: string[];
-  stock: { item_code: string; available: number; physical: number; last_receive: string | null }[];
-}
-
+// ── commit the receipt (atomic, via record_receipt) → refreshed stock ── (types in ./types)
 export async function recordReceipt(payload: RecordReceiptInput): Promise<RecordReceiptResult> {
   if (!payload.ship_id?.trim()) throw new Error('recordReceipt: a ship id is required');
   if (!payload.lines?.length) throw new Error('recordReceipt: add at least one received line');

@@ -4,13 +4,8 @@ import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createSupabaseBrowserClient } from '@jigzle/db/client';
 import type { FulfillQueueRow } from '@jigzle/db/types';
-import {
-  getFulfillQueue,
-  getOrderForFulfill,
-  fulfillOrder,
-  type FulfillDetail,
-  type FulfillResult,
-} from '@/app/fulfill/actions';
+import { getFulfillQueue, getOrderForFulfill, fulfillOrder } from '@/app/fulfill/actions';
+import type { FulfillDetail, FulfillResult } from '@/app/fulfill/types';
 
 const COURIERS = ['JNE', 'J&T', 'SiCepat', 'AnterAja', 'Ninja Xpress', 'POS Indonesia', 'TIKI', 'GoSend', 'GrabExpress', 'Lion Parcel', 'ID Express', 'Other'];
 

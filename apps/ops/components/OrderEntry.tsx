@@ -12,10 +12,8 @@ import {
   createAddress,
   searchSkus,
   createOrder,
-  type CustomerHit,
-  type LoyaltyReadout,
-  type SkuHit,
 } from '@/app/sales/actions';
+import type { CustomerHit, LoyaltyReadout, SkuHit } from '@/app/sales/types';
 
 const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEBSITE', 'LINE', 'OTHER'];
 const METHODS = ['BCA', 'Shopee', 'Tokopedia', 'Mandiri', 'Deposit', 'Website', 'Cash', 'Socmed'];

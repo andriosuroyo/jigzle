@@ -12,10 +12,12 @@ next-env.d.ts
 .DS_Store
 
 # ── Customer PII / data-lift inputs — DATA, not app code; never commit ──
+# Leading slash = repo-root only, so these do NOT match nested app dirs like
+# apps/ops/app/outbound/ (an unanchored `outbound/` swallowed that whole module).
 # Source workbooks: full customer / sales / outbound history (names, phones, addresses).
-migration/
+/migration/
 # TIKI courier PDFs + reconciliation xlsx — receiver names + addresses.
-outbound/
+/outbound/
 # Any row-level data dumps an import/smoke run might drop next to the code.
 scripts/**/*.csv
 scripts/**/*.xlsx
