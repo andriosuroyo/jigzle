@@ -86,15 +86,17 @@ alter table public.calculations      enable row level security;
 alter table public.user_prefs        enable row level security;
 
 -- Helper: only the allowed email may access.
--- Set the allowed email as a database setting OR hardcode below.
--- We hardcode here to keep deploy simple. Change if you need to rotate.
+-- Reads the email from the session JWT claims (auth.jwt()) rather than from
+-- auth.users — the `authenticated` role can't see auth.users, so a subquery
+-- against it silently returns NULL and blocks everything. See docs/001 for
+-- the full story. Change the comparison if you ever need to rotate the email.
 create or replace function public.is_allowed_user()
 returns boolean
 language sql
 stable
 as $$
   select coalesce(
-    (select email from auth.users where id = auth.uid()) = 'andriosuroyo@gmail.com',
+    (auth.jwt() ->> 'email') = 'andriosuroyo@gmail.com',
     false
   );
 $$;

@@ -1,0 +1,2 @@
+# Jigzle importer — only one third-party dependency; everything else is stdlib.
+openpyxl>=3.1
