@@ -181,16 +181,39 @@ export type Catalogue = {
   updated_at: string;
 };
 
-// One row per catalogue SKU from the live stock_check view (0009).
+// One row from the stock_snapshot materialized view (0019) — the Inventory screen's read model:
+// the stock_check (0009) aggregates per ACTIVE SKU (pending / on_the_way / physical > 0), joined to
+// its catalogue name + brand, plus the snapshot's refresh time. Inventory's three states map to
+// On order = pending, Being shipped = on_the_way, In warehouse = physical.
 export type StockRow = {
   item_code: string;
-  available: number;
-  physical: number;
-  reserved: number;
-  on_hold: number;
-  pending: number;
-  on_the_way: number;
+  name: string | null;          // coalesce(translate_name, original_name)
+  brand_prefix: string | null;
+  pending: number;              // On order  (PO status Processing)
+  on_the_way: number;           // Being shipped (PO status On the way / With Forwarder)
+  physical: number;             // In warehouse (on the shelf now)
+  available: number;            // sellable now
+  reserved: number;             // secondary (fulfilled, not shipped)
+  on_hold: number;              // secondary (active holds)
   last_receive: string | null;
+  refreshed_at: string;         // ISO timestamp — same for every row in a given refresh
+};
+
+// Inventory screen filter (read-only): substring search on item_code/name, a three-state quick
+// filter, and a sortable column. state 'all' = any of the three states > 0 (the active set).
+export type InventoryState = 'all' | 'on_order' | 'shipping' | 'warehouse';
+export type InventorySortColumn =
+  | 'item_code'
+  | 'name'
+  | 'pending'
+  | 'on_the_way'
+  | 'physical'
+  | 'available'
+  | 'last_receive';
+export type InventoryFilter = {
+  search?: string;
+  state?: InventoryState;
+  sort?: { column: InventorySortColumn; dir: 'asc' | 'desc' };
 };
 
 // ── Fulfill module (Sales pipeline step 4) ────────────────────────────────────

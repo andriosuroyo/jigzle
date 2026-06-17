@@ -31,6 +31,10 @@ export default function Home() {
           <div className="hub-card-title">Receiving</div>
           <div className="hub-card-sub">Check arrivals into stock — the only "+" side.</div>
         </Link>
+        <Link href="/inventory" className="hub-card">
+          <div className="hub-card-title">Inventory</div>
+          <div className="hub-card-sub">Stock per SKU — on order, being shipped, in warehouse.</div>
+        </Link>
       </div>
     </div>
   );
