@@ -11,6 +11,10 @@ export default function Home() {
         <div className="title">Jigzle Ops</div>
       </header>
       <div className="hub">
+        <Link href="/procurement" className="hub-card">
+          <div className="hub-card-title">Procurement</div>
+          <div className="hub-card-sub">Enter & advance purchase orders; group them into shipments.</div>
+        </Link>
         <Link href="/sales/new" className="hub-card">
           <div className="hub-card-title">Sales</div>
           <div className="hub-card-sub">Take a new order — customer, items, payment.</div>
