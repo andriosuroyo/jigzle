@@ -4,12 +4,12 @@ import type { Currency } from '@jigzle/db/types';
 
 export const dynamic = 'force-dynamic';
 
-const ALLOWED_EMAIL = (process.env.ALLOWED_USER_EMAIL || 'andriosuroyo@gmail.com').toLowerCase();
-
 export async function POST() {
   const supabase = createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user || (user.email || '').toLowerCase() !== ALLOWED_EMAIL) {
+  // Allow-list check via the DB function that reads public.allowed_users (migration 0017).
+  const { data: allowed } = await supabase.rpc('is_allowed_user');
+  if (!user || !allowed) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
