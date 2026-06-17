@@ -4,14 +4,15 @@ import { createSupabaseServerClient } from '@jigzle/db/server';
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
-  const allowed = (process.env.ALLOWED_USER_EMAIL || 'andriosuroyo@gmail.com').toLowerCase();
 
   if (code) {
     const supabase = createSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || (user.email || '').toLowerCase() !== allowed) {
+      // Authoritative allow-list check: the DB function reads public.allowed_users (migration 0017).
+      const { data: allowed } = await supabase.rpc('is_allowed_user');
+      if (!user || !allowed) {
         await supabase.auth.signOut();
         return NextResponse.redirect(new URL('/login?error=unauthorized', url.origin));
       }
