@@ -1,8 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { createSupabaseBrowserClient } from '@jigzle/db/client';
+import { useRef, useState } from 'react';
+import AppHeader from '@/components/AppHeader';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import {
   addBarcode,
@@ -130,8 +129,6 @@ export default function CatalogueBoard({
   initialShared: CollisionRow[];
   userEmail: string;
 }) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
   const [tab, setTab] = useState<Tab>('all');
   const [needsReview, setNeedsReview] = useState<CatalogueListRow[]>(initialNeedsReview);
   const [shared, setShared] = useState<CollisionRow[]>(initialShared);
@@ -326,29 +323,11 @@ export default function CatalogueBoard({
     }
   }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
-
   const listForTab: CatalogueListRow[] = tab === 'needs' ? needsReview : results;
 
   return (
     <div className="ops">
-      <header className="app-header">
-        <div className="logo">J</div>
-        <div className="title">Jigzle Ops</div>
-        <nav className="topnav">
-          <Link href="/procurement">Procurement</Link>
-          <Link href="/receiving">Receiving</Link>
-          <Link href="/sales/new">Sales</Link>
-          <Link href="/fulfill">Fulfill</Link>
-          <Link href="/outbound">Outbound</Link>
-          <Link href="/inventory">Inventory</Link>
-          <Link href="/catalogue" className="active">Catalogue</Link>
-        </nav>
-        <button className="signout" onClick={signOut} title={userEmail}>Sign out</button>
-      </header>
+      <AppHeader active="catalogue" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Left: tabs + list ── */}

@@ -1,15 +1,16 @@
 import Link from 'next/link';
+import { createSupabaseServerClient } from '@jigzle/db/server';
+import AppHeader from '@/components/AppHeader';
 
 export const dynamic = 'force-dynamic';
 
 // Ops home — nav hub. Modules land here as they ship (Sales, Fulfill, then Outbound…).
-export default function Home() {
+export default async function Home() {
+  const supabase = createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
   return (
     <div className="ops">
-      <header className="app-header">
-        <div className="logo">J</div>
-        <div className="title">Jigzle Ops</div>
-      </header>
+      <AppHeader userEmail={user?.email || ''} />
       <div className="hub">
         <Link href="/procurement" className="hub-card">
           <div className="hub-card-title">Procurement</div>

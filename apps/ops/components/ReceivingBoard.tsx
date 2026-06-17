@@ -1,8 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { createSupabaseBrowserClient } from '@jigzle/db/client';
+import AppHeader from '@/components/AppHeader';
 import type { ExpectedLine, InboundLabel, ReceiveLine, ReceiveQueueRow } from '@jigzle/db/types';
 import {
   getReceiveQueue,
@@ -34,8 +33,6 @@ export default function ReceivingBoard({
   initialQueue: ReceiveQueueRow[];
   userEmail: string;
 }) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
   const [queue, setQueue] = useState<ReceiveQueueRow[]>(initialQueue);
   const [selected, setSelected] = useState<string | null>(null); // ship_id, or ADHOC_SENTINEL
   const [detail, setDetail] = useState<ReceiveDetail | null>(null);
@@ -327,26 +324,11 @@ export default function ReceivingBoard({
     }
   }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
-
   const headerTitle = mode === 'adhoc' ? 'Ad-hoc receive' : detail?.ship_id ?? '';
 
   return (
     <div className="ops">
-      <header className="app-header">
-        <div className="logo">J</div>
-        <div className="title">Jigzle Ops</div>
-        <nav className="topnav">
-          <Link href="/sales/new">Sales</Link>
-          <Link href="/fulfill">Fulfill</Link>
-          <Link href="/outbound">Outbound</Link>
-          <Link href="/receiving" className="active">Receiving</Link>
-        </nav>
-        <button className="signout" onClick={signOut} title={userEmail}>Sign out</button>
-      </header>
+      <AppHeader active="receiving" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Arrivals queue ── */}
