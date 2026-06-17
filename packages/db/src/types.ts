@@ -355,3 +355,97 @@ export type ReceiveLine = {
   label: InboundLabel | null;
   dimension_weight: string | null;
 };
+
+// ── Procurement module (the buying pipeline BEFORE Receiving) ─────────────────
+// purchase_orders / suppliers / forwarders (0007). Procurement creates + advances open POs
+// and groups them into a forwarder shipment; Receiving owns the terminal 'Received' (set by
+// record_receipt, 0015). Column names mirror 0007_procurement.sql exactly.
+export type POStatus = 'Processing' | 'On the way' | 'With Forwarder' | 'Received';
+// the three states Procurement may set (Receiving owns 'Received')
+export type POOpenStatus = 'Processing' | 'On the way' | 'With Forwarder';
+export type SupplierType = 'Taobao account' | 'agent' | 'marketplace' | 'other';
+
+export type PurchaseOrder = {
+  po_id: number;
+  encrypt: string | null;            // legacy import key only (D2 — no new PO number)
+  supplier_id: number | null;
+  item_code: string | null;          // FK → catalogue
+  item_code_raw: string | null;
+  qty: number;                       // >= 0
+  status: POStatus | null;
+  status_since: string | null;
+  item_cost: number | null;          // supplier-currency unit cost (no conversion in v1)
+  method: string | null;             // domestic courier (EMS / ZTO / SF / ...)
+  ship_id: string | null;            // soft join to shipments
+  customs_value_usd: number | null;
+  tracking_to_wh: string | null;
+  tracking_to_forwarder: string | null;
+  tracking_to_jigzle: string | null;
+  marketplace_order_id: string | null; // Taobao order id (text — 19-digit ids overflow int)
+  customer_id: number | null;        // optional: item wanted by a customer
+  item_note: string | null;
+  shipment_note: string | null;
+  input_date: string | null;
+  receive_date: string | null;
+  created_at: string;
+};
+
+export type Supplier = {
+  supplier_id: number;
+  name: string;                      // unique
+  country: string | null;
+  flag: string | null;               // leading flag emoji
+  type: SupplierType | null;
+  created_at: string;
+};
+
+export type Forwarder = {
+  prefix: string;                    // ship_id prefix (PK): CBL, MTE, SUB, LGB, ...
+  name: string | null;
+  country: string | null;
+  created_at: string;
+};
+
+// One row in the open-PO queue (status <> 'Received', newest first), with resolved SKU /
+// supplier / customer names plus the editable fields so selecting a row prefills the edit
+// form without a refetch.
+export type OpenPORow = {
+  po_id: number;
+  item_code: string | null;
+  item_code_raw: string | null;
+  name: string;                      // resolved catalogue name (falls back to the code)
+  qty: number;
+  status: POStatus | null;
+  status_since: string | null;
+  ship_id: string | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  item_cost: number | null;
+  method: string | null;
+  marketplace_order_id: string | null;
+  customer_id: number | null;
+  customer_name: string | null;
+  item_note: string | null;
+};
+
+// createPO input — supplier_id + item_code required, qty >= 0; everything else optional.
+export type NewPOInput = {
+  supplier_id: number;
+  item_code: string;
+  qty: number;
+  item_cost?: number | null;
+  method?: string | null;
+  marketplace_order_id?: string | null;
+  customer_id?: number | null;
+  item_note?: string | null;
+};
+
+// groupIntoShipment payload → the group_pos_into_shipment RPC (0018). ship_id is free text in
+// the '<PREFIX> <n>' form (no allocator — forwarder ship-ids are externally assigned).
+export type GroupShipmentInput = {
+  ship_id: string;
+  po_ids: number[];
+  forwarder_prefix: string;
+  origin_country?: string | null;
+  ship_date?: string | null;         // 'YYYY-MM-DD'
+};

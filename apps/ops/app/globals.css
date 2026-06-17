@@ -245,6 +245,34 @@ input, textarea, select, button { font-family: inherit; }
 .rcv-dim { flex: 1; min-width: 120px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
 .rcv-close { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); padding: 6px 0; }
 
+/* ── Procurement: queue filters, group bar, PO form ── */
+.po-filters { display: flex; gap: 6px; padding: 8px 8px 0; }
+.po-filters select { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; background: var(--cream); }
+.po-newbtn { padding: 8px; }
+.po-row-wrap { display: flex; align-items: center; gap: 8px; }
+.po-row-wrap .po-check { flex-shrink: 0; width: 16px; height: 16px; }
+.po-row-wrap .fq-row { flex: 1; min-width: 0; }
+.po-status { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; margin-left: auto; white-space: nowrap; }
+.po-status.processing { background: var(--yellow-tint); color: #9C6F1C; }
+.po-status.ontheway   { background: var(--orange-tint); color: #8A5A1A; }
+.po-status.forwarder  { background: var(--green-tint); color: #3D6B26; }
+.po-group-bar { margin: 8px; padding: 10px; background: var(--orange-tint); border: 1px solid var(--orange); border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+.po-group-bar .gb-count { font-size: 12px; font-weight: 700; color: var(--brown-dark); }
+
+.po-form { display: flex; flex-direction: column; }
+.po-field { margin-bottom: 12px; }
+.po-field > label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field select, .po-field textarea {
+  width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream);
+}
+.po-field textarea { min-height: 48px; resize: vertical; }
+.po-inline { display: flex; gap: 8px; }
+.po-inline > .po-field { flex: 1; min-width: 0; }
+.po-current { background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; }
+.po-detach { margin-left: auto; flex-shrink: 0; }
+.po-sku-hit .po-sku-meta { font-size: 11px; color: var(--muted); }
+.po-sku-hit .po-sku-meta b { color: var(--ink); }
+
 /* ── Success ── */
 .success-wrap { display: flex; justify-content: center; padding: 40px 18px; }
 .success-card { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 28px; max-width: 360px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
