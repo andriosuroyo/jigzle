@@ -1,8 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { createSupabaseBrowserClient } from '@jigzle/db/client';
+import AppHeader from '@/components/AppHeader';
 import { volWeight, chargeable } from '@jigzle/lib';
 import type { ShipQueueRow } from '@jigzle/db/types';
 import { getShipQueue, getOrderForShip, recordShipment } from '@/app/outbound/actions';
@@ -26,8 +25,6 @@ export default function OutboundBoard({
   initialQueue: ShipQueueRow[];
   userEmail: string;
 }) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
   const [queue, setQueue] = useState<ShipQueueRow[]>(initialQueue);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<ShipDetail | null>(null);
@@ -181,24 +178,9 @@ export default function OutboundBoard({
     }
   }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
-
   return (
     <div className="ops">
-      <header className="app-header">
-        <div className="logo">J</div>
-        <div className="title">Jigzle Ops</div>
-        <nav className="topnav">
-          <Link href="/sales/new">Sales</Link>
-          <Link href="/fulfill">Fulfill</Link>
-          <Link href="/outbound" className="active">Outbound</Link>
-          <Link href="/receiving">Receiving</Link>
-        </nav>
-        <button className="signout" onClick={signOut} title={userEmail}>Sign out</button>
-      </header>
+      <AppHeader active="outbound" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Queue ── */}

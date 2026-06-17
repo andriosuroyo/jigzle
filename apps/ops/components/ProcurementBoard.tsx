@@ -1,8 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { createSupabaseBrowserClient } from '@jigzle/db/client';
+import AppHeader from '@/components/AppHeader';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
   addForwarder,
@@ -102,8 +101,6 @@ export default function ProcurementBoard({
   shipments: OpenShipmentRow[];
   userEmail: string;
 }) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
   const [forwarders, setForwarders] = useState<Forwarder[]>(initialForwarders);
@@ -462,25 +459,9 @@ export default function ProcurementBoard({
     }
   }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
-
   return (
     <div className="ops">
-      <header className="app-header">
-        <div className="logo">J</div>
-        <div className="title">Jigzle Ops</div>
-        <nav className="topnav">
-          <Link href="/procurement" className="active">Procurement</Link>
-          <Link href="/receiving">Receiving</Link>
-          <Link href="/sales/new">Sales</Link>
-          <Link href="/fulfill">Fulfill</Link>
-          <Link href="/outbound">Outbound</Link>
-        </nav>
-        <button className="signout" onClick={signOut} title={userEmail}>Sign out</button>
-      </header>
+      <AppHeader active="procurement" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Open-PO queue ── */}

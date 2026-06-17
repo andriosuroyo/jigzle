@@ -1,8 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { createSupabaseBrowserClient } from '@jigzle/db/client';
+import { useRef, useState } from 'react';
+import AppHeader from '@/components/AppHeader';
 import type { InventoryFilter, InventorySortColumn, InventoryState, StockRow } from '@jigzle/db/types';
 import { getInventory, refreshSnapshot } from '@/app/inventory/actions';
 
@@ -46,8 +45,6 @@ export default function InventoryBoard({
   refreshedAt: string | null;
   userEmail: string;
 }) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
   const [rows, setRows] = useState<StockRow[]>(initialRows);
   const [search, setSearch] = useState('');
   const [state, setState] = useState<InventoryState>('all');
@@ -103,28 +100,11 @@ export default function InventoryBoard({
     }
   }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
-
   const truncated = rows.length >= ROW_LIMIT;
 
   return (
     <div className="ops">
-      <header className="app-header">
-        <div className="logo">J</div>
-        <div className="title">Jigzle Ops</div>
-        <nav className="topnav">
-          <Link href="/procurement">Procurement</Link>
-          <Link href="/receiving">Receiving</Link>
-          <Link href="/sales/new">Sales</Link>
-          <Link href="/fulfill">Fulfill</Link>
-          <Link href="/outbound">Outbound</Link>
-          <Link href="/inventory" className="active">Inventory</Link>
-        </nav>
-        <button className="signout" onClick={signOut} title={userEmail}>Sign out</button>
-      </header>
+      <AppHeader active="inventory" userEmail={userEmail} />
 
       <div className="inv-wrap">
         <div className="inv-bar">

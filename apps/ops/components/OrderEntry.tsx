@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createSupabaseBrowserClient } from '@jigzle/db/client';
 import { fmtRp } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
+import AppHeader from '@/components/AppHeader';
 import {
   searchCustomers,
   createCustomer,
@@ -37,8 +37,6 @@ function addressLine(a: CustomerAddress): string {
 }
 
 export default function OrderEntry({ userEmail }: { userEmail: string }) {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-
   // Panel 1 — customer
   const [customer, setCustomer] = useState<CustomerHit | null>(null);
   const [loyalty, setLoyalty] = useState<LoyaltyReadout | null>(null);
@@ -232,20 +230,11 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
     setError(null); setResult(null);
   }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-  }
-
   // ── success screen ──
   if (result) {
     return (
       <div className="ops">
-        <header className="app-header">
-          <div className="logo">J</div>
-          <div className="title">Jigzle Ops · Sales</div>
-          <button className="signout" onClick={signOut} title={userEmail}>Sign out</button>
-        </header>
+        <AppHeader active="sales" userEmail={userEmail} />
         <div className="success-wrap">
           <div className="success-card">
             <div className="success-check">✓</div>
@@ -265,11 +254,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
 
   return (
     <div className="ops">
-      <header className="app-header">
-        <div className="logo">J</div>
-        <div className="title">Jigzle Ops · Sales</div>
-        <button className="signout" onClick={signOut} title={userEmail}>Sign out</button>
-      </header>
+      <AppHeader active="sales" userEmail={userEmail} />
 
       <div className="ops-layout">
         <main className="ops-main">
