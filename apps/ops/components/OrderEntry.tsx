@@ -14,6 +14,8 @@ import {
   createOrder,
 } from '@/app/sales/actions';
 import type { CustomerHit, LoyaltyReadout, SkuHit } from '@/app/sales/types';
+import SkuImage from '@/components/SkuImage';
+import { useSkuImages } from '@/components/useSkuImages';
 
 const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEBSITE', 'LINE', 'OTHER'];
 const METHODS = ['BCA', 'Shopee', 'Tokopedia', 'Mandiri', 'Deposit', 'Website', 'Cash', 'Socmed'];
@@ -88,6 +90,10 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
   const balance = subtotal - paid;
   const status = deriveStatus(subtotal, paid);
   const canSave = !!customer && lines.length > 0 && addressId != null && !saving;
+
+  // SKU images for the visible items (picker results + order lines) — one batch read, lazy.
+  const imgCodes = useMemo(() => [...skuResults.map((s) => s.item_code), ...lines.map((l) => l.item_code)], [skuResults, lines]);
+  const imgMap = useSkuImages(imgCodes);
 
   // ── debounced searches ──
   useEffect(() => {
@@ -371,6 +377,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                     return (
                       <li key={s.item_code} className="sku-result">
                         <div className="sku-line">
+                          <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={36} />
                           <span className="sku-code">{s.item_code}</span>
                           <span className="sku-name">{s.name}</span>
                           <span className={`sku-avail ${low ? 'low' : ''}`}>avail {s.available}</span>
@@ -395,6 +402,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                 <ul className="lines-list">
                   {lines.map((l, i) => (
                     <li key={`${l.item_code}-${i}`} className="line-item">
+                      <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={32} />
                       <span className="li-qty">{l.qty}×</span>
                       <span className="li-name">{l.name}<em>{l.item_code}</em></span>
                       <span className="li-total">{fmtRp(l.qty * l.unit_price_idr)}</span>
