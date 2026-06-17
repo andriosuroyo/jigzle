@@ -273,6 +273,30 @@ input, textarea, select, button { font-family: inherit; }
 .po-sku-hit .po-sku-meta { font-size: 11px; color: var(--muted); }
 .po-sku-hit .po-sku-meta b { color: var(--ink); }
 
+/* ── Inventory (Stock Check) — single pane: filter bar + sortable table ── */
+.inv-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.inv-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.inv-search { flex: 1; min-width: 220px; display: flex; gap: 8px; }
+.inv-search input { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
+.inv-asof { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.inv-states { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.inv-state { font-size: 12px; font-weight: 600; padding: 6px 12px; border: 1px solid var(--line); border-radius: 20px; background: white; color: var(--muted); cursor: pointer; }
+.inv-state.active { background: var(--orange-tint); border-color: var(--orange); color: #8A5A1A; }
+.inv-table-wrap { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: 74vh; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.inv-table th { text-align: left; padding: 9px 12px; background: var(--paper); color: var(--brown-dark); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; white-space: nowrap; position: sticky; top: 0; user-select: none; }
+.inv-table th:hover { color: var(--brown); }
+.inv-table th.num, .inv-table td.num { text-align: right; }
+.inv-table th .sort-ind { color: var(--orange); margin-left: 4px; font-size: 10px; }
+.inv-table td { padding: 8px 12px; border-top: 1px solid var(--line); }
+.inv-table tbody tr:hover { background: var(--cream); }
+.inv-code { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--brown); white-space: nowrap; }
+.inv-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-num { font-variant-numeric: tabular-nums; }
+.inv-num.zero { color: var(--muted); }
+.inv-empty { padding: 30px; text-align: center; color: var(--muted); }
+.inv-count { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
 /* ── Success ── */
 .success-wrap { display: flex; justify-content: center; padding: 40px 18px; }
 .success-card { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 28px; max-width: 360px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
