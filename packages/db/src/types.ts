@@ -202,6 +202,37 @@ export type CollisionRow = {
   item_codes: string[];
 };
 
+// ── SKU images (docs/011, 0021) ───────────────────────────────────────────────
+// has_image = a Drive file matched (authoritative); not_found = no file + ColJ 🖼️; pending = the
+// work queue (no file, ColJ ? or blank). Display-only: the bucket holds one ~400px display.webp
+// per SKU (the primary); originals stay in Drive.
+export type ImageStatus = 'has_image' | 'not_found' | 'pending';
+
+// One candidate file row from sku_images (0021) — metadata only; display_path is the bucket path
+// of the generated display.webp, set on the primary alone.
+export type SkuImage = {
+  id: string;
+  item_code: string;
+  source: 'edited' | 'pre';
+  variant: string;
+  source_path: string;
+  display_path: string | null;
+  width: number | null;
+  height: number | null;
+  bytes: number | null;
+  content_hash: string | null;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+// One row of the sku_image_resolved view (0021) — the app's only image read (path, never bytes).
+export type SkuImageResolved = {
+  item_code: string;
+  image_status: ImageStatus;
+  display_path: string | null;
+};
+
 // One row from the stock_snapshot materialized view (0019) — the Inventory screen's read model:
 // the stock_check (0009) aggregates per ACTIVE SKU (pending / on_the_way / physical > 0), joined to
 // its catalogue name + brand, plus the snapshot's refresh time. Inventory's three states map to
