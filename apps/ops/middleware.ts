@@ -1,13 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-// The allowed-login set (UX gate). ALLOWED_USER_EMAIL is comma-separated — trim + lowercase each.
-// The AUTHORITATIVE gate is the DB's is_allowed_user() RLS function (migration 0016); keep its
-// email list in sync with this env var, or a user that passes here will be blocked by RLS.
-const ALLOWED_EMAILS = (process.env.ALLOWED_USER_EMAIL || 'andriosuroyo@gmail.com')
-  .split(',')
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
+// The allow-list lives in ONE place: the DB's public.allowed_users table, read by the
+// is_allowed_user() RLS function (migration 0017). This UX gate asks that same function via RPC,
+// so there is no env var or code list to keep in sync — add/remove a user with a single row in
+// allowed_users and every gate (this one, the auth callback, and table RLS) follows.
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({ request: { headers: req.headers } });
@@ -53,7 +50,9 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (!ALLOWED_EMAILS.includes((user.email || '').toLowerCase())) {
+  // Authoritative allow-list check: ask the DB function that reads public.allowed_users.
+  const { data: allowed } = await supabase.rpc('is_allowed_user');
+  if (!allowed) {
     await supabase.auth.signOut();
     const url = req.nextUrl.clone();
     url.pathname = '/login';

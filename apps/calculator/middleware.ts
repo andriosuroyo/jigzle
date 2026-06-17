@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-const ALLOWED_EMAIL = (process.env.ALLOWED_USER_EMAIL || 'andriosuroyo@gmail.com').toLowerCase();
+// Allow-list source of truth is the DB's public.allowed_users table, read via is_allowed_user()
+// (migration 0017). No env var to maintain — shared with the ops app and table RLS.
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({ request: { headers: req.headers } });
@@ -47,7 +48,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if ((user.email || '').toLowerCase() !== ALLOWED_EMAIL) {
+  const { data: allowed } = await supabase.rpc('is_allowed_user');
+  if (!allowed) {
     await supabase.auth.signOut();
     const url = req.nextUrl.clone();
     url.pathname = '/login';
