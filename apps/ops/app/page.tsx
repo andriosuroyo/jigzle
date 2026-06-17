@@ -35,6 +35,10 @@ export default function Home() {
           <div className="hub-card-title">Inventory</div>
           <div className="hub-card-sub">Stock per SKU — on order, being shipped, in warehouse.</div>
         </Link>
+        <Link href="/catalogue" className="hub-card">
+          <div className="hub-card-title">Catalogue</div>
+          <div className="hub-card-sub">Edit SKUs & barcodes; needs-review &amp; shared-barcode cleanup.</div>
+        </Link>
       </div>
     </div>
   );

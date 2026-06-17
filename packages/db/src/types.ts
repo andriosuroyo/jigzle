@@ -177,8 +177,29 @@ export type Catalogue = {
   location: string | null;
   image: string | null;
   has_image: boolean;
+  needs_review: boolean;             // 0015 — receive-time SKU stubs flagged for admin review
   created_at: string;
   updated_at: string;
+};
+
+// ── Catalogue (SKU) editor (docs/010 §2) ──────────────────────────────────────
+// The editor reads/writes the full catalogue row (every column editable EXCEPT item_code) and
+// manages a SKU's barcode links against the composite (barcode, item_code) model (0020).
+export type CatalogueRow = Catalogue;
+
+// One barcode link on a SKU, in the per-SKU barcode manager. shared = the same barcode is also on
+// another SKU (composite key) → marked, and resolvable in the shared-barcodes tab.
+export type BarcodeLink = {
+  barcode: string;
+  is_verified: boolean;
+  shared: boolean;
+};
+
+// One shared barcode from the barcode_collisions view (0020): the code + how many SKUs carry it.
+export type CollisionRow = {
+  barcode: string;
+  n: number;
+  item_codes: string[];
 };
 
 // One row from the stock_snapshot materialized view (0019) — the Inventory screen's read model:
