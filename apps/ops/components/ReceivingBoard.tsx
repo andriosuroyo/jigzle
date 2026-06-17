@@ -14,6 +14,8 @@ import {
   recordReceipt,
 } from '@/app/receiving/actions';
 import type { ReceiveDetail, ResolvedSku, RecordReceiptResult, SkuHit } from '@/app/receiving/types';
+import SkuImage from '@/components/SkuImage';
+import { useSkuImages } from '@/components/useSkuImages';
 
 const LABELS: (InboundLabel | '')[] = ['', 'Exclude', 'Hold', 'Tokopedia'];
 
@@ -87,6 +89,18 @@ export default function ReceivingBoard({
     });
     return m;
   }, [detail]);
+
+  // SKU images for everything visible: expected list, what's been received, the collision picker,
+  // and search hits — one batch read, lazy. A picture here is the moment that stops a wrong-SKU scan.
+  const imgCodes = useMemo(() => {
+    const set = new Set<string>();
+    detail?.expected.forEach((e) => { if (e.item_code) set.add(e.item_code); });
+    received.forEach((_v, k) => set.add(k));
+    skuHits.forEach((h) => set.add(h.item_code));
+    picker?.forEach((p) => set.add(p.item_code));
+    return [...set];
+  }, [detail, received, skuHits, picker]);
+  const imgMap = useSkuImages(imgCodes);
 
   function resetDraft() {
     setReceived(new Map());
@@ -447,6 +461,7 @@ export default function ReceivingBoard({
                     <div className="rcv-picker-head">⚠ which SKU?</div>
                     {picker.map((s) => (
                       <button key={s.item_code} className="rcv-picker-opt" onClick={() => pick(s)}>
+                        <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={32} />
                         <span className="ff-code">{s.item_code}</span>
                         <span className="ff-name">{s.name}</span>
                         {s.is_verified && <span className="badge ready">verified</span>}
@@ -487,7 +502,7 @@ export default function ReceivingBoard({
                     {skuHits.map((h) => (
                       <li key={h.item_code}>
                         <button className="result-item" onClick={() => { addUnit(h.item_code, h.name); setSkuHits([]); setSkuQuery(''); }}>
-                          <span className="ri-name">{h.item_code} · {h.name}</span>
+                          <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={28} /> {h.item_code} · {h.name}</span>
                           <span className="ri-meta">avail {h.available}</span>
                         </button>
                       </li>
@@ -510,6 +525,7 @@ export default function ReceivingBoard({
                     return (
                       <li key={`exp-${e.item_code}`} className="ff-line">
                         <div className="rcv-line-head">
+                          <SkuImage status={imgMap[e.item_code!]?.status} displayUrl={imgMap[e.item_code!]?.displayUrl} name={e.name} size={32} />
                           <span className="ff-code">{e.item_code}</span>
                           <span className="ff-name">{e.name}</span>
                           <span className="rcv-exp">exp {e.expected_qty}</span>
@@ -526,6 +542,7 @@ export default function ReceivingBoard({
                     return (
                       <li key={`got-${line.item_code}`} className="ff-line">
                         <div className="rcv-line-head">
+                          <SkuImage status={imgMap[line.item_code]?.status} displayUrl={imgMap[line.item_code]?.displayUrl} name={line.name} size={32} />
                           <span className="ff-code">{line.item_code}</span>
                           <span className="ff-name">{line.name}</span>
                           <span className={`rcv-badge ${b.cls}`}>{b.text}</span>

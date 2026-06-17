@@ -16,6 +16,8 @@ import {
   updateSku,
 } from '@/app/catalogue/actions';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalogue/types';
+import SkuImage from '@/components/SkuImage';
+import { useSkuImages } from '@/components/useSkuImages';
 
 type FieldKind = 'text' | 'textarea' | 'number' | 'bool';
 type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind };
@@ -333,6 +335,15 @@ export default function CatalogueBoard({
 
   const listForTab: CatalogueListRow[] = tab === 'needs' ? needsReview : results;
 
+  // SKU images for the visible list + the open SKU — one batch read, lazy.
+  const imgCodes = useMemo(() => {
+    const set = new Set<string>();
+    listForTab.forEach((r) => set.add(r.item_code));
+    if (detail) set.add(detail.sku.item_code);
+    return [...set];
+  }, [listForTab, detail]);
+  const imgMap = useSkuImages(imgCodes);
+
   return (
     <div className="ops">
       <header className="app-header">
@@ -382,13 +393,18 @@ export default function CatalogueBoard({
               {listForTab.map((r) => (
                 <li key={r.item_code}>
                   <button className={`fq-row ${detail?.sku.item_code === r.item_code ? 'active' : ''}`} onClick={() => openSku(r.item_code)} disabled={busy}>
-                    <div className="fq-row-top">
-                      <span className="fq-id">{r.item_code}</span>
-                      <span className="fq-cust">{r.name}</span>
-                    </div>
-                    <div className="fq-row-bot">
-                      <span>{r.brand_prefix || '—'}</span>
-                      {r.needs_review && <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>}
+                    <div className="cat-row">
+                      <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={36} />
+                      <div className="cat-row-main">
+                        <div className="fq-row-top">
+                          <span className="fq-id">{r.item_code}</span>
+                          <span className="fq-cust">{r.name}</span>
+                        </div>
+                        <div className="fq-row-bot">
+                          <span>{r.brand_prefix || '—'}</span>
+                          {r.needs_review && <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>}
+                        </div>
+                      </div>
                     </div>
                   </button>
                 </li>
@@ -426,7 +442,10 @@ export default function CatalogueBoard({
           {mode === 'sku' && detail && (
             <>
               <div className="fd-head">
-                <div className="fd-title">{detail.sku.item_code}</div>
+                <div className="fd-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={40} />
+                  {detail.sku.item_code}
+                </div>
                 <div className="fd-sub">
                   item_code is the identity (read-only){detail.sku.updated_at ? ` · updated ${detail.sku.updated_at.slice(0, 10)}` : ''}
                   {detail.sku.needs_review && (

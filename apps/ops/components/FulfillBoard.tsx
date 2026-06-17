@@ -6,6 +6,8 @@ import { createSupabaseBrowserClient } from '@jigzle/db/client';
 import type { FulfillQueueRow } from '@jigzle/db/types';
 import { getFulfillQueue, getOrderForFulfill, fulfillOrder } from '@/app/fulfill/actions';
 import type { FulfillDetail, FulfillResult } from '@/app/fulfill/types';
+import SkuImage from '@/components/SkuImage';
+import { useSkuImages } from '@/components/useSkuImages';
 
 const COURIERS = ['JNE', 'J&T', 'SiCepat', 'AnterAja', 'Ninja Xpress', 'POS Indonesia', 'TIKI', 'GoSend', 'GrabExpress', 'Lion Parcel', 'ID Express', 'Other'];
 
@@ -68,6 +70,10 @@ export default function FulfillBoard({
     }
     return ids;
   }, [detail, checkedLines]);
+
+  // SKU images for the pick-list lines — high value: the picker grabs the right box off the shelf.
+  const imgCodes = useMemo(() => (detail?.lines ?? []).map((l) => l.item_code).filter(Boolean) as string[], [detail]);
+  const imgMap = useSkuImages(imgCodes);
 
   async function refreshQueue() {
     try {
@@ -267,6 +273,7 @@ export default function FulfillBoard({
                       <li key={l.line_id} className="ff-line">
                         <label className="ff-line-main">
                           <input type="checkbox" checked={checkedLines.has(l.line_id)} onChange={() => toggleLine(l.line_id)} />
+                          <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={32} />
                           <span className="ff-code">{l.item_code || '—'}</span>
                           <span className="ff-name">{l.name}</span>
                           <span className="ff-qty">×{l.qty}</span>

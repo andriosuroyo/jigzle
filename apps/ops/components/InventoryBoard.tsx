@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { createSupabaseBrowserClient } from '@jigzle/db/client';
 import type { InventoryFilter, InventorySortColumn, InventoryState, StockRow } from '@jigzle/db/types';
 import { getInventory, refreshSnapshot } from '@/app/inventory/actions';
+import SkuImage from '@/components/SkuImage';
+import { useSkuImages } from '@/components/useSkuImages';
 
 const ROW_LIMIT = 1000; // matches the server LIMIT — used only for the "refine your search" hint
 
@@ -110,6 +112,10 @@ export default function InventoryBoard({
 
   const truncated = rows.length >= ROW_LIMIT;
 
+  // SKU images for the visible rows — lazy; only on-screen rows fetch (browser/CDN handles it).
+  const imgCodes = useMemo(() => rows.map((r) => r.item_code), [rows]);
+  const imgMap = useSkuImages(imgCodes);
+
   return (
     <div className="ops">
       <header className="app-header">
@@ -170,7 +176,7 @@ export default function InventoryBoard({
               )}
               {rows.map((r) => (
                 <tr key={r.item_code}>
-                  <td className="inv-code">{r.item_code}</td>
+                  <td className="inv-code"><span className="inv-code-cell"><SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={26} />{r.item_code}</span></td>
                   <td className="inv-name">{r.name || '—'}</td>
                   <td className={`num inv-num ${r.pending ? '' : 'zero'}`}>{r.pending}</td>
                   <td className={`num inv-num ${r.on_the_way ? '' : 'zero'}`}>{r.on_the_way}</td>

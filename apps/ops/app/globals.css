@@ -308,6 +308,15 @@ input, textarea, select, button { font-family: inherit; }
 .cat-bc .bc-shared { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; background: var(--orange-tint); color: #8A5A1A; }
 .cat-bc .bc-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
+/* ── SKU image (shared thumbnail — has_image / not_found / pending) ── */
+.sku-img { display: inline-flex; align-items: center; justify-content: center; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); flex-shrink: 0; vertical-align: middle; overflow: hidden; }
+img.sku-img { background: var(--cream); }
+.sku-img-none { font-size: 16px; color: var(--muted); }
+.sku-img-pending { border-style: dashed; background: var(--cream); }
+.inv-code-cell { display: inline-flex; align-items: center; gap: 6px; }
+.cat-row { display: flex; align-items: center; gap: 8px; }
+.cat-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+
 /* ── Success ── */
 .success-wrap { display: flex; justify-content: center; padding: 40px 18px; }
 .success-card { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 28px; max-width: 360px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
