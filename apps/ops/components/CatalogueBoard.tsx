@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import {
