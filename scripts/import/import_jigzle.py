@@ -251,20 +251,27 @@ def read_catalogue(ctx):
     ctx.valid_item_codes = set(kept)
     self_codes = set()
     cat_rows, bc_rows, src_rows = [], [], []
-    bc_seen = {}
+    bc_first = {}      # barcode -> first owner seen (to log reused-barcode collisions)
+    bc_pairs = set()   # exact (barcode, item_code) pairs already emitted (de-dup)
     for code, (_s, cat, raw, _fi, _ri) in sorted(kept.items(), key=lambda kv: (kv[1][3], kv[1][4])):
         cat_rows.append(cat)
         if cat.get("brand_prefix"):
             self_codes.add(cat["brand_prefix"])   # already normalized (trailing '-' stripped)
-        # barcodes (col 32)
+        # barcodes (col 32). Composite (barcode, item_code) model: emit a PLAIN row for EVERY owner
+        # of a barcode (a reused code links to N SKUs honestly — no '#n' suffix). De-dup only exact
+        # (barcode, item_code) pairs (the same SKU listing a code twice). Reused codes are still
+        # logged; Receiving's resolveBarcode shows the "which SKU?" picker on >1 owners.
         barcodes, marker = t.parse_barcodes(g(raw, 32))
         for bc in barcodes:
-            owner = bc_seen.get(bc)
+            if (bc, code) in bc_pairs:
+                continue
+            owner = bc_first.get(bc)
             if owner is None:
-                bc_seen[bc] = code
-                bc_rows.append({"barcode": bc, "item_code": code, "is_verified": marker})
+                bc_first[bc] = code
             elif owner != code:
                 ctx.r.collisions.append((bc, owner, code))
+            bc_pairs.add((bc, code))
+            bc_rows.append({"barcode": bc, "item_code": code, "is_verified": marker})
         # sources (cols 2..8 → source_index 0..6, URLs only)
         for ci in range(2, 9):
             url = t.clean(g(raw, ci))

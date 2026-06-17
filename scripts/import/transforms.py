@@ -173,10 +173,21 @@ def split_courier(cell):
 
 # ── barcodes (Catalog!ARTICLE NUMBER) ─────────────────────────────────────────
 _BC_RE = re.compile(r"^\d{8,14}$")
+_SUFFIX_RE = re.compile(r"[A-Za-z]+$")   # Andrio's manual collision tag (e.g. '...A'/'...B')
 
 
 def parse_barcodes(cell):
-    """Return (list_of_barcode_strings, had_marker). Strips ◼️ + spaces; keeps EAN/UPC/JAN."""
+    """Return (list_of_barcode_strings, had_marker). Strips ◼️ + spaces; keeps EAN/UPC/JAN.
+
+    A token that isn't a clean barcode but is digits + a trailing letter (e.g.
+    '6941499606509A'/'…B') is Andrio's manual collision annotation: it marks a SKU that
+    SHARES this physical barcode. We strip the trailing letter(s) and keep the bare base, so
+    both lettered SKUs collide on the same code — the importer then emits a plain
+    (barcode, item_code) pair for each lettered SKU on that bare code (composite barcodes PK),
+    and Receiving's resolveBarcode shows the "which SKU?" picker. Safe because a genuine
+    EAN/UPC/JAN is all-digits, so a trailing letter is never part of a real barcode. Free-text
+    notes (e.g. 'Also: SKU-002') don't end in a letter after stripping, so they're still ignored.
+    """
     if cell is None:
         return [], False
     raw = str(cell)
@@ -186,6 +197,10 @@ def parse_barcodes(cell):
         t = tok.replace(MARK, "").replace("️", "").strip().replace(" ", "")
         if _BC_RE.match(t):
             out.append(t)
+        else:
+            base = _SUFFIX_RE.sub("", t)
+            if base != t and _BC_RE.match(base):
+                out.append(base)
     return out, had
 
 

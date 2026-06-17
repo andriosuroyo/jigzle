@@ -195,20 +195,16 @@ export async function resolveBarcode(code: string): Promise<ResolveResult> {
   const c = code.trim();
   if (!c) return { status: 'not_found', code: c };
 
-  // Exact match is the live path (barcode is a unique PK — the importer kept the first owner
-  // on a collision and dropped the rest). The app's reused-barcode suffix convention is
-  // `<code>#<n>`; matching it too means a future collision-cleanup that re-adds a dropped
-  // barcode as `<code>#2` surfaces as a "which SKU?" picker (D1) automatically — Receiving
-  // never silently guesses. Only run the suffix LIKE when the code can't break the filter.
-  const clean = !/[#%_,()\\*]/.test(c);
-  const exact = await supabase.from('barcodes').select('item_code,is_verified').eq('barcode', c);
-  const suffixed = clean
-    ? await supabase.from('barcodes').select('item_code,is_verified').like('barcode', `${c}#%`)
-    : { data: [] as { item_code: string; is_verified: boolean }[] };
+  // Composite (barcode, item_code) model (0020): one barcode can link to many SKUs, so an exact
+  // match returns every owner — 0 → not_found, 1 → resolved, >1 → the "which SKU?" picker. The
+  // legacy `<code>#<n>` suffix hack is retired with the composite key; the picker now comes
+  // honestly from the data. Dedupe by item_code (OR is_verified) is defensive — the composite PK
+  // already forbids exact (barcode, item_code) duplicates.
+  const { data } = await supabase.from('barcodes').select('item_code,is_verified').eq('barcode', c);
 
-  const byCode = new Map<string, boolean>(); // item_code → is_verified (OR across matches)
-  for (const row of [...(exact.data ?? []), ...(suffixed.data ?? [])]) {
-    byCode.set(row.item_code as string, (byCode.get(row.item_code as string) ?? false) || (row.is_verified as boolean));
+  const byCode = new Map<string, boolean>(); // item_code → is_verified (OR across links)
+  for (const row of (data ?? []) as { item_code: string; is_verified: boolean }[]) {
+    byCode.set(row.item_code, (byCode.get(row.item_code) ?? false) || row.is_verified);
   }
   const codes = [...byCode.keys()];
   if (!codes.length) return { status: 'not_found', code: c };
