@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import type { InventoryFilter, InventorySortColumn, InventoryState, StockRow } from '@jigzle/db/types';
 import { getInventory, refreshSnapshot } from '@/app/inventory/actions';
