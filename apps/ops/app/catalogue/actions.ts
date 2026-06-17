@@ -9,7 +9,7 @@ import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import type { CatalogueListRow, SkuDetail } from './types';
 
-const LIMIT = 50;
+const LIMIT = 200;
 
 // PostgREST `.or()` / `.ilike()` interpolate the raw string into a filter grammar where , ( ) * \
 // are operators. Strip them from operator-typed input (defense-in-depth; the operator is trusted).
@@ -38,27 +38,31 @@ export async function searchCatalogue(q: string): Promise<CatalogueListRow[]> {
   if (raw.length < 2) return [];
   const supabase = createSupabaseServerClient();
 
-  const [catRes, bcRes] = await Promise.all([
-    supabase
-      .from('catalogue')
-      .select(LIST_COLS)
-      .or(`item_code.ilike.%${raw}%,self_code.ilike.%${raw}%,original_name.ilike.%${raw}%,translate_name.ilike.%${raw}%`)
-      .limit(LIMIT),
-    supabase.from('barcodes').select('item_code').ilike('barcode', `%${raw}%`).limit(LIMIT),
-  ]);
+  const tokens = raw.split(/\s+/).filter(Boolean);
+  const pieceTerms   = tokens.filter((t) => /^\d{1,5}$/.test(t)).map(Number);
+  const barcodeTerms = tokens.filter((t) => /^\d{6,}$/.test(t));
+  const textTerms    = tokens.filter((t) => !/^\d+$/.test(t));
 
-  const rows = new Map<string, CatalogueListRow>();
-  for (const c of (catRes.data ?? []) as CatNameRow[]) {
-    rows.set(c.item_code, { item_code: c.item_code, name: nameOf(c), brand_prefix: c.brand_prefix ?? null, needs_review: !!c.needs_review });
+  let barcodeCodes: string[] | null = null;
+  for (const b of barcodeTerms) {
+    const { data } = await supabase.from('barcodes').select('item_code').ilike('barcode', `%${b}%`).limit(LIMIT);
+    const codes = [...new Set((data ?? []).map((r) => r.item_code as string))];
+    barcodeCodes = barcodeCodes === null ? codes : barcodeCodes.filter((c) => codes.includes(c));
   }
-  const bcCodes = [...new Set((bcRes.data ?? []).map((b) => b.item_code as string))].filter((code) => !rows.has(code));
-  if (bcCodes.length) {
-    const { data: cat2 } = await supabase.from('catalogue').select(LIST_COLS).in('item_code', bcCodes);
-    for (const c of (cat2 ?? []) as CatNameRow[]) {
-      rows.set(c.item_code, { item_code: c.item_code, name: nameOf(c), brand_prefix: c.brand_prefix ?? null, needs_review: !!c.needs_review });
-    }
+  if (barcodeCodes !== null && barcodeCodes.length === 0) return [];
+
+  let query = supabase.from('catalogue').select(LIST_COLS);
+  for (const t of textTerms) {
+    query = query.or(`item_code.ilike.%${t}%,self_code.ilike.%${t}%,original_name.ilike.%${t}%,translate_name.ilike.%${t}%`);
   }
-  return [...rows.values()].slice(0, LIMIT);
+  for (const n of pieceTerms) query = query.eq('piece_count_n', n);
+  if (barcodeCodes !== null) query = query.in('item_code', barcodeCodes);
+
+  const { data } = await query.order('item_code').limit(LIMIT);
+  return (data ?? []).map((c) => {
+    const r = c as CatNameRow;
+    return { item_code: r.item_code, name: nameOf(r), brand_prefix: r.brand_prefix ?? null, needs_review: !!r.needs_review };
+  });
 }
 
 // ── the edit pane: full SKU + its barcode links (with shared flags) ──
