@@ -329,6 +329,7 @@ input, textarea, select, button { font-family: inherit; }
 .inv-states { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
 .inv-state { font-size: 12px; font-weight: 600; padding: 6px 12px; border: 1px solid var(--line); border-radius: 20px; background: white; color: var(--muted); cursor: pointer; }
 .inv-state.active { background: var(--orange-tint); border-color: var(--orange); color: #8A5A1A; }
+@media (max-width: 760px) { .inv-state { min-height: 44px; display: inline-flex; align-items: center; } }
 .inv-table-wrap { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: 74vh; }
 .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .inv-table th { text-align: left; padding: 9px 12px; background: var(--paper); color: var(--brown-dark); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; white-space: nowrap; position: sticky; top: 0; user-select: none; }

@@ -7,6 +7,7 @@ import { getInventory, refreshSnapshot } from '@/app/inventory/actions';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import DataList, { type DataListColumn } from '@/components/DataList';
 
 const ROW_LIMIT = 1000; // matches the server LIMIT — used only for the "refine your search" hint
 
@@ -15,16 +16,6 @@ const STATES: { key: InventoryState; label: string }[] = [
   { key: 'on_order', label: 'on order' },
   { key: 'shipping', label: 'being shipped' },
   { key: 'warehouse', label: 'in warehouse' },
-];
-
-const COLUMNS: { key: InventorySortColumn; label: string; num: boolean }[] = [
-  { key: 'item_code', label: 'SKU', num: false },
-  { key: 'name', label: 'Name', num: false },
-  { key: 'pending', label: 'On order', num: true },
-  { key: 'on_the_way', label: 'Shipping', num: true },
-  { key: 'physical', label: 'Warehouse', num: true },
-  { key: 'available', label: 'Available', num: true },
-  { key: 'last_receive', label: 'Last in', num: false },
 ];
 
 // numeric columns + last-received default to descending (most stock / most recent first)
@@ -109,6 +100,25 @@ export default function InventoryBoard({
   const imgCodes = useMemo(() => rows.map((r) => r.item_code), [rows]);
   const imgMap = useSkuImages(imgCodes);
 
+  const numCell = (n: number) => <span className={`inv-num ${n ? '' : 'zero'}`}>{n}</span>;
+  const columns: DataListColumn<StockRow>[] = [
+    {
+      key: 'item_code', header: 'SKU', sortable: true, primary: true, className: 'inv-code',
+      render: (r) => (
+        <span className="inv-code-cell">
+          <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={SKU_IMG.sm} />
+          {r.item_code}
+        </span>
+      ),
+    },
+    { key: 'name', header: 'Name', sortable: true, className: 'inv-name', render: (r) => r.name || '—' },
+    { key: 'pending', header: 'On order', align: 'right', sortable: true, render: (r) => numCell(r.pending) },
+    { key: 'on_the_way', header: 'Shipping', align: 'right', sortable: true, render: (r) => numCell(r.on_the_way) },
+    { key: 'physical', header: 'Warehouse', align: 'right', sortable: true, render: (r) => numCell(r.physical) },
+    { key: 'available', header: 'Available', align: 'right', sortable: true, render: (r) => numCell(r.available) },
+    { key: 'last_receive', header: 'Last in', sortable: true, render: (r) => r.last_receive || '—' },
+  ];
+
   return (
     <div className="ops">
       <AppHeader active="inventory" userEmail={userEmail} />
@@ -139,39 +149,16 @@ export default function InventoryBoard({
 
         {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
 
-        <div className="inv-table-wrap" style={{ marginTop: 12 }}>
-          <table className="inv-table">
-            <thead>
-              <tr>
-                {COLUMNS.map((c) => (
-                  <th key={c.key} className={c.num ? 'num' : ''} onClick={() => clickSort(c.key)}>
-                    {c.label}
-                    {sort.column === c.key && <span className="sort-ind">{sort.dir === 'asc' ? '▲' : '▼'}</span>}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && (
-                <tr><td className="inv-empty" colSpan={COLUMNS.length}>{loading ? 'Loading…' : 'No matching SKUs.'}</td></tr>
-              )}
-              {rows.map((r) => (
-                <tr key={r.item_code}>
-                  <td className="inv-code"><span className="inv-code-cell"><SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={SKU_IMG.sm} />{r.item_code}</span></td>
-                  <td className="inv-name">{r.name || '—'}</td>
-                  <td className={`num inv-num ${r.pending ? '' : 'zero'}`}>{r.pending}</td>
-                  <td className={`num inv-num ${r.on_the_way ? '' : 'zero'}`}>{r.on_the_way}</td>
-                  <td className={`num inv-num ${r.physical ? '' : 'zero'}`}>{r.physical}</td>
-                  <td className={`num inv-num ${r.available ? '' : 'zero'}`}>{r.available}</td>
-                  <td>{r.last_receive || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="inv-count">
-          {rows.length} SKU{rows.length === 1 ? '' : 's'}{truncated ? ` — showing the first ${ROW_LIMIT}; refine your search to narrow` : ''} · read-only
+        <div style={{ marginTop: 12 }}>
+          <DataList<StockRow>
+            rows={rows}
+            columns={columns}
+            getRowKey={(r) => r.item_code}
+            sort={sort}
+            onSort={(key) => clickSort(key as InventorySortColumn)}
+            empty={loading ? 'Loading…' : 'No matching SKUs.'}
+            rowLimitNote={`${rows.length} SKU${rows.length === 1 ? '' : 's'}${truncated ? ` — showing the first ${ROW_LIMIT}; refine your search to narrow` : ''} · read-only`}
+          />
         </div>
       </div>
     </div>
