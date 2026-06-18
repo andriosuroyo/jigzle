@@ -1,13 +1,13 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import ProcurementBoard from '@/components/ProcurementBoard';
-import { getForwarders, getOpenPOs, getOpenShipments, getSuppliers } from '@/app/procurement/actions';
+import OrderBoard from '@/components/OrderBoard';
+import { getForwarders, getOpenPOs, getOpenShipments, getSuppliers } from '@/app/order/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Server shell: load the open-PO queue + the supplier / forwarder / open-shipment lists for the
 // form dropdowns, render the two-pane board.
-export default async function ProcurementPage() {
+export default async function OrderPage() {
   const supabase = createSupabaseServerClient();
   const [
     {
@@ -26,7 +26,7 @@ export default async function ProcurementPage() {
   ]);
 
   return (
-    <ProcurementBoard
+    <OrderBoard
       initialQueue={queue}
       suppliers={suppliers}
       forwarders={forwarders}

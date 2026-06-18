@@ -13,10 +13,11 @@ import {
   setVerified,
   unlinkBarcode,
   updateSku,
-} from '@/app/catalogue/actions';
-import type { CatalogueListRow, SkuDetail } from '@/app/catalogue/types';
+} from '@/app/catalog/actions';
+import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
+import { SKU_IMG } from '@/components/skuImageSizes';
 
 type FieldKind = 'text' | 'textarea' | 'number' | 'bool';
 type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind };
@@ -122,7 +123,7 @@ function buildPatch(orig: CatalogueRow, form: FormState): Partial<CatalogueRow> 
 type Tab = 'all' | 'needs' | 'shared';
 type RightMode = 'sku' | 'collision' | null;
 
-export default function CatalogueBoard({
+export default function CatalogBoard({
   initialNeedsReview,
   initialShared,
   userEmail,
@@ -338,7 +339,7 @@ export default function CatalogueBoard({
 
   return (
     <div className="ops">
-      <AppHeader active="catalogue" userEmail={userEmail} />
+      <AppHeader active="catalog" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Left: tabs + list ── */}
@@ -373,7 +374,7 @@ export default function CatalogueBoard({
                 <li key={r.item_code}>
                   <button className={`fq-row ${detail?.sku.item_code === r.item_code ? 'active' : ''}`} onClick={() => openSku(r.item_code)} disabled={busy}>
                     <div className="cat-row">
-                      <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={36} />
+                      <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                       <div className="cat-row-main">
                         <div className="fq-row-top">
                           <span className="fq-id">{r.item_code}</span>
@@ -422,7 +423,7 @@ export default function CatalogueBoard({
             <>
               <div className="fd-head">
                 <div className="fd-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={40} />
+                  <SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={SKU_IMG.lg} />
                   {detail.sku.item_code}
                 </div>
                 <div className="fd-sub">

@@ -11,10 +11,11 @@ import {
   createCatalogueStub,
   newAdhocShipId,
   recordReceipt,
-} from '@/app/receiving/actions';
-import type { ReceiveDetail, ResolvedSku, RecordReceiptResult, SkuHit } from '@/app/receiving/types';
+} from '@/app/inbound/actions';
+import type { ReceiveDetail, ResolvedSku, RecordReceiptResult, SkuHit } from '@/app/inbound/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
+import { SKU_IMG } from '@/components/skuImageSizes';
 
 const LABELS: (InboundLabel | '')[] = ['', 'Exclude', 'Hold', 'Tokopedia'];
 
@@ -28,7 +29,7 @@ function todayStr(): string {
 // the synthetic detail for an ad-hoc receive (no shipments-ledger row, no expected list)
 const ADHOC_SENTINEL = '__adhoc__';
 
-export default function ReceivingBoard({
+export default function InboundBoard({
   initialQueue,
   userEmail,
 }: {
@@ -342,7 +343,7 @@ export default function ReceivingBoard({
 
   return (
     <div className="ops">
-      <AppHeader active="receiving" userEmail={userEmail} />
+      <AppHeader active="inbound" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Arrivals queue ── */}
@@ -443,7 +444,7 @@ export default function ReceivingBoard({
                     <div className="rcv-picker-head">⚠ which SKU?</div>
                     {picker.map((s) => (
                       <button key={s.item_code} className="rcv-picker-opt" onClick={() => pick(s)}>
-                        <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={32} />
+                        <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={SKU_IMG.md} />
                         <span className="ff-code">{s.item_code}</span>
                         <span className="ff-name">{s.name}</span>
                         {s.is_verified && <span className="badge ready">verified</span>}
@@ -484,7 +485,7 @@ export default function ReceivingBoard({
                     {skuHits.map((h) => (
                       <li key={h.item_code}>
                         <button className="result-item" onClick={() => { addUnit(h.item_code, h.name); setSkuHits([]); setSkuQuery(''); }}>
-                          <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={28} /> {h.item_code} · {h.name}</span>
+                          <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} /> {h.item_code} · {h.name}</span>
                           <span className="ri-meta">avail {h.available}</span>
                         </button>
                       </li>
@@ -507,7 +508,7 @@ export default function ReceivingBoard({
                     return (
                       <li key={`exp-${e.item_code}`} className="ff-line">
                         <div className="rcv-line-head">
-                          <SkuImage status={imgMap[e.item_code!]?.status} displayUrl={imgMap[e.item_code!]?.displayUrl} name={e.name} size={32} />
+                          <SkuImage status={imgMap[e.item_code!]?.status} displayUrl={imgMap[e.item_code!]?.displayUrl} name={e.name} size={SKU_IMG.md} />
                           <span className="ff-code">{e.item_code}</span>
                           <span className="ff-name">{e.name}</span>
                           <span className="rcv-exp">exp {e.expected_qty}</span>
@@ -524,7 +525,7 @@ export default function ReceivingBoard({
                     return (
                       <li key={`got-${line.item_code}`} className="ff-line">
                         <div className="rcv-line-head">
-                          <SkuImage status={imgMap[line.item_code]?.status} displayUrl={imgMap[line.item_code]?.displayUrl} name={line.name} size={32} />
+                          <SkuImage status={imgMap[line.item_code]?.status} displayUrl={imgMap[line.item_code]?.displayUrl} name={line.name} size={SKU_IMG.md} />
                           <span className="ff-code">{line.item_code}</span>
                           <span className="ff-name">{line.name}</span>
                           <span className={`rcv-badge ${b.cls}`}>{b.text}</span>
@@ -588,6 +589,7 @@ export default function ReceivingBoard({
           <span>qty</span>
           <input
             type="number"
+            inputMode="numeric"
             step={1}
             className="rcv-qty"
             value={line.qty}

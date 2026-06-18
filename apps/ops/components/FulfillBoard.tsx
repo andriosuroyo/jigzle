@@ -7,6 +7,7 @@ import { getFulfillQueue, getOrderForFulfill, fulfillOrder } from '@/app/fulfill
 import type { FulfillDetail, FulfillResult } from '@/app/fulfill/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
+import { SKU_IMG } from '@/components/skuImageSizes';
 
 const COURIERS = ['JNE', 'J&T', 'SiCepat', 'AnterAja', 'Ninja Xpress', 'POS Indonesia', 'TIKI', 'GoSend', 'GrabExpress', 'Lion Parcel', 'ID Express', 'Other'];
 
@@ -255,7 +256,7 @@ export default function FulfillBoard({
                       <li key={l.line_id} className="ff-line">
                         <label className="ff-line-main">
                           <input type="checkbox" checked={checkedLines.has(l.line_id)} onChange={() => toggleLine(l.line_id)} />
-                          <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={32} />
+                          <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
                           <span className="ff-code">{l.item_code || '—'}</span>
                           <span className="ff-name">{l.name}</span>
                           <span className="ff-qty">×{l.qty}</span>
