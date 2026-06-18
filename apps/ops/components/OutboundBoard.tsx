@@ -276,10 +276,10 @@ export default function OutboundBoard({
                       <li key={b.key} className="box-row">
                         <div className="box-line">
                           <span className="box-n">Box {i + 1}</span>
-                          <input className="box-real" type="number" min={0} placeholder="real (g)" value={b.real} onChange={(e) => setBox(b.key, { real: e.target.value })} />
-                          <input className="box-dim" type="number" min={0} placeholder="P" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />
-                          <input className="box-dim" type="number" min={0} placeholder="L" value={b.l} onChange={(e) => setBox(b.key, { l: e.target.value })} />
-                          <input className="box-dim" type="number" min={0} placeholder="T" value={b.t} onChange={(e) => setBox(b.key, { t: e.target.value })} />
+                          <input className="box-real" type="number" inputMode="numeric" min={0} placeholder="real (g)" value={b.real} onChange={(e) => setBox(b.key, { real: e.target.value })} />
+                          <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="P" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />
+                          <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="L" value={b.l} onChange={(e) => setBox(b.key, { l: e.target.value })} />
+                          <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="T" value={b.t} onChange={(e) => setBox(b.key, { t: e.target.value })} />
                           {boxes.length > 1 && <button className="li-remove" onClick={() => setBoxes((prev) => prev.filter((x) => x.key !== b.key))} aria-label="remove box">×</button>}
                         </div>
                         <div className="box-preview">

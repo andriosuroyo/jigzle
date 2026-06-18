@@ -17,8 +17,9 @@
   --ink:          #2D2419;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; padding: 0; background: var(--cream); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif; }
-body { min-height: 100vh; }
+/* overflow-x:hidden kills the global horizontal-slide on mobile when any one child overruns. */
+html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; background: var(--cream); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+body { min-height: 100vh; min-height: 100dvh; }
 input, textarea, select, button { font-family: inherit; }
 
 /* ── Login (copied screen) ── */
@@ -41,7 +42,12 @@ input, textarea, select, button { font-family: inherit; }
 /* ── Layout ── */
 .ops-layout { display: grid; grid-template-columns: 1fr 300px; gap: 18px; max-width: 1040px; margin: 0 auto; padding: 18px; align-items: start; }
 .ops-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-@media (max-width: 760px) { .ops-layout { grid-template-columns: 1fr; } .ops-rail { order: -1; } }
+/* mobile: single column, and the summary rail drops sticky + flows at the page bottom (with its
+   Save button) so the keyboard never covers it (docs/014 §2.1 no-sticky-on-mobile) */
+@media (max-width: 760px) {
+  .ops-layout { grid-template-columns: 1fr; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .ops-rail { position: static; top: auto; }
+}
 
 /* ── Buttons ── */
 .btn-primary { background: var(--orange); color: white; border: none; padding: 10px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
@@ -128,7 +134,11 @@ input, textarea, select, button { font-family: inherit; }
 
 /* ── Fulfill two-pane ── */
 .fulfill-layout { display: grid; grid-template-columns: 340px 1fr; gap: 16px; max-width: 1100px; margin: 0 auto; padding: 16px; align-items: start; }
-@media (max-width: 800px) { .fulfill-layout { grid-template-columns: 1fr; } }
+@media (max-width: 800px) {
+  .fulfill-layout { grid-template-columns: 1fr; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .fq-pane { position: static; top: auto; }
+  .fq-list { max-height: none; }
+}
 
 .fq-pane { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; position: sticky; top: 70px; }
 .fq-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--paper); font-size: 13px; font-weight: 700; color: var(--brown-dark); }
@@ -176,14 +186,14 @@ input, textarea, select, button { font-family: inherit; }
 .scan-msg { font-size: 11px; color: var(--muted); }
 .box-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .box-row { background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-.box-line { display: flex; align-items: center; gap: 6px; }
+.box-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .box-n { font-size: 12px; font-weight: 700; color: var(--brown); white-space: nowrap; }
 .box-real { width: 90px; } .box-dim { width: 52px; }
 .box-line input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
 .box-preview { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
 .box-preview label { display: flex; align-items: center; gap: 5px; }
 
-.fd-commit { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.fd-commit { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--line); flex-wrap: wrap; }
 .fd-commit-info { font-size: 13px; color: var(--muted); }
 .fd-commit-info b { color: var(--ink); }
 .ok-text { color: var(--green); font-weight: 600; }
@@ -393,3 +403,9 @@ img.sku-img { background: #e8e8e8; }
 .success-rows { width: 100%; display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
 .success-rows div { display: flex; justify-content: space-between; font-size: 13px; }
 .success-rows span { color: var(--muted); }
+
+/* ── Cross-cutting mobile: safe-area at the page bottom + ≥44px tap targets ── */
+.inv-wrap { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+@media (max-width: 760px) {
+  .btn-link, .rcv-close, .po-detach { min-height: 44px; }
+}

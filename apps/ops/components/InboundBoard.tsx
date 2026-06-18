@@ -589,6 +589,7 @@ export default function InboundBoard({
           <span>qty</span>
           <input
             type="number"
+            inputMode="numeric"
             step={1}
             className="rcv-qty"
             value={line.qty}
