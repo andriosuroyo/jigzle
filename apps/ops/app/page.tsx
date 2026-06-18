@@ -53,6 +53,10 @@ export default async function Home() {
               <div className="hub-card-title">Catalog</div>
               <div className="hub-card-sub">Edit SKUs & barcodes; needs-review &amp; shared-barcode cleanup.</div>
             </Link>
+            <Link href="/stock-check" className="hub-card">
+              <div className="hub-card-title">Stock Check</div>
+              <div className="hub-card-sub">Count the shelf (presence / scan) & true stock up with adjustments.</div>
+            </Link>
           </div>
         </section>
       </div>
