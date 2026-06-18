@@ -234,7 +234,7 @@ function CheckRow({
       </span>
       {line.added_missing
         ? <span className="badge ready">+{line.counted_qty ?? 0} added</span>
-        : <span className="sc-exp">exp {line.physical}</span>}
+        : <span className="sc-exp">Qty {line.physical}</span>}
       <input
         type="checkbox"
         checked={line.confirmed}

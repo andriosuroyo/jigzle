@@ -354,7 +354,8 @@ function CountRow({
         {counted && d !== 0 && <span className={`sc-delta ${d > 0 ? 'pos' : 'neg'}`}>{d > 0 ? `+${d}` : d}</span>}
       </div>
       <div className="sc-row-ctl">
-        <span className="sc-exp">{counted ? `was ${line.physical}${line.added_missing ? ' · added' : ''}` : `system ${line.physical}`}</span>
+        {/* Scan: the editable qty field stands alone (PR16 §3) — no read-only label. The "= N" quick
+            button (un-counted) and the delta badge (counted) carry the system-qty reference. */}
         <span className="sc-ctlrow">
           {/* onMouseDown preventDefault keeps focus in the qty field, so a stepper click doesn't also
               blur-commit the draft → exactly one deterministic write per action. */}
