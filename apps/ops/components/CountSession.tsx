@@ -1,10 +1,11 @@
 'use client';
 
-// Count mode (docs/016 §2B) — the desktop barcode pass. Scan → resolve via the composite
-// (barcode, item_code) model: one owner → counted_qty += 1; a shared barcode (>1 owner) → the SHARED
-// BarcodePicker. A live "not yet scanned" panel lists in-scope SKUs still at counted 0; manual
-// set / +/− corrects without re-scanning. Close opens the SHARED CloseConfirm: every scanned delta
-// is shown and auto-written; un-scanned SKUs default to LEAVE (set-0 per row to zero them).
+// Count mode (docs/016 §2B; mobile rework docs/020) — phone-first quantitative count, no scanner
+// required. Opens to the SKU list (scan is a collapsible optional tool); a filter box finds the SKU
+// in hand; quantity entry is the primary control (type the real count, −/+ for corrections). One
+// working list, un-counted first then counted, with a sticky progress header. Behavior-preserving:
+// record_count / add_missing_sku / close_stock_check / CloseConfirm / BarcodePicker and the
+// per-non-zero-delta adjustment write are all UNCHANGED — this reworks layout/ergonomics only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import SkuImage from '@/components/SkuImage';
@@ -45,7 +46,9 @@ export default function CountSession({
   const [scan, setScan] = useState('');
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [picker, setPicker] = useState<ScanSku[] | null>(null);
+  const [scanOpen, setScanOpen] = useState(false); // collapsed by default (mobile-safe); opened on desktop
 
+  const [filter, setFilter] = useState(''); // in-scope filter (client-only) — distinct from add-missing search
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<SkuHit[]>([]);
   const [searching, setSearching] = useState(false);
@@ -56,12 +59,21 @@ export default function CountSession({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const searchReq = useRef(0);
+  const inflight = useRef<Set<Promise<unknown>>>(new Set()); // in-flight count writes; close awaits them so it reads a settled state
 
   useEffect(() => {
     void reload();
-    inputRef.current?.focus();
+    // Desktop / fine-pointer (or a Bluetooth scanner): open the scan tool and focus it. Phones open
+    // to the list — no keyboard popped, no auto-focus (docs/020 §4.1/§4.2).
+    const fine = typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(pointer:fine)').matches;
+    if (fine) setScanOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // focus the scan input only when the scan section is open (desktop load, or the operator opened it).
+  useEffect(() => {
+    if (scanOpen) inputRef.current?.focus();
+  }, [scanOpen]);
 
   async function reload(): Promise<LineRow[]> {
     setLoading(true);
@@ -86,13 +98,15 @@ export default function CountSession({
   }, [lines, picker, hits]);
   const imgMap = useSkuImages(imgCodes);
 
-  // increment a SKU by 1 (scan). Updates locally when the line exists; reloads when a brand-new
+  // increment a SKU by 1 (scan or +). Updates locally when the line exists; reloads when a brand-new
   // (out-of-scope) line was just created.
   async function bump(itemCode: string) {
     setError(null);
     const exists = lines.some((l) => l.item_code === itemCode);
+    const p = recordCount(session.stock_check_id, itemCode, 'inc', 1);
+    inflight.current.add(p);
     try {
-      const newQty = await recordCount(session.stock_check_id, itemCode, 'inc', 1);
+      const newQty = await p;
       if (exists) {
         setLines((ls) => ls.map((l) => (l.item_code === itemCode ? { ...l, counted_qty: newQty, confirmed: true } : l)));
       } else {
@@ -100,17 +114,23 @@ export default function CountSession({
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Count failed.');
+    } finally {
+      inflight.current.delete(p);
     }
   }
 
   async function setQty(itemCode: string, qty: number) {
     setError(null);
     const v = Math.max(0, Math.floor(qty));
+    const p = recordCount(session.stock_check_id, itemCode, 'set', v);
+    inflight.current.add(p);
     try {
-      await recordCount(session.stock_check_id, itemCode, 'set', v);
+      await p;
       setLines((ls) => ls.map((l) => (l.item_code === itemCode ? { ...l, counted_qty: v, confirmed: true } : l)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed.');
+    } finally {
+      inflight.current.delete(p);
     }
   }
 
@@ -170,6 +190,10 @@ export default function CountSession({
   }
 
   async function openClose() {
+    // The qty field commits on blur; tapping Close blurs it, firing a setQty. Await any in-flight
+    // count write to completion so the lines we close against include that last edit (no lost count,
+    // even on a slow network). Close math/output below is unchanged from docs/016.
+    if (inflight.current.size) await Promise.allSettled([...inflight.current]);
     const fresh = await reload();
     // In Count, an added-missing SKU's written delta is (counted − expected) — same as any counted
     // line — so it belongs in countDeltas with its true expected/delta, NOT the flat "+qty" added
@@ -208,8 +232,13 @@ export default function CountSession({
   }
 
   const counted = lines.filter((l) => l.counted_qty != null);
-  const notScanned = lines.filter((l) => l.counted_qty == null);
+  const toCount = lines.filter((l) => l.counted_qty == null);
   const listed = useMemo(() => new Set(lines.map((l) => l.item_code)), [lines]);
+
+  const f = filter.trim().toLowerCase();
+  const matchF = (l: LineRow) => !f || l.item_code.toLowerCase().includes(f) || (l.name ?? '').toLowerCase().includes(f);
+  const shownToCount = toCount.filter(matchF);
+  const shownCounted = counted.filter(matchF);
 
   return (
     <div className="sc-wrap">
@@ -221,31 +250,51 @@ export default function CountSession({
             {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')}
           </div>
         </div>
-        <div className="sc-prog">{counted.length}/{lines.length} scanned</div>
+        <div className="sc-prog">{counted.length} / {lines.length} counted</div>
         <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
         <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
       </div>
 
       {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
 
-      <div className="sc-scan">
-        <input
-          ref={inputRef}
-          type="text"
-          className="rcv-shipid"
-          placeholder="scan a barcode"
-          value={scan}
-          onChange={(e) => setScan(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void doScan(); } }}
-        />
-        {scanMsg && <div className="sc-scanmsg">{scanMsg}</div>}
-        {picker && <BarcodePicker skus={picker} imgMap={imgMap} onPick={pick} onCancel={() => setPicker(null)} />}
+      {/* Scan — optional, collapsible (desktop / Bluetooth scanner). Phones lead with the list. */}
+      <div className="sc-scanbox">
+        <button className="sc-scan-toggle" onClick={() => setScanOpen((v) => !v)} aria-expanded={scanOpen}>
+          {scanOpen ? '▾' : '▸'} Scan (optional)
+        </button>
+        {scanOpen && (
+          <div className="sc-scan">
+            <input
+              ref={inputRef}
+              type="text"
+              className="rcv-shipid"
+              placeholder="scan a barcode"
+              value={scan}
+              onChange={(e) => setScan(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void doScan(); } }}
+            />
+            {scanMsg && <div className="sc-scanmsg">{scanMsg}</div>}
+            {picker && <BarcodePicker skus={picker} imgMap={imgMap} onPick={pick} onCancel={() => setPicker(null)} />}
+          </div>
+        )}
       </div>
 
+      {/* Filter the in-scope list (find the SKU in hand) — separate from add-missing search below. */}
+      <div className="sc-filter">
+        <input
+          type="text"
+          placeholder="filter this count — code or name"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+        {filter && <button className="btn-link" onClick={() => setFilter('')}>clear</button>}
+      </div>
+
+      {/* Add a SKU that's NOT in this count's scope. */}
       <div className="sc-add">
         <input
           type="text"
-          placeholder="no barcode? search code/name to add a SKU"
+          placeholder="not in this count? search to add a SKU"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void doSearch(); } }}
@@ -257,56 +306,29 @@ export default function CountSession({
           {hits.filter((h) => !listed.has(h.item_code)).map((h) => (
             <CountAddHit key={h.item_code} hit={h} imgMap={imgMap} onAdd={(qty) => void addManual(h.item_code, qty)} />
           ))}
-          {hits.every((h) => listed.has(h.item_code)) && <div className="sc-empty">All matches are already in this count — scan or set them above.</div>}
+          {hits.every((h) => listed.has(h.item_code)) && <div className="sc-empty">All matches are already in this count — set them below.</div>}
         </div>
       )}
 
       {loading ? (
         <div className="sc-empty">Loading…</div>
       ) : (
-        <div className="sc-cols">
-          <div className="sc-col">
-            <div className="sc-sec-title">Counted ({counted.length})</div>
-            {counted.length === 0 && <div className="sc-empty">Nothing scanned yet.</div>}
-            {counted.map((l) => {
-              const d = (l.counted_qty as number) - l.physical;
-              return (
-                <div key={l.line_id} className="sc-count-row">
-                  <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={32} />
-                  <span className="ff-code">{l.item_code}</span>
-                  <span className="ff-name">{l.name}</span>
-                  <span className="sc-exp">was {l.physical}{l.added_missing ? ' · added' : ''}</span>
-                  <span className="sc-ctlrow">
-                    <button className="sc-step" onClick={() => void setQty(l.item_code, (l.counted_qty as number) - 1)}>−</button>
-                    <input
-                      type="number"
-                      className="sc-qty"
-                      min={0}
-                      value={l.counted_qty as number}
-                      onChange={(e) => void setQty(l.item_code, Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                    />
-                    <button className="sc-step" onClick={() => void bump(l.item_code)}>+</button>
-                  </span>
-                  {d !== 0 && <span className={`sc-delta ${d > 0 ? 'pos' : 'neg'}`}>{d > 0 ? `+${d}` : d}</span>}
-                </div>
-              );
-            })}
-          </div>
+        <div className="sc-list">
+          <div className="sc-sec-title">To count ({toCount.length})</div>
+          {shownToCount.length === 0 && (
+            <div className="sc-empty">{toCount.length === 0 ? 'Everything in scope is counted.' : 'No matches in “to count”.'}</div>
+          )}
+          {shownToCount.map((l) => (
+            <CountRow key={l.line_id} line={l} imgMap={imgMap} onSet={setQty} onInc={bump} />
+          ))}
 
-          <div className="sc-col">
-            <div className="sc-sec-title">Not yet scanned ({notScanned.length})</div>
-            {notScanned.length === 0 && <div className="sc-empty">Everything in scope is scanned.</div>}
-            {notScanned.map((l) => (
-              <div key={l.line_id} className="sc-count-row dim">
-                <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={32} />
-                <span className="ff-code">{l.item_code}</span>
-                <span className="ff-name">{l.name}</span>
-                <span className="sc-exp">system {l.physical}</span>
-                <button className="btn-secondary sc-mini" onClick={() => void setQty(l.item_code, l.physical)}>= {l.physical}</button>
-                <button className="btn-secondary sc-mini" onClick={() => void setQty(l.item_code, 0)}>0</button>
-              </div>
-            ))}
-          </div>
+          <div className="sc-sec-title" style={{ marginTop: 16 }}>Counted ({counted.length})</div>
+          {shownCounted.length === 0 && (
+            <div className="sc-empty">{counted.length === 0 ? 'Nothing counted yet.' : 'No matches in “counted”.'}</div>
+          )}
+          {shownCounted.map((l) => (
+            <CountRow key={l.line_id} line={l} imgMap={imgMap} onSet={setQty} onInc={bump} />
+          ))}
         </div>
       )}
 
@@ -319,6 +341,80 @@ export default function CountSession({
           onCancel={() => { if (!closing) setConfirm(null); }}
         />
       )}
+    </div>
+  );
+}
+
+// One working-list row (used for both un-counted and counted). The number field is the primary
+// control: a local draft committed on blur/Enter, so typing a multi-digit count doesn't fire a write
+// per keystroke (and doesn't move the row between sections mid-type). −/+ are small corrections; the
+// quick "= system" / "0" buttons stay on un-counted rows.
+function CountRow({
+  line,
+  imgMap,
+  onSet,
+  onInc,
+}: {
+  line: LineRow;
+  imgMap: ReturnType<typeof useSkuImages>;
+  onSet: (code: string, qty: number) => void;
+  onInc: (code: string) => void;
+}) {
+  const counted = line.counted_qty != null;
+  const [draft, setDraft] = useState(counted ? String(line.counted_qty) : '');
+  useEffect(() => {
+    setDraft(line.counted_qty == null ? '' : String(line.counted_qty));
+  }, [line.counted_qty]);
+
+  const d = counted ? (line.counted_qty as number) - line.physical : 0;
+
+  function commit() {
+    const t = draft.trim();
+    if (t === '') return; // empty → leave as-is (an un-counted row stays un-counted)
+    const n = Number(t);
+    if (!Number.isFinite(n)) {
+      setDraft(counted ? String(line.counted_qty) : '');
+      return;
+    }
+    const v = Math.max(0, Math.floor(n));
+    if (counted && v === line.counted_qty) return; // no change
+    onSet(line.item_code, v);
+  }
+
+  return (
+    <div className={`sc-count-row${counted ? '' : ' dim'}`}>
+      <div className="sc-row-top">
+        <SkuImage status={imgMap[line.item_code]?.status} displayUrl={imgMap[line.item_code]?.displayUrl} name={line.name} size={36} />
+        <span className="ff-code">{line.item_code}</span>
+        <span className="ff-name">{line.name}</span>
+        {counted && d !== 0 && <span className={`sc-delta ${d > 0 ? 'pos' : 'neg'}`}>{d > 0 ? `+${d}` : d}</span>}
+      </div>
+      <div className="sc-row-ctl">
+        <span className="sc-exp">{counted ? `was ${line.physical}${line.added_missing ? ' · added' : ''}` : `system ${line.physical}`}</span>
+        <span className="sc-ctlrow">
+          {/* onMouseDown preventDefault keeps focus in the qty field, so a stepper click doesn't also
+              blur-commit the draft → exactly one deterministic write per action. */}
+          <button className="sc-step" aria-label="minus one" onMouseDown={(e) => e.preventDefault()} onClick={() => onSet(line.item_code, (line.counted_qty ?? 0) - 1)}>−</button>
+          <input
+            type="number"
+            inputMode="numeric"
+            className="sc-qty"
+            min={0}
+            placeholder="count"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }}
+          />
+          <button className="sc-step" aria-label="plus one" onMouseDown={(e) => e.preventDefault()} onClick={() => onInc(line.item_code)}>+</button>
+        </span>
+        {!counted && (
+          <span className="sc-quick">
+            <button className="btn-secondary sc-mini" onMouseDown={(e) => e.preventDefault()} onClick={() => onSet(line.item_code, line.physical)}>= {line.physical}</button>
+            <button className="btn-secondary sc-mini" onMouseDown={(e) => e.preventDefault()} onClick={() => onSet(line.item_code, 0)}>0</button>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -341,6 +437,7 @@ function CountAddHit({
       <span className="sc-exp">avail {hit.available}</span>
       <input
         type="number"
+        inputMode="numeric"
         className="sc-qty"
         min={1}
         value={qty}
