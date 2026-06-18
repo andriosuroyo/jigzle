@@ -451,7 +451,7 @@ img.sku-img { background: #e8e8e8; }
 .sc-hits { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .sc-hit { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .sc-hit-btn { width: 100%; text-align: left; cursor: pointer; }
-.sc-qty { width: 64px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+.sc-qty { width: 72px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 16px; background: white; }  /* 16px = no iOS zoom-on-focus */
 .sc-note { flex: 1; min-width: 100px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
 
 /* presence checklist */
@@ -462,17 +462,27 @@ img.sku-img { background: #e8e8e8; }
 .sc-check-row input[type="checkbox"] { width: 22px; height: 22px; flex-shrink: 0; cursor: pointer; }
 .sc-check-row.done { opacity: 0.7; }
 
-/* count scanner */
-.sc-scan { margin-top: 14px; }
+/* count mode (mobile rework docs/020): collapsible optional scan + in-scope filter + single list */
+.sc-scanbox { margin-top: 12px; }
+.sc-scan-toggle { background: none; border: none; color: var(--brown); font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px 0; }
+.sc-scan { margin-top: 8px; }
 .sc-scanmsg { margin-top: 6px; font-size: 13px; color: var(--brown-dark); font-weight: 600; }
+.sc-filter { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.sc-filter input { flex: 1; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; }
+.sc-list { margin-top: 14px; }
+/* legacy two-column selectors (no longer rendered; kept harmless) */
 .sc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .sc-col { min-width: 0; }
-.sc-count-row { display: flex; align-items: center; gap: 8px; background: white; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; }
+/* one working-list row = a two-line card that wraps on narrow screens (image+code+name, then qty controls) */
+.sc-count-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
 .sc-count-row.dim { background: var(--cream); }
-.sc-ctlrow { display: flex; align-items: center; gap: 4px; }
-.sc-step { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: white; font-size: 16px; font-weight: 700; color: var(--brown); cursor: pointer; }
+.sc-row-top { display: flex; align-items: center; gap: 8px; flex: 1 1 240px; min-width: 0; }
+.sc-row-ctl { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; }
+.sc-quick { display: flex; gap: 4px; }
+.sc-ctlrow { display: flex; align-items: center; gap: 6px; }
+.sc-step { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 18px; font-weight: 700; color: var(--brown); cursor: pointer; line-height: 1; }
 .sc-step:active { background: var(--paper); }
-.sc-mini { padding: 5px 9px; font-size: 12px; }
+.sc-mini { padding: 6px 10px; font-size: 12px; }
 
 /* deltas + sources */
 .sc-exp { font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap; }
@@ -530,4 +540,17 @@ img.sku-img { background: #e8e8e8; }
 
 @media (max-width: 640px) {
   .sc-cols { grid-template-columns: 1fr; }
+}
+
+/* Mobile Count (docs/020 §5): sticky session header + thumb-friendly targets. */
+@media (max-width: 760px) {
+  /* z-index above the app-header (50) so when both pin to the top, this sits on top — not hidden
+     behind it; at rest it flows just below the header (no overlap). */
+  .sc-sess-head {
+    position: sticky; top: 0; z-index: 60;
+    background: var(--cream); border-bottom: 1px solid var(--line);
+    padding: 8px 18px; margin: 0 -18px;
+  }
+  .sc-step { width: 44px; height: 44px; }
+  .sc-qty { width: 80px; height: 44px; }
 }
