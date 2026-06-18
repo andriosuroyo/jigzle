@@ -19,11 +19,11 @@ const MIN_CHARS = 2;
 
 export default function SkuSearchAdd({
   listed,
-  placeholder,
+  placeholder = 'Add: list by code or name',
   onSelect,
 }: {
   listed: Set<string>;
-  placeholder: string;
+  placeholder?: string;
   onSelect: (code: string) => void;
 }) {
   const [q, setQ] = useState('');

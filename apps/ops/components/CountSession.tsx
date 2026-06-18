@@ -262,7 +262,7 @@ export default function CountSession({
       <div className="sc-filter">
         <input
           type="text"
-          placeholder="filter this count — code or name"
+          placeholder="Filter: search by code or name"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -270,7 +270,7 @@ export default function CountSession({
       </div>
 
       {/* Add a SKU that's NOT in this count's scope (autosearch → tap to add at qty 1; set the real count in-list). */}
-      <SkuSearchAdd listed={listed} placeholder="not in this count? search a code or name to add" onSelect={(code) => void addSku(code)} />
+      <SkuSearchAdd listed={listed} onSelect={(code) => void addSku(code)} />
 
       {loading ? (
         <div className="sc-empty">Loading…</div>

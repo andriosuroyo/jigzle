@@ -164,7 +164,7 @@ export default function PresenceSession({
       <div className="sc-filter">
         <input
           type="text"
-          placeholder="filter the checklist — code or name"
+          placeholder="Filter: search by code or name"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -172,7 +172,7 @@ export default function PresenceSession({
       </div>
 
       {/* Add a SKU that's here but not listed (autosearch → tap to add present). */}
-      <SkuSearchAdd listed={listed} placeholder="here but not listed? search a code or name to add" onSelect={(code) => void add(code)} />
+      <SkuSearchAdd listed={listed} onSelect={(code) => void add(code)} />
 
       {loading ? (
         <div className="sc-empty">Loading the checklist…</div>
