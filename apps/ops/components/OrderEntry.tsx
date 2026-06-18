@@ -279,7 +279,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                       inputMode="search"
                       placeholder="Search phone or name…"
                       value={custQuery}
-                      onChange={(e) => setCustQuery(e.target.value)}
+                      onChange={(e) => { setCustQuery(e.target.value); if (!e.target.value.trim()) setCustResults([]); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runCustSearch(); } }}
                     />
                     <button className="btn-secondary" onClick={runCustSearch} disabled={custSearching}>{custSearching ? '…' : 'Search'}</button>
@@ -354,7 +354,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                   inputMode="search"
                   placeholder="SKU code / name / barcode…"
                   value={skuQuery}
-                  onChange={(e) => setSkuQuery(e.target.value)}
+                  onChange={(e) => { setSkuQuery(e.target.value); if (!e.target.value.trim()) setSkuResults([]); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSkuSearch(); } }}
                   disabled={!customer}
                 />
