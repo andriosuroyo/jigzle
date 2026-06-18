@@ -12,8 +12,8 @@ export default async function Home() {
     <div className="ops">
       <AppHeader userEmail={user?.email || ''} />
       <div className="hub">
-        <Link href="/procurement" className="hub-card">
-          <div className="hub-card-title">Procurement</div>
+        <Link href="/order" className="hub-card">
+          <div className="hub-card-title">Order</div>
           <div className="hub-card-sub">Enter & advance purchase orders; group them into shipments.</div>
         </Link>
         <Link href="/sales/new" className="hub-card">
@@ -28,16 +28,16 @@ export default async function Home() {
           <div className="hub-card-title">Outbound</div>
           <div className="hub-card-sub">Box, weigh, and ship fulfilled orders.</div>
         </Link>
-        <Link href="/receiving" className="hub-card">
-          <div className="hub-card-title">Receiving</div>
+        <Link href="/inbound" className="hub-card">
+          <div className="hub-card-title">Inbound</div>
           <div className="hub-card-sub">Check arrivals into stock — the only "+" side.</div>
         </Link>
         <Link href="/inventory" className="hub-card">
           <div className="hub-card-title">Inventory</div>
           <div className="hub-card-sub">Stock per SKU — on order, being shipped, in warehouse.</div>
         </Link>
-        <Link href="/catalogue" className="hub-card">
-          <div className="hub-card-title">Catalogue</div>
+        <Link href="/catalog" className="hub-card">
+          <div className="hub-card-title">Catalog</div>
           <div className="hub-card-sub">Edit SKUs & barcodes; needs-review &amp; shared-barcode cleanup.</div>
         </Link>
       </div>

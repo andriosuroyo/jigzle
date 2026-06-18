@@ -11,8 +11,8 @@ import {
   createCatalogueStub,
   newAdhocShipId,
   recordReceipt,
-} from '@/app/receiving/actions';
-import type { ReceiveDetail, ResolvedSku, RecordReceiptResult, SkuHit } from '@/app/receiving/types';
+} from '@/app/inbound/actions';
+import type { ReceiveDetail, ResolvedSku, RecordReceiptResult, SkuHit } from '@/app/inbound/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 
@@ -28,7 +28,7 @@ function todayStr(): string {
 // the synthetic detail for an ad-hoc receive (no shipments-ledger row, no expected list)
 const ADHOC_SENTINEL = '__adhoc__';
 
-export default function ReceivingBoard({
+export default function InboundBoard({
   initialQueue,
   userEmail,
 }: {
@@ -342,7 +342,7 @@ export default function ReceivingBoard({
 
   return (
     <div className="ops">
-      <AppHeader active="receiving" userEmail={userEmail} />
+      <AppHeader active="inbound" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Arrivals queue ── */}

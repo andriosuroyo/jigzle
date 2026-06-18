@@ -13,8 +13,8 @@ import {
   setVerified,
   unlinkBarcode,
   updateSku,
-} from '@/app/catalogue/actions';
-import type { CatalogueListRow, SkuDetail } from '@/app/catalogue/types';
+} from '@/app/catalog/actions';
+import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 
@@ -122,7 +122,7 @@ function buildPatch(orig: CatalogueRow, form: FormState): Partial<CatalogueRow> 
 type Tab = 'all' | 'needs' | 'shared';
 type RightMode = 'sku' | 'collision' | null;
 
-export default function CatalogueBoard({
+export default function CatalogBoard({
   initialNeedsReview,
   initialShared,
   userEmail,
@@ -338,7 +338,7 @@ export default function CatalogueBoard({
 
   return (
     <div className="ops">
-      <AppHeader active="catalogue" userEmail={userEmail} />
+      <AppHeader active="catalog" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Left: tabs + list ── */}

@@ -14,8 +14,8 @@ import {
   searchSkus,
   setPOStatus,
   updatePO,
-} from '@/app/procurement/actions';
-import type { CustomerHit, OpenShipmentRow, SkuHit } from '@/app/procurement/types';
+} from '@/app/order/actions';
+import type { CustomerHit, OpenShipmentRow, SkuHit } from '@/app/order/types';
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -88,7 +88,7 @@ const formFromPO = (po: OpenPORow): PoForm => ({
 
 type RightMode = 'new' | 'edit' | 'group' | null;
 
-export default function ProcurementBoard({
+export default function OrderBoard({
   initialQueue,
   suppliers: initialSuppliers,
   forwarders: initialForwarders,
@@ -461,7 +461,7 @@ export default function ProcurementBoard({
 
   return (
     <div className="ops">
-      <AppHeader active="procurement" userEmail={userEmail} />
+      <AppHeader active="order" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Open-PO queue ── */}

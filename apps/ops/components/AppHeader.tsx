@@ -5,13 +5,13 @@ import { useMemo } from 'react';
 import { createSupabaseBrowserClient } from '@jigzle/db/client';
 
 const NAV = [
-  { key: 'procurement', href: '/procurement', label: 'Procurement' },
-  { key: 'receiving',   href: '/receiving',   label: 'Receiving' },
+  { key: 'order',       href: '/order',       label: 'Order' },
+  { key: 'inbound',     href: '/inbound',     label: 'Inbound' },
   { key: 'sales',       href: '/sales/new',   label: 'Sales' },
   { key: 'fulfill',     href: '/fulfill',     label: 'Fulfill' },
   { key: 'outbound',    href: '/outbound',    label: 'Outbound' },
   { key: 'inventory',   href: '/inventory',   label: 'Inventory' },
-  { key: 'catalogue',   href: '/catalogue',   label: 'Catalogue' },
+  { key: 'catalog',     href: '/catalog',     label: 'Catalog' },
 ];
 
 export default function AppHeader({ active, userEmail }: { active?: string; userEmail: string }) {
