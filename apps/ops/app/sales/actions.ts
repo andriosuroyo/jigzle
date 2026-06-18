@@ -65,7 +65,7 @@ export async function searchCustomers(q: string): Promise<CustomerHit[]> {
 
   const ids = data.map((c) => c.customer_id as number);
   const spend = await lifetimeSpend(supabase, ids);
-  return data.map((c) => {
+  const hits = data.map((c) => {
     const lifetime = spend.get(c.customer_id as number) ?? 0;
     return {
       id: c.customer_id as number,
@@ -75,6 +75,11 @@ export async function searchCustomers(q: string): Promise<CustomerHit[]> {
       lifetime_spend: lifetime,
     };
   });
+  // Surface an exact match (typed phone or full name) at the very top.
+  const ql = raw.toLowerCase();
+  const isExact = (h: CustomerHit) =>
+    (norm && h.phone === norm) || (h.name?.toLowerCase() === ql) || h.phone === raw;
+  return hits.sort((a, b) => Number(isExact(b)) - Number(isExact(a)));
 }
 
 // ── Panel 1: loyalty readout for the selected customer ──
@@ -206,11 +211,16 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
     .in('item_code', codes);
   const avail = new Map((stock ?? []).map((s) => [s.item_code as string, s.available as number]));
 
-  return codes.map((item_code) => ({
+  const hits = codes.map((item_code) => ({
     item_code,
     name: named.get(item_code)!,
     available: avail.get(item_code) ?? 0,
   }));
+  // An exact item_code match always sorts to the very top (stable sort keeps the rest in order).
+  const ql = raw.toLowerCase();
+  return hits.sort(
+    (a, b) => Number(b.item_code.toLowerCase() === ql) - Number(a.item_code.toLowerCase() === ql)
+  );
 }
 
 // ── Panel 5: save the order (atomic, via the create_order RPC) ── (types in ./types)

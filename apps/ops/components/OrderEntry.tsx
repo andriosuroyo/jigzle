@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { fmtRp } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import AppHeader from '@/components/AppHeader';
@@ -20,6 +20,7 @@ import { SKU_IMG } from '@/components/skuImageSizes';
 
 const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEBSITE', 'LINE', 'OTHER'];
 const METHODS = ['BCA', 'Shopee', 'Tokopedia', 'Mandiri', 'Deposit', 'Website', 'Cash', 'Socmed'];
+const QTY_OPTIONS = Array.from({ length: 50 }, (_, i) => i + 1); // mobile qty dropdown
 
 type Line = { item_code: string; name: string; qty: number; unit_price_idr: number; available: number };
 
@@ -94,26 +95,25 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
   const imgCodes = useMemo(() => [...skuResults.map((s) => s.item_code), ...lines.map((l) => l.item_code)], [skuResults, lines]);
   const imgMap = useSkuImages(imgCodes);
 
-  // ── debounced searches ──
-  useEffect(() => {
+  // ── on-demand searches (Enter or the search button) — no live debounce, so results only
+  //    refresh when asked. searchSkus/searchCustomers rank an exact match to the very top. ──
+  async function runCustSearch() {
     const q = custQuery.trim();
-    if (q.length < 2) { setCustResults([]); setCustSearching(false); return; }
+    if (q.length < 2) { setCustResults([]); return; }
     setCustSearching(true);
-    const t = setTimeout(() => {
-      searchCustomers(q).then(setCustResults).catch(() => setCustResults([])).finally(() => setCustSearching(false));
-    }, 300);
-    return () => clearTimeout(t);
-  }, [custQuery]);
+    try { setCustResults(await searchCustomers(q)); }
+    catch { setCustResults([]); }
+    finally { setCustSearching(false); }
+  }
 
-  useEffect(() => {
+  async function runSkuSearch() {
     const q = skuQuery.trim();
-    if (q.length < 2) { setSkuResults([]); setSkuSearching(false); return; }
+    if (q.length < 2) { setSkuResults([]); return; }
     setSkuSearching(true);
-    const t = setTimeout(() => {
-      searchSkus(q).then(setSkuResults).catch(() => setSkuResults([])).finally(() => setSkuSearching(false));
-    }, 300);
-    return () => clearTimeout(t);
-  }, [skuQuery]);
+    try { setSkuResults(await searchSkus(q)); }
+    catch { setSkuResults([]); }
+    finally { setSkuSearching(false); }
+  }
 
   // ── customer selection ──
   async function selectCustomer(hit: CustomerHit) {
@@ -276,10 +276,13 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                   <div className="search-row">
                     <input
                       type="text"
+                      inputMode="search"
                       placeholder="Search phone or name…"
                       value={custQuery}
                       onChange={(e) => setCustQuery(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runCustSearch(); } }}
                     />
+                    <button className="btn-secondary" onClick={runCustSearch} disabled={custSearching}>{custSearching ? '…' : 'Search'}</button>
                   </div>
                   {custSearching && <div className="hint">Searching…</div>}
                   {custResults.length > 0 && (
@@ -348,11 +351,14 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
               <div className="search-row">
                 <input
                   type="text"
+                  inputMode="search"
                   placeholder="SKU code / name / barcode…"
                   value={skuQuery}
                   onChange={(e) => setSkuQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSkuSearch(); } }}
                   disabled={!customer}
                 />
+                <button className="btn-secondary" onClick={runSkuSearch} disabled={!customer || skuSearching}>{skuSearching ? '…' : 'Search'}</button>
               </div>
               {skuSearching && <div className="hint">Searching…</div>}
               {skuResults.length > 0 && (
@@ -369,15 +375,21 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                           <span className={`sku-avail ${low ? 'low' : ''}`}>avail {s.available}</span>
                         </div>
                         <div className="sku-add">
-                          <input className="qty" type="number" min={1} placeholder="qty"
+                          {/* qty: dropdown on mobile, freestyle on desktop (same draftQty state) */}
+                          <select className="qty qty-mobile"
+                            value={draftQty[s.item_code] ?? ''}
+                            onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))}>
+                            <option value="">qty</option>
+                            {QTY_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                          <input className="qty qty-desktop" type="number" inputMode="numeric" min={1} placeholder="qty"
                             value={draftQty[s.item_code] ?? ''}
                             onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))} />
-                          <input className="price" type="number" min={0} placeholder="Rp price"
+                          <input className="price" type="number" inputMode="numeric" min={0} placeholder="Rp price"
                             value={draftPrice[s.item_code] ?? ''}
                             onChange={(e) => setDraftPrice((d) => ({ ...d, [s.item_code]: e.target.value }))} />
                           <button className="btn-secondary" onClick={() => addLine(s)}>add</button>
                         </div>
-                        {low && <div className="low-warn">Low stock (avail {s.available}) — backorder allowed</div>}
                       </li>
                     );
                   })}
@@ -389,10 +401,17 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                   {lines.map((l, i) => (
                     <li key={`${l.item_code}-${i}`} className="line-item">
                       <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={SKU_IMG.md} />
-                      <span className="li-qty">{l.qty}×</span>
-                      <span className="li-name">{l.name}<em>{l.item_code}</em></span>
-                      <span className="li-total">{fmtRp(l.qty * l.unit_price_idr)}</span>
-                      {l.available < l.qty && <span className="li-low" title="Low stock — backorder">⚠</span>}
+                      <div className="li-main">
+                        <span className="li-code">{l.item_code}</span>
+                        <span className="li-name">{l.name}</span>
+                        <span className={`li-avail ${l.available < l.qty ? 'low' : ''}`}>
+                          avail {l.available}{l.available < l.qty ? ' · low' : ''}
+                        </span>
+                      </div>
+                      <div className="li-right">
+                        <span className="li-qty">{l.qty}×</span>
+                        <span className="li-total">{fmtRp(l.qty * l.unit_price_idr)}</span>
+                      </div>
                       <button className="li-remove" onClick={() => removeLine(i)} aria-label="remove">×</button>
                     </li>
                   ))}
@@ -445,7 +464,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                 <button className={payMode === 'dp' ? 'active' : ''} onClick={() => setPayMode('dp')}>DP</button>
               </div>
               {payMode === 'dp' && (
-                <input className="pay-amount" type="number" min={0} placeholder="DP amount (Rp)" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                <input className="pay-amount" type="number" inputMode="numeric" min={0} placeholder="DP amount (Rp)" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
               )}
               {payMode === 'full' && <div className="hint">Full payment: {fmtRp(subtotal)}</div>}
               {payMode !== 'none' && (
