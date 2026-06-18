@@ -17,6 +17,10 @@ export function modeVerb(mode: StockCheckMode): string {
   return mode === 'count' ? 'Counted by' : 'Checked by';
 }
 
+// Result of openStockCheck — RETURNED (not thrown) so a readable message survives Next.js's
+// production server-action error sanitization (a thrown error reaches the client as an opaque digest).
+export type OpenResult = { ok: true; stock_check_id: number } | { ok: false; message: string };
+
 // One brand option for the New-count scope picker (brands.prefix → brands.name).
 export interface BrandOption {
   prefix: string;

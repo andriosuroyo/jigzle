@@ -68,7 +68,8 @@ export default function StockCheckBoard({
 
   async function createCount(input: NewCountInput) {
     setError(null);
-    const id = await openStockCheck(input); // throws → caught by the modal
+    const res = await openStockCheck(input);
+    if (!res.ok) throw new Error(res.message); // client-side throw → the modal shows the readable message
     try {
       localStorage.setItem('sc:lastBy', input.counted_by);
     } catch {
@@ -77,7 +78,7 @@ export default function StockCheckBoard({
     setLastBy(input.counted_by);
     setShowNew(false);
     const list = await reloadSessions();
-    const fresh = list.find((s) => s.stock_check_id === id);
+    const fresh = list.find((s) => s.stock_check_id === res.stock_check_id);
     if (fresh) setDetail(fresh);
   }
 
