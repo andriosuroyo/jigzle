@@ -21,6 +21,7 @@ import {
   recordCount,
   resolveScan,
 } from '@/app/stock-check/actions';
+import { modeLabel, modeVerb } from '@/app/stock-check/types';
 import type {
   CloseConfirmData,
   CloseReviewEntry,
@@ -222,16 +223,17 @@ export default function CountSession({
   return (
     <div className="sc-wrap">
       <div className="sc-sess-head">
-        <button className="btn-link" onClick={onExit}>← sessions</button>
-        <div className="sc-sess-head-main">
-          <div className="sc-sess-title">Count · {session.counted_by}</div>
-          <div className="sc-sess-sub">
-            {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')}
-          </div>
+        <div className="sc-sess-row1">
+          <button className="btn-link" onClick={onExit}>← back</button>
+          <span className="sc-prog">{counted.length} / {lines.length} SKUs</span>
+          <span className="sc-sess-actions">
+            <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
+            <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
+          </span>
         </div>
-        <div className="sc-prog">{counted.length} / {lines.length} SKUs</div>
-        <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
-        <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
+        <div className="sc-sess-row2">
+          {modeLabel(session.mode)} · {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')} · {modeVerb(session.mode)} {session.counted_by}
+        </div>
       </div>
 
       {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
