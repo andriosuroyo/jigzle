@@ -16,6 +16,9 @@ import {
   updatePO,
 } from '@/app/order/actions';
 import type { CustomerHit, OpenShipmentRow, SkuHit } from '@/app/order/types';
+import SkuImage from '@/components/SkuImage';
+import { useSkuImages } from '@/components/useSkuImages';
+import { SKU_IMG } from '@/components/skuImageSizes';
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -141,6 +144,15 @@ export default function OrderBoard({
 
   const selectedCount = selectedPoIds.size;
   const selectedPOs = useMemo(() => queue.filter((p) => selectedPoIds.has(p.po_id)), [queue, selectedPoIds]);
+
+  // SKU thumbnails for the PO queue rows + the SKU search picker
+  const imgCodes = useMemo(() => {
+    const set = new Set<string>();
+    queue.forEach((p) => { if (p.item_code) set.add(p.item_code); });
+    skuHits.forEach((h) => set.add(h.item_code));
+    return [...set];
+  }, [queue, skuHits]);
+  const imgMap = useSkuImages(imgCodes);
 
   function currentFilter() {
     return {
@@ -503,6 +515,7 @@ export default function OrderBoard({
                     onChange={() => toggleSelect(po.po_id)}
                     aria-label={`select PO ${po.po_id}`}
                   />
+                  <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                   <button className={`fq-row ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
                     <div className="fq-row-top">
                       <span className="fq-id">{po.item_code || '—'}</span>
@@ -614,7 +627,7 @@ export default function OrderBoard({
                   {skuHits.map((h) => (
                     <li key={h.item_code}>
                       <button className="result-item po-sku-hit" onClick={() => pickSku(h)}>
-                        <span className="ri-name">{h.item_code} · {h.name}</span>
+                        <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} /> {h.item_code} · {h.name}</span>
                         <span className="po-sku-meta">avail <b>{h.available}</b> · pending <b>{h.pending}</b> · on the way <b>{h.on_the_way}</b></span>
                       </button>
                     </li>
@@ -733,6 +746,7 @@ export default function OrderBoard({
             {selectedPOs.map((po) => (
               <li key={po.po_id} className="ff-line">
                 <div className="rcv-line-head">
+                  <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                   <span className="ff-code">{po.item_code || '—'}</span>
                   <span className="ff-name">{po.name}</span>
                   <span className="rcv-exp">×{po.qty}</span>

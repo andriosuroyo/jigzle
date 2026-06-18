@@ -17,6 +17,7 @@ import {
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
+import { SKU_IMG } from '@/components/skuImageSizes';
 
 type FieldKind = 'text' | 'textarea' | 'number' | 'bool';
 type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind };
@@ -373,7 +374,7 @@ export default function CatalogBoard({
                 <li key={r.item_code}>
                   <button className={`fq-row ${detail?.sku.item_code === r.item_code ? 'active' : ''}`} onClick={() => openSku(r.item_code)} disabled={busy}>
                     <div className="cat-row">
-                      <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={36} />
+                      <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                       <div className="cat-row-main">
                         <div className="fq-row-top">
                           <span className="fq-id">{r.item_code}</span>
@@ -422,7 +423,7 @@ export default function CatalogBoard({
             <>
               <div className="fd-head">
                 <div className="fd-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={40} />
+                  <SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={SKU_IMG.lg} />
                   {detail.sku.item_code}
                 </div>
                 <div className="fd-sub">

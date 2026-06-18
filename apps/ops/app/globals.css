@@ -362,10 +362,11 @@ input, textarea, select, button { font-family: inherit; }
 .cat-bc .bc-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
 /* ── SKU image (shared thumbnail — has_image / not_found / pending) ── */
-.sku-img { display: inline-flex; align-items: center; justify-content: center; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); flex-shrink: 0; vertical-align: middle; overflow: hidden; }
-img.sku-img { background: var(--cream); }
-.sku-img-none { font-size: 16px; color: var(--muted); }
-.sku-img-pending { border-style: dashed; background: var(--cream); }
+.sku-img { display: inline-flex; align-items: center; justify-content: center; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: #e8e8e8; flex-shrink: 0; vertical-align: middle; overflow: hidden; }
+img.sku-img { background: #e8e8e8; }
+/* pending → plain light-grey fill, no icon. not_found → same grey + a faint muted marker. */
+.sku-img-pending { background: #e8e8e8; }
+.sku-img-none { background: #e8e8e8; color: var(--brown-light); font-size: 14px; font-weight: 700; line-height: 1; }
 .inv-code-cell { display: inline-flex; align-items: center; gap: 6px; }
 .cat-row { display: flex; align-items: center; gap: 8px; }
 .cat-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }

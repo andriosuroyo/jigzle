@@ -6,6 +6,9 @@ import { volWeight, chargeable } from '@jigzle/lib';
 import type { ShipQueueRow } from '@jigzle/db/types';
 import { getShipQueue, getOrderForShip, recordShipment } from '@/app/outbound/actions';
 import type { ShipDetail, ShipResult } from '@/app/outbound/types';
+import SkuImage from '@/components/SkuImage';
+import { useSkuImages } from '@/components/useSkuImages';
+import { SKU_IMG } from '@/components/skuImageSizes';
 
 const COURIERS = ['JNE', 'J&T', 'SiCepat', 'AnterAja', 'Ninja Xpress', 'POS Indonesia', 'TIKI', 'GoSend', 'GrabExpress', 'Lion Parcel', 'ID Express', 'Other'];
 
@@ -48,6 +51,13 @@ export default function OutboundBoard({
     detail?.barcodes.forEach((b) => m.set(b.barcode, b.item_code));
     return m;
   }, [detail]);
+
+  // SKU thumbnails for the box-contents lines ("am I packing the RIGHT item?")
+  const imgCodes = useMemo(
+    () => (detail?.lines ?? []).map((l) => l.item_code).filter(Boolean) as string[],
+    [detail]
+  );
+  const imgMap = useSkuImages(imgCodes);
 
   function applyDetail(d: ShipDetail | null) {
     setDetail(d);
@@ -246,6 +256,7 @@ export default function OutboundBoard({
                     <li key={l.line_id} className="ff-line">
                       <label className="ff-line-main">
                         <input type="checkbox" checked={checkedLines.has(l.line_id)} onChange={() => toggleLine(l.line_id)} />
+                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
                         <span className="ff-code">{l.item_code || '—'}</span>
                         <span className="ff-name">{l.name}</span>
                         <span className="ff-qty">×{l.qty}</span>

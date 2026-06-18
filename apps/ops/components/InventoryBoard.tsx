@@ -6,6 +6,7 @@ import type { InventoryFilter, InventorySortColumn, InventoryState, StockRow } f
 import { getInventory, refreshSnapshot } from '@/app/inventory/actions';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
+import { SKU_IMG } from '@/components/skuImageSizes';
 
 const ROW_LIMIT = 1000; // matches the server LIMIT — used only for the "refine your search" hint
 
@@ -156,7 +157,7 @@ export default function InventoryBoard({
               )}
               {rows.map((r) => (
                 <tr key={r.item_code}>
-                  <td className="inv-code"><span className="inv-code-cell"><SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={26} />{r.item_code}</span></td>
+                  <td className="inv-code"><span className="inv-code-cell"><SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={SKU_IMG.sm} />{r.item_code}</span></td>
                   <td className="inv-name">{r.name || '—'}</td>
                   <td className={`num inv-num ${r.pending ? '' : 'zero'}`}>{r.pending}</td>
                   <td className={`num inv-num ${r.on_the_way ? '' : 'zero'}`}>{r.on_the_way}</td>
