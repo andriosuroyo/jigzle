@@ -332,6 +332,24 @@ input, textarea, select, button { font-family: inherit; }
 .inv-empty { padding: 30px; text-align: center; color: var(--muted); }
 .inv-count { font-size: 12px; color: var(--muted); margin-top: 10px; }
 
+/* ── DataList (shared responsive primitive: table on desktop, labeled cards on mobile) ── */
+.inv-table th.ctr, .inv-table td.ctr { text-align: center; }
+.datalist-cards, .datalist-sort { display: none; }
+@media (max-width: 760px) {
+  .datalist-table { display: none; }
+  .datalist-sort { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .datalist-sort label { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .datalist-sort select { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
+  .datalist-sort-dir { min-width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown); font-size: 13px; cursor: pointer; }
+  .datalist-cards { display: flex; flex-direction: column; gap: 8px; }
+  .datalist-empty { padding: 30px; text-align: center; color: var(--muted); }
+  .datalist-card { background: white; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .datalist-card-head { font-size: 14px; font-weight: 700; color: var(--brown-dark); display: flex; align-items: center; gap: 8px; }
+  .datalist-card-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; }
+  .datalist-card-label { color: var(--muted); font-weight: 600; }
+  .datalist-card-val { text-align: right; font-variant-numeric: tabular-nums; }
+}
+
 /* ── Catalogue (SKU editor): grouped form + barcode manager ── */
 .cat-grp { margin-top: 14px; }
 .cat-grp-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
