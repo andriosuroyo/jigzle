@@ -447,7 +447,7 @@ img.sku-img { background: #e8e8e8; }
 
 /* add-missing / search */
 .sc-add { display: flex; gap: 8px; margin-top: 14px; }
-.sc-add input { flex: 1; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: white; }
+.sc-add input { flex: 1; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; }  /* 16px = no iOS zoom-on-focus */
 .sc-hits { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .sc-hit { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .sc-hit-btn { width: 100%; text-align: left; cursor: pointer; }
@@ -479,6 +479,10 @@ img.sku-img { background: #e8e8e8; }
 .sc-row-top { display: flex; align-items: center; gap: 8px; flex: 1 1 240px; min-width: 0; }
 .sc-row-ctl { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; }
 .sc-quick { display: flex; gap: 4px; }
+/* two-line SKU identity (PR15 §A2): code on line 1, name on line 2 — used in both session lists + search results */
+.sc-row-id { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; line-height: 1.25; }
+.sc-row-id .ff-name { flex: none; }
+.sc-search { margin-top: 10px; }
 .sc-ctlrow { display: flex; align-items: center; gap: 6px; }
 .sc-step { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 18px; font-weight: 700; color: var(--brown); cursor: pointer; line-height: 1; }
 .sc-step:active { background: var(--paper); }

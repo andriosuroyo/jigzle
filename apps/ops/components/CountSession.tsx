@@ -12,6 +12,7 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import BarcodePicker from '@/components/BarcodePicker';
 import CloseConfirm from '@/components/CloseConfirm';
+import SkuSearchAdd from '@/components/SkuSearchAdd';
 import {
   addMissingSku,
   cancelStockCheck,
@@ -19,7 +20,6 @@ import {
   getSessionLines,
   recordCount,
   resolveScan,
-  searchSkus,
 } from '@/app/stock-check/actions';
 import type {
   CloseConfirmData,
@@ -27,7 +27,6 @@ import type {
   LineRow,
   ScanSku,
   SessionRow,
-  SkuHit,
 } from '@/app/stock-check/types';
 
 export default function CountSession({
@@ -49,16 +48,12 @@ export default function CountSession({
   const [scanOpen, setScanOpen] = useState(false); // collapsed by default (mobile-safe); opened on desktop
 
   const [filter, setFilter] = useState(''); // in-scope filter (client-only) — distinct from add-missing search
-  const [q, setQ] = useState('');
-  const [hits, setHits] = useState<SkuHit[]>([]);
-  const [searching, setSearching] = useState(false);
 
   const [confirm, setConfirm] = useState<CloseConfirmData | null>(null);
   const [closing, setClosing] = useState(false);
   const [closeErr, setCloseErr] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const searchReq = useRef(0);
   const inflight = useRef<Set<Promise<unknown>>>(new Set()); // in-flight count writes; close awaits them so it reads a settled state
 
   useEffect(() => {
@@ -93,9 +88,8 @@ export default function CountSession({
   const imgCodes = useMemo(() => {
     const set = new Set(lines.map((l) => l.item_code));
     picker?.forEach((p) => set.add(p.item_code));
-    hits.forEach((h) => set.add(h.item_code));
     return [...set];
-  }, [lines, picker, hits]);
+  }, [lines, picker]);
   const imgMap = useSkuImages(imgCodes);
 
   // increment a SKU by 1 (scan or +). Updates locally when the line exists; reloads when a brand-new
@@ -164,25 +158,10 @@ export default function CountSession({
     inputRef.current?.focus();
   }
 
-  async function doSearch() {
-    const myReq = ++searchReq.current;
-    setSearching(true);
-    try {
-      const r = await searchSkus(q);
-      if (searchReq.current === myReq) setHits(r);
-    } catch {
-      /* non-fatal */
-    } finally {
-      if (searchReq.current === myReq) setSearching(false);
-    }
-  }
-
-  async function addManual(code: string, qty: number) {
+  async function addSku(code: string) {
     setError(null);
     try {
-      await addMissingSku(session.stock_check_id, code, qty);
-      setQ('');
-      setHits([]);
+      await addMissingSku(session.stock_check_id, code, 1); // adds the line; operator sets the real qty in-list
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Add failed.');
@@ -250,7 +229,7 @@ export default function CountSession({
             {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')}
           </div>
         </div>
-        <div className="sc-prog">{counted.length} / {lines.length} counted</div>
+        <div className="sc-prog">{counted.length} / {lines.length} SKUs</div>
         <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
         <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
       </div>
@@ -290,25 +269,8 @@ export default function CountSession({
         {filter && <button className="btn-link" onClick={() => setFilter('')}>clear</button>}
       </div>
 
-      {/* Add a SKU that's NOT in this count's scope. */}
-      <div className="sc-add">
-        <input
-          type="text"
-          placeholder="not in this count? search to add a SKU"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void doSearch(); } }}
-        />
-        <button className="btn-secondary" onClick={() => void doSearch()} disabled={searching}>{searching ? '…' : 'search'}</button>
-      </div>
-      {hits.length > 0 && (
-        <div className="sc-hits">
-          {hits.filter((h) => !listed.has(h.item_code)).map((h) => (
-            <CountAddHit key={h.item_code} hit={h} imgMap={imgMap} onAdd={(qty) => void addManual(h.item_code, qty)} />
-          ))}
-          {hits.every((h) => listed.has(h.item_code)) && <div className="sc-empty">All matches are already in this count — set them below.</div>}
-        </div>
-      )}
+      {/* Add a SKU that's NOT in this count's scope (autosearch → tap to add at qty 1; set the real count in-list). */}
+      <SkuSearchAdd listed={listed} placeholder="not in this count? search a code or name to add" onSelect={(code) => void addSku(code)} />
 
       {loading ? (
         <div className="sc-empty">Loading…</div>
@@ -385,8 +347,10 @@ function CountRow({
     <div className={`sc-count-row${counted ? '' : ' dim'}`}>
       <div className="sc-row-top">
         <SkuImage status={imgMap[line.item_code]?.status} displayUrl={imgMap[line.item_code]?.displayUrl} name={line.name} size={36} />
-        <span className="ff-code">{line.item_code}</span>
-        <span className="ff-name">{line.name}</span>
+        <span className="sc-row-id">
+          <span className="ff-code">{line.item_code}</span>
+          <span className="ff-name">{line.name}</span>
+        </span>
         {counted && d !== 0 && <span className={`sc-delta ${d > 0 ? 'pos' : 'neg'}`}>{d > 0 ? `+${d}` : d}</span>}
       </div>
       <div className="sc-row-ctl">
@@ -415,35 +379,6 @@ function CountRow({
           </span>
         )}
       </div>
-    </div>
-  );
-}
-
-function CountAddHit({
-  hit,
-  imgMap,
-  onAdd,
-}: {
-  hit: SkuHit;
-  imgMap: ReturnType<typeof useSkuImages>;
-  onAdd: (qty: number) => void;
-}) {
-  const [qty, setQty] = useState(1);
-  return (
-    <div className="sc-hit">
-      <SkuImage status={imgMap[hit.item_code]?.status} displayUrl={imgMap[hit.item_code]?.displayUrl} name={hit.name} size={32} />
-      <span className="ff-code">{hit.item_code}</span>
-      <span className="ff-name">{hit.name}</span>
-      <span className="sc-exp">avail {hit.available}</span>
-      <input
-        type="number"
-        inputMode="numeric"
-        className="sc-qty"
-        min={1}
-        value={qty}
-        onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-      />
-      <button className="btn-secondary" onClick={() => onAdd(qty)}>add</button>
     </div>
   );
 }
