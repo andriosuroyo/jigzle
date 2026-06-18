@@ -87,6 +87,15 @@ const iconCatalog = svg(
   </>
 );
 
+// Stock Check — clipboard with a check (count / reconcile)
+const iconStockCheck = svg(
+  <>
+    <path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <polyline points="9 14 11 16 15 12" />
+  </>
+);
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sales & Purchasing',
@@ -106,6 +115,9 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'System',
-    items: [{ key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog }],
+    items: [
+      { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog },
+      { key: 'stock-check', href: '/stock-check', label: 'Stock Check', icon: iconStockCheck },
+    ],
   },
 ];
