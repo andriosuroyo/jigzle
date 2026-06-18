@@ -21,6 +21,7 @@ import {
   recordCount,
   resolveScan,
 } from '@/app/stock-check/actions';
+import { modeLabel, modeVerb } from '@/app/stock-check/types';
 import type {
   CloseConfirmData,
   CloseReviewEntry,
@@ -222,16 +223,17 @@ export default function CountSession({
   return (
     <div className="sc-wrap">
       <div className="sc-sess-head">
-        <button className="btn-link" onClick={onExit}>← sessions</button>
-        <div className="sc-sess-head-main">
-          <div className="sc-sess-title">Count · {session.counted_by}</div>
-          <div className="sc-sess-sub">
-            {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')}
-          </div>
+        <div className="sc-sess-row1">
+          <button className="btn-link" onClick={onExit}>← back</button>
+          <span className="sc-prog">{counted.length} / {lines.length} SKUs</span>
+          <span className="sc-sess-actions">
+            <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
+            <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
+          </span>
         </div>
-        <div className="sc-prog">{counted.length} / {lines.length} SKUs</div>
-        <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
-        <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
+        <div className="sc-sess-row2">
+          {modeLabel(session.mode)} · {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')} · {modeVerb(session.mode)} {session.counted_by}
+        </div>
       </div>
 
       {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
@@ -262,7 +264,7 @@ export default function CountSession({
       <div className="sc-filter">
         <input
           type="text"
-          placeholder="filter this count — code or name"
+          placeholder="Filter: search by code or name"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -270,7 +272,7 @@ export default function CountSession({
       </div>
 
       {/* Add a SKU that's NOT in this count's scope (autosearch → tap to add at qty 1; set the real count in-list). */}
-      <SkuSearchAdd listed={listed} placeholder="not in this count? search a code or name to add" onSelect={(code) => void addSku(code)} />
+      <SkuSearchAdd listed={listed} onSelect={(code) => void addSku(code)} />
 
       {loading ? (
         <div className="sc-empty">Loading…</div>
@@ -354,7 +356,8 @@ function CountRow({
         {counted && d !== 0 && <span className={`sc-delta ${d > 0 ? 'pos' : 'neg'}`}>{d > 0 ? `+${d}` : d}</span>}
       </div>
       <div className="sc-row-ctl">
-        <span className="sc-exp">{counted ? `was ${line.physical}${line.added_missing ? ' · added' : ''}` : `system ${line.physical}`}</span>
+        {/* Scan: the editable qty field stands alone (PR16 §3) — no read-only label. The "= N" quick
+            button (un-counted) and the delta badge (counted) carry the system-qty reference. */}
         <span className="sc-ctlrow">
           {/* onMouseDown preventDefault keeps focus in the qty field, so a stepper click doesn't also
               blur-commit the draft → exactly one deterministic write per action. */}

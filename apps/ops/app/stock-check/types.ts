@@ -7,6 +7,20 @@ export type StockCheckScope = 'all_active' | 'brand';
 export type StockCheckStatus = 'open' | 'closed' | 'cancelled';
 export type ReviewAction = 'zeroed' | 'ignored' | 'added';
 
+// Display labels for the modes (PR16 §1) — interaction-named, not device-named. The DB `mode` enum
+// stays presence/count; this is a UI-label mapping only.
+export function modeLabel(mode: StockCheckMode): string {
+  return mode === 'count' ? 'Scan' : 'Checkbox';
+}
+// the per-person verb for the session header line 2 ("Counted by Andrio" / "Checked by Andrio").
+export function modeVerb(mode: StockCheckMode): string {
+  return mode === 'count' ? 'Counted by' : 'Checked by';
+}
+
+// Result of openStockCheck — RETURNED (not thrown) so a readable message survives Next.js's
+// production server-action error sanitization (a thrown error reaches the client as an opaque digest).
+export type OpenResult = { ok: true; stock_check_id: number } | { ok: false; message: string };
+
 // One brand option for the New-count scope picker (brands.prefix → brands.name).
 export interface BrandOption {
   prefix: string;

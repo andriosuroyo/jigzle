@@ -439,11 +439,15 @@ img.sku-img { background: #e8e8e8; }
 .sc-badge.cancelled { background: var(--red-tint); color: #993525; }
 
 /* session header (presence / count / snapshot) */
-.sc-sess-head { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.sc-sess-head { display: flex; align-items: center; gap: 8px 12px; margin-top: 12px; flex-wrap: wrap; }
 .sc-sess-head-main { flex: 1; min-width: 0; }
 .sc-sess-title { font-size: 15px; font-weight: 700; color: var(--brown-dark); display: flex; align-items: center; gap: 8px; }
 .sc-sess-sub { font-size: 12px; color: var(--muted); }
 .sc-prog { font-size: 13px; font-weight: 700; color: var(--brown); }
+/* two-line session header (PR16 §5): line 1 = back · N/M SKUs · cancel · Close; line 2 = mode · scope · verb by who */
+.sc-sess-row1 { flex: 1 1 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sc-sess-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.sc-sess-row2 { flex: 1 1 100%; font-size: 12px; color: var(--muted); }
 
 /* add-missing / search */
 .sc-add { display: flex; gap: 8px; margin-top: 14px; }

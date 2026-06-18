@@ -14,6 +14,7 @@ import type {
   CloseSummary,
   LineRow,
   NewCountInput,
+  OpenResult,
   ScanResolve,
   ScanSku,
   SessionRow,
@@ -218,10 +219,10 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
 
 // ── writes (RPCs) ────────────────────────────────────────────────────────────
 
-export async function openStockCheck(input: NewCountInput): Promise<number> {
+export async function openStockCheck(input: NewCountInput): Promise<OpenResult> {
   const counted_by = input.counted_by?.trim();
-  if (!counted_by) throw new Error('openStockCheck: enter who is counting');
-  if (input.scope === 'brand' && !input.brands.length) throw new Error('openStockCheck: pick at least one brand');
+  if (!counted_by) return { ok: false, message: 'Enter who is counting.' };
+  if (input.scope === 'brand' && !input.brands.length) return { ok: false, message: 'Pick at least one brand.' };
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase.rpc('open_stock_check', {
     p_mode: input.mode,
@@ -230,8 +231,25 @@ export async function openStockCheck(input: NewCountInput): Promise<number> {
     p_counted_by: counted_by,
     p_note: input.note?.trim() || null,
   });
-  if (error) throw new Error(`openStockCheck: ${error.message}`);
-  return data as number;
+  if (error) return { ok: false, message: friendlyOpenError(error.message) };
+  return { ok: true, stock_check_id: data as number };
+}
+
+// Translate known open_stock_check raises (migration 0022) into a readable modal message. Surfaced
+// via the RETURN value, not a throw — Next.js replaces thrown server-action errors with an opaque
+// digest in production. Never echo raw DB text; unknown raises get a safe generic fallback.
+function friendlyOpenError(raw: string): string {
+  const m = (raw || '').toLowerCase();
+  if (m.includes('overlaps open session')) {
+    const ids = raw.match(/open session\(s\):\s*(.+?)\s*$/i)?.[1];
+    return `A count overlapping this scope is already open${ids ? ` (session #${ids})` : ''}. Cancel it first, then try again.`;
+  }
+  if (m.includes('counted_by')) return 'Enter who is counting before starting.';
+  if (m.includes('unknown brand')) return 'One or more selected brands aren’t recognized.';
+  if (m.includes('brand scope needs')) return 'Pick at least one brand for a by-brand count.';
+  if (m.includes('mode must be')) return 'Pick a mode (Checkbox or Scan).';
+  if (m.includes('scope must be')) return 'Pick a scope (all active or by brand).';
+  return 'Couldn’t start the count. Check whether a count is already open, then try again.';
 }
 
 export async function cancelStockCheck(stockCheckId: number): Promise<void> {

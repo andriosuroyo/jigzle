@@ -13,6 +13,7 @@ import CountSession from '@/components/CountSession';
 import SnapshotView from '@/components/SnapshotView';
 import AdjustmentsTab from '@/components/AdjustmentsTab';
 import { getSessions, openStockCheck } from '@/app/stock-check/actions';
+import { modeLabel } from '@/app/stock-check/types';
 import type { BrandOption, NewCountInput, SessionRow, StockCheckMode, StockCheckScope } from '@/app/stock-check/types';
 
 function fmtDate(iso: string | null): string {
@@ -67,7 +68,8 @@ export default function StockCheckBoard({
 
   async function createCount(input: NewCountInput) {
     setError(null);
-    const id = await openStockCheck(input); // throws → caught by the modal
+    const res = await openStockCheck(input);
+    if (!res.ok) throw new Error(res.message); // client-side throw → the modal shows the readable message
     try {
       localStorage.setItem('sc:lastBy', input.counted_by);
     } catch {
@@ -76,7 +78,7 @@ export default function StockCheckBoard({
     setLastBy(input.counted_by);
     setShowNew(false);
     const list = await reloadSessions();
-    const fresh = list.find((s) => s.stock_check_id === id);
+    const fresh = list.find((s) => s.stock_check_id === res.stock_check_id);
     if (fresh) setDetail(fresh);
   }
 
@@ -141,12 +143,12 @@ export default function StockCheckBoard({
               {sessions.map((s) => (
                 <button key={s.stock_check_id} className="sc-sess" onClick={() => setDetail(s)}>
                   <span className={`sc-badge ${s.status}`}>{s.status}</span>
-                  <span className="sc-sess-mode">{s.mode === 'count' ? 'Count' : 'Presence'}</span>
+                  <span className="sc-sess-mode">{modeLabel(s.mode)}</span>
                   <span className="sc-sess-scope">{scopeLabel(s)}</span>
                   <span className="sc-sess-by">{s.counted_by}</span>
                   <span className="sc-sess-meta">
                     {s.status === 'open'
-                      ? `${s.confirmed_count}/${s.line_count} ${s.mode === 'count' ? 'scanned' : 'ticked'}`
+                      ? `${s.confirmed_count}/${s.line_count} ${s.mode === 'count' ? 'counted' : 'checked'}`
                       : `${s.changed_count} changed`}
                   </span>
                   <span className="sc-sess-date">{fmtDate(s.started_at)}</span>
@@ -231,8 +233,8 @@ function NewCountModal({
           <div className="sc-field">
             <span>Mode</span>
             <div className="sc-seg">
-              <button className={mode === 'presence' ? 'active' : ''} onClick={() => setMode('presence')}>Presence (phone ✓)</button>
-              <button className={mode === 'count' ? 'active' : ''} onClick={() => setMode('count')}>Count (scan)</button>
+              <button className={mode === 'presence' ? 'active' : ''} onClick={() => setMode('presence')}>Checkbox</button>
+              <button className={mode === 'count' ? 'active' : ''} onClick={() => setMode('count')}>Scan</button>
             </div>
           </div>
 
