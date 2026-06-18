@@ -1,24 +1,25 @@
 'use client';
 
-// Presence mode (docs/016 §2A) — the phone "walk & confirm" pass. By-brand checklist; each row is
-// SKU + name + image + expected qty + a ✓ "it's here". Ticking collapses the row into "done".
-// Add-missing pulls in a SKU that's present but not listed. Close opens the SHARED confirm window
-// (CloseConfirm): un-ticked SKUs are NEVER auto-zeroed — each is set-to-0 or leave there.
+// Presence mode (docs/016 §2A; PR15 §A) — the phone "walk & confirm" pass. By-brand checklist; each
+// row is image + SKU code (line 1) + name (line 2) + expected qty + a ✓ "it's here". Ticking
+// collapses the row into "done". An in-scope filter narrows the checklist; the shared SkuSearchAdd
+// pulls in a SKU that's present but not listed. Close opens the SHARED CloseConfirm: un-ticked SKUs
+// are NEVER auto-zeroed — each is set-to-0 or leave there. Tick/close behavior is unchanged.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import CloseConfirm from '@/components/CloseConfirm';
+import SkuSearchAdd from '@/components/SkuSearchAdd';
 import {
   addMissingSku,
   cancelStockCheck,
   closeStockCheck,
   confirmPresent,
   getSessionLines,
-  searchSkus,
   unconfirmPresent,
 } from '@/app/stock-check/actions';
-import type { CloseConfirmData, CloseReviewEntry, LineRow, SessionRow, SkuHit } from '@/app/stock-check/types';
+import type { CloseConfirmData, CloseReviewEntry, LineRow, SessionRow } from '@/app/stock-check/types';
 
 export default function PresenceSession({
   session,
@@ -33,16 +34,11 @@ export default function PresenceSession({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
-
-  const [q, setQ] = useState('');
-  const [hits, setHits] = useState<SkuHit[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [filter, setFilter] = useState(''); // in-scope filter (client-only) — distinct from the add-missing search
 
   const [confirm, setConfirm] = useState<CloseConfirmData | null>(null);
   const [closing, setClosing] = useState(false);
   const [closeErr, setCloseErr] = useState<string | null>(null);
-
-  const searchReq = useRef(0);
 
   useEffect(() => {
     void reload();
@@ -90,25 +86,10 @@ export default function PresenceSession({
     }
   }
 
-  async function doSearch() {
-    const myReq = ++searchReq.current;
-    setSearching(true);
-    try {
-      const r = await searchSkus(q);
-      if (searchReq.current === myReq) setHits(r);
-    } catch {
-      /* search failures are non-fatal */
-    } finally {
-      if (searchReq.current === myReq) setSearching(false);
-    }
-  }
-
-  async function add(code: string, qty: number) {
+  async function add(code: string) {
     setError(null);
     try {
-      await addMissingSku(session.stock_check_id, code, qty);
-      setQ('');
-      setHits([]);
+      await addMissingSku(session.stock_check_id, code, 1); // Presence add = present at qty 1
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Add failed.');
@@ -139,20 +120,28 @@ export default function PresenceSession({
     }
   }
 
-  const toCheck = lines.filter((l) => !l.confirmed && !l.added_missing);
-  const done = lines.filter((l) => l.confirmed || l.added_missing);
   const checked = lines.filter((l) => l.confirmed).length;
+  const remaining = lines.filter((l) => !l.confirmed && !l.added_missing).length;
   const listed = useMemo(() => new Set(lines.map((l) => l.item_code)), [lines]);
+
+  // in-scope filter applied to BOTH the to-check groups and the done list
+  const f = filter.trim().toLowerCase();
+  const matchF = (l: LineRow) => !f || l.item_code.toLowerCase().includes(f) || (l.name ?? '').toLowerCase().includes(f);
 
   const groups = useMemo(() => {
     const m = new Map<string, LineRow[]>();
-    for (const l of toCheck) {
+    for (const l of lines) {
+      if (l.confirmed || l.added_missing) continue;
+      if (!matchF(l)) continue;
       const k = l.brand_prefix ?? '—';
       const arr = m.get(k) ?? (m.set(k, []), m.get(k)!);
       arr.push(l);
     }
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [toCheck]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, f]);
+  const shownDone = useMemo(() => lines.filter((l) => (l.confirmed || l.added_missing) && matchF(l)), [lines, f]); // eslint-disable-line react-hooks/exhaustive-deps
+  const done = lines.filter((l) => l.confirmed || l.added_missing);
 
   return (
     <div className="sc-wrap">
@@ -164,48 +153,38 @@ export default function PresenceSession({
             {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')}
           </div>
         </div>
-        <div className="sc-prog">{checked}/{lines.length} ✓</div>
+        <div className="sc-prog">{checked} / {lines.length} SKUs</div>
         <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
         <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
       </div>
 
       {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
 
-      <div className="sc-add">
+      {/* Filter the checklist (find the SKU in hand) — separate from the add-missing search below. */}
+      <div className="sc-filter">
         <input
           type="text"
-          placeholder="add a SKU that's here but not listed — search code/name/barcode"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void doSearch(); } }}
+          placeholder="filter the checklist — code or name"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
         />
-        <button className="btn-secondary" onClick={() => void doSearch()} disabled={searching}>{searching ? '…' : 'search'}</button>
+        {filter && <button className="btn-link" onClick={() => setFilter('')}>clear</button>}
       </div>
-      {hits.length > 0 && (
-        <div className="sc-hits">
-          {hits.filter((h) => !listed.has(h.item_code)).map((h) => (
-            <AddHit key={h.item_code} hit={h} imgMap={imgMap} onAdd={(qty) => void add(h.item_code, qty)} />
-          ))}
-          {hits.every((h) => listed.has(h.item_code)) && <div className="sc-empty">All matches are already on the checklist.</div>}
-        </div>
-      )}
+
+      {/* Add a SKU that's here but not listed (autosearch → tap to add present). */}
+      <SkuSearchAdd listed={listed} placeholder="here but not listed? search a code or name to add" onSelect={(code) => void add(code)} />
 
       {loading ? (
         <div className="sc-empty">Loading the checklist…</div>
       ) : (
         <>
-          {toCheck.length === 0 && <div className="validation ok" style={{ marginTop: 12 }}>All checked — close when ready.</div>}
+          {remaining === 0 && <div className="validation ok" style={{ marginTop: 12 }}>All checked — close when ready.</div>}
+          {f && groups.length === 0 && remaining > 0 && <div className="sc-empty">No un-checked SKUs match.</div>}
           {groups.map(([brand, rows]) => (
             <div key={brand} className="sc-grp">
               <div className="sc-grp-head">{brand} <span className="sc-exp">({rows.length})</span></div>
               {rows.map((l) => (
-                <label key={l.line_id} className="sc-check-row">
-                  <input type="checkbox" checked={l.confirmed} onChange={(e) => void tick(l, e.target.checked)} />
-                  <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={40} />
-                  <span className="ff-code">{l.item_code}</span>
-                  <span className="ff-name">{l.name}</span>
-                  <span className="sc-exp">exp {l.physical}</span>
-                </label>
+                <CheckRow key={l.line_id} line={l} imgMap={imgMap} onTick={tick} />
               ))}
             </div>
           ))}
@@ -215,21 +194,8 @@ export default function PresenceSession({
               <button className="sc-grp-head sc-grp-toggle" onClick={() => setShowDone((v) => !v)}>
                 {showDone ? '▾' : '▸'} Done <span className="sc-exp">({done.length})</span>
               </button>
-              {showDone &&
-                done.map((l) => (
-                  <label key={l.line_id} className="sc-check-row done">
-                    <input
-                      type="checkbox"
-                      checked={l.confirmed}
-                      disabled={l.added_missing}
-                      onChange={(e) => void tick(l, e.target.checked)}
-                    />
-                    <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={40} />
-                    <span className="ff-code">{l.item_code}</span>
-                    <span className="ff-name">{l.name}</span>
-                    {l.added_missing ? <span className="badge ready">+{l.counted_qty ?? 0} added</span> : <span className="sc-exp">exp {l.physical}</span>}
-                  </label>
-                ))}
+              {showDone && shownDone.map((l) => <CheckRow key={l.line_id} line={l} imgMap={imgMap} onTick={tick} />)}
+              {showDone && f && shownDone.length === 0 && <div className="sc-empty">No done SKUs match.</div>}
             </div>
           )}
         </>
@@ -248,31 +214,33 @@ export default function PresenceSession({
   );
 }
 
-// one add-missing search result with its own qty input
-function AddHit({
-  hit,
+// One checklist row: image left, code (line 1) / name (line 2) stacked, expected/added + the ✓ on
+// the right. The whole row is a <label> so tapping anywhere toggles the checkbox.
+function CheckRow({
+  line,
   imgMap,
-  onAdd,
+  onTick,
 }: {
-  hit: SkuHit;
+  line: LineRow;
   imgMap: ReturnType<typeof useSkuImages>;
-  onAdd: (qty: number) => void;
+  onTick: (line: LineRow, on: boolean) => void;
 }) {
-  const [qty, setQty] = useState(1);
   return (
-    <div className="sc-hit">
-      <SkuImage status={imgMap[hit.item_code]?.status} displayUrl={imgMap[hit.item_code]?.displayUrl} name={hit.name} size={32} />
-      <span className="ff-code">{hit.item_code}</span>
-      <span className="ff-name">{hit.name}</span>
-      <span className="sc-exp">avail {hit.available}</span>
+    <label className={`sc-check-row${line.confirmed || line.added_missing ? ' done' : ''}`}>
+      <SkuImage status={imgMap[line.item_code]?.status} displayUrl={imgMap[line.item_code]?.displayUrl} name={line.name} size={40} />
+      <span className="sc-row-id">
+        <span className="ff-code">{line.item_code}</span>
+        <span className="ff-name">{line.name}</span>
+      </span>
+      {line.added_missing
+        ? <span className="badge ready">+{line.counted_qty ?? 0} added</span>
+        : <span className="sc-exp">exp {line.physical}</span>}
       <input
-        type="number"
-        className="sc-qty"
-        min={1}
-        value={qty}
-        onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+        type="checkbox"
+        checked={line.confirmed}
+        disabled={line.added_missing}
+        onChange={(e) => onTick(line, e.target.checked)}
       />
-      <button className="btn-secondary" onClick={() => onAdd(qty)}>add</button>
-    </div>
+    </label>
   );
 }
