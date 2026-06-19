@@ -139,6 +139,8 @@ export default function PresenceSession({
       const arr = m.get(k) ?? (m.set(k, []), m.get(k)!);
       arr.push(l);
     }
+    // A–Z: items by item_code within each brand group (PR18 §3); groups A–Z by brand_prefix below.
+    for (const arr of m.values()) arr.sort((a, b) => a.item_code.localeCompare(b.item_code));
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, f]);
@@ -151,11 +153,12 @@ export default function PresenceSession({
           <span className="sc-prog">{checked} / {lines.length} SKUs</span>
           <span className="sc-sess-actions">
             <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
-            <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
+            <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close</button>
           </span>
         </div>
         <div className="sc-sess-row2">
           {modeLabel(session.mode)} · {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')} · {modeVerb(session.mode)} {session.counted_by}
+          {session.note ? ` · ${session.note}` : ''}
         </div>
       </div>
 

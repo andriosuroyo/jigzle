@@ -217,8 +217,11 @@ export default function CountSession({
 
   const f = filter.trim().toLowerCase();
   const matchF = (l: LineRow) => !f || l.item_code.toLowerCase().includes(f) || (l.name ?? '').toLowerCase().includes(f);
-  const shownToCount = toCount.filter(matchF);
-  const shownCounted = counted.filter(matchF);
+  // A–Z by brand_prefix then item_code (PR18 §3 — consistency with Checkbox grouping).
+  const byCode = (a: LineRow, b: LineRow) =>
+    (a.brand_prefix ?? '—').localeCompare(b.brand_prefix ?? '—') || a.item_code.localeCompare(b.item_code);
+  const shownToCount = toCount.filter(matchF).sort(byCode);
+  const shownCounted = counted.filter(matchF).sort(byCode);
 
   return (
     <div className="sc-wrap">
@@ -228,11 +231,12 @@ export default function CountSession({
           <span className="sc-prog">{counted.length} / {lines.length} SKUs</span>
           <span className="sc-sess-actions">
             <button className="btn-link sc-danger" onClick={() => void doCancel()}>cancel</button>
-            <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close…</button>
+            <button className="btn-primary" onClick={() => void openClose()} disabled={loading}>Close</button>
           </span>
         </div>
         <div className="sc-sess-row2">
           {modeLabel(session.mode)} · {session.scope === 'all_active' ? 'all active' : (session.scope_brands ?? []).join(', ')} · {modeVerb(session.mode)} {session.counted_by}
+          {session.note ? ` · ${session.note}` : ''}
         </div>
       </div>
 
