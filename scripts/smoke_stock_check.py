@@ -176,6 +176,9 @@ try:
     still_open = rest("GET", f"stock_checks?stock_check_id=eq.{scid4}&select=status")
     check("rejected close left zero residue (still open, no adjustments)",
           bool(still_open) and still_open[0]["status"] == "open" and len(session_adjustments(scid4)) == 0)
+    # CASE 4 intentionally leaves scid4 OPEN — cancel it so its brand scope is free before CASE 5/6
+    # open another presence session on the same brand (else open_stock_check's overlap guard rejects).
+    rpc("cancel_stock_check", {"p_stock_check_id": scid4})
 
     # ── CASE 5: Checkbox Qty (PR18 §5) — tick A at qty ≠ expected → (counted − expected) adjustment ──
     print("\n-- CASE 5: presence Checkbox Qty (ticked at qty ≠ expected → counted−expected) --")
