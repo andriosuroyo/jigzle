@@ -9,10 +9,13 @@ ledger against the live DB, asserting the stock-math invariant holds, then clean
   Presence mode — open → leave a SKU un-ticked → close marking it 'zeroed' → assert a −expected
                   adjustment + physical 0; separately close everything 'ignored' → assert NO
                   adjustment; and the validate-before-write guard (un-ticked + no decision → reject).
+  Checkbox Qty  — (PR18 §5 / 0024) open presence → record_count 'set' a SKU off its real number (a
+                  ticked Checkbox row at a Qty) → close → assert the SAME (counted − expected)
+                  adjustment Scan writes; and that ticking AT expected writes NOTHING.
 
 Uses the service-role key as a TEST HARNESS only (the app uses anon + the user session). Run AFTER
-0022 is applied, and when no live order/receiving traffic is touching the target SKU (the exact-delta
-asserts read the live view around the close).
+0024 is applied (the Checkbox-Qty close branch), and when no live order/receiving traffic is touching
+the target SKU (the exact-delta asserts read the live view around the close).
 
   python3 scripts/smoke_stock_check.py
 """
@@ -173,6 +176,37 @@ try:
     still_open = rest("GET", f"stock_checks?stock_check_id=eq.{scid4}&select=status")
     check("rejected close left zero residue (still open, no adjustments)",
           bool(still_open) and still_open[0]["status"] == "open" and len(session_adjustments(scid4)) == 0)
+
+    # ── CASE 5: Checkbox Qty (PR18 §5) — tick A at qty ≠ expected → (counted − expected) adjustment ──
+    print("\n-- CASE 5: presence Checkbox Qty (ticked at qty ≠ expected → counted−expected) --")
+    scid5 = rpc("open_stock_check", {"p_mode": "presence", "p_scope": "brand", "p_brands": [BR], "p_counted_by": BY})
+    base5 = view_row(A)
+    target5 = base5["physical"] + 3  # ticked at +3 over the shelf
+    rpc("record_count", {"p_stock_check_id": scid5, "p_item_code": A, "p_op": "set", "p_qty": target5})
+    lines5 = get_all_lines(scid5)
+    review5 = [{"item_code": l["item_code"], "action": "ignored"} for l in lines5 if l["item_code"] != A]  # A is ticked
+    rpc("close_stock_check", {"p_stock_check_id": scid5, "p_review": review5})
+    adjs5 = session_adjustments(scid5)
+    check("checkbox-qty: exactly one adjustment", len(adjs5) == 1, str(adjs5))
+    check("checkbox-qty: adjustment is +3 on A (same as Scan)",
+          bool(adjs5) and adjs5[0]["item_code"] == A and adjs5[0]["delta"] == 3, str(adjs5[:1]))
+    v5 = view_row(A)
+    check("checkbox-qty: view physical moved +3", v5["physical"] == base5["physical"] + 3, f'{base5["physical"]}→{v5["physical"]}')
+    check("checkbox-qty: view available moved +3", v5["available"] == base5["available"] + 3, f'{base5["available"]}→{v5["available"]}')
+    check("identity holds after checkbox-qty", identity_holds(v5), str(v5))
+    rest("DELETE", f"adjustments?stock_check_id=eq.{scid5}", prefer="return=minimal")
+    check("checkbox-qty: delete reverts physical", view_row(A)["physical"] == base5["physical"], str(view_row(A)["physical"]))
+
+    # ── CASE 6: Checkbox Qty — tick A AT expected → no change, no adjustment ──
+    print("\n-- CASE 6: presence Checkbox Qty (ticked at expected → no adjustment) --")
+    scid6 = rpc("open_stock_check", {"p_mode": "presence", "p_scope": "brand", "p_brands": [BR], "p_counted_by": BY})
+    expected6 = view_row(A)["physical"]
+    rpc("record_count", {"p_stock_check_id": scid6, "p_item_code": A, "p_op": "set", "p_qty": expected6})  # ticked at expected
+    lines6 = get_all_lines(scid6)
+    review6 = [{"item_code": l["item_code"], "action": "ignored"} for l in lines6 if l["item_code"] != A]
+    rpc("close_stock_check", {"p_stock_check_id": scid6, "p_review": review6})
+    check("checkbox-qty at expected: NO adjustment written", len(session_adjustments(scid6)) == 0, str(session_adjustments(scid6)))
+    check("checkbox-qty at expected: A physical unchanged", view_row(A)["physical"] == expected6, str(view_row(A)["physical"]))
 
 finally:
     cleanup()
