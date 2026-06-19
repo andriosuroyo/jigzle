@@ -203,12 +203,18 @@ export async function quickAddSku(input: {
     return { ok: false, reason: 'invalid', message: insErr.message };
   }
 
-  // optional barcode link — best-effort. The composite (barcode,item_code) key means a code already
-  // owned by another SKU just becomes shared (the caller showed the owners first); 23505 = this exact
-  // link already exists. A link hiccup does NOT unwind the created SKU (manage it in /catalog).
-  if (bc) await supabase.from('barcodes').insert({ barcode: bc, item_code: code, is_verified: false });
+  // optional barcode link. The composite (barcode,item_code) key means a code already owned by another
+  // SKU just becomes shared (the caller showed the owners first); 23505 = this exact link already
+  // exists → idempotent. The SKU was just created, so a non-23505 failure (RLS / transient) means the
+  // code did NOT attach — surface it as a SOFT warning, not a silent success (the SKU still exists;
+  // the operator links the barcode later in /catalog). A link hiccup never unwinds the created SKU.
+  let barcodeWarning: string | undefined;
+  if (bc) {
+    const { error: bcErr } = await supabase.from('barcodes').insert({ barcode: bc, item_code: code, is_verified: false });
+    if (bcErr && bcErr.code !== '23505') barcodeWarning = `barcode not linked (${bcErr.message}) — add it in Catalog`;
+  }
 
-  return { ok: true, item_code: code };
+  return { ok: true, item_code: code, barcodeWarning };
 }
 
 // SKUs already carrying a barcode — the shared-barcode owner warning shown in quick-add before a

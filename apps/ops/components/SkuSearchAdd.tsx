@@ -116,7 +116,14 @@ export default function SkuSearchAdd({
         </div>
       )}
 
-      {adding && <QuickAddForm initialCode={term} onAdded={(code) => select(code)} onCancel={() => setAdding(false)} />}
+      {adding && (
+        <QuickAddForm
+          initialCode={term}
+          onAdd={(code) => onSelect(code)}
+          onClose={() => { setQ(''); setHits([]); setAdding(false); }}
+          onCancel={() => setAdding(false)}
+        />
+      )}
     </div>
   );
 }
@@ -127,12 +134,14 @@ export default function SkuSearchAdd({
 // SKU or create a new one that shares the code. On success the SKU is added to the count via onAdded.
 function QuickAddForm({
   initialCode,
-  onAdded,
+  onAdd,
+  onClose,
   onCancel,
 }: {
   initialCode: string;
-  onAdded: (code: string) => void;
-  onCancel: () => void;
+  onAdd: (code: string) => void; // add the SKU to the count (does not close the form)
+  onClose: () => void; // clear the search + close the form
+  onCancel: () => void; // close the form without adding
 }) {
   const [code, setCode] = useState(initialCode);
   const [name, setName] = useState('');
@@ -140,6 +149,7 @@ function QuickAddForm({
   const [barcode, setBarcode] = useState('');
   const [owners, setOwners] = useState<BarcodeOwner[]>([]);
   const [exists, setExists] = useState<{ item_code: string; name: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null); // soft post-add notice (e.g. barcode didn't link)
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const ownReq = useRef(0);
@@ -173,7 +183,9 @@ function QuickAddForm({
     try {
       const res = await quickAddSku({ item_code: code.trim(), name: name.trim(), product_type: ptype, barcode: barcode.trim() || null });
       if (res.ok) {
-        onAdded(res.item_code);
+        onAdd(res.item_code); // the SKU is created + joins the count either way
+        if (res.barcodeWarning) setNotice(res.barcodeWarning); // stay open so the operator sees the soft warning
+        else onClose();
         return;
       }
       if (res.reason === 'exists') setExists(res.existing);
@@ -211,29 +223,36 @@ function QuickAddForm({
         <input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="scan / type, or leave blank" />
       </label>
 
-      {owners.length > 0 && (
+      {owners.length > 0 && !notice && (
         <div className="sc-qa-warn">
           <span>⚠ Barcode already on {owners.length === 1 ? 'a SKU' : `${owners.length} SKUs`} — use it, or create a new SKU to share the code:</span>
           {owners.map((o) => (
-            <button key={o.item_code} className="btn-link" onClick={() => onAdded(o.item_code)}>
+            <button key={o.item_code} className="btn-link" onClick={() => { onAdd(o.item_code); onClose(); }}>
               use {o.item_code} · {o.name}
             </button>
           ))}
         </div>
       )}
 
-      {exists && (
+      {exists && !notice && (
         <div className="sc-qa-warn">
           <span>⚠ {exists.item_code} already exists:</span>
-          <button className="btn-link" onClick={() => onAdded(exists.item_code)}>use {exists.name}</button>
+          <button className="btn-link" onClick={() => { onAdd(exists.item_code); onClose(); }}>use {exists.name}</button>
         </div>
       )}
 
       {err && <div className="validation err" style={{ marginTop: 8 }}>{err}</div>}
+      {notice && <div className="validation ok" style={{ marginTop: 8 }}>Added to the count — but {notice}.</div>}
 
       <div className="sc-qa-actions">
-        <button className="btn-secondary" onClick={onCancel} disabled={busy}>cancel</button>
-        <button className="btn-primary" onClick={submit} disabled={busy}>{busy ? 'Adding…' : 'Create & add to count'}</button>
+        {notice ? (
+          <button className="btn-primary" onClick={onClose}>Done</button>
+        ) : (
+          <>
+            <button className="btn-secondary" onClick={onCancel} disabled={busy}>cancel</button>
+            <button className="btn-primary" onClick={submit} disabled={busy}>{busy ? 'Adding…' : 'Create & add to count'}</button>
+          </>
+        )}
       </div>
     </div>
   );

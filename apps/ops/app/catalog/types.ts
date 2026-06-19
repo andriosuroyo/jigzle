@@ -66,7 +66,7 @@ export function isComplete(sku: GateFields): boolean {
 // Result of quickAddSku — created, or rejected because the item_code already exists (offer it), or
 // an input/validation problem with a readable message (returned, not thrown — survives prod).
 export type QuickAddResult =
-  | { ok: true; item_code: string }
+  | { ok: true; item_code: string; barcodeWarning?: string } // SKU created (+ added); barcode may not have linked
   | { ok: false; reason: 'exists'; existing: { item_code: string; name: string } }
   | { ok: false; reason: 'invalid'; message: string };
 
