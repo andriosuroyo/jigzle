@@ -44,8 +44,10 @@ export interface StubInput {
 // ── commit the receipt (atomic, via record_receipt) → refreshed stock ──
 export interface RecordReceiptLine {
   item_code: string;
-  qty: number; // signed
-  excluded: boolean;
+  qty: number; // signed counted (TOTAL arrived; allocation base)
+  excluded: boolean; // legacy whole-line flag (kept for back-compat)
+  excluded_qty: number | null; // how many of qty arrived damaged → 0 sellable
+  exclude_reason: string | null; // short text reason ("damaged box")
   label: InboundLabel | null;
   dimension_weight: string | null;
 }
@@ -56,6 +58,41 @@ export interface RecordReceiptInput {
   close_shipment: boolean;
 }
 export interface RecordReceiptResult {
+  receipt_id: number; // the reversible-unit handle (Reverse needs it)
+  closed: boolean; // the shipment was closed by this receipt
   affected: string[];
   stock: { item_code: string; available: number; physical: number; last_receive: string | null }[];
+}
+
+// ── reverse a confirmed receipt (mis-count recovery) ──
+export interface ReverseResult {
+  receipt_id: number;
+  affected: string[];
+  stock: { item_code: string; available: number; physical: number; last_receive: string | null }[];
+}
+
+// ── §5 ship-id suggestion: a scanned SKU → candidate open ship_ids with an open PO line for it ──
+export interface ShipIdSuggestion {
+  ship_id: string;
+  origin_country: string | null;
+  ship_date: string | null;
+  open_qty: number; // Σ open PO qty for the scanned SKU on this ship_id
+}
+
+// ── receive close-confirm window (ReceiveConfirm; reuses the .sc-modal* chrome) ──
+// per SKU: expected (open PO qty) vs counted, classified; shorts revert only on close.
+export type ReceiveClass = 'ok' | 'short' | 'over' | 'unexpected';
+export interface ReceiveConfirmRow {
+  item_code: string;
+  name: string;
+  expected: number; // open PO qty on the ship_id (0 = unexpected)
+  counted: number; // total arrived (incl. excluded)
+  excluded_qty: number; // damaged subset of counted
+  cls: ReceiveClass;
+}
+export interface ReceiveConfirmData {
+  ship_id: string;
+  is_shipment: boolean;
+  rows: ReceiveConfirmRow[];
+  shorts: string[]; // item_codes that will revert on close (expected > counted)
 }

@@ -64,7 +64,7 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
   let query = supabase
     .from('purchase_orders')
     .select(
-      'po_id,item_code,item_code_raw,qty,status,status_since,ship_id,supplier_id,item_cost,method,marketplace_order_id,customer_id,item_note'
+      'po_id,item_code,item_code_raw,qty,status,status_since,ship_id,supplier_id,item_cost,method,marketplace_order_id,customer_id,item_note,shipment_note'
     )
     .or('status.is.null,status.neq.Received')
     .order('po_id', { ascending: false })
@@ -89,6 +89,7 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
     marketplace_order_id: string | null;
     customer_id: number | null;
     item_note: string | null;
+    shipment_note: string | null;
   }[];
 
   // Resolve names in three small round-trips (catalogue, suppliers, customers).
@@ -138,6 +139,7 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
     customer_id: r.customer_id,
     customer_name: r.customer_id != null ? customerById.get(r.customer_id) ?? null : null,
     item_note: r.item_note,
+    shipment_note: r.shipment_note,
   }));
 }
 

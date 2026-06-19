@@ -374,12 +374,33 @@ export type Inbound = {
   receive_date_raw: string | null;
   is_opening_balance: boolean;
   excluded: boolean;
+  excluded_qty: number;              // (0023) arrived-but-damaged count on a sellable row; not in stock
   label: InboundLabel | null;
   tracking: string | null;
   receive_note: string | null;
   dimension_weight: string | null;   // raw 'L x W x H cm / NNNg'
   transfer_box_id: string | null;
   legacy_ref: string | null;
+  receipt_id: number | null;         // (0023) the reversible receipt that added this row (NULL legacy)
+  created_at: string;
+};
+
+// receipts (0023): one reversible unit per confirmed receive — what it closed + the PO change-log
+// (prior values) so reverse_receipt can fully undo it. status flips active → reversed on reverse.
+export type Receipt = {
+  receipt_id: number;
+  ship_id: string | null;
+  receive_date: string;
+  is_shipment: boolean;
+  closed: boolean;
+  prior_shipment_status: string | null;
+  prior_shipment_received_date: string | null;
+  po_changes: unknown;               // jsonb [{po_id, change_type, is_new_row, prior_*}] (engine-internal)
+  status: 'active' | 'reversed';
+  reversed_at: string | null;
+  reversed_by: string | null;
+  reverse_note: string | null;
+  created_by: string | null;
   created_at: string;
 };
 
@@ -425,8 +446,10 @@ export type ExpectedLine = {
 export type ReceiveLine = {
   item_code: string;
   name: string;
-  qty: number;                       // signed received qty
-  excluded: boolean;
+  qty: number;                       // signed counted qty (TOTAL arrived; the allocation base)
+  excluded: boolean;                 // legacy whole-line flag (kept for back-compat)
+  excluded_qty: number | null;       // (0023) how many of qty arrived damaged → 0 sellable
+  exclude_reason: string | null;     // (0023) short text reason ("damaged box")
   label: InboundLabel | null;
   dimension_weight: string | null;
 };
@@ -501,6 +524,7 @@ export type OpenPORow = {
   customer_id: number | null;
   customer_name: string | null;
   item_note: string | null;
+  shipment_note: string | null;      // (0023) carries the "shorted from <ship_id> on <date>" breadcrumb
 };
 
 // createPO input — supplier_id + item_code required, qty >= 0; everything else optional.
