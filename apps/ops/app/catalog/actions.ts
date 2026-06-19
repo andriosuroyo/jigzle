@@ -124,7 +124,7 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
   if (!code) throw new Error('updateSku: item_code is required');
 
   // identity / system columns are never written from the editor
-  const { item_code: _ic, created_at: _ca, updated_at: _ua, input_date: _id, ...rest } = patch as Record<string, unknown>;
+  const { item_code: _ic, created_at: _ca, updated_at: _ua, ...rest } = patch as Record<string, unknown>;
   const upd: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) if (v !== undefined) upd[k] = v;
   upd.updated_at = new Date().toISOString();
@@ -155,9 +155,9 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
 
 // ── quick-add (PR18 §6): create a PARTIAL SKU from a Stock Check session ──
 // Minimal data now (name + product_type + optional barcode), needs_review=true so admin completes it
-// later. Inserts the catalogue row (original_name=name, derived brand_prefix; input_date defaults to
-// today via 0025) and links the optional barcode (shared model — a code already on another SKU just
-// becomes a shared link). Adding the SKU to the open count is the caller's existing add-missing path.
+// later. Inserts the catalogue row (original_name=name, derived brand_prefix) and links the optional
+// barcode (shared model — a code already on another SKU just becomes a shared link). Adding the SKU to
+// the open count is the caller's existing add-missing path.
 export async function quickAddSku(input: {
   item_code: string;
   name: string;
@@ -286,11 +286,13 @@ export async function clearNeedsReview(itemCode: string): Promise<void> {
 export async function getNeedsReview(): Promise<CatalogueListRow[]> {
   const supabase = createSupabaseServerClient();
   // most-recently-entered first (PR18) — quick-added partials surface at the top of the queue.
+  // created_at (a real existing column) is the insert time; legacy rows cluster at import, so the
+  // newest quick-add / receive stubs sort to the top.
   const { data } = await supabase
     .from('catalogue')
     .select(LIST_COLS)
     .eq('needs_review', true)
-    .order('input_date', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
     .order('item_code')
     .limit(500);
   return ((data ?? []) as CatNameRow[]).map((c) => ({

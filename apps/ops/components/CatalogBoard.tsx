@@ -411,7 +411,7 @@ export default function CatalogBoard({
                 </div>
                 <div className="fd-sub">
                   item_code is the identity (read-only)
-                  {detail.sku.input_date ? ` · input ${detail.sku.input_date}` : ''}
+                  {detail.sku.created_at ? ` · added ${detail.sku.created_at.slice(0, 10)}` : ''}
                   {detail.sku.updated_at ? ` · updated ${detail.sku.updated_at.slice(0, 10)}` : ''}
                   {detail.sku.needs_review && (
                     <span className="po-status processing" style={{ marginLeft: 8 }}>
