@@ -178,6 +178,7 @@ export type Catalogue = {
   image: string | null;
   has_image: boolean;
   needs_review: boolean;             // 0015 — receive-time SKU stubs flagged for admin review
+  input_date: string | null;        // 0025 — 'YYYY-MM-DD' first-entered marker (legacy rows = 2026-06-18)
   created_at: string;
   updated_at: string;
 };
