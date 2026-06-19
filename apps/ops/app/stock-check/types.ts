@@ -67,7 +67,7 @@ export interface AdjustmentRow {
   item_code: string;
   name: string;
   delta: number;
-  source: 'stock_check' | 'manual';
+  source: 'stock_check' | 'manual' | 'reverse'; // 'reverse' = a PR17 receipt-reversal compensation
   stock_check_id: number | null;
   note: string | null;
   created_by: string | null;
@@ -76,7 +76,7 @@ export interface AdjustmentRow {
 
 export interface AdjustmentFilter {
   search?: string;
-  source?: 'all' | 'stock_check' | 'manual';
+  source?: 'all' | 'stock_check' | 'manual' | 'reverse';
   from?: string; // 'YYYY-MM-DD' inclusive
   to?: string;   // 'YYYY-MM-DD' inclusive
 }

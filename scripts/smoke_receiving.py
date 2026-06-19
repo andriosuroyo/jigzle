@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""J2 Receiving smoke: exercise record_receipt + next_adhoc_ship_id against the live DB —
+"""SUPERSEDED by scripts/smoke_inbound_reconcile.py after migration 0023 (PR17). This smoke targets
+the PRE-0023 record_receipt — the qty-blind text[] return + presence-based PO mark — and will FAIL
+against the reworked jsonb/qty-aware function. Kept for history; do NOT run it on a 0023+ database.
+
+J2 Receiving smoke: exercise record_receipt + next_adhoc_ship_id against the live DB —
 full receive (+ close + D4 PO mark), partial receive (stays open), an excluded line (adds 0),
 a signed negative correction, the barcode-collision resolve pattern (D1), an unknown-barcode
 needs_review stub (D2), the 📦YYMMXXX allocator, and the fail-loud on an unknown item_code —

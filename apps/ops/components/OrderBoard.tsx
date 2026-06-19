@@ -38,6 +38,18 @@ function statusClass(s: string | null): string {
   return '';
 }
 
+// A reverted "short" line (PR17): ship_id cleared back to NULL, with a breadcrumb
+// "shorted from <ship_id> on <date>" appended to shipment_note. Surface which ship_id it was short
+// from so the line explains itself. Breadcrumbs chain with ' · ' → take the LAST (most recent short).
+function shortFromShip(po: OpenPORow): string | null {
+  if (po.ship_id || !po.shipment_note) return null;
+  const re = /shorted from (.+?) on /g;
+  let m: RegExpExecArray | null;
+  let last: string | null = null;
+  while ((m = re.exec(po.shipment_note)) !== null) last = m[1];
+  return last;
+}
+
 const numOrNull = (s: string): number | null => {
   const n = parseFloat(s);
   return s.trim() && Number.isFinite(n) ? n : null;
@@ -526,6 +538,9 @@ export default function OrderBoard({
                       <span className={`po-status ${statusClass(po.status)}`}>{po.status || '—'}</span>
                     </div>
                     {po.ship_id && <div className="fq-row-bot"><span>ship {po.ship_id}</span></div>}
+                    {shortFromShip(po) && (
+                      <div className="fq-row-bot"><span className="badge short">Short · from {shortFromShip(po)}</span></div>
+                    )}
                   </button>
                 </div>
               </li>

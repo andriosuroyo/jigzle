@@ -11,9 +11,22 @@ import {
   createCatalogueStub,
   newAdhocShipId,
   recordReceipt,
+  reverseReceipt,
+  suggestShipIds,
 } from '@/app/inbound/actions';
-import type { ReceiveDetail, ResolvedSku, RecordReceiptResult, SkuHit } from '@/app/inbound/types';
+import type {
+  ReceiveDetail,
+  ResolvedSku,
+  RecordReceiptResult,
+  SkuHit,
+  ShipIdSuggestion,
+  ReceiveClass,
+  ReceiveConfirmData,
+  ReceiveConfirmRow,
+} from '@/app/inbound/types';
 import SkuImage from '@/components/SkuImage';
+import BarcodePicker from '@/components/BarcodePicker';
+import ReceiveConfirm from '@/components/ReceiveConfirm';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
@@ -28,6 +41,14 @@ function todayStr(): string {
 
 // the synthetic detail for an ad-hoc receive (no shipments-ledger row, no expected list)
 const ADHOC_SENTINEL = '__adhoc__';
+
+// effective excluded count for a draft line: explicit excluded_qty, else the legacy whole-line flag.
+function excludedOf(l: ReceiveLine): number {
+  return l.excluded_qty ?? (l.excluded ? Math.max(l.qty, 0) : 0);
+}
+function sellableOf(l: ReceiveLine): number {
+  return l.qty - excludedOf(l);
+}
 
 export default function InboundBoard({
   initialQueue,
@@ -62,7 +83,21 @@ export default function InboundBoard({
 
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<(RecordReceiptResult & { units: number; closed: boolean }) | null>(null);
+  const [result, setResult] = useState<(RecordReceiptResult & { units: number }) | null>(null);
+
+  // ── §6 confirmation window ──
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // ── reverse a confirmed receipt ──
+  const [reverseAsk, setReverseAsk] = useState(false);
+  const [reversing, setReversing] = useState(false);
+  const [reverseMsg, setReverseMsg] = useState<string | null>(null);
+
+  // ── §5 scan-to-find-shipment (suggest open ship_ids for a scanned SKU) ──
+  const [findScan, setFindScan] = useState('');
+  const [finding, setFinding] = useState(false);
+  const [suggestions, setSuggestions] = useState<ShipIdSuggestion[] | null>(null);
+  const [findMsg, setFindMsg] = useState<string | null>(null);
 
   // barcode → expected item_code(s). Composite barcode model (0020): a barcode can link to many
   // SKUs, so this maps to a LIST. The fast path only fires when exactly ONE expected SKU owns the
@@ -111,6 +146,9 @@ export default function InboundBoard({
     setReceiveDate(todayStr());
     setResult(null);
     setError(null);
+    setShowConfirm(false);
+    setReverseAsk(false);
+    setReverseMsg(null);
   }
 
   async function openShipment(shipId: string) {
@@ -121,6 +159,8 @@ export default function InboundBoard({
     setDetail(null);
     resetDraft();
     setCloseShipment(true);
+    setSuggestions(null);
+    setFindMsg(null);
     setLoadingDetail(true);
     try {
       const d = await getShipmentForReceive(shipId);
@@ -142,6 +182,8 @@ export default function InboundBoard({
     resetDraft();
     setCloseShipment(false);
     setAdhocShipId('');
+    setSuggestions(null);
+    setFindMsg(null);
     setLoadingDetail(true);
     try {
       const id = await newAdhocShipId();
@@ -155,12 +197,47 @@ export default function InboundBoard({
     }
   }
 
+  // ── §5: scan an item in the queue pane → suggest the open ship_ids that contain it ──
+  async function findShipment() {
+    const code = findScan.trim();
+    if (!code) return;
+    setFinding(true);
+    setFindMsg(null);
+    setSuggestions(null);
+    try {
+      // resolve the scan to a SKU first (a barcode → its item_code; a typed item_code resolves to itself).
+      let itemCode = code;
+      const res = await resolveBarcode(code);
+      if (res.status === 'resolved') itemCode = res.sku.item_code;
+      else if (res.status === 'collision') itemCode = res.skus[0].item_code; // any owner shares the same open POs query
+      const sug = await suggestShipIds(itemCode);
+      if (sug.length === 0) {
+        setFindMsg(`No open shipment has an open order line for ${itemCode}.`);
+      } else if (sug.length === 1) {
+        setSuggestions(sug);
+        setFindMsg(`1 candidate — ${sug[0].ship_id}.`);
+      } else {
+        setSuggestions(sug);
+        setFindMsg(`${sug.length} candidates — pick one (oldest first).`);
+      }
+    } catch (e) {
+      setFindMsg(e instanceof Error ? e.message : 'lookup failed');
+    } finally {
+      setFinding(false);
+    }
+  }
+
   // ── received-lines mutators ──
   function addUnit(item_code: string, name: string, delta = 1) {
     setReceived((prev) => {
       const next = new Map(prev);
       const cur = next.get(item_code);
-      next.set(item_code, cur ? { ...cur, qty: cur.qty + delta } : { item_code, name, qty: delta, excluded: false, label: null, dimension_weight: null });
+      next.set(
+        item_code,
+        cur
+          ? { ...cur, qty: cur.qty + delta }
+          : { item_code, name, qty: delta, excluded: false, excluded_qty: null, exclude_reason: null, label: null, dimension_weight: null }
+      );
       return next;
     });
   }
@@ -170,7 +247,10 @@ export default function InboundBoard({
     setReceived((prev) => {
       const next = new Map(prev);
       const cur = next.get(e.item_code!);
-      next.set(e.item_code!, cur ? { ...cur, qty } : { item_code: e.item_code!, name: e.name, qty, excluded: false, label: null, dimension_weight: null });
+      next.set(
+        e.item_code!,
+        cur ? { ...cur, qty } : { item_code: e.item_code!, name: e.name, qty, excluded: false, excluded_qty: null, exclude_reason: null, label: null, dimension_weight: null }
+      );
       return next;
     });
   }
@@ -280,10 +360,11 @@ export default function InboundBoard({
   );
 
   const receivedList = [...received.values()];
-  const totalUnits = receivedList.reduce((s, l) => s + (l.excluded ? 0 : l.qty), 0);
-  const sellableUnits = receivedList.filter((l) => !l.excluded).reduce((s, l) => s + l.qty, 0);
+  const totalUnits = receivedList.reduce((s, l) => s + l.qty, 0);
+  const sellableUnits = receivedList.reduce((s, l) => s + sellableOf(l), 0);
   const saveLines = receivedList.filter((l) => l.qty !== 0);
   const shipIdForSave = mode === 'adhoc' ? adhocShipId.trim() : detail?.ship_id ?? '';
+  const canClose = mode === 'shipment' && !!detail?.is_shipment;
 
   function badgeFor(exp: number, got: number): { cls: string; text: string } {
     if (exp > 0 && got === 0) return { cls: 'miss', text: '✗ missing' };
@@ -293,8 +374,35 @@ export default function InboundBoard({
     return { cls: 'match', text: '✓ match' };
   }
 
-  async function commit() {
+  function classify(exp: number, counted: number): ReceiveClass {
+    if (exp === 0 && counted !== 0) return 'unexpected';
+    if (counted < exp) return 'short';
+    if (counted > exp) return 'over';
+    return 'ok';
+  }
+
+  // build the confirmation-window data: every counted SKU + every expected-but-uncounted (a short).
+  function buildConfirmData(): ReceiveConfirmData {
+    const rows: ReceiveConfirmRow[] = [];
+    const seen = new Set<string>();
+    for (const line of received.values()) {
+      const exp = expectedByCode.get(line.item_code)?.expected_qty ?? 0;
+      rows.push({ item_code: line.item_code, name: line.name, expected: exp, counted: line.qty, excluded_qty: excludedOf(line), cls: classify(exp, line.qty) });
+      seen.add(line.item_code);
+    }
+    for (const e of expectedResolved) {
+      if (!e.item_code || seen.has(e.item_code) || e.expected_qty <= 0) continue;
+      rows.push({ item_code: e.item_code, name: e.name, expected: e.expected_qty, counted: 0, excluded_qty: 0, cls: 'short' });
+    }
+    rows.sort((a, b) => a.item_code.localeCompare(b.item_code));
+    const shorts = rows.filter((r) => r.counted < r.expected).map((r) => r.item_code);
+    return { ship_id: shipIdForSave, is_shipment: !!detail?.is_shipment, rows, shorts };
+  }
+
+  // open the §6 window (validate first, same guards as the old direct commit).
+  function openConfirm() {
     if (!detail) return;
+    setError(null);
     if (!shipIdForSave) {
       setError('A ship id is required (the ad-hoc id, a shipment, or free text).');
       return;
@@ -303,23 +411,33 @@ export default function InboundBoard({
       setError('Add at least one received line (a non-zero qty).');
       return;
     }
+    setShowConfirm(true);
+  }
+
+  // confirm → one transaction (record_receipt). closeShipment comes from the window's toggle.
+  async function doCommit(willClose: boolean) {
+    if (!detail) return;
     setCommitting(true);
     setError(null);
     try {
-      const willClose = mode === 'shipment' && closeShipment;
       const res = await recordReceipt({
         ship_id: shipIdForSave,
         receive_date: receiveDate,
-        close_shipment: willClose,
+        close_shipment: willClose && canClose,
         lines: saveLines.map((l) => ({
           item_code: l.item_code,
           qty: l.qty,
           excluded: l.excluded,
+          excluded_qty: l.excluded_qty,
+          exclude_reason: l.exclude_reason?.trim() || null,
           label: l.label,
           dimension_weight: l.dimension_weight?.trim() || null,
         })),
       });
-      setResult({ ...res, units: sellableUnits, closed: willClose });
+      setResult({ ...res, units: sellableUnits });
+      setReverseMsg(null);
+      setReverseAsk(false);
+      setShowConfirm(false);
       // the inbound rows are now persisted — clear the draft so nothing is double-counted
       setReceived(new Map());
       // refresh the queue; drop the shipment if it was closed
@@ -328,7 +446,7 @@ export default function InboundBoard({
       } catch {
         /* keep current queue on transient error */
       }
-      if (willClose) {
+      if (res.closed) {
         setDetail(null);
         setSelected(null);
       }
@@ -336,6 +454,29 @@ export default function InboundBoard({
       setError(e instanceof Error ? e.message : 'Save failed.');
     } finally {
       setCommitting(false);
+    }
+  }
+
+  // ── reverse the just-confirmed receipt (undo stock + restore PO lines + un-close) ──
+  async function doReverse() {
+    if (!result) return;
+    setReversing(true);
+    setError(null);
+    try {
+      const rev = await reverseReceipt(result.receipt_id);
+      const where = rev.stock.map((s) => `${s.item_code}: avail ${s.available}, physical ${s.physical}`).join(' · ');
+      setReverseMsg(`Receipt reversed — stock restored.${where ? ' ' + where : ''}`);
+      setResult(null);
+      setReverseAsk(false);
+      try {
+        setQueue(await getReceiveQueue());
+      } catch {
+        /* keep current queue on transient error */
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reverse failed.');
+    } finally {
+      setReversing(false);
     }
   }
 
@@ -349,6 +490,35 @@ export default function InboundBoard({
         {/* ── Arrivals queue ── */}
         <aside className="fq-pane">
           <div className="fq-head"><span>Arrivals</span></div>
+
+          {/* §5 scan-to-find-shipment */}
+          <div className="rcv-find">
+            <div className="scan-row">
+              <input
+                type="text"
+                placeholder="scan an item → find its shipment"
+                value={findScan}
+                onChange={(e) => setFindScan(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); findShipment(); } }}
+              />
+              <button className="btn-secondary" onClick={findShipment} disabled={finding}>{finding ? '…' : 'find'}</button>
+            </div>
+            {findMsg && <div className="hint">{findMsg}</div>}
+            {suggestions && suggestions.length > 0 && (
+              <ul className="rcv-suggest">
+                {suggestions.map((s) => (
+                  <li key={s.ship_id}>
+                    <button className="rcv-suggest-opt" onClick={() => { setSuggestions(null); setFindScan(''); openShipment(s.ship_id); }}>
+                      <span className="fq-id">{s.ship_id}</span>
+                      <span>{s.origin_country || '—'}{s.ship_date ? ` · ${s.ship_date}` : ''}</span>
+                      <span className="badge ready" style={{ marginLeft: 'auto' }}>order {s.open_qty}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div style={{ padding: '6px 6px 0' }}>
             <button className={`fq-row ${selected === ADHOC_SENTINEL ? 'active' : ''}`} onClick={startAdhoc} style={{ borderStyle: 'dashed' }}>
               <div className="fq-row-top"><span className="fq-id">+ ad-hoc receive</span></div>
@@ -378,8 +548,31 @@ export default function InboundBoard({
 
         {/* ── Receive detail ── */}
         <main className="fd-pane">
-          {!selected && <div className="fd-empty">Select a shipment to receive, or start an ad-hoc receive.</div>}
+          {!selected && !result && !reverseMsg && <div className="fd-empty">Select a shipment to receive, or start an ad-hoc receive.</div>}
           {selected && loadingDetail && <div className="fd-empty">Loading…</div>}
+
+          {/* persistent result banner (survives a close, where detail is cleared) + Reverse */}
+          {reverseMsg && <div className="validation ok">{reverseMsg}</div>}
+          {result && (
+            <div className="validation ok rcv-result">
+              <div>
+                Received {result.units} sellable unit{result.units === 1 ? '' : 's'}.{' '}
+                {result.closed ? 'Shipment → completed. ' : 'Shipment left open. '}
+                {result.stock.map((s) => `${s.item_code}: avail ${s.available}, physical ${s.physical}`).join(' · ')}
+              </div>
+              <div className="rcv-result-actions">
+                {!reverseAsk ? (
+                  <button className="btn-link" onClick={() => setReverseAsk(true)} disabled={reversing}>Reverse this receipt</button>
+                ) : (
+                  <span className="rcv-reverse-ask">
+                    Undo this receipt? Stock it added will be reversed.
+                    <button className="btn-secondary" onClick={() => setReverseAsk(false)} disabled={reversing}>Cancel</button>
+                    <button className="btn-primary danger" onClick={doReverse} disabled={reversing}>{reversing ? 'Reversing…' : 'Yes, reverse'}</button>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {detail && (
             <>
@@ -400,13 +593,6 @@ export default function InboundBoard({
               </div>
 
               {error && <div className="validation err">{error}</div>}
-              {result && (
-                <div className="validation ok">
-                  Received {result.units} sellable unit{result.units === 1 ? '' : 's'}.{' '}
-                  {result.closed ? 'Shipment → completed. ' : 'Shipment left open. '}
-                  {result.stock.map((s) => `${s.item_code}: avail ${s.available}, physical ${s.physical}`).join(' · ')}
-                </div>
-              )}
 
               {/* Ad-hoc id (editable; operator can override with free text) */}
               {mode === 'adhoc' && (
@@ -438,20 +624,9 @@ export default function InboundBoard({
                   {scanMsg && <span className="scan-msg">{scanMsg}</span>}
                 </div>
 
-                {/* D1 collision picker */}
+                {/* shared shared-barcode picker (F1) */}
                 {picker && (
-                  <div className="rcv-picker">
-                    <div className="rcv-picker-head">⚠ which SKU?</div>
-                    {picker.map((s) => (
-                      <button key={s.item_code} className="rcv-picker-opt" onClick={() => pick(s)}>
-                        <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={SKU_IMG.md} />
-                        <span className="ff-code">{s.item_code}</span>
-                        <span className="ff-name">{s.name}</span>
-                        {s.is_verified && <span className="badge ready">verified</span>}
-                      </button>
-                    ))}
-                    <button className="btn-link" onClick={() => setPicker(null)}>cancel</button>
-                  </div>
+                  <BarcodePicker skus={picker} imgMap={imgMap} onPick={(s) => pick(s)} onCancel={() => setPicker(null)} />
                 )}
 
                 {/* D2 unknown barcode → minimal stub */}
@@ -547,42 +722,53 @@ export default function InboundBoard({
                 </ul>
               </section>
 
-              {/* Receive date + close */}
+              {/* Receive date */}
               <section className="fd-section fd-courier">
                 <div>
                   <label className="fd-label">Receive date</label>
                   <input type="date" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} />
                 </div>
-                {mode === 'shipment' && detail.is_shipment && (
+                {canClose && (
                   <div style={{ flex: 1 }}>
                     <label className="fd-label">Shipment</label>
-                    <label className="rcv-close">
-                      <input type="checkbox" checked={closeShipment} onChange={(e) => setCloseShipment(e.target.checked)} />
-                      mark completed (leave unchecked for a partial receive)
-                    </label>
+                    <div className="hint">Leave-open vs close is chosen on the next step (shorts revert only on close).</div>
                   </div>
                 )}
               </section>
 
-              {/* Commit bar */}
+              {/* Commit bar → opens the §6 confirmation window */}
               <div className="fd-commit">
                 <div className="fd-commit-info">
                   Σ receiving <b>{sellableUnits}</b> sellable unit{sellableUnits === 1 ? '' : 's'} across {saveLines.length} line{saveLines.length === 1 ? '' : 's'}
-                  {totalUnits !== sellableUnits ? ' · (excluded rows add 0)' : ''}
+                  {totalUnits !== sellableUnits ? ` · ${totalUnits - sellableUnits} excluded` : ''}
                 </div>
-                <button className="btn-primary" onClick={commit} disabled={committing || saveLines.length === 0 || !shipIdForSave}>
-                  {committing ? 'Saving…' : 'Save receipt'}
+                <button className="btn-primary" onClick={openConfirm} disabled={committing || saveLines.length === 0 || !shipIdForSave}>
+                  Review &amp; save…
                 </button>
               </div>
             </>
           )}
         </main>
       </div>
+
+      {/* §6 pre-submit confirmation window */}
+      {showConfirm && detail && (
+        <ReceiveConfirm
+          data={buildConfirmData()}
+          canClose={canClose}
+          defaultClose={closeShipment}
+          busy={committing}
+          error={error}
+          onConfirm={(close) => doCommit(close)}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
     </div>
   );
 
-  // per-received-line controls: qty (signed) · exclude · label · dim/weight · remove
+  // per-received-line controls: qty (signed) · exclude (+ qty/reason) · label · dim/weight · remove
   function renderControls(line: ReceiveLine) {
+    const excl = excludedOf(line);
     return (
       <div className="rcv-controls">
         <label className="rcv-ctl">
@@ -593,13 +779,53 @@ export default function InboundBoard({
             step={1}
             className="rcv-qty"
             value={line.qty}
-            onChange={(e) => setField(line.item_code, { qty: Number.isFinite(parseInt(e.target.value, 10)) ? parseInt(e.target.value, 10) : 0 })}
+            onChange={(e) => {
+              const q = Number.isFinite(parseInt(e.target.value, 10)) ? parseInt(e.target.value, 10) : 0;
+              const patch: Partial<ReceiveLine> = { qty: q };
+              // keep the excluded subset <= the (new) counted total — never a negative sellable.
+              if (line.excluded_qty != null) patch.excluded_qty = Math.min(line.excluded_qty, Math.max(q, 0));
+              setField(line.item_code, patch);
+            }}
           />
         </label>
         <label className="rcv-ctl rcv-ex">
-          <input type="checkbox" checked={line.excluded} onChange={(e) => setField(line.item_code, { excluded: e.target.checked })} />
+          <input
+            type="checkbox"
+            checked={line.excluded}
+            onChange={(e) =>
+              setField(line.item_code, e.target.checked
+                ? { excluded: true, excluded_qty: line.excluded_qty ?? Math.max(line.qty, 0) }
+                : { excluded: false, excluded_qty: null, exclude_reason: null })
+            }
+          />
           <span>exclude</span>
         </label>
+        {line.excluded && (
+          <>
+            <label className="rcv-ctl">
+              <span>excl qty</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                className="rcv-qty"
+                value={excl}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setField(line.item_code, { excluded_qty: Number.isFinite(n) ? Math.max(n, 0) : 0 });
+                }}
+              />
+            </label>
+            <input
+              type="text"
+              className="rcv-dim"
+              placeholder="reason (e.g. damaged box)"
+              value={line.exclude_reason ?? ''}
+              onChange={(e) => setField(line.item_code, { exclude_reason: e.target.value })}
+            />
+          </>
+        )}
         <label className="rcv-ctl">
           <span>label</span>
           <select value={line.label ?? ''} onChange={(e) => setField(line.item_code, { label: (e.target.value || null) as InboundLabel | null })}>

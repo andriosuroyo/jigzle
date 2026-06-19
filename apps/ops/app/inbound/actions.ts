@@ -15,6 +15,8 @@ import type {
   StubInput,
   RecordReceiptInput,
   RecordReceiptResult,
+  ReverseResult,
+  ShipIdSuggestion,
 } from './types';
 
 type Supabase = ReturnType<typeof createSupabaseServerClient>;
@@ -317,6 +319,8 @@ export async function recordReceipt(payload: RecordReceiptInput): Promise<Record
       item_code: l.item_code,
       qty: l.qty,
       excluded: l.excluded,
+      excluded_qty: l.excluded_qty,
+      exclude_reason: l.exclude_reason,
       label: l.label,
       dimension_weight: l.dimension_weight,
     })),
@@ -324,7 +328,13 @@ export async function recordReceipt(payload: RecordReceiptInput): Promise<Record
   });
   if (error) throw new Error(`recordReceipt: ${error.message}`);
 
-  const affected = (data as string[] | null) ?? [];
+  // 0023 returns jsonb {receipt_id, affected, closed} (was a bare text[] in 0015).
+  const out = (data as { receipt_id: number; affected: string[]; closed: boolean } | null) ?? {
+    receipt_id: 0,
+    affected: [],
+    closed: false,
+  };
+  const affected = out.affected ?? [];
   let stock: RecordReceiptResult['stock'] = [];
   if (affected.length) {
     const { data: s } = await supabase
@@ -333,5 +343,76 @@ export async function recordReceipt(payload: RecordReceiptInput): Promise<Record
       .in('item_code', affected);
     stock = (s ?? []) as RecordReceiptResult['stock'];
   }
-  return { affected, stock };
+  return { receipt_id: out.receipt_id, closed: out.closed, affected, stock };
+}
+
+// ── reverse a confirmed receipt (mis-count recovery, via reverse_receipt) → refreshed stock ──
+export async function reverseReceipt(receiptId: number): Promise<ReverseResult> {
+  if (!receiptId) throw new Error('reverseReceipt: a receipt id is required');
+  const supabase = createSupabaseServerClient();
+
+  const { data, error } = await supabase.rpc('reverse_receipt', { p_receipt_id: receiptId, p_note: 'Reverse action' });
+  if (error) throw new Error(`reverseReceipt: ${error.message}`);
+
+  const out = (data as { receipt_id: number; affected: string[] } | null) ?? { receipt_id: receiptId, affected: [] };
+  const affected = out.affected ?? [];
+  let stock: ReverseResult['stock'] = [];
+  if (affected.length) {
+    const { data: s } = await supabase
+      .from('stock_check')
+      .select('item_code,available,physical,last_receive')
+      .in('item_code', affected);
+    stock = (s ?? []) as ReverseResult['stock'];
+  }
+  return { receipt_id: out.receipt_id, affected, stock };
+}
+
+// ── §5 ship-id suggestion: a scanned SKU → open ship_ids with an open PO line for it (no RPC) ──
+// Joins open POs (status <> 'Received', ship_id not null) for the SKU to OPEN shipments, oldest
+// shipment first. Returns candidates for the operator to confirm; the caller preselects if exactly one.
+export async function suggestShipIds(itemCode: string): Promise<ShipIdSuggestion[]> {
+  const code = itemCode.trim();
+  if (!code) return [];
+  const supabase = createSupabaseServerClient();
+
+  // open PO lines for this SKU that are attached to a shipment, summed per ship_id.
+  const { data: pos } = await supabase
+    .from('purchase_orders')
+    .select('ship_id,qty,status')
+    .eq('item_code', code)
+    .not('ship_id', 'is', null)
+    .or('status.is.null,status.neq.Received');
+  const byShip = new Map<string, number>();
+  for (const p of (pos ?? []) as { ship_id: string | null; qty: number | null }[]) {
+    if (!p.ship_id) continue;
+    byShip.set(p.ship_id, (byShip.get(p.ship_id) ?? 0) + (Number(p.qty) || 0));
+  }
+  if (byShip.size === 0) return [];
+
+  // keep only OPEN shipments (an open PO line could point at an already-completed ship_id).
+  const { data: ships } = await supabase
+    .from('shipments')
+    .select('ship_id,origin_country,ship_date,status')
+    .in('ship_id', [...byShip.keys()])
+    .eq('status', 'open');
+
+  const rows: ShipIdSuggestion[] = ((ships ?? []) as {
+    ship_id: string;
+    origin_country: string | null;
+    ship_date: string | null;
+  }[]).map((s) => ({
+    ship_id: s.ship_id,
+    origin_country: s.origin_country ?? null,
+    ship_date: s.ship_date ?? null,
+    open_qty: byShip.get(s.ship_id) ?? 0,
+  }));
+
+  // oldest shipment first (nulls last); ship_id tiebreak for stable order.
+  rows.sort((a, b) => {
+    if (a.ship_date && b.ship_date) return a.ship_date < b.ship_date ? -1 : a.ship_date > b.ship_date ? 1 : a.ship_id.localeCompare(b.ship_id);
+    if (a.ship_date) return -1;
+    if (b.ship_date) return 1;
+    return a.ship_id.localeCompare(b.ship_id);
+  });
+  return rows;
 }
