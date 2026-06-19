@@ -467,7 +467,7 @@ img.sku-img { background: #e8e8e8; }
 .sc-hits { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .sc-hit { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .sc-hit-btn { width: 100%; text-align: left; cursor: pointer; }
-.sc-qty { width: 72px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 16px; background: white; }  /* 16px = no iOS zoom-on-focus */
+.sc-qty { width: 54px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 16px; background: white; }  /* 16px = no iOS zoom-on-focus */
 .sc-note { flex: 1; min-width: 100px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
 
 /* presence checklist */
@@ -590,6 +590,6 @@ img.sku-img { background: #e8e8e8; }
     background: var(--cream); border-bottom: 1px solid var(--line);
     padding: 8px 18px; margin: 0 -18px;
   }
-  .sc-step { width: 44px; height: 44px; }
-  .sc-qty { width: 80px; height: 44px; }
+  .sc-step { width: 34px; height: 34px; font-size: 17px; }
+  .sc-qty  { width: 46px; height: 34px; }
 }

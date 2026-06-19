@@ -184,41 +184,18 @@ export async function resolveScan(code: string): Promise<ScanResolve> {
   return skus.length === 1 ? { status: 'resolved', sku: skus[0] } : { status: 'collision', skus };
 }
 
-// manual SKU search (catalogue text + barcode), with available, for add-missing.
+// manual SKU search (catalogue text + barcode) with available, for add-missing. ONE database
+// round-trip via the search_skus RPC (0026): catalogue 4-col ilike + barcode ilike, catalogue hits
+// rank first, cap 20, available from the stock_snapshot matview (0 when absent — same as before).
+// SECURITY INVOKER → the same RLS (is_allowed_user) that gated the old direct selects still applies.
+// 3-char floor so the 0025 pg_trgm GIN index is eligible (matches SkuSearchAdd's MIN_CHARS).
 export async function searchSkus(q: string): Promise<SkuHit[]> {
   const raw = sanitize(q);
-  if (raw.length < 2) return [];
+  if (raw.length < 3) return []; // <3 chars can't use the pg_trgm index → don't bother the DB
   const supabase = createSupabaseServerClient();
-
-  const named = new Map<string, string>();
-  const [catRes, bcRes] = await Promise.all([
-    supabase
-      .from('catalogue')
-      .select('item_code,original_name,translate_name,self_code')
-      .or(`item_code.ilike.%${raw}%,self_code.ilike.%${raw}%,original_name.ilike.%${raw}%,translate_name.ilike.%${raw}%`)
-      .limit(15),
-    supabase.from('barcodes').select('item_code').ilike('barcode', `%${raw}%`).limit(15),
-  ]);
-  for (const c of (catRes.data ?? []) as CatNameRow[]) named.set(c.item_code, nameOf(c, c.item_code));
-
-  const bcCodes = [...new Set((bcRes.data ?? []).map((b) => b.item_code as string))].filter((code) => !named.has(code));
-  if (bcCodes.length) {
-    const { data: cat2 } = await supabase
-      .from('catalogue')
-      .select('item_code,original_name,translate_name,self_code')
-      .in('item_code', bcCodes);
-    for (const c of (cat2 ?? []) as CatNameRow[]) named.set(c.item_code, nameOf(c, c.item_code));
-  }
-
-  const codes = [...named.keys()].slice(0, 20);
-  if (!codes.length) return [];
-  // available from the stock_snapshot matview (0019) — a pre-computed, item_code-indexed lookup —
-  // NOT the live stock_check view, which re-aggregates 250k+ rows on every call (PR18 §4). The
-  // matview holds ACTIVE SKUs only, so an inactive/zero-stock hit simply misses → defaults to 0,
-  // which is the right "avail" hint for an add-search. ~5-min refresh is fine for a hint.
-  const { data: stock } = await supabase.from('stock_snapshot').select('item_code,available').in('item_code', codes);
-  const avail = new Map<string, number>(((stock ?? []) as { item_code: string; available: number }[]).map((s) => [s.item_code, s.available]));
-  return codes.map((item_code) => ({ item_code, name: named.get(item_code)!, available: avail.get(item_code) ?? 0 }));
+  const { data, error } = await supabase.rpc('search_skus', { p_q: raw });
+  if (error) return []; // search failures are non-fatal (same posture as today)
+  return (data ?? []) as SkuHit[];
 }
 
 // ── writes (RPCs) ────────────────────────────────────────────────────────────
