@@ -142,16 +142,20 @@ export default function StockCheckBoard({
               {sessions.length === 0 && <div className="sc-empty">No counts yet. Start one with “New count”.</div>}
               {sessions.map((s) => (
                 <button key={s.stock_check_id} className="sc-sess" onClick={() => setDetail(s)}>
-                  <span className={`sc-badge ${s.status}`}>{s.status}</span>
-                  <span className="sc-sess-mode">{modeLabel(s.mode)}</span>
-                  <span className="sc-sess-scope">{scopeLabel(s)}</span>
-                  <span className="sc-sess-by">{s.counted_by}</span>
-                  <span className="sc-sess-meta">
-                    {s.status === 'open'
-                      ? `${s.confirmed_count}/${s.line_count} ${s.mode === 'count' ? 'counted' : 'checked'}`
-                      : `${s.changed_count} changed`}
-                  </span>
-                  <span className="sc-sess-date">{fmtDate(s.started_at)}</span>
+                  <div className="sc-sess-l1">
+                    <span className={`sc-badge ${s.status}`}>{s.status}</span>
+                    <span className="sc-sess-mode">{modeLabel(s.mode)}</span>
+                    <span className="sc-sess-scope">{scopeLabel(s)}</span>
+                    <span className="sc-sess-date">{fmtDate(s.started_at)}</span>
+                  </div>
+                  <div className="sc-sess-l2">
+                    <span className="sc-sess-by">{s.counted_by}</span>
+                    <span className="sc-sess-meta">
+                      {s.status === 'open'
+                        ? `${s.confirmed_count}/${s.line_count} ${s.mode === 'count' ? 'counted' : 'checked'}`
+                        : `${s.changed_count} changed`}
+                    </span>
+                  </div>
                 </button>
               ))}
             </div>

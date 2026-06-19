@@ -438,12 +438,17 @@ img.sku-img { background: #e8e8e8; }
 
 /* session list */
 .sc-sess-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-.sc-sess { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+/* PR21 §3 — each session is a 2-line card: l1 = badge · mode · scope · date; l2 = who · counter */
+.sc-sess { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
 .sc-sess:hover { border-color: var(--orange); }
+.sc-sess-l1 { display: flex; align-items: center; gap: 8px; width: 100%; }
+.sc-sess-l1 .sc-sess-scope { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-sess-l1 .sc-sess-date { margin-left: auto; white-space: nowrap; }
+.sc-sess-l2 { display: flex; align-items: center; gap: 8px; }
 .sc-sess-mode { font-weight: 700; color: var(--brown-dark); font-size: 13px; }
 .sc-sess-scope { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--brown); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sc-sess-by { font-size: 12px; color: var(--muted); }
-.sc-sess-meta { font-size: 12px; color: var(--muted); }
+.sc-sess-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }  /* PR21 §3 — no "0 / changed" wrap */
 .sc-sess-date { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .sc-badge { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 20px; white-space: nowrap; }
 .sc-badge.open { background: var(--green-tint); color: #3D6B26; }
@@ -505,10 +510,11 @@ img.sku-img { background: #e8e8e8; }
 .sc-mini { padding: 6px 10px; font-size: 12px; }
 
 /* PR18 §5 — quantitative Checkbox row: image + code/name, then an editable qty (−/+) and the ✓.
-   Wraps on narrow phones so the qty controls drop below the SKU identity rather than crushing it. */
-.sc-check-row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
+   PR21 §1 — nowrap so the checkbox stays inline even with an image; the name column shrinks +
+   ellipsizes (.ff-name) instead of pushing the checkbox down to a second line. */
+.sc-check-row2 { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px 10px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
 .sc-check-row2.done { opacity: 0.7; }
-.sc-check-row2 > .sc-row-id { flex: 1 1 150px; }
+.sc-check-row2 > .sc-row-id { flex: 1 1 0; min-width: 0; }
 .sc-check-row2 input[type="checkbox"] { width: 22px; height: 22px; flex-shrink: 0; cursor: pointer; }
 .sc-qtyctl { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-left: auto; }
 
@@ -528,7 +534,15 @@ img.sku-img { background: #e8e8e8; }
 .sc-delta { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 20px; white-space: nowrap; }
 .sc-delta.pos { background: var(--green-tint); color: #3D6B26; }
 .sc-delta.neg { background: var(--red-tint); color: #993525; }
+.sc-delta.zero { color: var(--muted); }
 .sc-pos { color: #3D6B26; }
+
+/* PR21 §2 — read-only snapshot as 2-line image cards (mirrors the live count rows) */
+.sc-snap-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.sc-snap-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.sc-snap-row > .sc-row-id { flex: 1 1 0; min-width: 0; }
+.sc-snap-meta { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.sc-snap-sub { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .sc-neg { color: #993525; }
 
 /* adjustments ledger */
