@@ -17,7 +17,7 @@ import type { BarcodeOwner } from '@/app/catalog/types';
 import type { SkuHit } from '@/app/stock-check/types';
 
 const DEBOUNCE_MS = 300;
-const MIN_CHARS = 2;
+const MIN_CHARS = 3; // matches searchSkus' 3-char floor so the 0025 pg_trgm index is eligible (PR20)
 
 export default function SkuSearchAdd({
   listed,
