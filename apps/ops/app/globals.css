@@ -504,6 +504,25 @@ img.sku-img { background: #e8e8e8; }
 .sc-step:active { background: var(--paper); }
 .sc-mini { padding: 6px 10px; font-size: 12px; }
 
+/* PR18 §5 — quantitative Checkbox row: image + code/name, then an editable qty (−/+) and the ✓.
+   Wraps on narrow phones so the qty controls drop below the SKU identity rather than crushing it. */
+.sc-check-row2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }
+.sc-check-row2.done { opacity: 0.7; }
+.sc-check-row2 > .sc-row-id { flex: 1 1 150px; }
+.sc-check-row2 input[type="checkbox"] { width: 22px; height: 22px; flex-shrink: 0; cursor: pointer; }
+.sc-qtyctl { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; margin-left: auto; }
+
+/* PR18 §6 — inline quick-add of a partial SKU (search no-match → create + add to the count) */
+.sc-nomatch { text-align: left; }
+.sc-quickadd { margin-top: 8px; background: var(--cream); border: 1px dashed var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.sc-qa-title { font-size: 12px; font-weight: 700; color: var(--brown-dark); }
+.sc-qa-field { display: flex; flex-direction: column; gap: 4px; }
+.sc-qa-field > span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.sc-qa-field input, .sc-qa-field select { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; }  /* 16px = no iOS zoom-on-focus */
+.sc-qa-warn { font-size: 12px; color: #8A5A1A; background: var(--orange-tint); border: 1px solid var(--orange); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.sc-qa-warn .btn-link { text-align: left; }
+.sc-qa-actions { display: flex; justify-content: space-between; gap: 10px; }
+
 /* deltas + sources */
 .sc-exp { font-size: 11px; color: var(--muted); font-weight: 600; white-space: nowrap; }
 .sc-delta { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 20px; white-space: nowrap; }
