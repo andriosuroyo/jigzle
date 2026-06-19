@@ -184,7 +184,7 @@ export async function resolveScan(code: string): Promise<ScanResolve> {
   return skus.length === 1 ? { status: 'resolved', sku: skus[0] } : { status: 'collision', skus };
 }
 
-// manual SKU search (catalogue text + barcode), with live available, for add-missing.
+// manual SKU search (catalogue text + barcode), with available, for add-missing.
 export async function searchSkus(q: string): Promise<SkuHit[]> {
   const raw = sanitize(q);
   if (raw.length < 2) return [];
@@ -212,7 +212,11 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
 
   const codes = [...named.keys()].slice(0, 20);
   if (!codes.length) return [];
-  const { data: stock } = await supabase.from('stock_check').select('item_code,available').in('item_code', codes);
+  // available from the stock_snapshot matview (0019) — a pre-computed, item_code-indexed lookup —
+  // NOT the live stock_check view, which re-aggregates 250k+ rows on every call (PR18 §4). The
+  // matview holds ACTIVE SKUs only, so an inactive/zero-stock hit simply misses → defaults to 0,
+  // which is the right "avail" hint for an add-search. ~5-min refresh is fine for a hint.
+  const { data: stock } = await supabase.from('stock_snapshot').select('item_code,available').in('item_code', codes);
   const avail = new Map<string, number>(((stock ?? []) as { item_code: string; available: number }[]).map((s) => [s.item_code, s.available]));
   return codes.map((item_code) => ({ item_code, name: named.get(item_code)!, available: avail.get(item_code) ?? 0 }));
 }
