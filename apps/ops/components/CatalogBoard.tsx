@@ -5,7 +5,6 @@ import AppHeader from '@/components/AppHeader';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import {
   addBarcode,
-  clearNeedsReview,
   getNeedsReview,
   getSharedBarcodes,
   getSku,
@@ -14,6 +13,7 @@ import {
   unlinkBarcode,
   updateSku,
 } from '@/app/catalog/actions';
+import { missingForComplete } from '@/app/catalog/types';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -76,10 +76,9 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       { key: 'release_month', label: 'Release month', kind: 'number' },
     ],
   },
-  {
-    title: 'Flags',
-    fields: [{ key: 'needs_review', label: 'Needs review', kind: 'bool' }],
-  },
+  // needs_review is no longer a manual toggle — it's DERIVED by the completion gate on every save
+  // (PR18 §6): a SKU drops off Needs-review once it has name + brand_prefix + product_type (+ piece
+  // count if a puzzle). See updateSku / missingForComplete.
 ];
 
 type FormState = Record<string, string | boolean>;
@@ -254,22 +253,6 @@ export default function CatalogBoard({
     }
   }
 
-  async function quickClearNeedsReview() {
-    if (!detail) return;
-    resetMsg();
-    setBusy(true);
-    try {
-      await clearNeedsReview(detail.sku.item_code);
-      await reloadDetail(detail.sku.item_code);
-      await refreshNeeds();
-      setSuccess('Cleared needs-review.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to clear.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function doAddBarcode() {
     if (!detail) return;
     const bc = newBarcode.trim();
@@ -427,9 +410,13 @@ export default function CatalogBoard({
                   {detail.sku.item_code}
                 </div>
                 <div className="fd-sub">
-                  item_code is the identity (read-only){detail.sku.updated_at ? ` · updated ${detail.sku.updated_at.slice(0, 10)}` : ''}
+                  item_code is the identity (read-only)
+                  {detail.sku.created_at ? ` · added ${detail.sku.created_at.slice(0, 10)}` : ''}
+                  {detail.sku.updated_at ? ` · updated ${detail.sku.updated_at.slice(0, 10)}` : ''}
                   {detail.sku.needs_review && (
-                    <button className="btn-link" style={{ marginLeft: 8 }} onClick={quickClearNeedsReview} disabled={busy}>clear needs-review</button>
+                    <span className="po-status processing" style={{ marginLeft: 8 }}>
+                      needs review{(() => { const m = missingForComplete(detail.sku); return m.length ? ` — missing ${m.join(', ')}` : ''; })()}
+                    </span>
                   )}
                 </div>
               </div>

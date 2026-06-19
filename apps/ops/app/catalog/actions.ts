@@ -7,9 +7,12 @@
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
-import type { CatalogueListRow, SkuDetail } from './types';
+import { isComplete } from './types';
+import type { BarcodeOwner, CatalogueListRow, QuickAddResult, SkuDetail } from './types';
 
 const LIMIT = 200;
+
+type Supabase = ReturnType<typeof createSupabaseServerClient>;
 
 // PostgREST `.or()` / `.ilike()` interpolate the raw string into a filter grammar where , ( ) * \
 // are operators. Strip them from operator-typed input (defense-in-depth; the operator is trusted).
@@ -31,6 +34,24 @@ function nameOf(c: CatNameRow): string {
 }
 
 const LIST_COLS = 'item_code,brand_prefix,translate_name,original_name,self_code,needs_review';
+
+// brand_prefix for a quick-added SKU = the LONGEST known brand prefix the item_code starts with
+// (so compound prefixes like DIS-TDL win over DIS); null when nothing matches. brand_prefix is a FK
+// to brands(prefix), so a derived value MUST exist in brands or the insert would fail — hence the
+// lookup rather than a blind string split.
+async function deriveBrandPrefix(supabase: Supabase, itemCode: string): Promise<string | null> {
+  const segs = itemCode.split('-').filter(Boolean);
+  if (segs.length < 2) {
+    const { data } = await supabase.from('brands').select('prefix').eq('prefix', itemCode).maybeSingle();
+    return data ? itemCode : null;
+  }
+  const candidates: string[] = [];
+  for (let i = segs.length - 1; i >= 1; i--) candidates.push(segs.slice(0, i).join('-')); // longest first
+  const { data } = await supabase.from('brands').select('prefix').in('prefix', candidates);
+  const found = new Set(((data ?? []) as { prefix: string }[]).map((b) => b.prefix));
+  for (const cand of candidates) if (found.has(cand)) return cand;
+  return null;
+}
 
 // ── All tab: search by item_code / name / barcode → list rows ──
 export async function searchCatalogue(q: string): Promise<CatalogueListRow[]> {
@@ -108,8 +129,113 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
   for (const [k, v] of Object.entries(rest)) if (v !== undefined) upd[k] = v;
   upd.updated_at = new Date().toISOString();
 
+  // Completion gate (PR18 §6): needs_review is DERIVED on every save — recompute it from the final
+  // row (current values overlaid with this patch), NOT cleared blindly. A SKU drops off Needs-review
+  // only once complete: name + brand_prefix + product_type, plus piece_count_n if a puzzle.
+  const { data: cur } = await supabase
+    .from('catalogue')
+    .select('brand_prefix,product_type,piece_count_n,original_name,translate_name')
+    .eq('item_code', code)
+    .maybeSingle();
+  if (cur) {
+    const curRow = cur as Record<string, unknown>;
+    const pick = (k: string) => (k in upd ? upd[k] : curRow[k]);
+    upd.needs_review = !isComplete({
+      brand_prefix: (pick('brand_prefix') as string | null) ?? null,
+      product_type: (pick('product_type') as string | null) ?? null,
+      piece_count_n: (pick('piece_count_n') as number | null) ?? null,
+      original_name: (pick('original_name') as string | null) ?? null,
+      translate_name: (pick('translate_name') as string | null) ?? null,
+    });
+  }
+
   const { error } = await supabase.from('catalogue').update(upd).eq('item_code', code);
   if (error) throw new Error(`updateSku: ${error.message}`);
+}
+
+// ── quick-add (PR18 §6): create a PARTIAL SKU from a Stock Check session ──
+// Minimal data now (name + product_type + optional barcode), needs_review=true so admin completes it
+// later. Inserts the catalogue row (original_name=name, derived brand_prefix) and links the optional
+// barcode (shared model — a code already on another SKU just becomes a shared link). Adding the SKU to
+// the open count is the caller's existing add-missing path.
+export async function quickAddSku(input: {
+  item_code: string;
+  name: string;
+  product_type: string;
+  barcode?: string | null;
+}): Promise<QuickAddResult> {
+  const supabase = createSupabaseServerClient();
+  const code = input.item_code?.trim();
+  const name = input.name?.trim();
+  const ptype = input.product_type?.trim();
+  const bc = input.barcode?.trim() || null;
+  if (!code) return { ok: false, reason: 'invalid', message: 'Item code is required.' };
+  if (!name) return { ok: false, reason: 'invalid', message: 'Name is required.' };
+  if (!ptype) return { ok: false, reason: 'invalid', message: 'Pick a product type.' };
+
+  // uniqueness — item_code is the PK; if taken, offer the existing SKU instead of creating a dup.
+  const { data: exist } = await supabase
+    .from('catalogue')
+    .select('item_code,brand_prefix,translate_name,original_name,self_code,needs_review')
+    .eq('item_code', code)
+    .maybeSingle();
+  if (exist) return { ok: false, reason: 'exists', existing: { item_code: code, name: nameOf(exist as CatNameRow) } };
+
+  const brand_prefix = await deriveBrandPrefix(supabase, code);
+
+  const { error: insErr } = await supabase.from('catalogue').insert({
+    item_code: code,
+    original_name: name,
+    product_type: ptype,
+    brand_prefix,           // null when the code prefix isn't a known brand
+    needs_review: true,     // PARTIAL — surfaced in /catalog Needs-review until completed
+  });
+  if (insErr) {
+    if (insErr.code === '23505') {
+      // raced insert between the check and here — offer the existing one rather than erroring.
+      const { data: e2 } = await supabase
+        .from('catalogue')
+        .select('item_code,brand_prefix,translate_name,original_name,self_code,needs_review')
+        .eq('item_code', code)
+        .maybeSingle();
+      return { ok: false, reason: 'exists', existing: { item_code: code, name: e2 ? nameOf(e2 as CatNameRow) : code } };
+    }
+    return { ok: false, reason: 'invalid', message: insErr.message };
+  }
+
+  // optional barcode link. The composite (barcode,item_code) key means a code already owned by another
+  // SKU just becomes shared (the caller showed the owners first); 23505 = this exact link already
+  // exists → idempotent. The SKU was just created, so a non-23505 failure (RLS / transient) means the
+  // code did NOT attach — surface it as a SOFT warning, not a silent success (the SKU still exists;
+  // the operator links the barcode later in /catalog). A link hiccup never unwinds the created SKU.
+  let barcodeWarning: string | undefined;
+  if (bc) {
+    const { error: bcErr } = await supabase.from('barcodes').insert({ barcode: bc, item_code: code, is_verified: false });
+    if (bcErr && bcErr.code !== '23505') barcodeWarning = `barcode not linked (${bcErr.message}) — add it in Catalog`;
+  }
+
+  return { ok: true, item_code: code, barcodeWarning };
+}
+
+// SKUs already carrying a barcode — the shared-barcode owner warning shown in quick-add before a
+// staffer creates a new SKU on a code that already resolves (pick the existing one, or share it).
+export async function getBarcodeOwners(barcode: string): Promise<BarcodeOwner[]> {
+  const supabase = createSupabaseServerClient();
+  const bc = barcode?.trim();
+  if (!bc) return [];
+  const { data } = await supabase.from('barcodes').select('item_code').eq('barcode', bc);
+  const codes = [...new Set(((data ?? []) as { item_code: string }[]).map((r) => r.item_code))];
+  if (!codes.length) return [];
+  const { data: cat } = await supabase
+    .from('catalogue')
+    .select('item_code,brand_prefix,translate_name,original_name,self_code,needs_review')
+    .in('item_code', codes);
+  const byCode = new Map<string, CatNameRow>();
+  for (const c of (cat ?? []) as CatNameRow[]) byCode.set(c.item_code, c);
+  return codes.map((item_code) => {
+    const c = byCode.get(item_code);
+    return { item_code, name: c ? nameOf(c) : item_code };
+  });
 }
 
 // ── barcode manager: add a link (composite key — a code on another SKU just becomes shared) ──
@@ -159,7 +285,16 @@ export async function clearNeedsReview(itemCode: string): Promise<void> {
 // ── needs-review tab: the D2 stub queue ──
 export async function getNeedsReview(): Promise<CatalogueListRow[]> {
   const supabase = createSupabaseServerClient();
-  const { data } = await supabase.from('catalogue').select(LIST_COLS).eq('needs_review', true).order('item_code').limit(500);
+  // most-recently-entered first (PR18) — quick-added partials surface at the top of the queue.
+  // created_at (a real existing column) is the insert time; legacy rows cluster at import, so the
+  // newest quick-add / receive stubs sort to the top.
+  const { data } = await supabase
+    .from('catalogue')
+    .select(LIST_COLS)
+    .eq('needs_review', true)
+    .order('created_at', { ascending: false })
+    .order('item_code')
+    .limit(500);
   return ((data ?? []) as CatNameRow[]).map((c) => ({
     item_code: c.item_code,
     name: nameOf(c),
