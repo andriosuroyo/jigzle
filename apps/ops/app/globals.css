@@ -509,6 +509,38 @@ img.sku-img { background: #e8e8e8; }
 .sc-step:active { background: var(--paper); }
 .sc-mini { padding: 6px 10px; font-size: 12px; }
 
+/* PR22 — scanner-first Count: always-on scan field + mute, review strip, collapsible sticky lists */
+.sc-scanrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.sc-scanrow .sc-scaninput { flex: 1; min-width: 0; font-size: 16px; }  /* 16px = no iOS zoom-on-focus */
+.sc-mute { width: 44px; height: 44px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 18px; line-height: 1; cursor: pointer; }
+.sc-mute:active { background: var(--paper); }
+
+/* review strip — anything that isn't a clean count is held here until resolved/dismissed */
+.sc-review { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--red-tint); border: 1px solid var(--red); border-radius: 10px; padding: 10px 12px; }
+.sc-review-head { font-size: 12px; font-weight: 700; color: #993525; }
+.sc-review-item { background: white; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.sc-review-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sc-review-kind { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 20px; background: var(--orange-tint); color: #8A5A1A; white-space: nowrap; }
+.sc-review-raw { flex: 1; min-width: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink); word-break: break-all; }
+.sc-review-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+/* the strip nests BarcodePicker (.rcv-picker) + QuickAddForm (.sc-quickadd), which carry their own styles */
+.sc-review-item .rcv-picker, .sc-review-item .sc-quickadd { margin-top: 0; }
+
+/* collapsible Unscanned / Scanned lists with a sticky sub-header */
+.sc-listsec { margin-top: 14px; }
+.sc-listhead { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: var(--cream); border: none; border-bottom: 1px solid var(--line); padding: 8px 0; margin-bottom: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); cursor: pointer; }
+.sc-listhead .sc-caret { color: var(--brown); font-size: 12px; }
+
+/* raw scan log (audit; client-only, not persisted across refresh in v1) */
+.sc-scanlog { margin-top: 14px; }
+.sc-scanlog-toggle { background: none; border: none; color: var(--brown); font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px 0; }
+.sc-scanlog-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; max-height: 220px; overflow: auto; }
+.sc-scanlog-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.sc-scanlog-out { font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.03em; white-space: nowrap; }
+.sc-scanlog-out.ok { color: #3D6B26; }
+.sc-scanlog-out.bad { color: #993525; }
+.sc-scanlog-raw { flex: 1; min-width: 0; font-family: 'JetBrains Mono', monospace; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* PR18 §5 — quantitative Checkbox row: image + code/name, then an editable qty (−/+) and the ✓.
    PR21 §1 — nowrap so the checkbox stays inline even with an image; the name column shrinks +
    ellipsizes (.ff-name) instead of pushing the checkbox down to a second line. */
@@ -606,4 +638,6 @@ img.sku-img { background: #e8e8e8; }
   }
   .sc-step { width: 34px; height: 34px; font-size: 17px; }
   .sc-qty  { width: 46px; height: 34px; }
+  /* PR22 — list sub-headers stick just below the sticky session header (its measured height), full-bleed */
+  .sc-listhead { top: var(--sc-head-h, 56px); margin: 0 -18px; padding: 8px 18px; }
 }

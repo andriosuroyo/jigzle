@@ -132,13 +132,17 @@ export default function SkuSearchAdd({
 // product_type (required selector, no default), barcode (optional). A barcode that already resolves
 // shows its owner SKU(s) — a soft warning (shared-barcode model), so staff either pick the existing
 // SKU or create a new one that shares the code. On success the SKU is added to the count via onAdded.
-function QuickAddForm({
+// Exported so the Scan-mode review strip (PR22) can reuse it for an unknown barcode — seeded with the
+// raw scan as `initialBarcode` (and a blank item_code for the operator to fill).
+export function QuickAddForm({
   initialCode,
+  initialBarcode = '',
   onAdd,
   onClose,
   onCancel,
 }: {
   initialCode: string;
+  initialBarcode?: string; // seed the barcode field (PR22 unknown-scan path); default blank
   onAdd: (code: string) => void; // add the SKU to the count (does not close the form)
   onClose: () => void; // clear the search + close the form
   onCancel: () => void; // close the form without adding
@@ -146,7 +150,7 @@ function QuickAddForm({
   const [code, setCode] = useState(initialCode);
   const [name, setName] = useState('');
   const [ptype, setPtype] = useState('');
-  const [barcode, setBarcode] = useState('');
+  const [barcode, setBarcode] = useState(initialBarcode);
   const [owners, setOwners] = useState<BarcodeOwner[]>([]);
   const [exists, setExists] = useState<{ item_code: string; name: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null); // soft post-add notice (e.g. barcode didn't link)
