@@ -1,10 +1,16 @@
--- Manual apply for migration 0027 (PR23 §2a) — paste into the Supabase SQL editor.
+-- Manual apply for migration 0027 (PR23 §2a) — paste into the Supabase SQL editor and Run.
 -- Rewrites public.search_skus as a WORD-SPLIT search (every whitespace token, ≥3 chars, must match
 -- item_code ILIKE / translate_name ILIKE / exact piece_count_n — so "Snoopy 1000" & "1000 Snoopy"
--- both resolve the 1000-piece SKU) and adds on_the_way to the return. Idempotent: create or replace +
--- repeatable revoke/grant. Additive return shape (one extra column; item_code/name/available
--- unchanged), read-only, SECURITY INVOKER → no breakage window for the existing Stock Check caller.
--- Apply this BEFORE deploying the PR23 app code (Sales repoints its searchSkus at this RPC).
+-- both resolve the 1000-piece SKU) and adds on_the_way to the return. Adding on_the_way changes the
+-- return TYPE (3→4 cols), which CREATE OR REPLACE can't do, so we DROP first — wrapped in begin/commit
+-- so the swap is ATOMIC (no window where the function is missing and Stock Check's live search errors).
+-- Idempotent (drop-if-exists + create + repeatable revoke/grant + create index if not exists).
+-- SECURITY INVOKER → same RLS as before. Apply this BEFORE deploying the PR23 app code (Sales now
+-- calls this RPC).
+
+begin;
+
+drop function if exists public.search_skus(text);
 
 create or replace function public.search_skus(p_q text)
 returns table(item_code text, name text, available int, on_the_way int)
@@ -51,3 +57,5 @@ grant execute on function public.search_skus(text) to authenticated, service_rol
 -- Verify: explain analyze select * from search_skus('1000 snoopy');  -- expect BitmapOr, not Seq Scan.
 create index if not exists catalogue_piece_count_n_text_idx
   on public.catalogue ((piece_count_n::text));
+
+commit;

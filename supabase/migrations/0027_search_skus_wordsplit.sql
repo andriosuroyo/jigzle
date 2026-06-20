@@ -20,10 +20,20 @@
 -- seed's 3-branch OR can plan as a BitmapOr (bitmap index scans) instead of a seq scan over ~47k
 -- catalogue rows on every search.
 --
--- Idempotent (create or replace + repeatable revoke/grant + create index if not exists); additive
--- return shape (one extra column, the existing item_code/name/available unchanged) → no breakage for
--- the other RPC caller. Apply this BEFORE deploying the PR23 app code (Sales now calls this RPC).
--- SECURITY INVOKER → the same RLS (is_allowed_user) that gated the prior direct selects still applies.
+-- Adding on_the_way changes the return TYPE (3 cols → 4), which CREATE OR REPLACE FUNCTION cannot do
+-- — Postgres requires DROP FUNCTION first ("cannot change return type of existing function"). So this
+-- drops the old function then recreates it, all inside one begin/commit so the swap is ATOMIC: there
+-- is no window where the function is missing and Stock Check's live search (the existing RPC caller)
+-- would error. The extra column is still additive TO THAT CALLER (it ignores on_the_way). Idempotent
+-- / re-runnable (drop-if-exists + create + repeatable revoke/grant + create index if not exists).
+-- Apply this BEFORE deploying the PR23 app code (Sales now calls this RPC). SECURITY INVOKER → the
+-- same RLS (is_allowed_user) that gated the prior direct selects still applies.
+
+begin;
+
+-- DROP first: a new return column is a return-type change that CREATE OR REPLACE rejects. if-exists
+-- keeps re-runs clean; the begin/commit wrap makes the drop+recreate one atomic swap.
+drop function if exists public.search_skus(text);
 
 create or replace function public.search_skus(p_q text)
 returns table(item_code text, name text, available int, on_the_way int)
@@ -81,3 +91,5 @@ grant execute on function public.search_skus(text) to authenticated, service_rol
 --   explain analyze select * from search_skus('1000 snoopy');  -- expect BitmapOr, not Seq Scan.
 create index if not exists catalogue_piece_count_n_text_idx
   on public.catalogue ((piece_count_n::text));
+
+commit;
