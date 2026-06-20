@@ -1,6 +1,7 @@
 -- Manual apply for migration 0027 (PR23 §2a) — paste into the Supabase SQL editor.
 -- Rewrites public.search_skus as a WORD-SPLIT search (every whitespace token, ≥3 chars, must match
--- item_code OR translate_name) and adds on_the_way to the return. Idempotent: create or replace +
+-- item_code ILIKE / translate_name ILIKE / exact piece_count_n — so "Snoopy 1000" & "1000 Snoopy"
+-- both resolve the 1000-piece SKU) and adds on_the_way to the return. Idempotent: create or replace +
 -- repeatable revoke/grant. Additive return shape (one extra column; item_code/name/available
 -- unchanged), read-only, SECURITY INVOKER → no breakage window for the existing Stock Check caller.
 -- Apply this BEFORE deploying the PR23 app code (Sales repoints its searchSkus at this RPC).
@@ -23,11 +24,13 @@ language sql stable security invoker set search_path = public as $$
     from catalogue c, toks
     where toks.n > 0
       and (c.item_code ilike '%' || toks.arr[1] || '%'
-        or c.translate_name ilike '%' || toks.arr[1] || '%')
+        or c.translate_name ilike '%' || toks.arr[1] || '%'
+        or c.piece_count_n::text = toks.arr[1])
       and not exists (
         select 1 from unnest(toks.arr) as t
         where not (c.item_code ilike '%' || t || '%'
-                or c.translate_name ilike '%' || t || '%')
+                or c.translate_name ilike '%' || t || '%'
+                or c.piece_count_n::text = t)
       )
   )
   select m.item_code, m.name,

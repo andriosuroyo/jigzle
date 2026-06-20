@@ -3,7 +3,10 @@
 -- substring, so a name token ("Snoopy") and a code/piece token ("1000") that live in different fields
 -- never co-occurred in one column → zero hits. Now p_q is split on whitespace into tokens (each ≥3
 -- chars so the 0025 pg_trgm GIN index stays eligible) and a SKU matches iff EVERY token matches
--- SOMEWHERE — item_code OR translate_name (AND across tokens, OR across the two fields).
+-- SOMEWHERE — item_code ILIKE, translate_name ILIKE, OR an exact piece_count_n match (AND across
+-- tokens, OR across the three fields). The piece_count_n branch is the real "Snoopy 1000" fix: the
+-- piece count lives in its own column, so a token like "1000" must match it directly (exact = low
+-- noise) — "Snoopy 1000" and "1000 Snoopy" both resolve.
 --
 -- D2: matching drops self_code (brand-prefix noise that flooded results), original_name and barcode;
 -- the DISPLAY name still falls back through them (coalesce) so an untranslated SKU still shows a name.
@@ -35,17 +38,20 @@ language sql stable security invoker set search_path = public as $$
                     nullif(c.self_code, ''), c.item_code) as name
     from catalogue c, toks
     where toks.n > 0
-      -- Seed on the first token so the trgm GIN index drives the scan (a direct, indexable predicate
-      -- on c). Logically redundant — the NOT EXISTS below already requires arr[1] to match — so it
-      -- never changes the result set; it only gives the planner an index entry point.
+      -- Seed on the first token (an index entry point for the trgm GIN scan). It MIRRORS the NOT
+      -- EXISTS predicate below EXACTLY — including the piece_count_n branch — so it never wrongly
+      -- excludes a row: a number-first query like "1000 Snoopy" (where 1000 lives only in
+      -- piece_count_n) still passes the seed because the seed checks piece_count_n too.
       and (c.item_code ilike '%' || toks.arr[1] || '%'
-        or c.translate_name ilike '%' || toks.arr[1] || '%')
-      -- Require EVERY token to match somewhere (item_code OR translate_name): the row is kept iff no
-      -- token fails.
+        or c.translate_name ilike '%' || toks.arr[1] || '%'
+        or c.piece_count_n::text = toks.arr[1])
+      -- Require EVERY token to match somewhere (item_code ILIKE / translate_name ILIKE / exact
+      -- piece_count_n): the row is kept iff no token fails.
       and not exists (
         select 1 from unnest(toks.arr) as t
         where not (c.item_code ilike '%' || t || '%'
-                or c.translate_name ilike '%' || t || '%')
+                or c.translate_name ilike '%' || t || '%'
+                or c.piece_count_n::text = t)
       )
   )
   select m.item_code, m.name,
