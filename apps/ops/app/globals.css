@@ -69,6 +69,7 @@ input, textarea, select, button { font-family: inherit; }
 .search-row { display: flex; gap: 8px; align-items: center; }
 .search-row input { flex: 1; min-width: 0; }
 .search-row .btn-secondary { flex-shrink: 0; }
+.search-row .btn-link { flex-shrink: 0; white-space: nowrap; }  /* PR24 — "Clear" link beside Search */
 .search-row input, .subform input, .subform textarea, .subform select, .pay-amount, select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
 .subform textarea { min-height: 56px; resize: vertical; }
 .hint { font-size: 12px; color: var(--muted); }
@@ -229,7 +230,6 @@ input, textarea, select, button { font-family: inherit; }
 .sku-code { font-size: 12px; font-weight: 700; color: var(--brown); }
 .sku-name { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sku-avail { font-size: 11px; color: var(--green); font-weight: 600; }
-.sku-avail.low { color: var(--red); }
 .sku-add { display: flex; gap: 6px; }
 .sku-add .qty { width: 64px; } .sku-add .price { flex: 1; }
 .sku-add input, .sku-add select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
@@ -243,7 +243,6 @@ input, textarea, select, button { font-family: inherit; }
 .li-code { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--brown); }
 .li-name { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .li-avail { font-size: 11px; font-weight: 600; color: var(--green); }
-.li-avail.low { color: var(--red); }
 .li-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
 .li-qty { font-weight: 700; font-size: 13px; color: var(--brown); }
 .li-total { font-weight: 700; font-size: 13px; }
