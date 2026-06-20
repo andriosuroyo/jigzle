@@ -117,11 +117,13 @@ export type ScanResolve =
   | { status: 'collision'; skus: ScanSku[] }
   | { status: 'not_found'; code: string };
 
-// manual SKU search (catalogue + barcode) with live available, for add-missing.
+// manual SKU search via the shared search_skus RPC, for add-missing. `on_the_way` (PR23/0027) comes
+// back from the RPC but is unused here — Stock Check's Add field only shows `available`.
 export interface SkuHit {
   item_code: string;
   name: string;
   available: number;
+  on_the_way: number;
 }
 
 // ── close-confirm window data (shared component) ──
