@@ -93,7 +93,7 @@ try:
     preA, preB = stock(A), stock(B)   # fulfilled-but-unshipped state
     boxes = [
         {"real_weight": 10, "dim_p": 100, "dim_l": 100, "dim_t": 100, "bill_by_volume": True, "chargeable_weight": 99999},
-        {"real_weight": 50, "dim_p": 10, "dim_l": 10, "dim_t": 10, "bill_by_volume": False, "chargeable_weight": 99999},
+        {"real_weight": 50, "dim_p": 5, "dim_l": 5, "dim_t": 5, "bill_by_volume": False, "chargeable_weight": 99999},
     ]
     aff = ship("ZZ-OBTEST-1", l1, "JNE", "TRK-1", boxes)
     check("record_shipment returned affected codes", isinstance(aff, list) and A in aff and B in aff, str(aff))
@@ -119,8 +119,10 @@ try:
     if len(bx) == 2:
         b1 = next(b for b in bx if approx(b["real_weight"], 10))
         b2 = next(b for b in bx if approx(b["real_weight"], 50))
-        check("box1 vol = ceil·ceil·ceil/6000 (≈166.67)", approx(b1["vol_weight"], 1000000 / 6000))
-        check("box1 chargeable = vol (vol>real), NOT the client 99999", approx(b1["chargeable_weight"], 1000000 / 6000))
+        # PR26 (0029): vol is now ceil·ceil·ceil/6 in GRAMS (was /6000/kg). box1 100³ → 1000000/6 ≈ 166666.67.
+        check("box1 vol = ceil·ceil·ceil/6 grams (≈166666.67)", approx(b1["vol_weight"], 1000000 / 6))
+        check("box1 chargeable = vol (vol>real), NOT the client 99999", approx(b1["chargeable_weight"], 1000000 / 6))
+        # box2 5³ → vol = 125/6 ≈ 20.83 grams < real 50, so real still wins.
         check("box2 chargeable = real (real>vol), NOT 99999", approx(b2["chargeable_weight"], 50))
 
     # ── CASE 2: partial ship (C, D fulfilled; ship only C) ──

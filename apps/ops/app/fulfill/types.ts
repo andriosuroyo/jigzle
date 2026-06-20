@@ -22,7 +22,9 @@ export interface FulfillInput {
   sales_id: string;
   line_ids: string[];
   address_id: number;
-  courier: string | null;
+  courier: string | null;          // base courier name, e.g. 'TIKI'
+  courier_speed?: string | null;   // speed tier, e.g. 'ONS' (null = courier has no tiers)
+  courier_label?: string | null;   // denormalized display label, e.g. 'TIKI ONS'
   tracking?: string | null;
 }
 

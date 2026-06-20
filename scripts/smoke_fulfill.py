@@ -73,8 +73,10 @@ try:
         return [r["line_id"] for r in rows]
 
     def fulfill(sid, line_ids):
+        # PR26 (0029): fulfill_order is now 7-arg — courier_speed + courier_label travel on the line.
         return rest("POST", "rpc/fulfill_order", body={"p_sales_id": sid, "p_line_ids": line_ids,
-                    "p_address_id": addr_id, "p_courier": "JNE", "p_tracking": None})
+                    "p_address_id": addr_id, "p_courier": "JNE", "p_tracking": None,
+                    "p_courier_speed": None, "p_courier_label": "JNE"})
 
     # ── CASE 1: full fulfill of an in-stock order (A×1, B×2) ──
     print("\n-- CASE 1: full fulfill --")

@@ -25,21 +25,44 @@ function one<T>(v: T | T[] | null | undefined): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : v;
 }
 
-function skuName(c: { original_name: string | null; translate_name: string | null; self_code: string | null } | null, fallback: string): string {
-  if (!c) return fallback;
-  return c.translate_name || c.original_name || c.self_code || fallback;
+function catName(c: { original_name: string | null; translate_name: string | null; self_code: string | null } | null): string | null {
+  if (!c) return null;
+  return c.translate_name || c.original_name || c.self_code || null;
 }
 
-// ── live available for a set of item_codes ──
+// F4: a coded line with no catalogue name falls back to line_note → item_link host/slug → the literal
+// "Unmatched item". NEVER the raw line_id.
+function fallbackName(lineNote: string | null, itemLink: string | null): string {
+  const note = lineNote?.trim();
+  if (note) return note;
+  const link = linkLabel(itemLink);
+  if (link) return link;
+  return 'Unmatched item';
+}
+
+function linkLabel(link: string | null): string | null {
+  const s = link?.trim();
+  if (!s) return null;
+  try {
+    const u = new URL(s.includes('://') ? s : `https://${s}`);
+    const seg = u.pathname.split('/').filter(Boolean).pop();
+    return seg ? `${u.hostname}/${seg}` : u.hostname;
+  } catch {
+    return s; // not a parseable URL — show the raw link text
+  }
+}
+
+// ── live available + on_the_way for a set of item_codes ──
 async function availabilityFor(
   supabase: ReturnType<typeof createSupabaseServerClient>,
   itemCodes: string[]
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
+): Promise<Map<string, { available: number; on_the_way: number }>> {
+  const out = new Map<string, { available: number; on_the_way: number }>();
   const codes = [...new Set(itemCodes)];
   if (!codes.length) return out;
-  const { data } = await supabase.from('stock_check').select('item_code,available').in('item_code', codes);
-  for (const r of data ?? []) out.set(r.item_code as string, r.available as number);
+  const { data } = await supabase.from('stock_check').select('item_code,available,on_the_way').in('item_code', codes);
+  for (const r of data ?? [])
+    out.set(r.item_code as string, { available: (r.available as number) ?? 0, on_the_way: (r.on_the_way as number) ?? 0 });
   return out;
 }
 
@@ -69,7 +92,7 @@ export async function getFulfillQueue(filterReadyOnly = false): Promise<FulfillQ
   const rows: FulfillQueueRow[] = data.map((o) => {
     const lines = (o.order_lines ?? []) as { line_id: string; item_code: string | null; qty: number }[];
     const cust = one<{ name: string | null; phone: string | null }>(o.customers as never);
-    const shortCount = lines.filter((l) => (avail.get(l.item_code ?? '') ?? 0) < l.qty).length;
+    const shortCount = lines.filter((l) => (avail.get(l.item_code ?? '')?.available ?? 0) < l.qty).length;
     return {
       sales_id: o.sales_id as string,
       order_date: (o.order_date as string | null) ?? null,
@@ -97,7 +120,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
 
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,qty,line_note,item_link,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .is('fulfilled_at', null)
     .eq('is_cancelled', false)
@@ -109,19 +132,28 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
     line_id: string;
     item_code: string | null;
     qty: number;
+    line_note: string | null;
+    item_link: string | null;
     catalogue: { original_name: string | null; translate_name: string | null; self_code: string | null } | null;
   }[];
 
   const codes = rows.map((r) => r.item_code).filter((c): c is string => !!c);
   const avail = await availabilityFor(supabase, codes);
 
-  const lines: FulfillLine[] = rows.map((r) => ({
-    line_id: r.line_id,
-    item_code: r.item_code,
-    name: skuName(one(r.catalogue as never), r.item_code ?? r.line_id),
-    qty: r.qty,
-    available: avail.get(r.item_code ?? '') ?? 0,
-  }));
+  const lines: FulfillLine[] = rows.map((r) => {
+    const st = avail.get(r.item_code ?? '');
+    return {
+      line_id: r.line_id,
+      item_code: r.item_code,
+      // F4: catalogue name if matched, else line_note → item_link → "Unmatched item" (never line_id)
+      name: catName(one(r.catalogue as never)) || fallbackName(r.line_note, r.item_link),
+      qty: r.qty,
+      available: st?.available ?? 0,
+      on_the_way: st?.on_the_way ?? 0,
+      line_note: r.line_note,
+      item_link: r.item_link,
+    };
+  });
 
   const customerId = (order.customer_id as number | null) ?? null;
   let addresses: CustomerAddress[] = [];
@@ -172,6 +204,8 @@ export async function fulfillOrder(payload: FulfillInput): Promise<FulfillResult
     p_address_id: payload.address_id,
     p_courier: payload.courier ?? null,
     p_tracking: payload.tracking ?? null,
+    p_courier_speed: payload.courier_speed ?? null,
+    p_courier_label: payload.courier_label ?? null,
   });
   if (error) throw new Error(`fulfillOrder: ${error.message}`);
 

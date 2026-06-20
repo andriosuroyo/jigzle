@@ -300,6 +300,9 @@ export type FulfillLine = {
   name: string;
   qty: number;
   available: number;           // stock_check.available for item_code (0 when unmatched/null)
+  on_the_way: number;          // stock_check.on_the_way — incoming PO qty (0 when unmatched/null)
+  line_note: string | null;    // free-text note on the line (F4 fallback name source)
+  item_link: string | null;    // marketplace/source URL (F4 fallback name source)
 };
 
 // ── Outbound (Ship) module (Sales pipeline step 5) ────────────────────────────
@@ -333,8 +336,8 @@ export type Box = {
   dim_l: number | null;
   dim_t: number | null;
   bill_by_volume: boolean;
-  vol_weight: number | null;          // ceil(p)·ceil(l)·ceil(t)/6000 (server-computed)
-  chargeable_weight: number | null;   // max(real_weight, vol_weight) (server-computed)
+  vol_weight: number | null;          // ceil(p)·ceil(l)·ceil(t)/6 — GRAMS (server-computed, PR26)
+  chargeable_weight: number | null;   // max(real_weight, vol_weight) — grams (server-computed)
   created_at: string;
   send_id: string | null;             // 0014
 };
