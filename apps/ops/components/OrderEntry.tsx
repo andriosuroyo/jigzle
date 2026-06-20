@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { fmtRp } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import AppHeader from '@/components/AppHeader';
@@ -22,14 +22,28 @@ const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEB
 const METHODS = ['BCA', 'Shopee', 'Tokopedia', 'Mandiri', 'Deposit', 'Website', 'Cash', 'Socmed'];
 const QTY_OPTIONS = Array.from({ length: 50 }, (_, i) => i + 1); // mobile qty dropdown
 
-type Line = { item_code: string; name: string; qty: number; unit_price_idr: number; available: number };
+type Line = { item_code: string; name: string; qty: number; unit_price_idr: number; available: number; on_the_way: number };
 
-// D5 mapping preview (the authoritative version lives in the create_order SQL function).
+// Payment state (Paid/Partial/Unpaid) for the rail's Payment row. The status field is the legacy D5
+// preview; the rail/success Status row now uses deriveReadiness() instead (PR24 §1.9).
 function deriveStatus(total: number, paid: number): { status: string; pay: string } {
   if (total > 0 && paid >= total) return { status: 'Need send', pay: 'Paid' };
   if (paid > 0) return { status: 'Need payment', pay: 'Partial' };
   return { status: 'Need payment', pay: 'Unpaid' };
 }
+
+// Live, DISPLAY-ONLY readiness label (PR24 §1.9). Payment gate first, then the weakest line wins.
+// Never stored — create_order's orders.status is untouched.
+function deriveReadiness(lines: Line[], subtotal: number, paid: number): string {
+  if (subtotal <= 0) return '—';
+  if (paid < subtotal) return 'Need payment';
+  if (lines.every((l) => l.available >= l.qty)) return 'Ready to send';
+  if (lines.every((l) => l.available + l.on_the_way >= l.qty)) return 'On the way';
+  return 'Need to order';
+}
+
+// Thousands separators for the price / DP inputs (display only; the state stores digits). PR24 §4.
+const fmtThousands = (d: string) => d.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 function addressLine(a: CustomerAddress): string {
   return (
@@ -63,13 +77,14 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
   const [naRecipient, setNaRecipient] = useState('');
   const [naContact, setNaContact] = useState('');
   const [naAddr, setNaAddr] = useState('');
-  const [naKota, setNaKota] = useState('');
   const [savingAddr, setSavingAddr] = useState(false);
 
   // Panel 2 — items
   const [skuQuery, setSkuQuery] = useState('');
   const [skuResults, setSkuResults] = useState<SkuHit[]>([]);
   const [skuSearching, setSkuSearching] = useState(false);
+  const [skuSearched, setSkuSearched] = useState(false); // a search has settled → gates the "No results" line
+  const skuInputRef = useRef<HTMLInputElement>(null);
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
   const [draftPrice, setDraftPrice] = useState<Record<string, string>>({});
   const [lines, setLines] = useState<Line[]>([]);
@@ -87,8 +102,8 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
   // ── derived totals ──
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.qty * l.unit_price_idr, 0), [lines]);
   const paid = payMode === 'full' ? subtotal : payMode === 'dp' ? Math.max(0, parseInt(payAmount, 10) || 0) : 0;
-  const balance = subtotal - paid;
-  const status = deriveStatus(subtotal, paid);
+  const status = deriveStatus(subtotal, paid);          // .pay → the rail's Payment row
+  const readiness = deriveReadiness(lines, subtotal, paid); // → the rail/success Status row (PR24 §1.9)
   const canSave = !!customer && lines.length > 0 && addressId != null && !saving;
 
   // SKU images for the visible items (picker results + order lines) — one batch read, lazy.
@@ -108,11 +123,19 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
 
   async function runSkuSearch() {
     const q = skuQuery.trim();
-    if (q.length < 2) { setSkuResults([]); return; }
+    // <3 matches searchSkus' real floor (the 0025 pg_trgm index needs ≥3) — so a 2-char query
+    // short-circuits here instead of round-tripping to a guaranteed [] and falsely showing "No results".
+    if (q.length < 3) { setSkuResults([]); setSkuSearched(false); return; }
     setSkuSearching(true);
     try { setSkuResults(await searchSkus(q)); }
     catch { setSkuResults([]); }
-    finally { setSkuSearching(false); }
+    finally { setSkuSearching(false); setSkuSearched(true); }
+  }
+
+  // Reset the Items search to a blank, focused field (after an add, or the manual Clear link). PR24 §5.
+  function clearSkuSearch() {
+    setSkuResults([]); setSkuQuery(''); setSkuSearched(false);
+    skuInputRef.current?.focus();
   }
 
   // ── customer selection ──
@@ -169,12 +192,11 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
         recipient_name: naRecipient || customer.name || undefined,
         contact_phone: naContact || customer.phone || undefined,
         raw_address: naAddr,
-        kota: naKota,
       });
       setAddresses((prev) => [addr, ...prev]);
       setAddressId(addr.address_id);
       setShowNewAddr(false);
-      setNaRecipient(''); setNaContact(''); setNaAddr(''); setNaKota('');
+      setNaRecipient(''); setNaContact(''); setNaAddr('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add address.');
     } finally {
@@ -197,10 +219,11 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
         next[i] = { ...next[i], qty: next[i].qty + qty };
         return next;
       }
-      return [...prev, { item_code: sku.item_code, name: sku.name, qty, unit_price_idr: price, available: sku.available }];
+      return [...prev, { item_code: sku.item_code, name: sku.name, qty, unit_price_idr: price, available: sku.available, on_the_way: sku.on_the_way }];
     });
     setDraftQty((d) => ({ ...d, [sku.item_code]: '' }));
     setDraftPrice((d) => ({ ...d, [sku.item_code]: '' }));
+    clearSkuSearch(); // start the next SKU from a blank, focused search (Andrio's request, PR24 §5)
   }
 
   function removeLine(idx: number) {
@@ -219,7 +242,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
         lines: lines.map((l) => ({ item_code: l.item_code, qty: l.qty, unit_price_idr: l.unit_price_idr })),
         payment: paid > 0 ? { amount_idr: paid, method: payMethod } : null,
       });
-      setResult({ sales_id, total: subtotal, status: status.status, pay: status.pay });
+      setResult({ sales_id, total: subtotal, status: readiness, pay: status.pay });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save order.');
     } finally {
@@ -231,8 +254,8 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
     setCustomer(null); setLoyalty(null); setCustQuery(''); setCustResults([]); setShowNewCust(false);
     setNcName(''); setNcPhone(''); setNcChannel(CHANNELS[0]); setNcRecipient(''); setNcContact(''); setNcAddr('');
     setAddresses([]); setAddressId(null); setShowNewAddr(false);
-    setNaRecipient(''); setNaContact(''); setNaAddr(''); setNaKota('');
-    setSkuQuery(''); setSkuResults([]); setDraftQty({}); setDraftPrice({}); setLines([]);
+    setNaRecipient(''); setNaContact(''); setNaAddr('');
+    setSkuQuery(''); setSkuResults([]); setSkuSearched(false); setDraftQty({}); setDraftPrice({}); setLines([]);
     setPayMode('none'); setPayAmount(''); setPayMethod(METHODS[0]);
     setError(null); setResult(null);
   }
@@ -312,8 +335,8 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                         {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
                       <div className="subform-label">First address</div>
-                      <input type="text" placeholder="Recipient name (optional)" value={ncRecipient} onChange={(e) => setNcRecipient(e.target.value)} />
-                      <input type="text" placeholder="Contact phone (optional)" value={ncContact} onChange={(e) => setNcContact(e.target.value)} />
+                      <input type="text" placeholder="Recipient name (leave blank if same as customer)" value={ncRecipient} onChange={(e) => setNcRecipient(e.target.value)} />
+                      <input type="text" placeholder="Contact phone (leave blank if same as customer)" value={ncContact} onChange={(e) => setNcContact(e.target.value)} />
                       <textarea placeholder="Address" value={ncAddr} onChange={(e) => setNcAddr(e.target.value)} />
                       <div className="subform-actions">
                         <button className="btn-secondary" onClick={() => setShowNewCust(false)} disabled={savingCust}>Cancel</button>
@@ -350,49 +373,56 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
             <div className="panel-body">
               <div className="search-row">
                 <input
+                  ref={skuInputRef}
                   type="text"
                   inputMode="search"
-                  placeholder="SKU code / name / barcode…"
+                  placeholder="Code, name, or piece count…"
                   value={skuQuery}
-                  onChange={(e) => { setSkuQuery(e.target.value); if (!e.target.value.trim()) setSkuResults([]); }}
+                  onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); if (!e.target.value.trim()) setSkuResults([]); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSkuSearch(); } }}
                   disabled={!customer}
                 />
                 <button className="btn-secondary" onClick={runSkuSearch} disabled={!customer || skuSearching}>{skuSearching ? '…' : 'Search'}</button>
+                {(skuQuery || skuResults.length > 0) && (
+                  <button className="btn-link sku-clear" onClick={clearSkuSearch}>Clear</button>
+                )}
               </div>
               {skuSearching && <div className="hint">Searching…</div>}
+              {!skuSearching && skuSearched && skuResults.length === 0 && (
+                <div className="hint"><em>No results</em></div>
+              )}
               {skuResults.length > 0 && (
                 <ul className="result-list">
-                  {skuResults.map((s) => {
-                    const q = parseInt(draftQty[s.item_code] || '1', 10) || 1;
-                    const low = s.available < q;
-                    return (
-                      <li key={s.item_code} className="sku-result">
-                        <div className="sku-line">
-                          <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={SKU_IMG.sm} />
-                          <span className="sku-code">{s.item_code}</span>
-                          <span className="sku-name">{s.name}</span>
-                          <span className={`sku-avail ${low ? 'low' : ''}`}>avail {s.available}</span>
-                        </div>
-                        <div className="sku-add">
-                          {/* qty: dropdown on mobile, freestyle on desktop (same draftQty state) */}
-                          <select className="qty qty-mobile"
-                            value={draftQty[s.item_code] ?? ''}
-                            onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))}>
-                            <option value="">qty</option>
-                            {QTY_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-                          </select>
-                          <input className="qty qty-desktop" type="number" inputMode="numeric" min={1} placeholder="qty"
-                            value={draftQty[s.item_code] ?? ''}
-                            onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))} />
-                          <input className="price" type="number" inputMode="numeric" min={0} placeholder="Rp price"
-                            value={draftPrice[s.item_code] ?? ''}
-                            onChange={(e) => setDraftPrice((d) => ({ ...d, [s.item_code]: e.target.value }))} />
-                          <button className="btn-secondary" onClick={() => addLine(s)}>add</button>
-                        </div>
-                      </li>
-                    );
-                  })}
+                  {skuResults.map((s) => (
+                    <li key={s.item_code} className="sku-result">
+                      {/* Line 1: image + code + name */}
+                      <div className="sku-line">
+                        <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={SKU_IMG.sm} />
+                        <span className="sku-code">{s.item_code}</span>
+                        <span className="sku-name">{s.name}</span>
+                      </div>
+                      {/* Line 2: qty × price × add */}
+                      <div className="sku-add">
+                        {/* qty: dropdown on mobile, freestyle on desktop (same draftQty state) */}
+                        <select className="qty qty-mobile"
+                          value={draftQty[s.item_code] ?? ''}
+                          onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))}>
+                          <option value="">qty</option>
+                          {QTY_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <input className="qty qty-desktop" type="number" inputMode="numeric" min={1} placeholder="qty"
+                          value={draftQty[s.item_code] ?? ''}
+                          onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))} />
+                        {/* price: text + thousands grouping; state stores digits only (PR24 §4) */}
+                        <input className="price" type="text" inputMode="numeric" placeholder="Rp price"
+                          value={fmtThousands(draftPrice[s.item_code] ?? '')}
+                          onChange={(e) => setDraftPrice((d) => ({ ...d, [s.item_code]: e.target.value.replace(/\D/g, '') }))} />
+                        <button className="btn-secondary" onClick={() => addLine(s)}>add</button>
+                      </div>
+                      {/* Line 3: availability only (no "low" amber). Future: "preorder OK" once the auto-scrape lands. */}
+                      <span className="sku-avail">avail {s.available}</span>
+                    </li>
+                  ))}
                 </ul>
               )}
 
@@ -404,9 +434,8 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                       <div className="li-main">
                         <span className="li-code">{l.item_code}</span>
                         <span className="li-name">{l.name}</span>
-                        <span className={`li-avail ${l.available < l.qty ? 'low' : ''}`}>
-                          avail {l.available}{l.available < l.qty ? ' · low' : ''}
-                        </span>
+                        {/* per-line "low" amber dropped (PR24 §3) — the rail Status readiness label is the short-stock signal now */}
+                        <span className="li-avail">avail {l.available}</span>
                       </div>
                       <div className="li-right">
                         <span className="li-qty">{l.qty}×</span>
@@ -441,10 +470,9 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                 <button className="btn-secondary" onClick={() => setShowNewAddr(true)} disabled={!customer}>+ New address</button>
               ) : (
                 <div className="subform">
-                  <input type="text" placeholder="Recipient name (optional)" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />
-                  <input type="text" placeholder="Contact phone (optional)" value={naContact} onChange={(e) => setNaContact(e.target.value)} />
+                  <input type="text" placeholder="Recipient name (leave blank if same as customer)" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />
+                  <input type="text" placeholder="Contact phone (leave blank if same as customer)" value={naContact} onChange={(e) => setNaContact(e.target.value)} />
                   <textarea placeholder="Address" value={naAddr} onChange={(e) => setNaAddr(e.target.value)} />
-                  <input type="text" placeholder="Kota (optional)" value={naKota} onChange={(e) => setNaKota(e.target.value)} />
                   <div className="subform-actions">
                     <button className="btn-secondary" onClick={() => setShowNewAddr(false)} disabled={savingAddr}>Cancel</button>
                     <button className="btn-primary" onClick={handleCreateAddress} disabled={savingAddr}>{savingAddr ? 'Saving…' : 'Add address'}</button>
@@ -464,7 +492,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                 <button className={payMode === 'dp' ? 'active' : ''} onClick={() => setPayMode('dp')}>DP</button>
               </div>
               {payMode === 'dp' && (
-                <input className="pay-amount" type="number" inputMode="numeric" min={0} placeholder="DP amount (Rp)" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                <input className="pay-amount" type="text" inputMode="numeric" placeholder="DP amount (Rp)" value={fmtThousands(payAmount)} onChange={(e) => setPayAmount(e.target.value.replace(/\D/g, ''))} />
               )}
               {payMode === 'full' && <div className="hint">Full payment: {fmtRp(subtotal)}</div>}
               {payMode !== 'none' && (
@@ -483,12 +511,10 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
             <div className="rail-row"><span>Customer</span><b>{customer?.name || '—'}</b></div>
             <div className="rail-row"><span>Tier</span><b>{customer?.tier || '—'}</b></div>
             <div className="rail-sep" />
-            <div className="rail-row"><span>Lines</span><b>{lines.length}</b></div>
             <div className="rail-row"><span>Subtotal</span><b>{fmtRp(subtotal)}</b></div>
             <div className="rail-row"><span>Paid</span><b>{fmtRp(paid)}</b></div>
-            <div className="rail-row"><span>Balance</span><b>{fmtRp(balance)}</b></div>
             <div className="rail-sep" />
-            <div className="rail-row"><span>Status</span><b>{status.status}</b></div>
+            <div className="rail-row"><span>Status</span><b>{readiness}</b></div>
             <div className="rail-row"><span>Payment</span><b>{status.pay}</b></div>
             <button className="btn-primary rail-save" onClick={handleSave} disabled={!canSave}>
               {saving ? 'Saving…' : 'Save order'}

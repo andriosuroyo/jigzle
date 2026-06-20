@@ -75,11 +75,15 @@ export async function searchCustomers(q: string): Promise<CustomerHit[]> {
       lifetime_spend: lifetime,
     };
   });
-  // Surface an exact match (typed phone or full name) at the very top.
-  const ql = raw.toLowerCase();
-  const isExact = (h: CustomerHit) =>
-    (norm && h.phone === norm) || (h.name?.toLowerCase() === ql) || h.phone === raw;
-  return hits.sort((a, b) => Number(isExact(b)) - Number(isExact(a)));
+  // A–Z by lower(name), nulls/blank last — alphabetical is what helps scan a long list (PR24 §1).
+  return hits.sort((a, b) => {
+    const an = a.name?.trim().toLowerCase() ?? '';
+    const bn = b.name?.trim().toLowerCase() ?? '';
+    if (an === bn) return 0;
+    if (!an) return 1;
+    if (!bn) return -1;
+    return an.localeCompare(bn);
+  });
 }
 
 // ── Panel 1: loyalty readout for the selected customer ──
