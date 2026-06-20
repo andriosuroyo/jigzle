@@ -63,7 +63,21 @@ export async function getSettings(): Promise<SettingsData> {
   return { paymentMethods, courierServices, boxPresets };
 }
 
-// ── lighter single-list reads (PR26: Fulfill needs couriers, Outbound needs box presets) ──
+// ── lighter single-list reads (PR26: Fulfill needs couriers, Outbound box presets; PR27: Orders
+//    Need-payment panel needs payment methods) ──
+export async function getPaymentMethods(): Promise<PaymentMethod[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.payment)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) throw new Error(`getPaymentMethods: ${error.message}`);
+  return (data ?? []) as PaymentMethod[];
+}
+
 export async function getCourierServices(): Promise<CourierService[]> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase

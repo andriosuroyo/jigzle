@@ -23,7 +23,19 @@ const svg = (children: ReactNode): ReactNode => (
   </svg>
 );
 
-// Order — receipt / document
+// Orders — bulleted list (the sales-order lifecycle overview board)
+const iconOrders = svg(
+  <>
+    <line x1="8" y1="6" x2="21" y2="6" />
+    <line x1="8" y1="12" x2="21" y2="12" />
+    <line x1="8" y1="18" x2="21" y2="18" />
+    <line x1="3" y1="6" x2="3.01" y2="6" />
+    <line x1="3" y1="12" x2="3.01" y2="12" />
+    <line x1="3" y1="18" x2="3.01" y2="18" />
+  </>
+);
+
+// Order — receipt / document (the Purchase-Order / procurement board)
 const iconOrder = svg(
   <>
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -108,6 +120,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sales & Purchasing',
     items: [
+      { key: 'orders', href: '/orders', label: 'Orders', icon: iconOrders },
       { key: 'order', href: '/order', label: 'Order', icon: iconOrder },
       { key: 'sales', href: '/sales/new', label: 'Sales', icon: iconSales },
       { key: 'fulfill', href: '/fulfill', label: 'Fulfill', icon: iconFulfill },

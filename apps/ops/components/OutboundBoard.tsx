@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { volWeight, chargeable } from '@jigzle/lib';
 import type { ShipQueueRow } from '@jigzle/db/types';
-import { getShipQueue, getOrderForShip, recordShipment } from '@/app/outbound/actions';
+import { getShipQueue, getOrderForShip, recordShipment, unfulfillOrder } from '@/app/outbound/actions';
 import type { ShipDetail, ShipResult } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
@@ -25,10 +25,12 @@ const fmtDim = (n: number | null): string => (n == null ? '—' : String(n));
 export default function OutboundBoard({
   initialQueue,
   boxPresets,
+  initialOrderId,
   userEmail,
 }: {
   initialQueue: ShipQueueRow[];
   boxPresets: BoxPreset[];
+  initialOrderId?: string | null;
   userEmail: string;
 }) {
   const [queue, setQueue] = useState<ShipQueueRow[]>(initialQueue);
@@ -110,6 +112,39 @@ export default function OutboundBoard({
       setError(e instanceof Error ? e.message : 'Failed to load order.');
     } finally {
       if (reqIdRef.current === myReq) setLoadingDetail(false);
+    }
+  }
+
+  // PR27: preselect an order when arriving from /orders (?order=…). Runs once.
+  const didPreselect = useRef(false);
+  useEffect(() => {
+    if (initialOrderId && !didPreselect.current) {
+      didPreselect.current = true;
+      openOrder(initialOrderId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOrderId]);
+
+  // PR27: Return to Fulfill — un-fulfill the WHOLE order (all-or-none). Restores stock; leaves holds
+  // + payment untouched. The order leaves the ship queue and reappears in Fulfill.
+  async function returnToFulfill() {
+    if (!detail) return;
+    if (!window.confirm(`Return ${detail.sales_id} to Fulfill? Every fulfilled item goes back to Need send to re-pick.`)) return;
+    const myReq = ++reqIdRef.current; // latest-wins: a mid-flight selection change must win
+    setCommitting(true);
+    setError(null);
+    try {
+      await unfulfillOrder(detail.sales_id);
+      if (reqIdRef.current !== myReq) return; // superseded by a newer selection — don't clobber it
+      setResult(null);
+      setDetail(null);
+      setSelected(null);
+      // a queue-refresh failure must not masquerade as an un-fulfill failure (detail is now null)
+      try { setQueue(await getShipQueue()); } catch { /* keep current queue on transient error */ }
+    } catch (e) {
+      if (reqIdRef.current === myReq) setError(e instanceof Error ? e.message : 'Return to Fulfill failed.');
+    } finally {
+      setCommitting(false);
     }
   }
 
@@ -360,9 +395,12 @@ export default function OutboundBoard({
                 <button className="btn-secondary" onClick={() => setBoxes((prev) => [...prev, makeBox()])}>+ box</button>
               </section>
 
-              {/* HOOK (PR27): a single "Return to Fulfill" button for the whole order goes here — it
-                  calls the unfulfill_order(sales_id) RPC, which lands in PR27. All-or-none, not per
-                  line. Intentionally NOT built in PR26 (no RPC yet). */}
+              {/* Return to Fulfill (PR27) — all-or-none: the whole order goes back to Need send. */}
+              <div className="ob-return">
+                <button className="btn-secondary" onClick={returnToFulfill} disabled={committing}>↩ Return to Fulfill</button>
+                <span className="hint">Sends every fulfilled item back to Need send to re-pick the available subset.</span>
+              </div>
+
 
               {/* Commit bar (O5: all-or-none; enabled only when every line verified + custom dims filled) */}
               <div className="fd-commit">

@@ -7,12 +7,20 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Server shell: load the ready-to-ship worklist + the SETTINGS box presets (PR26 box dropdown), render the board.
-export default async function OutboundPage() {
+// PR27: an optional ?order= preselects that order (deep-link from the Orders board).
+export default async function OutboundPage({ searchParams }: { searchParams?: { order?: string } }) {
   const supabase = createSupabaseServerClient();
   const [{ data: { user } }, queue, boxPresets] = await Promise.all([
     supabase.auth.getUser(),
     getShipQueue(),
     getBoxPresets(),
   ]);
-  return <OutboundBoard initialQueue={queue} boxPresets={boxPresets} userEmail={user?.email || ''} />;
+  return (
+    <OutboundBoard
+      initialQueue={queue}
+      boxPresets={boxPresets}
+      initialOrderId={searchParams?.order ?? null}
+      userEmail={user?.email || ''}
+    />
+  );
 }
