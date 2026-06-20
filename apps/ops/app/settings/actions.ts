@@ -63,6 +63,33 @@ export async function getSettings(): Promise<SettingsData> {
   return { paymentMethods, courierServices, boxPresets };
 }
 
+// ── lighter single-list reads (PR26: Fulfill needs couriers, Outbound needs box presets) ──
+export async function getCourierServices(): Promise<CourierService[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.courier)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) throw new Error(`getCourierServices: ${error.message}`);
+  return (data ?? []) as CourierService[];
+}
+
+export async function getBoxPresets(): Promise<BoxPreset[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.box)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) throw new Error(`getBoxPresets: ${error.message}`);
+  return (data ?? []) as BoxPreset[];
+}
+
 // ── add: a new global row at the end of its list (sort_order = current max + 1) ──
 export async function addSetting(kind: SettingsKind, payload: SettingPayload): Promise<SettingRow> {
   const supabase = createSupabaseServerClient();

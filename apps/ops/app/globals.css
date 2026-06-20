@@ -145,7 +145,7 @@ input, textarea, select, button { font-family: inherit; }
 .fq-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--paper); font-size: 13px; font-weight: 700; color: var(--brown-dark); }
 .fq-filter { font-size: 11px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 5px; }
 .fq-empty { padding: 14px; }
-.fq-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 5px; max-height: 72vh; overflow-y: auto; }
+.fq-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 5px; max-height: 360px; overflow-y: auto; }  /* PR26 F1 — ~5.5 rows then scroll */
 .fq-row { width: 100%; text-align: left; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .fq-row.active { border-color: var(--orange); background: var(--orange-tint); }
 .fq-row-top { display: flex; justify-content: space-between; gap: 8px; }
@@ -669,3 +669,35 @@ img.sku-img { background: #e8e8e8; }
   .set-arrow { min-width: 40px; height: 30px; }
   .set-active input { min-width: 18px; min-height: 18px; }
 }
+
+/* ── PR26 — Fulfill 3-line item card (F5) ── */
+.ff-card { align-items: center; gap: 10px; }
+.ff-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ff-card-code { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--brown); }
+.ff-card-name { font-size: 14px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ff-card-status { font-size: 13px; font-weight: 600; color: var(--muted); }
+.ff-status { font-weight: 700; }
+.ff-status.ok { color: var(--green); }
+.ff-status.otw { color: #9C6F1C; }
+.ff-status.short { color: var(--red); }
+
+/* ── PR26 — Outbound O2 counter + O1 verify notes (manual vs scan distinct) ── */
+.ob-count { font-size: 13px; font-weight: 700; }
+.ob-count.zero { color: var(--muted); }
+.ob-count.scan { color: var(--green); }
+.ob-count.manual { color: #9C6F1C; }
+.ob-note { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; margin-top: 5px; display: inline-block; }
+.ob-note.manual { color: #9C6F1C; background: var(--yellow-tint); }
+.ob-note.scan { color: #3D6B26; background: var(--green-tint); }
+
+/* ── PR26 — Outbound O3 copyable address block ── */
+.ob-code { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--brown); }
+.ob-addr { position: relative; margin-top: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.ob-addr-block { margin: 0; font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+.ob-copy { position: absolute; top: 8px; right: 8px; background: white; border: 1px solid var(--line); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--brown); padding: 4px 8px; cursor: pointer; }
+.ob-copy:active { background: var(--paper); }
+.ob-addr-hint { margin-top: 6px; }
+
+/* ── PR26 — Outbound O8 box preset dropdown ── */
+.box-preset { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+.box-dims-ro { font-size: 12px; color: var(--muted); white-space: nowrap; }

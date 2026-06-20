@@ -13,27 +13,32 @@ export interface ShipDetail {
   customer_phone: string | null;
   status: string | null;
   address_id: number | null;
-  ship_address: string | null;
-  planned_courier: string | null;
+  ship_address: string | null;          // legacy single-line fallback (kept; O3 uses the fields below)
+  // O3 copyable address block (verbatim raw_address; name/phone fall back to the customer):
+  recipient_name: string | null;        // from the chosen address
+  contact_phone: string | null;         // from the chosen address
+  raw_address: string | null;           // VERBATIM — printed as-is, never rebuilt from columns
+  planned_courier: string | null;       // base courier from fulfill (e.g. 'TIKI')
+  courier_label: string | null;         // denormalized label from the line (e.g. 'TIKI ONS')
+  courier_tracking: string | null;      // tracking entered at fulfill
   lines: ShipLine[];
-  barcodes: { barcode: string; item_code: string }[]; // for optional scan resolution
+  barcodes: { barcode: string; item_code: string }[]; // for scan verification
   pending_fulfill_count: number; // unshipped, non-cancelled lines NOT yet fulfilled
 }
 
-// ── commit the shipment ──
+// ── commit the shipment ── (bill_by_volume dropped from the client per O9 — the column stays in DB
+// defaulting false; chargeable is always max(real, vol) regardless.)
 export interface BoxInput {
   real_weight: number | null;
   dim_p: number | null;
   dim_l: number | null;
   dim_t: number | null;
-  bill_by_volume: boolean;
 }
 
+// Courier + tracking are set at Fulfill now and travel on the line (O4) — Outbound never sends them.
 export interface ShipInput {
   sales_id: string;
   line_ids: string[];
-  courier: string | null;
-  tracking?: string | null;
   boxes: BoxInput[];
 }
 

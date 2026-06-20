@@ -5,17 +5,18 @@ import AppHeader from '@/components/AppHeader';
 import type { FulfillQueueRow } from '@jigzle/db/types';
 import { getFulfillQueue, getOrderForFulfill, fulfillOrder } from '@/app/fulfill/actions';
 import type { FulfillDetail, FulfillResult } from '@/app/fulfill/types';
+import type { CourierService } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
-const COURIERS = ['JNE', 'J&T', 'SiCepat', 'AnterAja', 'Ninja Xpress', 'POS Indonesia', 'TIKI', 'GoSend', 'GrabExpress', 'Lion Parcel', 'ID Express', 'Other'];
-
 export default function FulfillBoard({
   initialQueue,
+  courierServices,
   userEmail,
 }: {
   initialQueue: FulfillQueueRow[];
+  courierServices: CourierService[];
   userEmail: string;
 }) {
   const [queue, setQueue] = useState<FulfillQueueRow[]>(initialQueue);
@@ -27,22 +28,21 @@ export default function FulfillBoard({
 
   const [checkedLines, setCheckedLines] = useState<Set<string>>(new Set());
   const [addressId, setAddressId] = useState<number | null>(null);
-  const [courier, setCourier] = useState(COURIERS[0]);
+  const [courierId, setCourierId] = useState<number | null>(courierServices[0]?.id ?? null);
   const [tracking, setTracking] = useState('');
 
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<(FulfillResult & { units: number }) | null>(null);
 
-  // Latest-wins guard: every detail load/reload bumps this; an awaited response only applies
-  // if it is still the most recent request, so a slow fetch can't overwrite a newer selection.
+  // Latest-wins guard: every detail load/reload bumps this; an awaited response only applies if it
+  // is still the most recent request, so a slow fetch can't overwrite a newer selection.
   const reqIdRef = useRef(0);
 
   const shown = readyOnly ? queue.filter((q) => q.ready) : queue;
 
-  // Which active holds will actually auto-release: only those on CHECKED lines, and only up to
-  // the fulfilled qty per item_code (oldest-first) — mirrors the RPC's per-item budget cap so
-  // the UI never over-promises a release the RPC won't perform.
+  // Which active holds will actually auto-release: only those on CHECKED lines, and only up to the
+  // fulfilled qty per item_code (oldest-first) — mirrors the RPC's per-item budget cap.
   const willReleaseHoldIds = useMemo(() => {
     const ids = new Set<number>();
     if (!detail) return ids;
@@ -87,7 +87,7 @@ export default function FulfillBoard({
       // default-check lines that are in stock; default address to the order's address
       setCheckedLines(new Set(d.lines.filter((l) => l.available >= l.qty).map((l) => l.line_id)));
       setAddressId(d.default_address_id ?? d.addresses[0]?.address_id ?? null);
-      setCourier(COURIERS[0]);
+      setCourierId(courierServices[0]?.id ?? null);
       setTracking('');
     }
   }
@@ -123,21 +123,32 @@ export default function FulfillBoard({
   const unitsCommitting = selectedLines.reduce((s, l) => s + l.qty, 0);
   const goNegativeCount = selectedLines.filter((l) => l.available - l.qty < 0).length;
 
+  // F5 per-line status: in stock → available {n}; short but incoming covers it → on the way ×{n};
+  // else → short {n}.
+  function lineStatus(l: FulfillDetail['lines'][number]): { text: string; cls: string } {
+    if (l.available >= l.qty) return { text: `available ${l.available}`, cls: 'ok' };
+    if (l.available + l.on_the_way >= l.qty) return { text: `on the way ×${l.on_the_way}`, cls: 'otw' };
+    return { text: `short ${l.qty - l.available}`, cls: 'short' };
+  }
+
   async function commit() {
     if (!detail || selectedLines.length === 0 || addressId == null) return;
     setCommitting(true);
     setError(null);
     try {
+      const svc = courierServices.find((c) => c.id === courierId) ?? null;
       const res = await fulfillOrder({
         sales_id: detail.sales_id,
         line_ids: selectedLines.map((l) => l.line_id),
         address_id: addressId,
-        courier,
+        courier: svc?.courier ?? null,
+        courier_speed: svc?.speed ?? null,
+        courier_label: svc?.label ?? null,
         tracking: tracking.trim() || null,
       });
       setResult({ ...res, units: unitsCommitting });
-      // reload the detail — remaining (short) lines stay; if none left, drop the order.
-      // Guard with the request token so a mid-flight switch to another order isn't clobbered.
+      // reload the detail — remaining (short) lines stay; if none left, drop the order. Guard with
+      // the request token so a mid-flight switch to another order isn't clobbered.
       const myReq = ++reqIdRef.current;
       const d = await getOrderForFulfill(detail.sales_id);
       if (reqIdRef.current === myReq) {
@@ -164,7 +175,8 @@ export default function FulfillBoard({
         {/* ── Queue ── */}
         <aside className="fq-pane">
           <div className="fq-head">
-            <span>Fulfill queue</span>
+            {/* F3: full group total — every order, ready and short (not the readyOnly-filtered count) */}
+            <span>Fulfill queue: {queue.length}</span>
             <label className="fq-filter">
               <input type="checkbox" checked={readyOnly} onChange={(e) => setReadyOnly(e.target.checked)} />
               ready only
@@ -183,7 +195,7 @@ export default function FulfillBoard({
                     <span className="fq-cust">{q.customer_name || '—'}</span>
                   </div>
                   <div className="fq-row-bot">
-                    <span>{q.line_count} {q.line_count === 1 ? 'line' : 'lines'}</span>
+                    <span>{q.line_count} {q.line_count === 1 ? 'item' : 'items'}</span>
                     <span className={`pay pay-${(q.payment_status || '').toLowerCase()}`}>{q.payment_status || '—'}</span>
                     {q.ready ? (
                       <span className="badge ready">✅ ready</span>
@@ -245,24 +257,31 @@ export default function FulfillBoard({
                 </ul>
               </section>
 
-              {/* Lines */}
+              {/* Items (F2: "items" not "lines") */}
               <section className="fd-section">
-                <div className="fd-section-head">Lines</div>
+                <div className="fd-section-head">Items</div>
                 <ul className="ff-lines">
                   {detail.lines.map((l) => {
+                    const st = lineStatus(l);
                     const short = l.available < l.qty;
                     const lineHolds = detail.holds.filter((h) => h.item_code === l.item_code);
                     return (
                       <li key={l.line_id} className="ff-line">
-                        <label className="ff-line-main">
+                        {/* F5: checkbox · big image · 3 stacked rows (code / name / qty — status) */}
+                        <label className="ff-line-main ff-card">
                           <input type="checkbox" checked={checkedLines.has(l.line_id)} onChange={() => toggleLine(l.line_id)} />
                           <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
-                          <span className="ff-code">{l.item_code || '—'}</span>
-                          <span className="ff-name">{l.name}</span>
-                          <span className="ff-qty">×{l.qty}</span>
-                          <span className={`ff-avail ${short ? 'low' : ''}`}>avail {l.available}</span>
+                          <div className="ff-card-info">
+                            <div className="ff-card-code">{l.item_code || '—'}</div>
+                            <div className="ff-card-name">{l.name}</div>
+                            <div className="ff-card-status">
+                              ×{l.qty} — <span className={`ff-status ${st.cls}`}>{st.text}</span>
+                            </div>
+                          </div>
                         </label>
-                        {short && <div className="low-warn">Short {l.qty - l.available} — fulfilling will take available to {l.available - l.qty} (allowed)</div>}
+                        {short && st.cls === 'short' && (
+                          <div className="low-warn">Fulfilling will take available to {l.available - l.qty} (allowed)</div>
+                        )}
                         {lineHolds.map((h) => {
                           const willRelease = willReleaseHoldIds.has(h.hold_id);
                           return (
@@ -280,13 +299,17 @@ export default function FulfillBoard({
                 </ul>
               </section>
 
-              {/* Courier */}
+              {/* Courier (from SETTINGS) + tracking */}
               <section className="fd-section fd-courier">
                 <div>
                   <label className="fd-label">Courier</label>
-                  <select value={courier} onChange={(e) => setCourier(e.target.value)}>
-                    {COURIERS.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  {courierServices.length === 0 ? (
+                    <div className="hint">No couriers configured — add them in Settings.</div>
+                  ) : (
+                    <select value={courierId ?? ''} onChange={(e) => setCourierId(e.target.value ? Number(e.target.value) : null)}>
+                      {courierServices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="fd-label">Tracking <em>(optional)</em></label>
@@ -294,22 +317,17 @@ export default function FulfillBoard({
                 </div>
               </section>
 
-              {/* Commit bar */}
+              {/* Commit bar (F6: button = "Fulfill N units"; compact go-negative warning only when > 0) */}
               <div className="fd-commit">
-                <div className="fd-commit-info">
-                  Σ committing <b>{unitsCommitting}</b> unit{unitsCommitting === 1 ? '' : 's'} ·{' '}
-                  {goNegativeCount === 0 ? (
-                    <span className="ok-text">available after: ok</span>
-                  ) : (
-                    <span className="warn-text">⚠ {goNegativeCount} line{goNegativeCount === 1 ? '' : 's'} go negative</span>
-                  )}
-                </div>
+                {goNegativeCount > 0 && (
+                  <span className="warn-text">⚠ {goNegativeCount} item{goNegativeCount === 1 ? '' : 's'} go negative</span>
+                )}
                 <button
                   className="btn-primary"
                   onClick={commit}
                   disabled={committing || selectedLines.length === 0 || addressId == null}
                 >
-                  {committing ? 'Fulfilling…' : `Fulfill selected line${selectedLines.length === 1 ? '' : 's'}`}
+                  {committing ? 'Fulfilling…' : `Fulfill ${unitsCommitting} unit${unitsCommitting === 1 ? '' : 's'}`}
                 </button>
               </div>
             </>

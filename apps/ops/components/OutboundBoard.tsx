@@ -6,26 +6,29 @@ import { volWeight, chargeable } from '@jigzle/lib';
 import type { ShipQueueRow } from '@jigzle/db/types';
 import { getShipQueue, getOrderForShip, recordShipment } from '@/app/outbound/actions';
 import type { ShipDetail, ShipResult } from '@/app/outbound/types';
+import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
-const COURIERS = ['JNE', 'J&T', 'SiCepat', 'AnterAja', 'Ninja Xpress', 'POS Indonesia', 'TIKI', 'GoSend', 'GrabExpress', 'Lion Parcel', 'ID Express', 'Other'];
-
-type BoxDraft = { key: number; real: string; p: string; l: string; t: string; vol: boolean };
+// preset = a box-preset code (dims from SETTINGS) or 'Custom' (manual P/L/T).
+type BoxDraft = { key: number; preset: string; real: string; p: string; l: string; t: string };
+const CUSTOM = 'Custom';
 
 let boxKeySeq = 1;
-const newBox = (): BoxDraft => ({ key: boxKeySeq++, real: '', p: '', l: '', t: '', vol: false });
 const numOrNull = (s: string): number | null => {
   const n = parseFloat(s);
   return s.trim() && isFinite(n) ? n : null;
 };
+const fmtDim = (n: number | null): string => (n == null ? '—' : String(n));
 
 export default function OutboundBoard({
   initialQueue,
+  boxPresets,
   userEmail,
 }: {
   initialQueue: ShipQueueRow[];
+  boxPresets: BoxPreset[];
   userEmail: string;
 }) {
   const [queue, setQueue] = useState<ShipQueueRow[]>(initialQueue);
@@ -34,40 +37,60 @@ export default function OutboundBoard({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const reqIdRef = useRef(0);
 
-  const [checkedLines, setCheckedLines] = useState<Set<string>>(new Set());
+  // verification state: presence in `verified` = the line is confirmed (manual tick or full scan);
+  // scanCounts drives the {n}/{qty} counter. (O1/O2)
+  const [verified, setVerified] = useState<Map<string, 'manual' | 'scan'>>(new Map());
+  const [scanCounts, setScanCounts] = useState<Map<string, number>>(new Map());
   const [scan, setScan] = useState('');
   const [scanMsg, setScanMsg] = useState<string | null>(null);
-  const [courier, setCourier] = useState(COURIERS[0]);
-  const [tracking, setTracking] = useState('');
-  const [boxes, setBoxes] = useState<BoxDraft[]>([newBox()]);
+  const [boxes, setBoxes] = useState<BoxDraft[]>([]);
+  const [copied, setCopied] = useState(false);
 
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<(ShipResult & { units: number; completed: boolean }) | null>(null);
 
-  // barcode → item_code, for optional scan resolution
+  const defaultPreset = boxPresets[0]?.code ?? CUSTOM;
+  const makeBox = (): BoxDraft => ({ key: boxKeySeq++, preset: defaultPreset, real: '', p: '', l: '', t: '' });
+
+  // barcode → item_code, for scan verification
   const barcodeMap = useMemo(() => {
     const m = new Map<string, string>();
     detail?.barcodes.forEach((b) => m.set(b.barcode, b.item_code));
     return m;
   }, [detail]);
 
-  // SKU thumbnails for the box-contents lines ("am I packing the RIGHT item?")
   const imgCodes = useMemo(
     () => (detail?.lines ?? []).map((l) => l.item_code).filter(Boolean) as string[],
     [detail]
   );
   const imgMap = useSkuImages(imgCodes);
 
+  // O3 copyable address block — name/phone fall back to the customer; raw_address verbatim; a blank
+  // line then the courier label + #tracking. The order-code title row is NOT part of the copy text.
+  const addressBlock = useMemo(() => {
+    if (!detail) return '';
+    const head: string[] = [];
+    const name = detail.recipient_name || detail.customer_name;
+    if (name) head.push(name);
+    if (detail.raw_address) head.push(detail.raw_address);
+    const phone = detail.contact_phone || detail.customer_phone;
+    if (phone) head.push(phone);
+    const tail: string[] = [];
+    if (detail.courier_label) tail.push(detail.courier_label);
+    if (detail.courier_tracking) tail.push('#' + detail.courier_tracking);
+    return tail.length ? `${head.join('\n')}\n\n${tail.join('\n')}` : head.join('\n');
+  }, [detail]);
+
   function applyDetail(d: ShipDetail | null) {
     setDetail(d);
     if (d) {
-      setCheckedLines(new Set(d.lines.map((l) => l.line_id))); // default: ship all
-      setCourier(d.planned_courier && COURIERS.includes(d.planned_courier) ? d.planned_courier : COURIERS[0]);
-      setTracking('');
-      setBoxes([newBox()]);
+      setVerified(new Map());      // O1: lines start UNCHECKED
+      setScanCounts(new Map());
+      setBoxes([makeBox()]);
       setScan('');
       setScanMsg(null);
+      setCopied(false);
     }
   }
 
@@ -90,76 +113,94 @@ export default function OutboundBoard({
     }
   }
 
+  // manual verification: tick = "Manually checked"; unticking also resets the scan counter to 0/X.
   function toggleLine(lineId: string) {
-    setCheckedLines((prev) => {
-      const next = new Set(prev);
-      next.has(lineId) ? next.delete(lineId) : next.add(lineId);
+    const isVerified = verified.has(lineId);
+    setVerified((prev) => {
+      const next = new Map(prev);
+      if (isVerified) next.delete(lineId);
+      else next.set(lineId, 'manual');
       return next;
     });
+    if (isVerified) setScanCounts((prev) => new Map(prev).set(lineId, 0));
   }
 
+  // scan verification: +1 to the first not-yet-full matching line; full → "Barcode OK".
   function doScan() {
     const code = scan.trim();
+    setScan('');
     if (!code || !detail) return;
     const item = barcodeMap.get(code);
-    const hits = item ? detail.lines.filter((l) => l.item_code === item) : [];
-    if (hits.length) {
-      setCheckedLines((prev) => {
-        const next = new Set(prev);
-        hits.forEach((l) => next.add(l.line_id));
-        return next;
-      });
-      setScanMsg(`✓ ${item} checked`);
+    if (!item) { setScanMsg(`no SKU for barcode ${code}`); return; }
+    const hitLines = detail.lines.filter((l) => l.item_code === item);
+    if (!hitLines.length) { setScanMsg(`${item} not in this order`); return; }
+    const target = hitLines.find((l) => (scanCounts.get(l.line_id) ?? 0) < l.qty);
+    if (!target) { setScanMsg(`${item} already fully scanned`); return; }
+    const n = Math.min((scanCounts.get(target.line_id) ?? 0) + 1, target.qty);
+    setScanCounts((prev) => new Map(prev).set(target.line_id, n));
+    if (n >= target.qty) {
+      setVerified((prev) => new Map(prev).set(target.line_id, 'scan'));
+      setScanMsg(`✓ ${item} complete`);
     } else {
-      setScanMsg(`no line for barcode ${code}`);
+      setScanMsg(`✓ ${item} ${n}/${target.qty}`);
     }
-    setScan('');
   }
-
-  const selectedLines = detail?.lines.filter((l) => checkedLines.has(l.line_id)) ?? [];
-  const unitsShipping = selectedLines.reduce((s, l) => s + l.qty, 0);
-  // the order reaches Complete iff every fulfilled-unshipped line is going AND nothing is still
-  // awaiting fulfill (mirrors the RPC's "no unshipped non-cancelled line remains").
-  const willComplete =
-    !!detail &&
-    detail.lines.length > 0 &&
-    selectedLines.length === detail.lines.length &&
-    detail.pending_fulfill_count === 0;
 
   function setBox(key: number, patch: Partial<BoxDraft>) {
     setBoxes((prev) => prev.map((b) => (b.key === key ? { ...b, ...patch } : b)));
   }
+  // effective dims for a box: preset dims from SETTINGS, or the manual P/L/T for a Custom box.
+  function boxDims(b: BoxDraft): { p: number | null; l: number | null; t: number | null } {
+    if (b.preset === CUSTOM) return { p: numOrNull(b.p), l: numOrNull(b.l), t: numOrNull(b.t) };
+    const preset = boxPresets.find((x) => x.code === b.preset);
+    return { p: preset?.dim_p ?? null, l: preset?.dim_l ?? null, t: preset?.dim_t ?? null };
+  }
   function boxPreview(b: BoxDraft): { vol: number | null; charge: number | null } {
     const real = numOrNull(b.real);
-    const p = numOrNull(b.p), l = numOrNull(b.l), t = numOrNull(b.t);
+    const { p, l, t } = boxDims(b);
     const vol = p != null && l != null && t != null ? volWeight(p, l, t) : null;
     const charge = vol != null ? chargeable(real ?? 0, vol) : real;
     return { vol, charge };
   }
 
+  // O5 gate: every line verified AND every Custom box has all three dims. unitsShipping = ALL lines
+  // (no partial ship — the subset decision was made at Fulfill).
+  const allVerified = !!detail && detail.lines.length > 0 && detail.lines.every((l) => verified.has(l.line_id));
+  const customIncomplete = boxes.some(
+    (b) => b.preset === CUSTOM && !(numOrNull(b.p) != null && numOrNull(b.l) != null && numOrNull(b.t) != null)
+  );
+  const unitsShipping = detail?.lines.reduce((s, l) => s + l.qty, 0) ?? 0;
+  const willComplete = !!detail && detail.lines.length > 0 && detail.pending_fulfill_count === 0;
+
+  async function copyAddress() {
+    try {
+      await navigator.clipboard.writeText(addressBlock);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError('Copy failed — select the block and copy manually.');
+    }
+  }
+
   async function commit() {
-    if (!detail || selectedLines.length === 0) return;
+    if (!detail || !allVerified || customIncomplete) return;
     setCommitting(true);
     setError(null);
     try {
       const willCompleteNow = willComplete;
       const res = await recordShipment({
         sales_id: detail.sales_id,
-        line_ids: selectedLines.map((l) => l.line_id),
-        courier,
-        tracking: tracking.trim() || null,
+        line_ids: detail.lines.map((l) => l.line_id), // all-or-none: ship every fulfilled-unshipped line
         boxes: boxes
-          .filter((b) => b.real.trim() || b.p.trim() || b.l.trim() || b.t.trim())
-          .map((b) => ({
-            real_weight: numOrNull(b.real),
-            dim_p: numOrNull(b.p),
-            dim_l: numOrNull(b.l),
-            dim_t: numOrNull(b.t),
-            bill_by_volume: b.vol,
-          })),
+          .filter((b) => {
+            const d = boxDims(b);
+            return b.real.trim() || d.p != null || d.l != null || d.t != null;
+          })
+          .map((b) => {
+            const d = boxDims(b);
+            return { real_weight: numOrNull(b.real), dim_p: d.p, dim_l: d.l, dim_t: d.t };
+          }),
       });
-      // The RPC ships only still-eligible lines (returns the affected item_codes). If nothing
-      // shipped (e.g. already shipped in another tab), don't show a false "shipped/Complete".
       if (res.affected.length === 0) {
         setError('Those lines were already shipped — nothing to do.');
       } else {
@@ -206,7 +247,7 @@ export default function OutboundBoard({
                     <span className="fq-cust">{q.customer_name || '—'}</span>
                   </div>
                   <div className="fq-row-bot">
-                    <span>{q.ready_count} {q.ready_count === 1 ? 'line' : 'lines'}</span>
+                    <span>{q.ready_count} {q.ready_count === 1 ? 'item' : 'items'}</span>
                     <span className="badge ready" style={{ marginLeft: 'auto' }}>{q.planned_courier || '—'}</span>
                   </div>
                 </button>
@@ -223,9 +264,16 @@ export default function OutboundBoard({
 
           {detail && (
             <>
+              {/* O3: order code + copyable address block */}
               <div className="fd-head">
-                <div className="fd-title">{detail.sales_id} → {detail.customer_name || '—'}</div>
-                {detail.ship_address && <div className="fd-sub">{detail.ship_address}</div>}
+                <div className="ob-code">{detail.sales_id}</div>
+                <div className="ob-addr">
+                  <button className="ob-copy" onClick={copyAddress} aria-label="Copy address block">
+                    {copied ? '✓ Copied' : '⧉ Copy'}
+                  </button>
+                  <pre className="ob-addr-block">{addressBlock}</pre>
+                  {!detail.courier_label && <div className="hint ob-addr-hint">Courier not set — set it in Fulfill.</div>}
+                </div>
               </div>
 
               {error && <div className="validation err">{error}</div>}
@@ -237,84 +285,95 @@ export default function OutboundBoard({
                 </div>
               )}
 
-              {/* Items */}
+              {/* Items — verify every one (manual tick or scan), then ship the whole order */}
               <section className="fd-section">
-                <div className="fd-section-head">Items (fulfilled, not shipped)</div>
+                <div className="fd-section-head">Items (verify all to ship)</div>
                 <div className="scan-row">
                   <input
                     type="text"
-                    placeholder="scan / type a barcode (optional)"
+                    placeholder="scan / type a barcode"
                     value={scan}
                     onChange={(e) => setScan(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doScan(); } }}
                   />
-                  <button className="btn-secondary" onClick={doScan}>check</button>
+                  <button className="btn-secondary" onClick={doScan}>scan</button>
                   {scanMsg && <span className="scan-msg">{scanMsg}</span>}
                 </div>
                 <ul className="ff-lines">
-                  {detail.lines.map((l) => (
-                    <li key={l.line_id} className="ff-line">
-                      <label className="ff-line-main">
-                        <input type="checkbox" checked={checkedLines.has(l.line_id)} onChange={() => toggleLine(l.line_id)} />
-                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
-                        <span className="ff-code">{l.item_code || '—'}</span>
-                        <span className="ff-name">{l.name}</span>
-                        <span className="ff-qty">×{l.qty}</span>
-                      </label>
-                    </li>
-                  ))}
+                  {detail.lines.map((l) => {
+                    const mode = verified.get(l.line_id);
+                    const n = scanCounts.get(l.line_id) ?? 0;
+                    const countText = mode ? `${l.qty}/${l.qty}` : `${n}/${l.qty}`;
+                    const countCls = mode === 'manual' ? 'manual' : mode === 'scan' ? 'scan' : 'zero';
+                    return (
+                      <li key={l.line_id} className="ff-line">
+                        <label className="ff-line-main">
+                          <input type="checkbox" checked={verified.has(l.line_id)} onChange={() => toggleLine(l.line_id)} />
+                          <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
+                          <span className="ff-code">{l.item_code || '—'}</span>
+                          <span className="ff-name">{l.name}</span>
+                          <span className={`ob-count ${countCls}`}>{countText}</span>
+                        </label>
+                        {mode && (
+                          <div className={`ob-note ${mode}`}>{mode === 'manual' ? 'Manually checked' : 'Barcode OK'}</div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
 
-              {/* Boxes */}
+              {/* Boxes — size from SETTINGS presets (or Custom); real weight in grams (O8/O9) */}
               <section className="fd-section">
                 <div className="fd-section-head">Boxes</div>
                 <ul className="box-list">
                   {boxes.map((b, i) => {
                     const { vol, charge } = boxPreview(b);
+                    const dims = boxDims(b);
                     return (
                       <li key={b.key} className="box-row">
                         <div className="box-line">
                           <span className="box-n">Box {i + 1}</span>
+                          <select className="box-preset" value={b.preset} onChange={(e) => setBox(b.key, { preset: e.target.value })}>
+                            {boxPresets.map((p) => <option key={p.code} value={p.code}>{p.code}</option>)}
+                            <option value={CUSTOM}>Custom</option>
+                          </select>
                           <input className="box-real" type="number" inputMode="numeric" min={0} placeholder="real (g)" value={b.real} onChange={(e) => setBox(b.key, { real: e.target.value })} />
-                          <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="P" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />
-                          <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="L" value={b.l} onChange={(e) => setBox(b.key, { l: e.target.value })} />
-                          <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="T" value={b.t} onChange={(e) => setBox(b.key, { t: e.target.value })} />
+                          {b.preset === CUSTOM ? (
+                            <>
+                              <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="P" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />
+                              <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="L" value={b.l} onChange={(e) => setBox(b.key, { l: e.target.value })} />
+                              <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="T" value={b.t} onChange={(e) => setBox(b.key, { t: e.target.value })} />
+                            </>
+                          ) : (
+                            <span className="box-dims-ro">{fmtDim(dims.p)}·{fmtDim(dims.l)}·{fmtDim(dims.t)} cm</span>
+                          )}
                           {boxes.length > 1 && <button className="li-remove" onClick={() => setBoxes((prev) => prev.filter((x) => x.key !== b.key))} aria-label="remove box">×</button>}
                         </div>
                         <div className="box-preview">
-                          <label><input type="checkbox" checked={b.vol} onChange={(e) => setBox(b.key, { vol: e.target.checked })} /> bill by volume</label>
-                          <span>vol {vol != null ? vol.toFixed(2) : '—'} · chargeable {charge != null ? charge.toFixed(2) : '—'}</span>
+                          <span>vol {vol != null ? vol.toFixed(1) : '—'} g · chargeable {charge != null ? charge.toFixed(1) : '—'} g</span>
                         </div>
                       </li>
                     );
                   })}
                 </ul>
-                <button className="btn-secondary" onClick={() => setBoxes((prev) => [...prev, newBox()])}>+ box</button>
+                <button className="btn-secondary" onClick={() => setBoxes((prev) => [...prev, makeBox()])}>+ box</button>
               </section>
 
-              {/* Courier */}
-              <section className="fd-section fd-courier">
-                <div>
-                  <label className="fd-label">Courier</label>
-                  <select value={courier} onChange={(e) => setCourier(e.target.value)}>
-                    {COURIERS.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="fd-label">Tracking</label>
-                  <input type="text" placeholder="tracking #" value={tracking} onChange={(e) => setTracking(e.target.value)} />
-                </div>
-              </section>
+              {/* HOOK (PR27): a single "Return to Fulfill" button for the whole order goes here — it
+                  calls the unfulfill_order(sales_id) RPC, which lands in PR27. All-or-none, not per
+                  line. Intentionally NOT built in PR26 (no RPC yet). */}
 
-              {/* Commit bar */}
+              {/* Commit bar (O5: all-or-none; enabled only when every line verified + custom dims filled) */}
               <div className="fd-commit">
-                <div className="fd-commit-info">
-                  Σ shipping <b>{unitsShipping}</b> unit{unitsShipping === 1 ? '' : 's'} ·{' '}
-                  {willComplete ? <span className="ok-text">order will → Complete</span> : <span className="warn-text">order stays open</span>}
-                </div>
-                <button className="btn-primary" onClick={commit} disabled={committing || selectedLines.length === 0}>
-                  {committing ? 'Shipping…' : 'Mark shipped'}
+                {detail.lines.length > 0 && !allVerified && (
+                  <span className="warn-text">verify all {detail.lines.length} item{detail.lines.length === 1 ? '' : 's'} to ship</span>
+                )}
+                {allVerified && customIncomplete && (
+                  <span className="warn-text">fill the custom box dimensions</span>
+                )}
+                <button className="btn-primary" onClick={commit} disabled={committing || !allVerified || customIncomplete}>
+                  {committing ? 'Shipping…' : `Mark shipped${unitsShipping ? ` (${unitsShipping} unit${unitsShipping === 1 ? '' : 's'})` : ''}`}
                 </button>
               </div>
             </>
