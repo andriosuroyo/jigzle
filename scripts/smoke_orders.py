@@ -121,7 +121,10 @@ try:
     sid2 = create_order([{"item_code": B, "qty": 2, "unit_price_idr": 50000}],
                         payment={"amount_idr": 100000, "method": "BCA"})
     o2_before = order_row(sid2)
-    check("paid order starts Need send / Paid", o2_before["status"] == "Need send" and o2_before["payment_status"] == "Paid")
+    # also locks create_order's paid_idr seed on the FULL-paid path (CASE 1 covers the DP path)
+    check("paid order starts Need send / Paid + paid_idr seeded at creation (100000)",
+          o2_before["status"] == "Need send" and o2_before["payment_status"] == "Paid" and o2_before["paid_idr"] == 100000,
+          str(o2_before))
     fulfill(sid2)
     sB_ff = stock(B)
     check("B available DOWN by 2 (fulfilled)", sB_ff["available"] == base[B]["available"] - 2,
