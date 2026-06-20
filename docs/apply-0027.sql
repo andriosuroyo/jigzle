@@ -44,3 +44,10 @@ $$;
 
 revoke all on function public.search_skus(text) from public, anon;
 grant execute on function public.search_skus(text) to authenticated, service_role;
+
+-- Expression index so the piece_count_n::text branch is index-eligible (a plain btree on
+-- piece_count_n is NOT used because of the cast). With the 0025 trgm GIN indexes this lets the seed's
+-- 3-branch OR BitmapOr instead of seq-scanning ~47k rows. Brief write-lock; idempotent.
+-- Verify: explain analyze select * from search_skus('1000 snoopy');  -- expect BitmapOr, not Seq Scan.
+create index if not exists catalogue_piece_count_n_text_idx
+  on public.catalogue ((piece_count_n::text));

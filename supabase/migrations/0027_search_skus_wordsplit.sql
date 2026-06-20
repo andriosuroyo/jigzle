@@ -14,10 +14,16 @@
 -- stock_snapshot matview via LEFT JOIN, so a 0-stock preorder SKU still appears (avail 0, on_the_way
 -- reflecting any incoming PO). Exact item_code match ranks first, then item_code; cap 20.
 --
--- Idempotent (create or replace + repeatable revoke/grant); additive return shape (one extra column,
--- the existing item_code/name/available unchanged) → no breakage for the other RPC caller. Apply this
--- BEFORE deploying the PR23 app code (Sales now calls this RPC). SECURITY INVOKER → the same RLS
--- (is_allowed_user) that gated the prior direct selects still applies.
+-- Also creates an EXPRESSION index on (piece_count_n::text) so the new piece-count branch is
+-- index-eligible: the ::text cast means a plain btree on piece_count_n would NOT be used, so the
+-- expression itself is indexed. With it + the 0025 trgm GIN indexes (item_code/translate_name), the
+-- seed's 3-branch OR can plan as a BitmapOr (bitmap index scans) instead of a seq scan over ~47k
+-- catalogue rows on every search.
+--
+-- Idempotent (create or replace + repeatable revoke/grant + create index if not exists); additive
+-- return shape (one extra column, the existing item_code/name/available unchanged) → no breakage for
+-- the other RPC caller. Apply this BEFORE deploying the PR23 app code (Sales now calls this RPC).
+-- SECURITY INVOKER → the same RLS (is_allowed_user) that gated the prior direct selects still applies.
 
 create or replace function public.search_skus(p_q text)
 returns table(item_code text, name text, available int, on_the_way int)
@@ -67,3 +73,11 @@ $$;
 
 revoke all on function public.search_skus(text) from public, anon;
 grant execute on function public.search_skus(text) to authenticated, service_role;
+
+-- Expression index for the piece_count_n branch of the per-token predicate (a plain btree on
+-- piece_count_n is NOT used because of the ::text cast — index the expression). Lets the seed's
+-- 3-branch OR BitmapOr with the 0025 trgm GIN indexes rather than seq-scanning ~47k rows per search.
+-- Non-concurrent (brief write-lock on catalogue; idempotent via if-not-exists). Verify post-apply:
+--   explain analyze select * from search_skus('1000 snoopy');  -- expect BitmapOr, not Seq Scan.
+create index if not exists catalogue_piece_count_n_text_idx
+  on public.catalogue ((piece_count_n::text));
