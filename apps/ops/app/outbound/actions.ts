@@ -180,3 +180,23 @@ export async function recordShipment(payload: ShipInput): Promise<ShipResult> {
   }
   return { affected, stock };
 }
+
+// ── Return to Fulfill (PR27): un-fulfill the whole order — all fulfilled-but-unshipped lines go
+// back to Need send. Inverse of fulfillOrder; restores stock; leaves holds + payment untouched.
+export async function unfulfillOrder(salesId: string): Promise<ShipResult> {
+  if (!salesId) throw new Error('unfulfillOrder: sales_id is required');
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.rpc('unfulfill_order', { p_sales_id: salesId });
+  if (error) throw new Error(`unfulfillOrder: ${error.message}`);
+
+  const affected = (data as string[] | null) ?? [];
+  let stock: ShipResult['stock'] = [];
+  if (affected.length) {
+    const { data: s } = await supabase
+      .from('stock_check')
+      .select('item_code,available,physical,reserved')
+      .in('item_code', affected);
+    stock = (s ?? []) as ShipResult['stock'];
+  }
+  return { affected, stock };
+}

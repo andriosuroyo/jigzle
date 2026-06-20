@@ -7,12 +7,20 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Server shell: load the worklist + the SETTINGS courier list (PR26 courier dropdown), render the board.
-export default async function FulfillPage() {
+// PR27: an optional ?order= preselects that order (deep-link from the Orders board).
+export default async function FulfillPage({ searchParams }: { searchParams?: { order?: string } }) {
   const supabase = createSupabaseServerClient();
   const [{ data: { user } }, queue, courierServices] = await Promise.all([
     supabase.auth.getUser(),
     getFulfillQueue(false),
     getCourierServices(),
   ]);
-  return <FulfillBoard initialQueue={queue} courierServices={courierServices} userEmail={user?.email || ''} />;
+  return (
+    <FulfillBoard
+      initialQueue={queue}
+      courierServices={courierServices}
+      initialOrderId={searchParams?.order ?? null}
+      userEmail={user?.email || ''}
+    />
+  );
 }

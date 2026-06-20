@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import type { FulfillQueueRow } from '@jigzle/db/types';
 import { getFulfillQueue, getOrderForFulfill, fulfillOrder } from '@/app/fulfill/actions';
@@ -13,10 +13,12 @@ import { SKU_IMG } from '@/components/skuImageSizes';
 export default function FulfillBoard({
   initialQueue,
   courierServices,
+  initialOrderId,
   userEmail,
 }: {
   initialQueue: FulfillQueueRow[];
   courierServices: CourierService[];
+  initialOrderId?: string | null;
   userEmail: string;
 }) {
   const [queue, setQueue] = useState<FulfillQueueRow[]>(initialQueue);
@@ -110,6 +112,16 @@ export default function FulfillBoard({
       if (reqIdRef.current === myReq) setLoadingDetail(false);
     }
   }
+
+  // PR27: preselect an order when arriving from /orders (?order=…). Runs once.
+  const didPreselect = useRef(false);
+  useEffect(() => {
+    if (initialOrderId && !didPreselect.current) {
+      didPreselect.current = true;
+      openOrder(initialOrderId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOrderId]);
 
   function toggleLine(lineId: string) {
     setCheckedLines((prev) => {

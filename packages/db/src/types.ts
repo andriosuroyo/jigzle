@@ -109,6 +109,7 @@ export type Order = {
   order_date: string | null;
   status: OrderStatus | null;
   sales_total_idr: number | null;     // full IDR
+  paid_idr: number;                   // running paid total (0030); full IDR, default 0
   payment_method: string | null;
   payment_status: PaymentStatus | null;
   order_note: string | null;
