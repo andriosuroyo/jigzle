@@ -35,11 +35,14 @@ export interface NewAddressInput {
   kode_pos?: string;
 }
 
-// ── Panel 2: SKU search (catalogue text + barcode), with live stock_check.available ──
+// ── Panel 2: SKU search via the shared search_skus RPC (PR23) — word-split over item_code +
+// translate_name; available + on_the_way from the stock_snapshot matview (on_the_way drives PR24's
+// readiness label; ignored by the current OrderEntry UI). ──
 export interface SkuHit {
   item_code: string;
   name: string;
   available: number;
+  on_the_way: number;
 }
 
 // ── Panel 5: save the order (atomic, via the create_order RPC) ──

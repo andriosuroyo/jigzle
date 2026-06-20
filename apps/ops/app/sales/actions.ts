@@ -163,64 +163,19 @@ export async function createAddress(
   return data as CustomerAddress;
 }
 
-// ── Panel 2: SKU search (catalogue text + barcode), with live stock_check.available ──
+// ── Panel 2: SKU search — ONE round-trip via the shared search_skus RPC (PR23 §2b / migration 0027),
+// the SAME function Stock Check's Add field calls (one source of truth, no drift). Word-split: every
+// whitespace token (≥3 chars) must match item_code OR translate_name (so "Snoopy 1000" works); exact
+// item_code ranks first; cap 20; available + on_the_way from the stock_snapshot matview (0 when absent
+// → 0-stock preorder SKUs still appear). SECURITY INVOKER → the same RLS (is_allowed_user) that gated
+// the old direct selects applies. 3-char floor so the 0025 pg_trgm GIN index is eligible.
 export async function searchSkus(q: string): Promise<SkuHit[]> {
   const raw = sanitize(q);
-  if (raw.length < 2) return [];
+  if (raw.length < 3) return []; // <3 chars can't use the pg_trgm index → don't bother the DB
   const supabase = createSupabaseServerClient();
-
-  const named = new Map<string, string>(); // item_code → display name
-  const nameOf = (c: {
-    item_code: string;
-    translate_name: string | null;
-    original_name: string | null;
-    self_code: string | null;
-  }) => c.translate_name || c.original_name || c.self_code || c.item_code;
-
-  const [catRes, bcRes] = await Promise.all([
-    supabase
-      .from('catalogue')
-      .select('item_code,original_name,translate_name,self_code')
-      .or(
-        `item_code.ilike.%${raw}%,self_code.ilike.%${raw}%,original_name.ilike.%${raw}%,translate_name.ilike.%${raw}%`
-      )
-      .limit(15),
-    supabase.from('barcodes').select('item_code').ilike('barcode', `%${raw}%`).limit(15),
-  ]);
-
-  for (const c of catRes.data ?? []) named.set(c.item_code as string, nameOf(c as never));
-
-  // Barcode-only hits: resolve their catalogue names too.
-  const bcCodes = [...new Set((bcRes.data ?? []).map((b) => b.item_code as string))].filter(
-    (code) => !named.has(code)
-  );
-  if (bcCodes.length) {
-    const { data: cat2 } = await supabase
-      .from('catalogue')
-      .select('item_code,original_name,translate_name,self_code')
-      .in('item_code', bcCodes);
-    for (const c of cat2 ?? []) named.set(c.item_code as string, nameOf(c as never));
-  }
-
-  const codes = [...named.keys()].slice(0, 20);
-  if (!codes.length) return [];
-
-  const { data: stock } = await supabase
-    .from('stock_check')
-    .select('item_code,available')
-    .in('item_code', codes);
-  const avail = new Map((stock ?? []).map((s) => [s.item_code as string, s.available as number]));
-
-  const hits = codes.map((item_code) => ({
-    item_code,
-    name: named.get(item_code)!,
-    available: avail.get(item_code) ?? 0,
-  }));
-  // An exact item_code match always sorts to the very top (stable sort keeps the rest in order).
-  const ql = raw.toLowerCase();
-  return hits.sort(
-    (a, b) => Number(b.item_code.toLowerCase() === ql) - Number(a.item_code.toLowerCase() === ql)
-  );
+  const { data, error } = await supabase.rpc('search_skus', { p_q: raw });
+  if (error) return []; // search failures are non-fatal (same posture as before)
+  return (data ?? []) as SkuHit[];
 }
 
 // ── Panel 5: save the order (atomic, via the create_order RPC) ── (types in ./types)
