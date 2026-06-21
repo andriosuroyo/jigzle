@@ -197,12 +197,14 @@ export async function returnToFulfill(salesId: string): Promise<void> {
   if (!salesId) throw new Error('returnToFulfill: sales_id is required');
   const supabase = createSupabaseServerClient();
 
-  // the cut, unshipped, non-cancelled lines Outbound is holding for this order
+  // the ADDRESSED (courier-set), unshipped, non-cancelled lines Outbound is holding — same predicate
+  // as getShipQueue/getOrderForShip, so a straddling order's still-in-Fulfill lines aren't touched.
   const { data: lineRows } = await supabase
     .from('order_lines')
     .select('line_id')
     .eq('sales_id', salesId)
     .not('fulfilled_at', 'is', null)
+    .not('courier', 'is', null)
     .is('shipped_at', null)
     .eq('is_cancelled', false);
   const lineIds = ((lineRows ?? []) as { line_id: string }[]).map((r) => r.line_id);
