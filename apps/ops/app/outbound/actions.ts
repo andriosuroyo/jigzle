@@ -69,9 +69,12 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
 
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,courier,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,qty,address_id,courier,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .not('fulfilled_at', 'is', null)
+    // PR-B §6: only ADDRESSED lines belong to Outbound. A cut-but-unaddressed line (courier null, still
+    // in Fulfill) on a straddling order must not be shipped here — match the getShipQueue predicate.
+    .not('courier', 'is', null)
     .is('shipped_at', null)
     .eq('is_cancelled', false)
     .order('line_id');
@@ -80,6 +83,7 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
     line_id: string;
     item_code: string | null;
     qty: number;
+    address_id: number | null;
     courier: string | null;
     courier_label: string | null;
     courier_tracking: string | null;
@@ -102,7 +106,9 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
   let contactPhone: string | null = null;
   let rawAddress: string | null = null;
   let shipAddress: string | null = null; // legacy single-line fallback (kept for compatibility)
-  const addressId = (order.address_id as number | null) ?? null;
+  // PR-B: the address Fulfill confirmed is stamped on the LINE by set_fulfillment (orders.address_id
+  // may be null when SA-1 deferred it). Prefer the line's address; fall back to the order's.
+  const addressId = (rows.find((r) => r.address_id != null)?.address_id ?? (order.address_id as number | null)) ?? null;
   if (addressId != null) {
     const { data: a } = await supabase
       .from('customer_addresses')
