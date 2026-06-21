@@ -45,19 +45,3 @@ export interface FulfillDetail {
   lines: FulfillCutLine[];           // the cut, courier-null, unshipped lines
   addresses: CustomerAddress[];
 }
-
-// ── commit the stock cut (legacy fulfill_order path — retired in Stage 7) ──
-export interface FulfillInput {
-  sales_id: string;
-  line_ids: string[];
-  address_id: number;
-  courier: string | null;          // base courier name, e.g. 'TIKI'
-  courier_speed?: string | null;   // speed tier, e.g. 'ONS' (null = courier has no tiers)
-  courier_label?: string | null;   // denormalized display label, e.g. 'TIKI ONS'
-  tracking?: string | null;
-}
-
-export interface FulfillResult {
-  affected: string[]; // item_codes whose stock moved
-  stock: { item_code: string; available: number; reserved: number; physical: number }[];
-}

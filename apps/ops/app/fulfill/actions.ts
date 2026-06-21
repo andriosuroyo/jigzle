@@ -9,8 +9,6 @@ import type { CustomerAddress } from '@jigzle/db/types';
 import type {
   FulfillCutLine,
   FulfillDetail,
-  FulfillInput,
-  FulfillResult,
   SendToOutboundInput,
   ToSendQueueRow,
 } from './types';
@@ -119,34 +117,9 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
   };
 }
 
-// ── commit the stock cut ── (FulfillInput / FulfillResult live in ./types)
-export async function fulfillOrder(payload: FulfillInput): Promise<FulfillResult> {
-  if (!payload.line_ids?.length) throw new Error('fulfillOrder: select at least one line');
-  if (!payload.address_id) throw new Error('fulfillOrder: an address is required');
-  const supabase = createSupabaseServerClient();
-
-  const { data, error } = await supabase.rpc('fulfill_order', {
-    p_sales_id: payload.sales_id,
-    p_line_ids: payload.line_ids,
-    p_address_id: payload.address_id,
-    p_courier: payload.courier ?? null,
-    p_tracking: payload.tracking ?? null,
-    p_courier_speed: payload.courier_speed ?? null,
-    p_courier_label: payload.courier_label ?? null,
-  });
-  if (error) throw new Error(`fulfillOrder: ${error.message}`);
-
-  const affected = (data as string[] | null) ?? [];
-  let stock: FulfillResult['stock'] = [];
-  if (affected.length) {
-    const { data: s } = await supabase
-      .from('stock_check')
-      .select('item_code,available,reserved,physical')
-      .in('item_code', affected);
-    stock = (s ?? []) as FulfillResult['stock'];
-  }
-  return { affected, stock };
-}
+// (Stage 7) The legacy fulfillOrder action — which called the fulfill_order RPC to cut + courier in
+// one step — is retired: the cut now happens upstream (cut_order_lines at New/Pending) and the courier
+// at sendToOutbound (set_fulfillment). The fulfill_order DB function is LEFT in place, dormant.
 
 // ── PR-B "To send" queue (FT-2/FT-3): orders with cut + courier-null + unshipped lines. The !inner
 // embed + embedded filters restrict both which orders return AND which lines come back (only the cut,
