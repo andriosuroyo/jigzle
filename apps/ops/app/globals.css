@@ -746,3 +746,6 @@ img.sku-img { background: #e8e8e8; }
 .pend-status.on_the_way { color: #9C6F1C; background: var(--yellow-tint); }
 .pend-status.to_order { color: var(--red); background: #FBEAEA; }
 .pend-delete { color: var(--red); }
+
+/* ── PR-B — Fulfill To-send preview SKU list (FT-3) ── */
+.ff-sku-list { margin-left: auto; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }

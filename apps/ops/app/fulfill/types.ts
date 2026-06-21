@@ -2,7 +2,7 @@
 // export only async functions — a Next.js production-build requirement (the linux SWC on Vercel
 // rejects a 'use server' module that exports anything but async functions, incl. interfaces).
 
-import type { CustomerAddress, FulfillLine, Hold, PaymentStatus } from '@jigzle/db/types';
+import type { CustomerAddress } from '@jigzle/db/types';
 
 // ── PR-B To-send queue (§5, FT-2/FT-3): orders with cut + courier-null + unshipped lines. The cut
 // already happened (Pending / New); Fulfill confirms address + courier, then sends to Outbound. ──
@@ -25,20 +25,28 @@ export interface SendToOutboundInput {
   tracking?: string | null;
 }
 
-// ── the detail pane ──
-export interface FulfillDetail {
-  sales_id: string;
-  customer_id: number | null;
-  customer_name: string | null;
-  customer_phone: string | null;
-  payment_status: PaymentStatus | null;
-  default_address_id: number | null; // the order's current address_id
-  lines: FulfillLine[];
-  addresses: CustomerAddress[];
-  holds: Hold[]; // active holds matching a line's item_code (and this customer / customer-agnostic)
+// ── one cut line in the Fulfill detail (FT-6: read-only — the whole cut set ships; no checkbox, no
+// availability, no holds — the cut + hold-release already happened upstream at Pending / New) ──
+export interface FulfillCutLine {
+  line_id: string;
+  item_code: string | null;
+  name: string;
+  qty: number;
 }
 
-// ── commit the stock cut ──
+// ── the detail pane (prep-only: confirm address + pick courier, then send to Outbound) ──
+export interface FulfillDetail {
+  sales_id: string;
+  order_date: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  default_address_id: number | null; // the order's current address_id (null = SA-1 deferred)
+  needs_address: boolean;            // address_id is null → must be set before sending to Outbound
+  lines: FulfillCutLine[];           // the cut, courier-null, unshipped lines
+  addresses: CustomerAddress[];
+}
+
+// ── commit the stock cut (legacy fulfill_order path — retired in Stage 7) ──
 export interface FulfillInput {
   sales_id: string;
   line_ids: string[];
