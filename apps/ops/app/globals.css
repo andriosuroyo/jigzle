@@ -718,6 +718,7 @@ img.sku-img { background: #e8e8e8; }
 .ord-state.need_send     { background: var(--yellow-tint); color: #9C6F1C; }
 .ord-state.ready_to_ship { background: var(--orange-tint); color: #8A5A1A; }
 .ord-state.complete      { background: var(--green-tint);  color: #3D6B26; }
+.ord-state.cancelled     { background: var(--line);        color: var(--muted); }
 .ord-date { margin-left: auto; font-size: 11px; color: var(--muted); }
 
 .ord-pay-grid { display: flex; gap: 16px; flex-wrap: wrap; }

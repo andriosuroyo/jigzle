@@ -1,12 +1,19 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import HistoryBoard from '@/components/HistoryBoard';
+import { getHistory } from '@/app/history/actions';
+import { getPaymentMethods } from '@/app/settings/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// PR-B Stage 1 skeleton shell; the real read-only History board (search + summary + Mark paid) lands in Stage 6.
+// Server shell: load the newest orders (unfiltered) + SETTINGS payment methods (Mark paid), render the
+// read-only History board (HI-1 search · HI-2 summary · HI-4 Mark paid).
 export default async function HistoryPage() {
   const supabase = createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return <HistoryBoard userEmail={user?.email || ''} />;
+  const [{ data: { user } }, orders, paymentMethods] = await Promise.all([
+    supabase.auth.getUser(),
+    getHistory(''),
+    getPaymentMethods(),
+  ]);
+  return <HistoryBoard initialOrders={orders} paymentMethods={paymentMethods} userEmail={user?.email || ''} />;
 }
