@@ -4,9 +4,8 @@
 // History. Same auth posture as the other modules: the SSR supabase client (anon key + the signed-in
 // user's session), so RLS (is_allowed_user()) gates every read and write. The service-role key is
 // never used here.
-//   getOrders / getOrderSummary / deriveState are the PR27 board carry-overs — getOrderSummary +
-//   markOrderPaid are re-used by History (§4); getOrders is removed when PendingBoard is rewritten
-//   (Stage 4) to read getPending instead.
+//   getOrderSummary + markOrderPaid are PR27 carry-overs re-used by History (§4); the Pending board
+//   itself reads getPending + sendReadyItems + deletePendingOrder.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type {
@@ -14,16 +13,11 @@ import type {
   LineStatus,
   MarkPaidResult,
   OrderDot,
-  OrderFilter,
-  OrderRow,
-  OrderState,
   OrderSummary,
   PendingLine,
   PendingOrder,
   ShippedLineSummary,
 } from './types';
-
-const LIMIT = 200;
 
 function one<T>(v: T | T[] | null | undefined): T | null {
   if (v == null) return null;
@@ -36,19 +30,6 @@ function nameOf(
 ): string {
   if (!c) return fallback;
   return c.translate_name || c.original_name || c.self_code || fallback;
-}
-
-type LineLite = { fulfilled_at: string | null; shipped_at: string | null; is_cancelled: boolean };
-
-// derive an order's primary state from its status + line progress (same signals the Fulfill/Outbound
-// queues use). Need payment gates first; Complete is terminal; otherwise ready-to-ship (something to
-// ship now) outranks need-send.
-function deriveState(status: string | null, lines: LineLite[]): OrderState {
-  if (status === 'Need payment') return 'need_payment';
-  if (status === 'Complete') return 'complete';
-  const active = lines.filter((l) => !l.is_cancelled);
-  if (active.some((l) => l.fulfilled_at && !l.shipped_at)) return 'ready_to_ship';
-  return 'need_send';
 }
 
 const PENDING_LIMIT = 200;
@@ -159,51 +140,6 @@ export async function deletePendingOrder(salesId: string): Promise<void> {
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.rpc('delete_pending_order', { p_sales_id: salesId });
   if (error) throw new Error(`deletePendingOrder: ${error.message}`);
-}
-
-// ── the board list, filtered by state ──
-export async function getOrders(filter: OrderFilter = 'all'): Promise<OrderRow[]> {
-  const supabase = createSupabaseServerClient();
-  let q = supabase
-    .from('orders')
-    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customer_id,customers(name),order_lines(line_id,fulfilled_at,shipped_at,is_cancelled)')
-    // Cancelled orders are out of this board's lifecycle (no Cancelled tab) — exclude them so they
-    // never fall through deriveState() to a wrong "Need send" badge + dead Fulfill link.
-    .neq('status', 'Cancelled')
-    .order('order_date', { ascending: false, nullsFirst: false })
-    .limit(LIMIT);
-
-  // coarse status pre-filter where it maps 1:1 (need_send + ready_to_ship both live under 'Need send'
-  // and are split by line flags below).
-  if (filter === 'need_payment') q = q.eq('status', 'Need payment');
-  else if (filter === 'complete') q = q.eq('status', 'Complete');
-  else if (filter === 'need_send' || filter === 'ready_to_ship') q = q.eq('status', 'Need send');
-
-  const { data, error } = await q;
-  if (error || !data) return [];
-
-  const rows: OrderRow[] = data.map((o) => {
-    const lines = (o.order_lines ?? []) as LineLite[];
-    const active = lines.filter((l) => !l.is_cancelled);
-    const cust = one<{ name: string | null }>(o.customers as never);
-    const total = (o.sales_total_idr as number | null) ?? null;
-    const paid = (o.paid_idr as number | null) ?? 0;
-    return {
-      sales_id: o.sales_id as string,
-      customer_name: cust?.name ?? null,
-      order_date: (o.order_date as string | null) ?? null,
-      status: (o.status as string | null) ?? null,
-      payment_status: (o.payment_status as string | null) ?? null,
-      sales_total_idr: total,
-      paid_idr: paid,
-      balance: Math.max((total ?? 0) - paid, 0),
-      item_count: active.length,
-      state: deriveState(o.status as string | null, lines),
-    };
-  });
-
-  if (filter === 'all') return rows;
-  return rows.filter((r) => r.state === filter);
 }
 
 // ── mark a Need-payment order paid (records the payment, recomputes status) ──

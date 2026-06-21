@@ -1,12 +1,13 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import PendingBoard from '@/components/PendingBoard';
-import { getOrders } from '@/app/pending/actions';
+import { getPending } from '@/app/pending/actions';
 import { getPaymentMethods } from '@/app/settings/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Server shell: load the full order list + SETTINGS payment methods (Need-payment panel), render the board.
+// Server shell: load the Pending queue (orders with ≥1 uncut line) + SETTINGS payment methods (Mark
+// paid panel), render the board.
 export default async function PendingPage() {
   const supabase = createSupabaseServerClient();
   const [
@@ -15,7 +16,7 @@ export default async function PendingPage() {
     },
     orders,
     paymentMethods,
-  ] = await Promise.all([supabase.auth.getUser(), getOrders('all'), getPaymentMethods()]);
+  ] = await Promise.all([supabase.auth.getUser(), getPending(), getPaymentMethods()]);
 
   return <PendingBoard initialOrders={orders} paymentMethods={paymentMethods} userEmail={user?.email || ''} />;
 }

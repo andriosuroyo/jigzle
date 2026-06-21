@@ -732,3 +732,17 @@ img.sku-img { background: #e8e8e8; }
 
 /* ── PR27 — Outbound Return-to-Fulfill row ── */
 .ob-return { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); flex-wrap: wrap; }
+
+/* ── PR-B — Pending board (R/Y/G dots, per-line status, delete) ── */
+.pend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.pend-dot.red { background: var(--red); }
+.pend-dot.yellow { background: #E0A92E; }
+.pend-dot.green { background: var(--green); }
+.pend-ready { font-size: 11px; font-weight: 600; color: var(--green); }
+.pend-line { gap: 8px; }
+.pend-line-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pend-status { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+.pend-status.available { color: var(--green); background: var(--green-tint, #E8F3EC); }
+.pend-status.on_the_way { color: #9C6F1C; background: var(--yellow-tint); }
+.pend-status.to_order { color: var(--red); background: #FBEAEA; }
+.pend-delete { color: var(--red); }
