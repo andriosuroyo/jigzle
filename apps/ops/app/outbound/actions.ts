@@ -33,6 +33,9 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
     .select('sales_id,order_date,customer_id,customers(name,phone),order_lines!inner(line_id,courier)')
     .is('order_lines.shipped_at', null)
     .not('order_lines.fulfilled_at', 'is', null)
+    // PR-B §6: a line only ships once it's ADDRESSED (courier set in Fulfill). Without this, cut-but-
+    // unaddressed lines (sitting in the Fulfill To-send queue) would wrongly appear here too.
+    .not('order_lines.courier', 'is', null)
     .eq('order_lines.is_cancelled', false)
     .order('order_date', { ascending: false, nullsFirst: false })
     .limit(QUEUE_LIMIT);
@@ -181,22 +184,33 @@ export async function recordShipment(payload: ShipInput): Promise<ShipResult> {
   return { affected, stock };
 }
 
-// ── Return to Fulfill (PR27): un-fulfill the whole order — all fulfilled-but-unshipped lines go
-// back to Need send. Inverse of fulfillOrder; restores stock; leaves holds + payment untouched.
-export async function unfulfillOrder(salesId: string): Promise<ShipResult> {
-  if (!salesId) throw new Error('unfulfillOrder: sales_id is required');
+// ── Return to Fulfill (PR-B §6): clear the courier on the order's cut-unshipped lines via
+// set_fulfillment (PR-A) — the cut + address stay, so the order drops back into the Fulfill To-send
+// queue (NOT all the way to Pending; that's Fulfill's "send back to pending"). No stock movement. ──
+export async function returnToFulfill(salesId: string): Promise<void> {
+  if (!salesId) throw new Error('returnToFulfill: sales_id is required');
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase.rpc('unfulfill_order', { p_sales_id: salesId });
-  if (error) throw new Error(`unfulfillOrder: ${error.message}`);
 
-  const affected = (data as string[] | null) ?? [];
-  let stock: ShipResult['stock'] = [];
-  if (affected.length) {
-    const { data: s } = await supabase
-      .from('stock_check')
-      .select('item_code,available,physical,reserved')
-      .in('item_code', affected);
-    stock = (s ?? []) as ShipResult['stock'];
-  }
-  return { affected, stock };
+  // the cut, unshipped, non-cancelled lines Outbound is holding for this order
+  const { data: lineRows } = await supabase
+    .from('order_lines')
+    .select('line_id')
+    .eq('sales_id', salesId)
+    .not('fulfilled_at', 'is', null)
+    .is('shipped_at', null)
+    .eq('is_cancelled', false);
+  const lineIds = ((lineRows ?? []) as { line_id: string }[]).map((r) => r.line_id);
+  if (!lineIds.length) return; // nothing addressed to return
+
+  // p_courier/speed/label/tracking = null → cleared; p_address_id = null → coalesce keeps the address.
+  const { error } = await supabase.rpc('set_fulfillment', {
+    p_sales_id: salesId,
+    p_line_ids: lineIds,
+    p_address_id: null,
+    p_courier: null,
+    p_tracking: null,
+    p_courier_speed: null,
+    p_courier_label: null,
+  });
+  if (error) throw new Error(`returnToFulfill: ${error.message}`);
 }

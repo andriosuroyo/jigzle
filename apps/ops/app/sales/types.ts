@@ -62,8 +62,16 @@ export interface OrderPaymentInput {
 
 export interface CreateOrderInput {
   customer_id: number | null;
-  address_id: number;
+  address_id: number | null;   // null = SA-1 "confirm address later" (set in Fulfill)
   order_note?: string | null;
   lines: OrderLineInput[];
   payment: OrderPaymentInput | null;
+}
+
+// submitOrder (SA-3): where the saved order landed after the live availability re-check.
+//   'fulfill' = all coded lines in stock → cut at save, now in the To-send queue.
+//   'pending' = at least one line short → nothing cut, waiting in Pending.
+export interface SubmitResult {
+  sales_id: string;
+  routed: 'fulfill' | 'pending';
 }

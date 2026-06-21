@@ -12,7 +12,13 @@ import type {
   Hold,
   PaymentStatus,
 } from '@jigzle/db/types';
-import type { FulfillDetail, FulfillInput, FulfillResult } from './types';
+import type {
+  FulfillDetail,
+  FulfillInput,
+  FulfillResult,
+  SendToOutboundInput,
+  ToSendQueueRow,
+} from './types';
 
 // Most-recent N 'Need send' orders with unfulfilled lines. The queue is timestamp-derived
 // (D1), so there is no status to page on; cap the worklist and order by recency.
@@ -219,4 +225,61 @@ export async function fulfillOrder(payload: FulfillInput): Promise<FulfillResult
     stock = (s ?? []) as FulfillResult['stock'];
   }
   return { affected, stock };
+}
+
+// ── PR-B "To send" queue (FT-2/FT-3): orders with cut + courier-null + unshipped lines. The !inner
+// embed + embedded filters restrict both which orders return AND which lines come back (only the cut,
+// not-yet-addressed lines — a partial order's already-shipped or still-uncut lines are elsewhere). ──
+export async function getToSendQueue(): Promise<ToSendQueueRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('orders')
+    .select('sales_id,order_date,customer_id,customers(name),order_lines!inner(line_id,item_code)')
+    .not('order_lines.fulfilled_at', 'is', null)
+    .is('order_lines.courier', null)
+    .is('order_lines.shipped_at', null)
+    .eq('order_lines.is_cancelled', false)
+    .order('order_date', { ascending: false, nullsFirst: false })
+    .limit(QUEUE_LIMIT);
+  if (error || !data) return [];
+
+  return data.map((o) => {
+    const lines = (o.order_lines ?? []) as { line_id: string; item_code: string | null }[];
+    const cust = one<{ name: string | null }>(o.customers as never);
+    return {
+      sales_id: o.sales_id as string,
+      order_date: (o.order_date as string | null) ?? null,
+      customer_name: cust?.name ?? null,
+      item_count: lines.length,
+      sku_codes: lines.map((l) => l.item_code).filter((c): c is string => !!c),
+    };
+  });
+}
+
+// ── Send to Outbound (FT-6): set courier + (deferred) address on the cut lines via set_fulfillment
+// (PR-A). No stock movement. Server-validates the Outbound gate: address + courier both present. ──
+export async function sendToOutbound(input: SendToOutboundInput): Promise<void> {
+  if (!input.line_ids?.length) throw new Error('sendToOutbound: no cut lines to send');
+  if (!input.address_id) throw new Error('sendToOutbound: an address is required');
+  if (!input.courier) throw new Error('sendToOutbound: a courier is required');
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('set_fulfillment', {
+    p_sales_id: input.sales_id,
+    p_line_ids: input.line_ids,
+    p_address_id: input.address_id,
+    p_courier: input.courier,
+    p_tracking: input.tracking ?? null,
+    p_courier_speed: input.courier_speed ?? null,
+    p_courier_label: input.courier_label ?? null,
+  });
+  if (error) throw new Error(`sendToOutbound: ${error.message}`);
+}
+
+// ── Send back to pending (FT-4): clear the cut entirely (unfulfill_order) → the lines return to
+// Pending uncut, stock restored. Inverse of the cut; holds + payment untouched. ──
+export async function sendBackToPending(salesId: string): Promise<void> {
+  if (!salesId) throw new Error('sendBackToPending: sales_id is required');
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('unfulfill_order', { p_sales_id: salesId });
+  if (error) throw new Error(`sendBackToPending: ${error.message}`);
 }
