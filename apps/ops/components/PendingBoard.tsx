@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
-import { getOrders, getOrderSummary, markOrderPaid } from '@/app/orders/actions';
-import type { OrderFilter, OrderRow, OrderState, OrderSummary } from '@/app/orders/types';
+import { getOrders, getOrderSummary, markOrderPaid } from '@/app/pending/actions';
+import type { OrderFilter, OrderRow, OrderState, OrderSummary } from '@/app/pending/types';
 import type { PaymentMethod } from '@/app/settings/types';
 
 const FILTERS: { key: OrderFilter; label: string }[] = [
@@ -24,7 +24,7 @@ const STATE_LABEL: Record<OrderState, string> = {
 
 const fmtIDR = (n: number | null | undefined): string => 'Rp ' + (n ?? 0).toLocaleString('id-ID');
 
-export default function OrdersBoard({
+export default function PendingBoard({
   initialOrders,
   paymentMethods,
   userEmail,
@@ -115,7 +115,7 @@ export default function OrdersBoard({
 
   return (
     <div className="ops">
-      <AppHeader active="orders" userEmail={userEmail} />
+      <AppHeader active="pending" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Board ── */}

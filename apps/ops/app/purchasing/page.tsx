@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import OrderBoard from '@/components/OrderBoard';
-import { getForwarders, getOpenPOs, getOpenShipments, getSuppliers } from '@/app/order/actions';
+import { getForwarders, getOpenPOs, getOpenShipments, getSuppliers } from '@/app/purchasing/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
