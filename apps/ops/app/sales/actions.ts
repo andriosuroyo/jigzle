@@ -232,12 +232,3 @@ export async function submitOrder(payload: CreateOrderInput): Promise<SubmitResu
   }
   return { sales_id: salesId, routed: 'pending' };
 }
-
-// ── kept for back-compat until OrderEntry switches fully to submitOrder (Stage 3) ──
-export async function createOrder(payload: CreateOrderInput): Promise<{ sales_id: string }> {
-  if (!payload.lines?.length) throw new Error('createOrder: at least one line is required');
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase.rpc('create_order', { payload });
-  if (error) throw new Error(`createOrder: ${error.message}`);
-  return { sales_id: data as string };
-}

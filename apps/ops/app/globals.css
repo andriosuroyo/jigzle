@@ -235,7 +235,9 @@ input, textarea, select, button { font-family: inherit; }
 .sku-add { display: flex; gap: 6px; }
 .sku-add .qty { width: 64px; } .sku-add .price { flex: 1; }
 .sku-add input, .sku-add select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
-.qty-mobile { display: none; } /* qty: <select> on mobile, freestyle <input> on desktop */
+/* SA-1: "Confirm address later" checkbox row in the Address panel */
+.addr-later { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin-bottom: 8px; cursor: pointer; }
+.addr-later input { width: 16px; height: 16px; }
 /* short-stock caution chip — shared by Fulfill (kept; Sales' own low-stock TEXT was removed) */
 .low-warn { font-size: 11px; color: #9C6F1C; background: var(--yellow-tint); padding: 4px 8px; border-radius: 6px; }
 
@@ -251,8 +253,6 @@ input, textarea, select, button { font-family: inherit; }
 .li-remove { background: none; border: none; color: var(--red); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 6px; flex-shrink: 0; }
 
 @media (max-width: 760px) {
-  .qty-mobile { display: block; }
-  .qty-desktop { display: none; }
   .li-remove { min-width: 44px; min-height: 44px; }
   /* 44px tap targets on the primary order-entry controls (peripheral ones handled elsewhere) */
   .sku-add input, .sku-add select, .sku-add .btn-secondary { min-height: 44px; }
