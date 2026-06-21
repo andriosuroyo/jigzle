@@ -5,7 +5,9 @@ import type { ReactNode } from 'react';
 // Icons are inline SVGs drawn with `stroke="currentColor"` so they inherit the link text colour
 // (white on the brown bar, brown wherever the text is brown) — never a separate hard-coded colour.
 
-export type NavItem = { key: string; href: string; label: string; icon: ReactNode };
+// `sub` is the one-line hub blurb (rendered on the landing-page cards, §10). Optional so the menu
+// (AppHeader) — which ignores it — is unaffected.
+export type NavItem = { key: string; href: string; label: string; icon: ReactNode; sub?: string };
 export type NavGroup = { label: string; items: NavItem[] };
 
 const svg = (children: ReactNode): ReactNode => (
@@ -120,26 +122,26 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sales & Purchasing',
     items: [
-      { key: 'orders', href: '/orders', label: 'Orders', icon: iconOrders },
-      { key: 'order', href: '/order', label: 'Order', icon: iconOrder },
-      { key: 'sales', href: '/sales/new', label: 'Sales', icon: iconSales },
-      { key: 'fulfill', href: '/fulfill', label: 'Fulfill', icon: iconFulfill },
+      { key: 'orders', href: '/orders', label: 'Orders', icon: iconOrders, sub: "Track every order's state — payment, fulfill, ship." },
+      { key: 'order', href: '/order', label: 'Order', icon: iconOrder, sub: 'Enter & advance purchase orders; group them into shipments.' },
+      { key: 'sales', href: '/sales/new', label: 'Sales', icon: iconSales, sub: 'Take a new order — customer, items, payment.' },
+      { key: 'fulfill', href: '/fulfill', label: 'Fulfill', icon: iconFulfill, sub: 'Commit stock for paid orders waiting to go out.' },
     ],
   },
   {
     label: 'Warehouse',
     items: [
-      { key: 'inbound', href: '/inbound', label: 'Inbound', icon: iconInbound },
-      { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound },
-      { key: 'inventory', href: '/inventory', label: 'Inventory', icon: iconInventory },
+      { key: 'inbound', href: '/inbound', label: 'Inbound', icon: iconInbound, sub: 'Check arrivals into stock — the only "+" side.' },
+      { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound, sub: 'Box, weigh, and ship fulfilled orders.' },
+      { key: 'inventory', href: '/inventory', label: 'Inventory', icon: iconInventory, sub: 'Stock per SKU — on order, being shipped, in warehouse.' },
     ],
   },
   {
     label: 'System',
     items: [
-      { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog },
-      { key: 'stock-check', href: '/stock-check', label: 'Stock Check', icon: iconStockCheck },
-      { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings },
+      { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog, sub: 'Edit SKUs & barcodes; needs-review & shared-barcode cleanup.' },
+      { key: 'stock-check', href: '/stock-check', label: 'Stock Check', icon: iconStockCheck, sub: 'Count the shelf (presence / scan) & true stock up with adjustments.' },
+      { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings, sub: 'Configurable lists — payment, courier, box, inbound labels.' },
     ],
   },
 ];

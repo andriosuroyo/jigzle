@@ -138,6 +138,7 @@ export default function CatalogBoard({
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogueListRow[]>([]);
   const [searching, setSearching] = useState(false);
+  const [catSearched, setCatSearched] = useState(false); // true after a real search → drives "No results" (C1)
 
   const [mode, setMode] = useState<RightMode>(null);
   const [detail, setDetail] = useState<SkuDetail | null>(null);
@@ -175,6 +176,7 @@ export default function CatalogBoard({
     const q = search.trim();
     if (q.length < 2) {
       setResults([]);
+      setCatSearched(false);
       return;
     }
     setSearching(true);
@@ -184,7 +186,14 @@ export default function CatalogBoard({
       setResults([]);
     } finally {
       setSearching(false);
+      setCatSearched(true);
     }
+  }
+
+  // C1: tab switch resets the "searched" flag so the empty hint reverts to the prompt, not "No results".
+  function switchTab(t: Tab) {
+    setTab(t);
+    setCatSearched(false);
   }
 
   async function openSku(code: string) {
@@ -328,9 +337,9 @@ export default function CatalogBoard({
         {/* ── Left: tabs + list ── */}
         <aside className="fq-pane">
           <div className="inv-states" style={{ padding: '8px 8px 0', marginTop: 0 }}>
-            <button className={`inv-state ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>All</button>
-            <button className={`inv-state ${tab === 'needs' ? 'active' : ''}`} onClick={() => setTab('needs')}>Needs review ({needsReview.length})</button>
-            <button className={`inv-state ${tab === 'shared' ? 'active' : ''}`} onClick={() => setTab('shared')}>Shared barcodes ({shared.length})</button>
+            <button className={`inv-state ${tab === 'all' ? 'active' : ''}`} onClick={() => switchTab('all')}>All</button>
+            <button className={`inv-state ${tab === 'needs' ? 'active' : ''}`} onClick={() => switchTab('needs')}>Needs review ({needsReview.length})</button>
+            <button className={`inv-state ${tab === 'shared' ? 'active' : ''}`} onClick={() => switchTab('shared')}>Shared barcodes ({shared.length})</button>
           </div>
 
           {tab === 'all' && (
@@ -340,7 +349,7 @@ export default function CatalogBoard({
                   type="text"
                   placeholder="search SKU code / name / barcode"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => { setSearch(e.target.value); setCatSearched(false); }}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
                 />
                 <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
@@ -351,7 +360,13 @@ export default function CatalogBoard({
           {(tab === 'all' || tab === 'needs') && (
             <ul className="fq-list">
               {listForTab.length === 0 && (
-                <li><div className="hint fq-empty">{tab === 'needs' ? 'No SKUs need review.' : 'Search to find a SKU.'}</div></li>
+                <li><div className="hint fq-empty">
+                  {tab === 'needs'
+                    ? 'No SKUs need review.'
+                    : catSearched
+                      ? <em>No results</em>
+                      : 'Search to find a SKU.'}
+                </div></li>
               )}
               {listForTab.map((r) => (
                 <li key={r.item_code}>

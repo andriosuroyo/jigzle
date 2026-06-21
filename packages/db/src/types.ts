@@ -366,7 +366,8 @@ export type ShipLine = {
 // inbound (0006): qty is SIGNED (negative = stock correction); excluded rows add 0
 // sellable stock; ship_id is the free-text join to shipments (incl. the 📦YYMMXXX
 // ad-hoc form). needs_review (0015) flags receive-time SKU stubs.
-export type InboundLabel = 'Exclude' | 'Hold' | 'Tokopedia';
+// `label` is free TEXT — the editable SETTINGS pick-list (settings_inbound_labels, PR28/0031),
+// not a fixed enum (the old 'Exclude' | 'Hold' | 'Tokopedia' union was retired with that change).
 
 export type Inbound = {
   inbound_id: number;
@@ -379,7 +380,7 @@ export type Inbound = {
   is_opening_balance: boolean;
   excluded: boolean;
   excluded_qty: number;              // (0023) arrived-but-damaged count on a sellable row; not in stock
-  label: InboundLabel | null;
+  label: string | null;             // free text from settings_inbound_labels (PR28/0031)
   tracking: string | null;
   receive_note: string | null;
   dimension_weight: string | null;   // raw 'L x W x H cm / NNNg'
@@ -454,7 +455,7 @@ export type ReceiveLine = {
   excluded: boolean;                 // legacy whole-line flag (kept for back-compat)
   excluded_qty: number | null;       // (0023) how many of qty arrived damaged → 0 sellable
   exclude_reason: string | null;     // (0023) short text reason ("damaged box")
-  label: InboundLabel | null;
+  label: string | null;             // free text from settings_inbound_labels (PR28/0031)
   dimension_weight: string | null;
 };
 

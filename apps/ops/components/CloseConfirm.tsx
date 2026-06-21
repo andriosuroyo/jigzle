@@ -8,6 +8,7 @@
 // writes the adjustments (still per-row editable/deletable afterward). Darkened backdrop, centered.
 
 import { useMemo, useState } from 'react';
+import ConfirmModal from '@/components/ConfirmModal';
 import type { CloseConfirmData, CloseReviewEntry } from '@/app/stock-check/types';
 
 function fmt(n: number): string {
@@ -48,19 +49,21 @@ export default function CloseConfirm({
   }
 
   return (
-    <div className="sc-modal-backdrop" onClick={busy ? undefined : onCancel}>
-      <div className="sc-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <div className="sc-modal-head">
-          <div className="sc-modal-title">Confirm close — {data.mode === 'count' ? 'Count' : 'Presence'}</div>
-          <div className="sc-modal-sub">
-            {writeCount === 0
-              ? 'No adjustments will be written.'
-              : `${writeCount} adjustment${writeCount === 1 ? '' : 's'} · net ${fmt(net)}`}
-          </div>
-        </div>
-
-        <div className="sc-modal-body">
-          {data.countDeltas.length > 0 && (
+    <ConfirmModal
+      title={`Confirm close — ${data.mode === 'count' ? 'Count' : 'Presence'}`}
+      subtitle={
+        writeCount === 0
+          ? 'No adjustments will be written.'
+          : `${writeCount} adjustment${writeCount === 1 ? '' : 's'} · net ${fmt(net)}`
+      }
+      error={error}
+      busy={busy}
+      confirmLabel={busy ? 'Writing…' : 'Confirm & close'}
+      cancelLabel="← Back to counting"
+      onConfirm={confirm}
+      onCancel={onCancel}
+    >
+      {data.countDeltas.length > 0 && (
             <div className="sc-sec">
               <div className="sc-sec-title">Counted — differs from system ({data.countDeltas.length})</div>
               {data.countDeltas.map((d) => (
@@ -120,15 +123,6 @@ export default function CloseConfirm({
           {writeCount === 0 && data.decisions.length === 0 && (
             <div className="sc-empty">Everything matches the system — nothing to write.</div>
           )}
-
-          {error && <div className="validation err" style={{ marginTop: 10 }}>{error}</div>}
-        </div>
-
-        <div className="sc-modal-foot">
-          <button className="btn-secondary" onClick={onCancel} disabled={busy}>← Back to counting</button>
-          <button className="btn-primary" onClick={confirm} disabled={busy}>{busy ? 'Writing…' : 'Confirm & close'}</button>
-        </div>
-      </div>
-    </div>
+    </ConfirmModal>
   );
 }

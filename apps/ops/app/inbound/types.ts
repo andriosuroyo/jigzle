@@ -2,7 +2,7 @@
 // file can export only async functions — a Next.js production-build requirement (the linux SWC on
 // Vercel rejects a 'use server' module that exports anything but async functions, incl. interfaces).
 
-import type { ExpectedLine, InboundLabel } from '@jigzle/db/types';
+import type { ExpectedLine } from '@jigzle/db/types';
 
 // ── the receive detail: the expected list (contents ∪ POs) + barcodes for scan resolution ──
 export interface ReceiveDetail {
@@ -26,11 +26,13 @@ export type ResolveResult =
   | { status: 'collision'; skus: ResolvedSku[] }
   | { status: 'not_found'; code: string };
 
-// ── manual SKU search (catalogue text + barcode), with live available, for adding a line ──
+// ── manual SKU search via the shared search_skus RPC (PR28; same shape as Sales/Stock-Check). ──
+// `on_the_way` (PR23/0027) rides along from the RPC but is UNUSED here — Inbound only shows `available`.
 export interface SkuHit {
   item_code: string;
   name: string;
   available: number;
+  on_the_way: number;
 }
 
 // ── D2: create a minimal needs_review SKU stub for an unknown barcode ──
@@ -48,7 +50,7 @@ export interface RecordReceiptLine {
   excluded: boolean; // legacy whole-line flag (kept for back-compat)
   excluded_qty: number | null; // how many of qty arrived damaged → 0 sellable
   exclude_reason: string | null; // short text reason ("damaged box")
-  label: InboundLabel | null;
+  label: string | null; // free text from settings_inbound_labels (PR28/0031)
   dimension_weight: string | null;
 }
 export interface RecordReceiptInput {
