@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import AppHeader from '@/components/AppHeader';
+import { NAV_GROUPS } from '@/components/navConfig';
 
 export const dynamic = 'force-dynamic';
 
-// Ops home — nav hub. Modules land here as they ship (Sales, Fulfill, then Outbound…).
+// Ops home — nav hub. Rendered from NAV_GROUPS (§10), the SAME source the menu uses, so the cards
+// always match the menu: same groups, same icons, and Orders + Settings appear automatically. Each
+// card's blurb is the nav item's `sub`. AppHeader behaviour is unchanged.
 export default async function Home() {
   const supabase = createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -12,53 +15,19 @@ export default async function Home() {
     <div className="ops">
       <AppHeader userEmail={user?.email || ''} />
       <div className="hub">
-        <section className="hub-group">
-          <h2 className="hub-group-title">Sales &amp; Purchasing</h2>
-          <div className="hub-grid">
-            <Link href="/order" className="hub-card">
-              <div className="hub-card-title">Order</div>
-              <div className="hub-card-sub">Enter & advance purchase orders; group them into shipments.</div>
-            </Link>
-            <Link href="/sales/new" className="hub-card">
-              <div className="hub-card-title">Sales</div>
-              <div className="hub-card-sub">Take a new order — customer, items, payment.</div>
-            </Link>
-            <Link href="/fulfill" className="hub-card">
-              <div className="hub-card-title">Fulfill</div>
-              <div className="hub-card-sub">Commit stock for paid orders waiting to go out.</div>
-            </Link>
-          </div>
-        </section>
-        <section className="hub-group">
-          <h2 className="hub-group-title">Warehouse</h2>
-          <div className="hub-grid">
-            <Link href="/inbound" className="hub-card">
-              <div className="hub-card-title">Inbound</div>
-              <div className="hub-card-sub">Check arrivals into stock — the only "+" side.</div>
-            </Link>
-            <Link href="/outbound" className="hub-card">
-              <div className="hub-card-title">Outbound</div>
-              <div className="hub-card-sub">Box, weigh, and ship fulfilled orders.</div>
-            </Link>
-            <Link href="/inventory" className="hub-card">
-              <div className="hub-card-title">Inventory</div>
-              <div className="hub-card-sub">Stock per SKU — on order, being shipped, in warehouse.</div>
-            </Link>
-          </div>
-        </section>
-        <section className="hub-group">
-          <h2 className="hub-group-title">System</h2>
-          <div className="hub-grid">
-            <Link href="/catalog" className="hub-card">
-              <div className="hub-card-title">Catalog</div>
-              <div className="hub-card-sub">Edit SKUs & barcodes; needs-review &amp; shared-barcode cleanup.</div>
-            </Link>
-            <Link href="/stock-check" className="hub-card">
-              <div className="hub-card-title">Stock Check</div>
-              <div className="hub-card-sub">Count the shelf (presence / scan) & true stock up with adjustments.</div>
-            </Link>
-          </div>
-        </section>
+        {NAV_GROUPS.map((g) => (
+          <section className="hub-group" key={g.label}>
+            <h2 className="hub-group-title">{g.label}</h2>
+            <div className="hub-grid">
+              {g.items.map((n) => (
+                <Link href={n.href} className="hub-card" key={n.key}>
+                  <div className="hub-card-title"><span className="nav-icon-wrap">{n.icon}</span> {n.label}</div>
+                  {n.sub && <div className="hub-card-sub">{n.sub}</div>}
+                </Link>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );

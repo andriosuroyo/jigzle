@@ -64,6 +64,14 @@ const SECTIONS: SectionDef[] = [
     sortKey: 'code',
     blank: { code: '' },
   },
+  {
+    kind: 'inbound_labels',
+    title: 'Inbound labels',
+    sub: 'Shown in the Inbound per-line label picker.',
+    cols: [{ key: 'label', label: 'Label', type: 'text', grow: true }],
+    sortKey: 'label',
+    blank: { label: '' },
+  },
 ];
 
 const val = (row: SettingRow, key: string): unknown => (row as unknown as Record<string, unknown>)[key];
@@ -92,6 +100,7 @@ export default function SettingsBoard({ initial, userEmail }: { initial: Setting
     payment: initial.paymentMethods,
     courier: initial.courierServices,
     box: initial.boxPresets,
+    inbound_labels: initial.inboundLabels,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

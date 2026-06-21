@@ -30,17 +30,27 @@ export interface BoxPreset {
   sort_order: number;
 }
 
+// PR28: the Inbound per-line label pick-list (same shape as PaymentMethod). Note: this REPLACES the
+// old `InboundLabel` string-union in @jigzle/db/types (dropped — the stored label is now free text).
+export interface InboundLabel {
+  id: number;
+  label: string;
+  is_active: boolean;
+  sort_order: number;
+}
+
 // what getSettings() returns — one ordered, active-only list per kind.
 export interface SettingsData {
   paymentMethods: PaymentMethod[];
   courierServices: CourierService[];
   boxPresets: BoxPreset[];
+  inboundLabels: InboundLabel[];
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).
-export type SettingsKind = 'payment' | 'courier' | 'box';
+export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels';
 
-export type SettingRow = PaymentMethod | CourierService | BoxPreset;
+export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel;
 
 // permissive payload shapes for add/update — the actions whitelist columns per kind, so a stray key
 // can never reach an identity/system column (id / user_id / sort_order / created_at).

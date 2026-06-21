@@ -123,7 +123,9 @@ input, textarea, select, button { font-family: inherit; }
 .hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 .hub-card { display: block; background: white; border: 1px solid var(--line); border-radius: 12px; padding: 20px; text-decoration: none; color: var(--ink); }
 .hub-card:hover { border-color: var(--orange); }
-.hub-card-title { font-size: 18px; font-weight: 700; color: var(--brown-dark); margin-bottom: 4px; }
+.hub-card-title { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; color: var(--brown-dark); margin-bottom: 4px; }
+/* §10 — title-only icon bump (the menu's .nav-icon stays 16px). Colour inherits via currentColor. */
+.hub-card-title .nav-icon { width: 18px; height: 18px; }
 .hub-card-sub { font-size: 13px; color: var(--muted); }
 
 /* ── Payment badges ── */
@@ -300,6 +302,11 @@ input, textarea, select, button { font-family: inherit; }
 .rcv-badge.miss  { background: var(--red-tint); color: #993525; }
 .rcv-badge.ok    { background: var(--green-tint); color: #3D6B26; }
 .rcv-badge.unexpected { background: var(--orange-tint); color: #8A5A1A; }
+
+/* PR28 §4b — receive-card status line: exp + badge (+ quick-add) sit inline, left-aligned. The badge's
+   flat-row margin-left:auto is neutralised inside the stacked card. */
+.rcv-card-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rcv-card-status .rcv-badge { margin-left: 0; }
 
 .rcv-controls { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .rcv-ctl { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-weight: 600; }
@@ -670,8 +677,11 @@ img.sku-img { background: #e8e8e8; }
   .set-active input { min-width: 18px; min-height: 18px; }
 }
 
-/* ── PR26 — Fulfill 3-line item card (F5) ── */
-.ff-card { align-items: center; gap: 10px; }
+/* ── PR26 — Fulfill 3-line item card (F5); PR28 §4c — Pattern A card primitive ── */
+/* Self-sufficient flex row (image left, description column beside). Combined with .result-item on
+   Inbound search hits it wins the cascade (defined later) over that class's column layout; in Fulfill
+   it composes with .ff-line-main, already a flex row, so nothing changes there. */
+.ff-card { display: flex; flex-direction: row; align-items: center; gap: 10px; }
 .ff-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ff-card-code { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--brown); }
 .ff-card-name { font-size: 14px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

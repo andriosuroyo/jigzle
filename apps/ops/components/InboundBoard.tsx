@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
-import type { ExpectedLine, InboundLabel, ReceiveLine, ReceiveQueueRow } from '@jigzle/db/types';
+import type { ExpectedLine, ReceiveLine, ReceiveQueueRow } from '@jigzle/db/types';
 import {
   getReceiveQueue,
   getShipmentForReceive,
@@ -24,13 +24,20 @@ import type {
   ReceiveConfirmData,
   ReceiveConfirmRow,
 } from '@/app/inbound/types';
+import type { InboundLabel } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import BarcodePicker from '@/components/BarcodePicker';
 import ReceiveConfirm from '@/components/ReceiveConfirm';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
-const LABELS: (InboundLabel | '')[] = ['', 'Exclude', 'Hold', 'Tokopedia'];
+// Never render a raw internal id as a name (Fulfill F4 parity, §4b). When the only "name" we have is
+// the item_code itself (an edge case — stub creation + search both supply real names), show this.
+function displayName(name: string | null | undefined, code?: string | null): string {
+  const n = (name ?? '').trim();
+  if (!n || (code && n === code)) return 'Unmatched item';
+  return n;
+}
 
 function todayStr(): string {
   const d = new Date();
@@ -52,9 +59,11 @@ function sellableOf(l: ReceiveLine): number {
 
 export default function InboundBoard({
   initialQueue,
+  inboundLabels,
   userEmail,
 }: {
   initialQueue: ReceiveQueueRow[];
+  inboundLabels: InboundLabel[];
   userEmail: string;
 }) {
   const [queue, setQueue] = useState<ReceiveQueueRow[]>(initialQueue);
@@ -77,6 +86,8 @@ export default function InboundBoard({
   const [skuQuery, setSkuQuery] = useState('');
   const [skuHits, setSkuHits] = useState<SkuHit[]>([]);
   const [searching, setSearching] = useState(false);
+  const [skuSearched, setSkuSearched] = useState(false); // true after a real search → drives "No results"
+  const skuInputRef = useRef<HTMLInputElement>(null);
 
   const [receiveDate, setReceiveDate] = useState(todayStr());
   const [closeShipment, setCloseShipment] = useState(true);
@@ -143,6 +154,7 @@ export default function InboundBoard({
     setStub(null);
     setSkuQuery('');
     setSkuHits([]);
+    setSkuSearched(false);
     setReceiveDate(todayStr());
     setResult(null);
     setError(null);
@@ -327,8 +339,10 @@ export default function InboundBoard({
 
   async function runSearch() {
     const q = skuQuery.trim();
-    if (q.length < 2) {
+    if (q.length < 3) {
+      // <3 chars can't use the shared RPC's pg_trgm index — clear, and don't claim "No results".
       setSkuHits([]);
+      setSkuSearched(false);
       return;
     }
     setSearching(true);
@@ -338,7 +352,16 @@ export default function InboundBoard({
       setSkuHits([]);
     } finally {
       setSearching(false);
+      setSkuSearched(true);
     }
+  }
+
+  // clear the manual-search field + results and refocus it (W3). Used by the Clear link and after add.
+  function clearSearch() {
+    setSkuQuery('');
+    setSkuHits([]);
+    setSkuSearched(false);
+    skuInputRef.current?.focus();
   }
 
   // ── expected vs received, merged ──
@@ -489,7 +512,7 @@ export default function InboundBoard({
       <div className="fulfill-layout">
         {/* ── Arrivals queue ── */}
         <aside className="fq-pane">
-          <div className="fq-head"><span>Arrivals</span></div>
+          <div className="fq-head"><span>Arrivals: {queue.length}</span></div>
 
           {/* §5 scan-to-find-shipment */}
           <div className="rcv-find">
@@ -644,24 +667,35 @@ export default function InboundBoard({
                   </div>
                 )}
 
-                {/* manual SKU search */}
+                {/* manual SKU search (shared search_skus RPC) */}
                 <div className="scan-row" style={{ marginTop: 8 }}>
                   <input
+                    ref={skuInputRef}
                     type="text"
-                    placeholder="or search SKU by code / name"
+                    placeholder="Code, name, or piece count…"
                     value={skuQuery}
-                    onChange={(e) => setSkuQuery(e.target.value)}
+                    onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
                   />
                   <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
+                  {(skuQuery || skuHits.length > 0) && <button className="btn-link" onClick={clearSearch}>Clear</button>}
                 </div>
+                {searching && <div className="hint">Searching…</div>}
+                {!searching && skuSearched && skuHits.length === 0 && (
+                  <div className="hint"><em>No results</em></div>
+                )}
                 {skuHits.length > 0 && (
                   <ul className="result-list" style={{ marginTop: 6 }}>
                     {skuHits.map((h) => (
                       <li key={h.item_code}>
-                        <button className="result-item" onClick={() => { addUnit(h.item_code, h.name); setSkuHits([]); setSkuQuery(''); }}>
-                          <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} /> {h.item_code} · {h.name}</span>
-                          <span className="ri-meta">avail {h.available}</span>
+                        {/* §4a Pattern A: image left, code / name / avail stacked beside (ff-card family) */}
+                        <button className="result-item ff-card" onClick={() => { addUnit(h.item_code, h.name); clearSearch(); }}>
+                          <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
+                          <div className="ff-card-info">
+                            <div className="ff-card-code">{h.item_code}</div>
+                            <div className="ff-card-name">{displayName(h.name, h.item_code)}</div>
+                            <div className="ff-card-status">avail {h.available}</div>
+                          </div>
                         </button>
                       </li>
                     ))}
@@ -682,13 +716,18 @@ export default function InboundBoard({
                     const b = badgeFor(e.expected_qty, got);
                     return (
                       <li key={`exp-${e.item_code}`} className="ff-line">
-                        <div className="rcv-line-head">
+                        {/* §4b Pattern A: image left, code / name / (exp + badge) stacked beside */}
+                        <div className="ff-card">
                           <SkuImage status={imgMap[e.item_code!]?.status} displayUrl={imgMap[e.item_code!]?.displayUrl} name={e.name} size={SKU_IMG.md} />
-                          <span className="ff-code">{e.item_code}</span>
-                          <span className="ff-name">{e.name}</span>
-                          <span className="rcv-exp">exp {e.expected_qty}</span>
-                          <span className={`rcv-badge ${b.cls}`}>{b.text}</span>
-                          {!line && <button className="btn-link" onClick={() => receiveExpected(e)}>+ receive</button>}
+                          <div className="ff-card-info">
+                            <div className="ff-card-code">{e.item_code}</div>
+                            <div className="ff-card-name">{displayName(e.name, e.item_code)}</div>
+                            <div className="ff-card-status rcv-card-status">
+                              <span className="rcv-exp">exp {e.expected_qty}</span>
+                              <span className={`rcv-badge ${b.cls}`}>{b.text}</span>
+                              {!line && <button className="btn-link" onClick={() => receiveExpected(e)}>+ receive</button>}
+                            </div>
+                          </div>
                         </div>
                         {line && renderControls(line)}
                       </li>
@@ -699,11 +738,16 @@ export default function InboundBoard({
                     const b = badgeFor(0, line.qty);
                     return (
                       <li key={`got-${line.item_code}`} className="ff-line">
-                        <div className="rcv-line-head">
+                        {/* §4b extra (received, not expected): no `exp`, badge only */}
+                        <div className="ff-card">
                           <SkuImage status={imgMap[line.item_code]?.status} displayUrl={imgMap[line.item_code]?.displayUrl} name={line.name} size={SKU_IMG.md} />
-                          <span className="ff-code">{line.item_code}</span>
-                          <span className="ff-name">{line.name}</span>
-                          <span className={`rcv-badge ${b.cls}`}>{b.text}</span>
+                          <div className="ff-card-info">
+                            <div className="ff-card-code">{line.item_code}</div>
+                            <div className="ff-card-name">{displayName(line.name, line.item_code)}</div>
+                            <div className="ff-card-status rcv-card-status">
+                              <span className={`rcv-badge ${b.cls}`}>{b.text}</span>
+                            </div>
+                          </div>
                         </div>
                         {renderControls(line)}
                       </li>
@@ -739,7 +783,7 @@ export default function InboundBoard({
               {/* Commit bar → opens the §6 confirmation window */}
               <div className="fd-commit">
                 <div className="fd-commit-info">
-                  Σ receiving <b>{sellableUnits}</b> sellable unit{sellableUnits === 1 ? '' : 's'} across {saveLines.length} line{saveLines.length === 1 ? '' : 's'}
+                  Σ receiving <b>{sellableUnits}</b> sellable unit{sellableUnits === 1 ? '' : 's'} across {saveLines.length} item{saveLines.length === 1 ? '' : 's'}
                   {totalUnits !== sellableUnits ? ` · ${totalUnits - sellableUnits} excluded` : ''}
                 </div>
                 <button className="btn-primary" onClick={openConfirm} disabled={committing || saveLines.length === 0 || !shipIdForSave}>
@@ -828,8 +872,9 @@ export default function InboundBoard({
         )}
         <label className="rcv-ctl">
           <span>label</span>
-          <select value={line.label ?? ''} onChange={(e) => setField(line.item_code, { label: (e.target.value || null) as InboundLabel | null })}>
-            {LABELS.map((l) => <option key={l || 'none'} value={l}>{l || '—'}</option>)}
+          <select value={line.label ?? ''} onChange={(e) => setField(line.item_code, { label: e.target.value || null })}>
+            <option value="">—</option>
+            {inboundLabels.map((l) => <option key={l.id} value={l.label}>{l.label}</option>)}
           </select>
         </label>
         <input

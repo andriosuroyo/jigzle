@@ -9,6 +9,7 @@ import { createSupabaseServerClient } from '@jigzle/db/server';
 import type {
   BoxPreset,
   CourierService,
+  InboundLabel,
   PaymentMethod,
   SettingPatch,
   SettingPayload,
@@ -22,6 +23,7 @@ const TABLE: Record<SettingsKind, string> = {
   payment: 'settings_payment_methods',
   courier: 'settings_courier_services',
   box: 'settings_box_presets',
+  inbound_labels: 'settings_inbound_labels',
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -31,6 +33,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   payment: ['label', 'is_active'],
   courier: ['courier', 'speed', 'label', 'is_active'],
   box: ['code', 'dim_p', 'dim_l', 'dim_t', 'is_active'],
+  inbound_labels: ['label', 'is_active'],
 };
 
 function pick(kind: SettingsKind, src: Record<string, unknown>): Record<string, unknown> {
@@ -55,12 +58,13 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, inboundLabels] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
+    list<InboundLabel>(TABLE.inbound_labels),
   ]);
-  return { paymentMethods, courierServices, boxPresets };
+  return { paymentMethods, courierServices, boxPresets, inboundLabels };
 }
 
 // ── lighter single-list reads (PR26: Fulfill needs couriers, Outbound box presets; PR27: Orders
@@ -102,6 +106,20 @@ export async function getBoxPresets(): Promise<BoxPreset[]> {
     .order('id', { ascending: true });
   if (error) throw new Error(`getBoxPresets: ${error.message}`);
   return (data ?? []) as BoxPreset[];
+}
+
+// PR28: Inbound's per-line label picker reads this (mirrors how Fulfill reads courier services).
+export async function getInboundLabels(): Promise<InboundLabel[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.inbound_labels)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) throw new Error(`getInboundLabels: ${error.message}`);
+  return (data ?? []) as InboundLabel[];
 }
 
 // ── add: a new global row at the end of its list (sort_order = current max + 1) ──

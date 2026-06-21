@@ -227,39 +227,19 @@ export async function resolveBarcode(code: string): Promise<ResolveResult> {
   return skus.length === 1 ? { status: 'resolved', sku: skus[0] } : { status: 'collision', skus };
 }
 
-// ── manual SKU search (catalogue text + barcode), with live available, for adding a line ── (SkuHit in ./types)
+// ── manual SKU search — ONE round-trip via the shared search_skus RPC (PR28; the SAME function
+// Sales and Stock Check call, so no drift). Word-split match (item_code OR translate_name OR
+// piece_count), exact item_code first, available + on_the_way from the stock_snapshot matview, cap
+// 20. SECURITY INVOKER → the same RLS (is_allowed_user) that gated the old direct selects applies.
+// 3-char floor so the 0025 pg_trgm GIN index is eligible. Barcode resolution is UNCHANGED — it lives
+// in the separate doScan → resolveBarcode path (this manual field never matched barcodes). (SkuHit in ./types)
 export async function searchSkus(q: string): Promise<SkuHit[]> {
   const raw = sanitize(q);
-  if (raw.length < 2) return [];
+  if (raw.length < 3) return []; // <3 chars can't use the pg_trgm index → don't bother the DB
   const supabase = createSupabaseServerClient();
-
-  const named = new Map<string, string>();
-  const [catRes, bcRes] = await Promise.all([
-    supabase
-      .from('catalogue')
-      .select('item_code,original_name,translate_name,self_code')
-      .or(`item_code.ilike.%${raw}%,self_code.ilike.%${raw}%,original_name.ilike.%${raw}%,translate_name.ilike.%${raw}%`)
-      .limit(15),
-    supabase.from('barcodes').select('item_code').ilike('barcode', `%${raw}%`).limit(15),
-  ]);
-
-  for (const c of (catRes.data ?? []) as CatNameRow[]) named.set(c.item_code, nameOf(c, c.item_code));
-
-  const bcCodes = [...new Set((bcRes.data ?? []).map((b) => b.item_code as string))].filter((code) => !named.has(code));
-  if (bcCodes.length) {
-    const { data: cat2 } = await supabase
-      .from('catalogue')
-      .select('item_code,original_name,translate_name,self_code')
-      .in('item_code', bcCodes);
-    for (const c of (cat2 ?? []) as CatNameRow[]) named.set(c.item_code, nameOf(c, c.item_code));
-  }
-
-  const codes = [...named.keys()].slice(0, 20);
-  if (!codes.length) return [];
-
-  const { data: stock } = await supabase.from('stock_check').select('item_code,available').in('item_code', codes);
-  const avail = new Map((stock ?? []).map((s) => [s.item_code as string, s.available as number]));
-  return codes.map((item_code) => ({ item_code, name: named.get(item_code)!, available: avail.get(item_code) ?? 0 }));
+  const { data, error } = await supabase.rpc('search_skus', { p_q: raw });
+  if (error) return []; // search failures are non-fatal (same posture as before)
+  return (data ?? []) as SkuHit[];
 }
 
 // ── D2: create a minimal needs_review SKU stub for an unknown barcode ── (StubInput in ./types)
@@ -294,7 +274,7 @@ export async function createCatalogueStub(input: StubInput): Promise<SkuHit> {
     if (bcErr && bcErr.code !== '23505') throw new Error(`createCatalogueStub (barcode): ${bcErr.message}`);
   }
 
-  return { item_code, name: name ?? item_code, available: 0 };
+  return { item_code, name: name ?? item_code, available: 0, on_the_way: 0 };
 }
 
 // ── allocate the next ad-hoc 📦YYMMXXX id (advisory-locked, server-side) ──
