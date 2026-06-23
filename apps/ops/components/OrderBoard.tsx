@@ -14,8 +14,8 @@ import {
   searchSkus,
   setPOStatus,
   updatePO,
-} from '@/app/order/actions';
-import type { CustomerHit, OpenShipmentRow, SkuHit } from '@/app/order/types';
+} from '@/app/purchasing/actions';
+import type { CustomerHit, OpenShipmentRow, SkuHit } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -485,7 +485,7 @@ export default function OrderBoard({
 
   return (
     <div className="ops">
-      <AppHeader active="order" userEmail={userEmail} />
+      <AppHeader active="purchasing" userEmail={userEmail} />
 
       <div className="fulfill-layout">
         {/* ── Open-PO queue ── */}

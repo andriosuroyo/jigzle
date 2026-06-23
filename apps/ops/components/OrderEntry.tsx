@@ -11,29 +11,29 @@ import {
   getCustomerAddresses,
   createAddress,
   searchSkus,
-  createOrder,
+  submitOrder,
 } from '@/app/sales/actions';
 import type { CustomerHit, LoyaltyReadout, SkuHit } from '@/app/sales/types';
+import type { PaymentMethod } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import { addressLine } from '@/components/addressLine';
 
 const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEBSITE', 'LINE', 'OTHER'];
-const METHODS = ['BCA', 'Shopee', 'Tokopedia', 'Mandiri', 'Deposit', 'Website', 'Cash', 'Socmed'];
-const QTY_OPTIONS = Array.from({ length: 50 }, (_, i) => i + 1); // mobile qty dropdown
 
 type Line = { item_code: string; name: string; qty: number; unit_price_idr: number; available: number; on_the_way: number };
 
-// Payment state (Paid/Partial/Unpaid) for the rail's Payment row. The status field is the legacy D5
-// preview; the rail/success Status row now uses deriveReadiness() instead (PR24 §1.9).
-function deriveStatus(total: number, paid: number): { status: string; pay: string } {
-  if (total > 0 && paid >= total) return { status: 'Need send', pay: 'Paid' };
-  if (paid > 0) return { status: 'Need payment', pay: 'Partial' };
-  return { status: 'Need payment', pay: 'Unpaid' };
+// Payment label (Paid/Partial/Unpaid) for the rail's Payment row. (SA-9: the dead `status` field that
+// deriveStatus used to also return was dropped — only this payment label remains.)
+function payLabel(total: number, paid: number): string {
+  if (total > 0 && paid >= total) return 'Paid';
+  if (paid > 0) return 'Partial';
+  return 'Unpaid';
 }
 
-// Live, DISPLAY-ONLY readiness label (PR24 §1.9). Payment gate first, then the weakest line wins.
-// Never stored — create_order's orders.status is untouched.
+// Live, DISPLAY-ONLY readiness preview (the rail). Payment gate first, then the weakest line wins. The
+// real routing (Fulfill vs Pending) is decided server-side at save by submitOrder's live re-check.
 function deriveReadiness(lines: Line[], subtotal: number, paid: number): string {
   if (subtotal <= 0) return '—';
   if (paid < subtotal) return 'Need payment';
@@ -45,22 +45,14 @@ function deriveReadiness(lines: Line[], subtotal: number, paid: number): string 
 // Thousands separators for the price / DP inputs (display only; the state stores digits). PR24 §4.
 const fmtThousands = (d: string) => d.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-function addressLine(a: CustomerAddress): string {
-  return (
-    a.recipient_name ||
-    a.address_label ||
-    [a.raw_address, a.kota].filter(Boolean).join(' · ') ||
-    `Address #${a.address_id}`
-  );
-}
-
-export default function OrderEntry({ userEmail }: { userEmail: string }) {
+export default function OrderEntry({ userEmail, paymentMethods }: { userEmail: string; paymentMethods: PaymentMethod[] }) {
   // Panel 1 — customer
   const [customer, setCustomer] = useState<CustomerHit | null>(null);
   const [loyalty, setLoyalty] = useState<LoyaltyReadout | null>(null);
   const [custQuery, setCustQuery] = useState('');
   const [custResults, setCustResults] = useState<CustomerHit[]>([]);
   const [custSearching, setCustSearching] = useState(false);
+  const [custSearched, setCustSearched] = useState(false); // a search settled → gates the "No matches" line (SA-7)
   const [showNewCust, setShowNewCust] = useState(false);
   const [ncName, setNcName] = useState('');
   const [ncPhone, setNcPhone] = useState('');
@@ -70,16 +62,17 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
   const [ncAddr, setNcAddr] = useState('');
   const [savingCust, setSavingCust] = useState(false);
 
-  // Panel 3 — address
+  // Panel 2 — address
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [addressId, setAddressId] = useState<number | null>(null);
+  const [confirmLater, setConfirmLater] = useState(false); // SA-1: defer the address to Fulfill
   const [showNewAddr, setShowNewAddr] = useState(false);
   const [naRecipient, setNaRecipient] = useState('');
   const [naContact, setNaContact] = useState('');
   const [naAddr, setNaAddr] = useState('');
   const [savingAddr, setSavingAddr] = useState(false);
 
-  // Panel 2 — items
+  // Panel 3 — items
   const [skuQuery, setSkuQuery] = useState('');
   const [skuResults, setSkuResults] = useState<SkuHit[]>([]);
   const [skuSearching, setSkuSearching] = useState(false);
@@ -92,39 +85,41 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
   // Panel 4 — payment
   const [payMode, setPayMode] = useState<'none' | 'full' | 'dp'>('none');
   const [payAmount, setPayAmount] = useState('');
-  const [payMethod, setPayMethod] = useState(METHODS[0]);
+  const [payMethod, setPayMethod] = useState(paymentMethods[0]?.label ?? '');
 
-  // Panel 5 — save
+  // save
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ sales_id: string; total: number; status: string; pay: string } | null>(null);
+  const [result, setResult] = useState<{ sales_id: string; total: number; routed: 'fulfill' | 'pending'; pay: string } | null>(null);
 
   // ── derived totals ──
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.qty * l.unit_price_idr, 0), [lines]);
-  const paid = payMode === 'full' ? subtotal : payMode === 'dp' ? Math.max(0, parseInt(payAmount, 10) || 0) : 0;
-  const status = deriveStatus(subtotal, paid);          // .pay → the rail's Payment row
-  const readiness = deriveReadiness(lines, subtotal, paid); // → the rail/success Status row (PR24 §1.9)
-  const canSave = !!customer && lines.length > 0 && addressId != null && !saving;
+  const dpRaw = Math.max(0, parseInt(payAmount, 10) || 0);
+  // SA-8: a DP is clamped to the subtotal so an over-typed DP can't inflate paid / read as overpaid.
+  const paid = payMode === 'full' ? subtotal : payMode === 'dp' ? Math.min(subtotal, dpRaw) : 0;
+  const dpOver = payMode === 'dp' && subtotal > 0 && dpRaw > subtotal;
+  const payStatus = payLabel(subtotal, paid);
+  const readiness = deriveReadiness(lines, subtotal, paid);
+  const canSave = !!customer && lines.length > 0 && (addressId != null || confirmLater) && !saving;
 
   // SKU images for the visible items (picker results + order lines) — one batch read, lazy.
   const imgCodes = useMemo(() => [...skuResults.map((s) => s.item_code), ...lines.map((l) => l.item_code)], [skuResults, lines]);
   const imgMap = useSkuImages(imgCodes);
 
-  // ── on-demand searches (Enter or the search button) — no live debounce, so results only
-  //    refresh when asked. searchSkus/searchCustomers rank an exact match to the very top. ──
+  // ── on-demand searches (Enter or the search button) ──
   async function runCustSearch() {
     const q = custQuery.trim();
-    if (q.length < 2) { setCustResults([]); return; }
+    if (q.length < 2) { setCustResults([]); setCustSearched(false); return; }
     setCustSearching(true);
     try { setCustResults(await searchCustomers(q)); }
     catch { setCustResults([]); }
-    finally { setCustSearching(false); }
+    finally { setCustSearching(false); setCustSearched(true); }
   }
 
   async function runSkuSearch() {
     const q = skuQuery.trim();
-    // <3 matches searchSkus' real floor (the 0025 pg_trgm index needs ≥3) — so a 2-char query
-    // short-circuits here instead of round-tripping to a guaranteed [] and falsely showing "No results".
+    // <3 matches searchSkus' real floor (the 0025 pg_trgm index needs ≥3) — short-circuit here
+    // instead of round-tripping to a guaranteed [] and falsely showing "No results".
     if (q.length < 3) { setSkuResults([]); setSkuSearched(false); return; }
     setSkuSearching(true);
     try { setSkuResults(await searchSkus(q)); }
@@ -132,19 +127,19 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
     finally { setSkuSearching(false); setSkuSearched(true); }
   }
 
-  // Reset the Items search to a blank, focused field (after an add, or the manual Clear link). PR24 §5.
   function clearSkuSearch() {
     setSkuResults([]); setSkuQuery(''); setSkuSearched(false);
     skuInputRef.current?.focus();
   }
 
-  // ── customer selection ──
+  // ── customer selection (SA-9: set customer ONCE, after loyalty + addresses load → no double render) ──
   async function selectCustomer(hit: CustomerHit) {
-    setCustomer(hit);
     setCustResults([]);
     setCustQuery('');
+    setCustSearched(false);
     setShowNewCust(false);
     setAddressId(null);
+    setConfirmLater(false);
     const [loy, addrs] = await Promise.all([getLoyalty(hit.id), getCustomerAddresses(hit.id)]);
     setLoyalty(loy);
     setCustomer({ ...hit, tier: loy.tier, lifetime_spend: loy.lifetime_spend });
@@ -172,6 +167,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
       setLoyalty(loy);
       setAddresses(addrs);
       setAddressId(addrs[0]?.address_id ?? null);
+      setConfirmLater(false);
       setShowNewCust(false);
       setNcName(''); setNcPhone(''); setNcRecipient(''); setNcContact(''); setNcAddr('');
     } catch (e) {
@@ -195,6 +191,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
       });
       setAddresses((prev) => [addr, ...prev]);
       setAddressId(addr.address_id);
+      setConfirmLater(false);
       setShowNewAddr(false);
       setNaRecipient(''); setNaContact(''); setNaAddr('');
     } catch (e) {
@@ -211,8 +208,6 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
     if (price <= 0) { setError(`Enter a price for ${sku.item_code}.`); return; }
     setError(null);
     setLines((prev) => {
-      // Merge only when the SAME item is re-added at the SAME price (just bump qty). A
-      // different price becomes its own line — never silently re-price already-added units.
       const i = prev.findIndex((l) => l.item_code === sku.item_code && l.unit_price_idr === price);
       if (i >= 0) {
         const next = [...prev];
@@ -223,26 +218,27 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
     });
     setDraftQty((d) => ({ ...d, [sku.item_code]: '' }));
     setDraftPrice((d) => ({ ...d, [sku.item_code]: '' }));
-    clearSkuSearch(); // start the next SKU from a blank, focused search (Andrio's request, PR24 §5)
+    clearSkuSearch();
   }
 
   function removeLine(idx: number) {
     setLines((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  // ── save ──
+  // ── save + route (SA-3): submitOrder cuts at save when everything's in stock (→ Fulfill), else the
+  //    order waits in Pending. Address may be deferred (SA-1, confirmLater → address_id null). ──
   async function handleSave() {
-    if (!customer || !addressId || lines.length === 0) return;
+    if (!customer || lines.length === 0 || (addressId == null && !confirmLater)) return;
     setSaving(true);
     setError(null);
     try {
-      const { sales_id } = await createOrder({
+      const res = await submitOrder({
         customer_id: customer.id,
-        address_id: addressId,
+        address_id: confirmLater ? null : addressId,
         lines: lines.map((l) => ({ item_code: l.item_code, qty: l.qty, unit_price_idr: l.unit_price_idr })),
-        payment: paid > 0 ? { amount_idr: paid, method: payMethod } : null,
+        payment: paid > 0 ? { amount_idr: paid, method: payMethod || null } : null,
       });
-      setResult({ sales_id, total: subtotal, status: readiness, pay: status.pay });
+      setResult({ sales_id: res.sales_id, total: subtotal, routed: res.routed, pay: payStatus });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save order.');
     } finally {
@@ -251,17 +247,18 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
   }
 
   function resetAll() {
-    setCustomer(null); setLoyalty(null); setCustQuery(''); setCustResults([]); setShowNewCust(false);
+    setCustomer(null); setLoyalty(null); setCustQuery(''); setCustResults([]); setCustSearched(false); setShowNewCust(false);
     setNcName(''); setNcPhone(''); setNcChannel(CHANNELS[0]); setNcRecipient(''); setNcContact(''); setNcAddr('');
-    setAddresses([]); setAddressId(null); setShowNewAddr(false);
+    setAddresses([]); setAddressId(null); setConfirmLater(false); setShowNewAddr(false);
     setNaRecipient(''); setNaContact(''); setNaAddr('');
     setSkuQuery(''); setSkuResults([]); setSkuSearched(false); setDraftQty({}); setDraftPrice({}); setLines([]);
-    setPayMode('none'); setPayAmount(''); setPayMethod(METHODS[0]);
+    setPayMode('none'); setPayAmount(''); setPayMethod(paymentMethods[0]?.label ?? '');
     setError(null); setResult(null);
   }
 
-  // ── success screen ──
+  // ── success screen (SA-3: shows where the order went) ──
   if (result) {
+    const routedLabel = result.routed === 'fulfill' ? 'Sent to Fulfill' : 'Waiting in Pending';
     return (
       <div className="ops">
         <AppHeader active="sales" userEmail={userEmail} />
@@ -272,7 +269,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
             <div className="success-id">{result.sales_id}</div>
             <div className="success-rows">
               <div><span>Total</span><b>{fmtRp(result.total)}</b></div>
-              <div><span>Status</span><b>{result.status}</b></div>
+              <div><span>Routed</span><b>{routedLabel}</b></div>
               <div><span>Payment</span><b>{result.pay}</b></div>
             </div>
             <button className="btn-primary" onClick={resetAll}>New order</button>
@@ -302,12 +299,15 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                       inputMode="search"
                       placeholder="Search phone or name…"
                       value={custQuery}
-                      onChange={(e) => { setCustQuery(e.target.value); if (!e.target.value.trim()) setCustResults([]); }}
+                      onChange={(e) => { setCustQuery(e.target.value); setCustSearched(false); if (!e.target.value.trim()) setCustResults([]); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runCustSearch(); } }}
                     />
                     <button className="btn-secondary" onClick={runCustSearch} disabled={custSearching}>{custSearching ? '…' : 'Search'}</button>
                   </div>
                   {custSearching && <div className="hint">Searching…</div>}
+                  {!custSearching && custSearched && custResults.length === 0 && (
+                    <div className="hint"><em>No matches</em></div>
+                  )}
                   {custResults.length > 0 && (
                     <ul className="result-list">
                       {custResults.map((c) => (
@@ -361,15 +361,56 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                       <span className="next">{fmtRp(loyalty.to_next_tier.remaining)} → {loyalty.to_next_tier.tier}</span>
                     )}
                   </div>
-                  <button className="btn-link" onClick={() => { setCustomer(null); setLoyalty(null); setAddresses([]); setAddressId(null); }}>Change</button>
+                  <button className="btn-link" onClick={() => { setCustomer(null); setLoyalty(null); setAddresses([]); setAddressId(null); setConfirmLater(false); }}>Change</button>
                 </div>
               )}
             </div>
           </section>
 
-          {/* Panel 2 — Items */}
+          {/* Panel 2 — Address (SA-2 reorder: address before items) */}
           <section className={`panel ${!customer ? 'panel-locked' : ''}`}>
-            <div className="panel-head"><span className="panel-num">2</span> Items</div>
+            <div className="panel-head"><span className="panel-num">2</span> Address</div>
+            <div className="panel-body">
+              <label className="addr-later">
+                <input type="checkbox" checked={confirmLater} onChange={(e) => { setConfirmLater(e.target.checked); if (e.target.checked) setAddressId(null); }} disabled={!customer} />
+                <span>Confirm address later (set it in Fulfill)</span>
+              </label>
+              {!confirmLater && (
+                <>
+                  {addresses.length === 0 && !showNewAddr && <div className="hint">No saved addresses — add one, or tick “confirm later”.</div>}
+                  {addresses.length > 0 && (
+                    <ul className="addr-list">
+                      {addresses.map((a) => (
+                        <li key={a.address_id}>
+                          <label className={`addr-opt ${addressId === a.address_id ? 'active' : ''}`}>
+                            <input type="radio" name="address" checked={addressId === a.address_id} onChange={() => setAddressId(a.address_id)} />
+                            <span className="addr-text">{addressLine(a)}{a.raw_address ? <em>{a.raw_address}</em> : null}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {!showNewAddr ? (
+                    <button className="btn-secondary" onClick={() => setShowNewAddr(true)} disabled={!customer}>+ New address</button>
+                  ) : (
+                    <div className="subform">
+                      <input type="text" placeholder="Recipient name (leave blank if same as customer)" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />
+                      <input type="text" placeholder="Contact phone (leave blank if same as customer)" value={naContact} onChange={(e) => setNaContact(e.target.value)} />
+                      <textarea placeholder="Address" value={naAddr} onChange={(e) => setNaAddr(e.target.value)} />
+                      <div className="subform-actions">
+                        <button className="btn-secondary" onClick={() => setShowNewAddr(false)} disabled={savingAddr}>Cancel</button>
+                        <button className="btn-primary" onClick={handleCreateAddress} disabled={savingAddr}>{savingAddr ? 'Saving…' : 'Add address'}</button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+
+          {/* Panel 3 — Items */}
+          <section className={`panel ${!customer ? 'panel-locked' : ''}`}>
+            <div className="panel-head"><span className="panel-num">3</span> Items</div>
             <div className="panel-body">
               <div className="search-row">
                 <input
@@ -401,16 +442,9 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                         <span className="sku-code">{s.item_code}</span>
                         <span className="sku-name">{s.name}</span>
                       </div>
-                      {/* Line 2: qty × price × add */}
+                      {/* Line 2: qty × price × add — free numeric qty on every viewport (SA-6, no 50 cap) */}
                       <div className="sku-add">
-                        {/* qty: dropdown on mobile, freestyle on desktop (same draftQty state) */}
-                        <select className="qty qty-mobile"
-                          value={draftQty[s.item_code] ?? ''}
-                          onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))}>
-                          <option value="">qty</option>
-                          {QTY_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
-                        </select>
-                        <input className="qty qty-desktop" type="number" inputMode="numeric" min={1} placeholder="qty"
+                        <input className="qty" type="number" inputMode="numeric" min={1} placeholder="qty"
                           value={draftQty[s.item_code] ?? ''}
                           onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))} />
                         {/* price: text + thousands grouping; state stores digits only (PR24 §4) */}
@@ -419,7 +453,7 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                           onChange={(e) => setDraftPrice((d) => ({ ...d, [s.item_code]: e.target.value.replace(/\D/g, '') }))} />
                         <button className="btn-secondary" onClick={() => addLine(s)}>add</button>
                       </div>
-                      {/* Line 3: availability only (no "low" amber). Future: "preorder OK" once the auto-scrape lands. */}
+                      {/* Line 3: availability only */}
                       <span className="sku-avail">avail {s.available}</span>
                     </li>
                   ))}
@@ -434,7 +468,6 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                       <div className="li-main">
                         <span className="li-code">{l.item_code}</span>
                         <span className="li-name">{l.name}</span>
-                        {/* per-line "low" amber dropped (PR24 §3) — the rail Status readiness label is the short-stock signal now */}
                         <span className="li-avail">avail {l.available}</span>
                       </div>
                       <div className="li-right">
@@ -449,39 +482,6 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
             </div>
           </section>
 
-          {/* Panel 3 — Address */}
-          <section className={`panel ${!customer ? 'panel-locked' : ''}`}>
-            <div className="panel-head"><span className="panel-num">3</span> Address</div>
-            <div className="panel-body">
-              {addresses.length === 0 && !showNewAddr && <div className="hint">No saved addresses — add one.</div>}
-              {addresses.length > 0 && (
-                <ul className="addr-list">
-                  {addresses.map((a) => (
-                    <li key={a.address_id}>
-                      <label className={`addr-opt ${addressId === a.address_id ? 'active' : ''}`}>
-                        <input type="radio" name="address" checked={addressId === a.address_id} onChange={() => setAddressId(a.address_id)} />
-                        <span className="addr-text">{addressLine(a)}{a.raw_address ? <em>{a.raw_address}</em> : null}</span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {!showNewAddr ? (
-                <button className="btn-secondary" onClick={() => setShowNewAddr(true)} disabled={!customer}>+ New address</button>
-              ) : (
-                <div className="subform">
-                  <input type="text" placeholder="Recipient name (leave blank if same as customer)" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />
-                  <input type="text" placeholder="Contact phone (leave blank if same as customer)" value={naContact} onChange={(e) => setNaContact(e.target.value)} />
-                  <textarea placeholder="Address" value={naAddr} onChange={(e) => setNaAddr(e.target.value)} />
-                  <div className="subform-actions">
-                    <button className="btn-secondary" onClick={() => setShowNewAddr(false)} disabled={savingAddr}>Cancel</button>
-                    <button className="btn-primary" onClick={handleCreateAddress} disabled={savingAddr}>{savingAddr ? 'Saving…' : 'Add address'}</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
           {/* Panel 4 — Payment */}
           <section className={`panel ${!customer ? 'panel-locked' : ''}`}>
             <div className="panel-head"><span className="panel-num">4</span> Payment</div>
@@ -492,13 +492,20 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
                 <button className={payMode === 'dp' ? 'active' : ''} onClick={() => setPayMode('dp')}>DP</button>
               </div>
               {payMode === 'dp' && (
-                <input className="pay-amount" type="text" inputMode="numeric" placeholder="DP amount (Rp)" value={fmtThousands(payAmount)} onChange={(e) => setPayAmount(e.target.value.replace(/\D/g, ''))} />
+                <>
+                  <input className="pay-amount" type="text" inputMode="numeric" placeholder="DP amount (Rp)" value={fmtThousands(payAmount)} onChange={(e) => setPayAmount(e.target.value.replace(/\D/g, ''))} />
+                  {dpOver && <div className="hint">DP capped at the subtotal ({fmtRp(subtotal)}) — use Full for a full payment.</div>}
+                </>
               )}
               {payMode === 'full' && <div className="hint">Full payment: {fmtRp(subtotal)}</div>}
               {payMode !== 'none' && (
-                <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                  {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
+                paymentMethods.length === 0 ? (
+                  <div className="hint">No payment methods — add them in Settings.</div>
+                ) : (
+                  <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                    {paymentMethods.map((m) => <option key={m.id} value={m.label}>{m.label}</option>)}
+                  </select>
+                )
               )}
             </div>
           </section>
@@ -515,13 +522,13 @@ export default function OrderEntry({ userEmail }: { userEmail: string }) {
             <div className="rail-row"><span>Paid</span><b>{fmtRp(paid)}</b></div>
             <div className="rail-sep" />
             <div className="rail-row"><span>Status</span><b>{readiness}</b></div>
-            <div className="rail-row"><span>Payment</span><b>{status.pay}</b></div>
+            <div className="rail-row"><span>Payment</span><b>{payStatus}</b></div>
             <button className="btn-primary rail-save" onClick={handleSave} disabled={!canSave}>
               {saving ? 'Saving…' : 'Save order'}
             </button>
             {!canSave && !saving && (
               <div className="rail-hint">
-                {!customer ? 'Pick a customer' : lines.length === 0 ? 'Add at least one line' : addressId == null ? 'Pick an address' : ''}
+                {!customer ? 'Pick a customer' : lines.length === 0 ? 'Add at least one line' : (addressId == null && !confirmLater) ? 'Pick an address or tick “confirm later”' : ''}
               </div>
             )}
           </div>

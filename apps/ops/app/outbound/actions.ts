@@ -33,6 +33,9 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
     .select('sales_id,order_date,customer_id,customers(name,phone),order_lines!inner(line_id,courier)')
     .is('order_lines.shipped_at', null)
     .not('order_lines.fulfilled_at', 'is', null)
+    // PR-B §6: a line only ships once it's ADDRESSED (courier set in Fulfill). Without this, cut-but-
+    // unaddressed lines (sitting in the Fulfill To-send queue) would wrongly appear here too.
+    .not('order_lines.courier', 'is', null)
     .eq('order_lines.is_cancelled', false)
     .order('order_date', { ascending: false, nullsFirst: false })
     .limit(QUEUE_LIMIT);
@@ -66,9 +69,12 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
 
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,courier,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,qty,address_id,courier,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .not('fulfilled_at', 'is', null)
+    // PR-B §6: only ADDRESSED lines belong to Outbound. A cut-but-unaddressed line (courier null, still
+    // in Fulfill) on a straddling order must not be shipped here — match the getShipQueue predicate.
+    .not('courier', 'is', null)
     .is('shipped_at', null)
     .eq('is_cancelled', false)
     .order('line_id');
@@ -77,6 +83,7 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
     line_id: string;
     item_code: string | null;
     qty: number;
+    address_id: number | null;
     courier: string | null;
     courier_label: string | null;
     courier_tracking: string | null;
@@ -99,7 +106,9 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
   let contactPhone: string | null = null;
   let rawAddress: string | null = null;
   let shipAddress: string | null = null; // legacy single-line fallback (kept for compatibility)
-  const addressId = (order.address_id as number | null) ?? null;
+  // PR-B: the address Fulfill confirmed is stamped on the LINE by set_fulfillment (orders.address_id
+  // may be null when SA-1 deferred it). Prefer the line's address; fall back to the order's.
+  const addressId = (rows.find((r) => r.address_id != null)?.address_id ?? (order.address_id as number | null)) ?? null;
   if (addressId != null) {
     const { data: a } = await supabase
       .from('customer_addresses')
@@ -181,22 +190,35 @@ export async function recordShipment(payload: ShipInput): Promise<ShipResult> {
   return { affected, stock };
 }
 
-// ── Return to Fulfill (PR27): un-fulfill the whole order — all fulfilled-but-unshipped lines go
-// back to Need send. Inverse of fulfillOrder; restores stock; leaves holds + payment untouched.
-export async function unfulfillOrder(salesId: string): Promise<ShipResult> {
-  if (!salesId) throw new Error('unfulfillOrder: sales_id is required');
+// ── Return to Fulfill (PR-B §6): clear the courier on the order's cut-unshipped lines via
+// set_fulfillment (PR-A) — the cut + address stay, so the order drops back into the Fulfill To-send
+// queue (NOT all the way to Pending; that's Fulfill's "send back to pending"). No stock movement. ──
+export async function returnToFulfill(salesId: string): Promise<void> {
+  if (!salesId) throw new Error('returnToFulfill: sales_id is required');
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase.rpc('unfulfill_order', { p_sales_id: salesId });
-  if (error) throw new Error(`unfulfillOrder: ${error.message}`);
 
-  const affected = (data as string[] | null) ?? [];
-  let stock: ShipResult['stock'] = [];
-  if (affected.length) {
-    const { data: s } = await supabase
-      .from('stock_check')
-      .select('item_code,available,physical,reserved')
-      .in('item_code', affected);
-    stock = (s ?? []) as ShipResult['stock'];
-  }
-  return { affected, stock };
+  // the ADDRESSED (courier-set), unshipped, non-cancelled lines Outbound is holding — same predicate
+  // as getShipQueue/getOrderForShip, so a straddling order's still-in-Fulfill lines aren't touched.
+  const { data: lineRows } = await supabase
+    .from('order_lines')
+    .select('line_id')
+    .eq('sales_id', salesId)
+    .not('fulfilled_at', 'is', null)
+    .not('courier', 'is', null)
+    .is('shipped_at', null)
+    .eq('is_cancelled', false);
+  const lineIds = ((lineRows ?? []) as { line_id: string }[]).map((r) => r.line_id);
+  if (!lineIds.length) return; // nothing addressed to return
+
+  // p_courier/speed/label/tracking = null → cleared; p_address_id = null → coalesce keeps the address.
+  const { error } = await supabase.rpc('set_fulfillment', {
+    p_sales_id: salesId,
+    p_line_ids: lineIds,
+    p_address_id: null,
+    p_courier: null,
+    p_tracking: null,
+    p_courier_speed: null,
+    p_courier_label: null,
+  });
+  if (error) throw new Error(`returnToFulfill: ${error.message}`);
 }

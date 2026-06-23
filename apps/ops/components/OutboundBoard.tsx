@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { volWeight, chargeable } from '@jigzle/lib';
 import type { ShipQueueRow } from '@jigzle/db/types';
-import { getShipQueue, getOrderForShip, recordShipment, unfulfillOrder } from '@/app/outbound/actions';
+import { getShipQueue, getOrderForShip, recordShipment, returnToFulfill } from '@/app/outbound/actions';
 import type { ShipDetail, ShipResult } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
@@ -125,16 +125,16 @@ export default function OutboundBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOrderId]);
 
-  // PR27: Return to Fulfill — un-fulfill the WHOLE order (all-or-none). Restores stock; leaves holds
-  // + payment untouched. The order leaves the ship queue and reappears in Fulfill.
-  async function returnToFulfill() {
+  // PR-B §6: Return to Fulfill — clear the courier on the whole order (all-or-none). The cut + address
+  // stay, so the order drops back into the Fulfill To-send queue (NOT to Pending). No stock movement.
+  async function doReturnToFulfill() {
     if (!detail) return;
-    if (!window.confirm(`Return ${detail.sales_id} to Fulfill? Every fulfilled item goes back to Need send to re-pick.`)) return;
+    if (!window.confirm(`Return ${detail.sales_id} to Fulfill? The courier is cleared and the order goes back to the To-send queue to re-pick courier/address.`)) return;
     const myReq = ++reqIdRef.current; // latest-wins: a mid-flight selection change must win
     setCommitting(true);
     setError(null);
     try {
-      await unfulfillOrder(detail.sales_id);
+      await returnToFulfill(detail.sales_id);
       if (reqIdRef.current !== myReq) return; // superseded by a newer selection — don't clobber it
       setResult(null);
       setDetail(null);
@@ -395,10 +395,10 @@ export default function OutboundBoard({
                 <button className="btn-secondary" onClick={() => setBoxes((prev) => [...prev, makeBox()])}>+ box</button>
               </section>
 
-              {/* Return to Fulfill (PR27) — all-or-none: the whole order goes back to Need send. */}
+              {/* Return to Fulfill (PR-B §6) — all-or-none: clears the courier, order returns to To-send. */}
               <div className="ob-return">
-                <button className="btn-secondary" onClick={returnToFulfill} disabled={committing}>↩ Return to Fulfill</button>
-                <span className="hint">Sends every fulfilled item back to Need send to re-pick the available subset.</span>
+                <button className="btn-secondary" onClick={doReturnToFulfill} disabled={committing}>↩ Return to Fulfill</button>
+                <span className="hint">Clears the courier so the order goes back to the To-send queue to re-pick courier/address.</span>
               </div>
 
 

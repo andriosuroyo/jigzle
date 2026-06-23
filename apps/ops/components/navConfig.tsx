@@ -37,7 +37,16 @@ const iconOrders = svg(
   </>
 );
 
-// Order — receipt / document (the Purchase-Order / procurement board)
+// History — clock with a rewind arrow (the read-only all-orders log)
+const iconHistory = svg(
+  <>
+    <path d="M3 3v5h5" />
+    <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+    <polyline points="12 7 12 12 15 14" />
+  </>
+);
+
+// Purchasing — receipt / document (the Purchase-Order / procurement board)
 const iconOrder = svg(
   <>
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -122,17 +131,18 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sales & Purchasing',
     items: [
-      { key: 'orders', href: '/orders', label: 'Orders', icon: iconOrders, sub: "Track every order's state — payment, fulfill, ship." },
-      { key: 'order', href: '/order', label: 'Order', icon: iconOrder, sub: 'Enter & advance purchase orders; group them into shipments.' },
-      { key: 'sales', href: '/sales/new', label: 'Sales', icon: iconSales, sub: 'Take a new order — customer, items, payment.' },
-      { key: 'fulfill', href: '/fulfill', label: 'Fulfill', icon: iconFulfill, sub: 'Commit stock for paid orders waiting to go out.' },
+      { key: 'sales', href: '/sales/new', label: 'New', icon: iconSales, sub: 'Take a new order — customer, address, items, payment.' },
+      { key: 'pending', href: '/pending', label: 'Pending', icon: iconOrders, sub: 'Uncut orders waiting on stock — cut the ready items.' },
+      { key: 'fulfill', href: '/fulfill', label: 'Fulfill', icon: iconFulfill, sub: 'Confirm address + courier on cut orders, then send out.' },
+      { key: 'history', href: '/history', label: 'History', icon: iconHistory, sub: 'Every order, searchable & read-only; settle payments.' },
+      { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound, sub: 'Box, weigh, and ship addressed orders.' },
+      { key: 'purchasing', href: '/purchasing', label: 'Purchasing', icon: iconOrder, sub: 'Enter & advance purchase orders; group them into shipments.' },
     ],
   },
   {
     label: 'Warehouse',
     items: [
       { key: 'inbound', href: '/inbound', label: 'Inbound', icon: iconInbound, sub: 'Check arrivals into stock — the only "+" side.' },
-      { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound, sub: 'Box, weigh, and ship fulfilled orders.' },
       { key: 'inventory', href: '/inventory', label: 'Inventory', icon: iconInventory, sub: 'Stock per SKU — on order, being shipped, in warehouse.' },
     ],
   },

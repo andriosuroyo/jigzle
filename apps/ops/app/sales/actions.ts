@@ -16,6 +16,7 @@ import type {
   NewAddressInput,
   SkuHit,
   CreateOrderInput,
+  SubmitResult,
 } from './types';
 
 type Supabase = ReturnType<typeof createSupabaseServerClient>;
@@ -182,12 +183,52 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
   return (data ?? []) as SkuHit[];
 }
 
-// ── Panel 5: save the order (atomic, via the create_order RPC) ── (types in ./types)
-export async function createOrder(payload: CreateOrderInput): Promise<{ sales_id: string }> {
-  if (!payload.lines?.length) throw new Error('createOrder: at least one line is required');
-  if (!payload.address_id) throw new Error('createOrder: an address is required');
+// ── Panel 4: save + route the order (SA-3) ── (types in ./types)
+// New does not gate on payment (D5). It creates the order, then re-checks availability against the
+// LIVE stock_check view (not the search-time snapshot) and decides where the order goes:
+//   • every coded line has Σqty ≤ available  → cut all lines now (cut_order_lines) → To-send (Fulfill).
+//   • any coded line short                    → cut nothing → the order waits in Pending.
+// An address may be null here (SA-1 "confirm address later"); create_order (0033) permits it and
+// Fulfill confirms the address before Outbound. Lines with no item_code carry no stock gate (the
+// per-code constraint simply doesn't include them) and never block the Fulfill route.
+export async function submitOrder(payload: CreateOrderInput): Promise<SubmitResult> {
+  if (!payload.lines?.length) throw new Error('submitOrder: at least one line is required');
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase.rpc('create_order', { payload });
-  if (error) throw new Error(`createOrder: ${error.message}`);
-  return { sales_id: data as string };
+
+  const { data: sid, error } = await supabase.rpc('create_order', { payload });
+  if (error) throw new Error(`submitOrder: ${error.message}`);
+  const salesId = sid as string;
+
+  // read back the lines the RPC created
+  const { data: lineRows } = await supabase
+    .from('order_lines')
+    .select('line_id,item_code,qty')
+    .eq('sales_id', salesId)
+    .eq('is_cancelled', false);
+  const lines = (lineRows ?? []) as { line_id: string; item_code: string | null; qty: number }[];
+  if (!lines.length) return { sales_id: salesId, routed: 'pending' };
+
+  // live availability re-check: Σqty per item_code ≤ available (uncoded lines carry no gate)
+  const needByCode = new Map<string, number>();
+  for (const l of lines) if (l.item_code) needByCode.set(l.item_code, (needByCode.get(l.item_code) ?? 0) + l.qty);
+  const codes = [...needByCode.keys()];
+  const availByCode = new Map<string, number>();
+  if (codes.length) {
+    const { data: sc } = await supabase.from('stock_check').select('item_code,available').in('item_code', codes);
+    for (const r of sc ?? []) availByCode.set(r.item_code as string, (r.available as number) ?? 0);
+  }
+  let allAvailable = true;
+  for (const [code, need] of needByCode) {
+    if ((availByCode.get(code) ?? 0) < need) { allAvailable = false; break; }
+  }
+
+  if (allAvailable) {
+    const { error: cutErr } = await supabase.rpc('cut_order_lines', {
+      p_sales_id: salesId,
+      p_line_ids: lines.map((l) => l.line_id),
+    });
+    if (cutErr) throw new Error(`submitOrder cut: ${cutErr.message}`);
+    return { sales_id: salesId, routed: 'fulfill' };
+  }
+  return { sales_id: salesId, routed: 'pending' };
 }
