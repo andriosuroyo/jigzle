@@ -39,9 +39,18 @@ def rest(method, path, body=None, prefer=None):
     if prefer:
         h["Prefer"] = prefer
     req = urllib.request.Request(url, data=data, method=method, headers=h)
-    with urllib.request.urlopen(req, timeout=db.timeout) as resp:
-        raw = resp.read()
-        return json.loads(raw) if raw else None
+    try:
+        with urllib.request.urlopen(req, timeout=db.timeout) as resp:
+            raw = resp.read()
+            return json.loads(raw) if raw else None
+    except urllib.error.HTTPError as e:
+        # surface the PostgREST/Postgres error body (otherwise a 400 is opaque)
+        try:
+            detail = e.read().decode("utf-8", "replace")
+        except Exception:
+            detail = ""
+        e.pg_detail = detail  # attach so callers (e.g. the delete-guard case) can inspect
+        raise
 
 def stock(code):
     r = rest("GET", f"stock_check?item_code=eq.{code}&select=available,reserved")
@@ -155,6 +164,15 @@ try:
     check("after unfulfill: B available restored to baseline", stock(B)["available"] == base[B]["available"],
           f'{stock(B)["available"]} vs base {base[B]["available"]}')
 
+except urllib.error.HTTPError as e:
+    detail = getattr(e, "pg_detail", "") or ""
+    print(f"\n[ABORTED] HTTP {e.code} {e.reason}")
+    if detail:
+        print(f"  server said: {detail}")
+    if "address_id is required" in detail:
+        print("  → migration 0033 is NOT applied yet — the OLD create_order still raises on a null")
+        print("    address. Apply 0033 (delete_pending_order + the relaxed create_order), then re-run.")
+    FAIL.append("smoke aborted on unexpected HTTP error")
 finally:
     for sid in created_orders:
         try: rest("DELETE", f"orders?sales_id=eq.{sid}", prefer="return=minimal")
