@@ -739,6 +739,15 @@ img.sku-img { background: #e8e8e8; }
 /* Balance pushed to the right edge of the totals row; green (settled) when nothing is owed. */
 .ord-pay-bal-col { margin-left: auto; text-align: right; }
 .ord-pay-bal.bal-clear { color: var(--green); }
+/* Status column (History detail) — pushed right, pill right-aligned. */
+.ord-pay-status-col { margin-left: auto; align-items: flex-end; }
+
+/* Box summary rows (History detail) — numbered box icon, two-line descriptor, chargeable on the right. */
+.box-sum { display: flex; align-items: center; gap: 10px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.box-idx { flex-shrink: 0; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--brown-light); border-radius: 5px; font-size: 12px; font-weight: 700; color: var(--brown); background: white; }
+.box-sum-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.box-sum-l1 { font-size: 12px; font-weight: 700; color: var(--ink); }
+.box-sum-l2 { font-size: 11px; color: var(--muted); }
 
 .ord-sum-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ord-sum-line { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
