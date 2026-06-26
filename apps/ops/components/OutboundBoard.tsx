@@ -443,7 +443,7 @@ export default function OutboundBoard({
   if (embedded) return body;
   return (
     <div className="ops">
-      <AppHeader active="orders" userEmail={userEmail} />
+      <AppHeader active="outbound" userEmail={userEmail} />
       {body}
     </div>
   );

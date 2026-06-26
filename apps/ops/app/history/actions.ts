@@ -8,7 +8,9 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { HistoryRow, HistoryState } from './types';
 
-const LIMIT = 200;
+// Keep History light: load only the most recent orders by default. Search still queries the full
+// orders table server-side (filtered), so older history is reachable on demand — just not shown up front.
+const LIMIT = 100;
 
 function one<T>(v: T | T[] | null | undefined): T | null {
   if (v == null) return null;
