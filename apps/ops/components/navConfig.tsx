@@ -57,6 +57,15 @@ const iconInbound = svg(
   </>
 );
 
+// Outbound — tray arrow up (goods out) — mirror of Inbound
+const iconOutbound = svg(
+  <>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </>
+);
+
 // Inventory — package / box
 const iconInventory = svg(
   <>
@@ -96,9 +105,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sales & Purchasing',
     items: [
-      // JZ-001: the four sell-side stages (New / Pending / Fulfill / Outbound) + History collapse into a
-      // single Orders pipeline window. New is a button inside that window; History is its 4th tab.
-      { key: 'orders', href: '/orders', label: 'Sales', icon: iconOrders, sub: 'The sell-side pipeline — Pending → Fulfill → Outbound, plus History; + new orders.' },
+      // JZ-001: the sell-side stages collapse into a single Sales pipeline window — Pending → Fulfill,
+      // plus a History tab. New is a button inside that window. The Sales team's job stops at Fulfill;
+      // Outbound (shipping) is a warehouse screen, see below.
+      { key: 'orders', href: '/orders', label: 'Sales', icon: iconOrders, sub: 'The sell-side pipeline — Pending → Fulfill, plus History; + new orders.' },
       { key: 'purchasing', href: '/purchasing', label: 'Purchasing', icon: iconOrder, sub: 'Enter & advance purchase orders; group them into shipments.' },
     ],
   },
@@ -106,6 +116,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Warehouse',
     items: [
       { key: 'inbound', href: '/inbound', label: 'Inbound', icon: iconInbound, sub: 'Check arrivals into stock — the only "+" side.' },
+      // Outbound (goods out) is the shipping screen the warehouse runs once Sales has fulfilled an order.
+      { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound, sub: 'Box, weigh, and ship fulfilled orders.' },
       { key: 'inventory', href: '/inventory', label: 'Inventory', icon: iconInventory, sub: 'Stock per SKU — on order, being shipped, in warehouse.' },
     ],
   },
