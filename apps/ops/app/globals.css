@@ -150,10 +150,13 @@ input, textarea, select, button { font-family: inherit; }
 .fq-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 5px; max-height: 360px; overflow-y: auto; }  /* PR26 F1 — ~5.5 rows then scroll */
 .fq-row { width: 100%; text-align: left; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .fq-row.active { border-color: var(--orange); background: var(--orange-tint); }
-.fq-row-top { display: flex; justify-content: space-between; gap: 8px; }
+.fq-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .fq-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--brown); }
-/* margin-left:auto pins the customer name to the right so the order id sits left of it (the Pending row
-   also has a leading status dot, which otherwise centred the id under flex space-between). */
+/* Pending row leads with the customer name (headline); the sales id is demoted to a muted tail. */
+.pend-headline { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pend-id-sub { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+/* margin-left:auto pins the customer name to the right in the Fulfill/Outbound/History rows (which lead
+   with a date or sales id). */
 .fq-cust { font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; }
 .fq-row-bot { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
 .badge { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 20px; margin-left: auto; }
@@ -164,6 +167,8 @@ input, textarea, select, button { font-family: inherit; }
 .fd-empty { color: var(--muted); font-size: 14px; padding: 40px 0; text-align: center; }
 .fd-head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .fd-title { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; color: var(--brown); }
+/* Pending detail headline is the customer name — a normal (non-mono) face reads better than the id font. */
+.pend-fd-title { font-family: inherit; }
 .fd-sub { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .fd-section { margin-top: 14px; }
 .fd-section-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
@@ -201,11 +206,8 @@ input, textarea, select, button { font-family: inherit; }
 .fd-commit { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--line); flex-wrap: wrap; }
 .fd-commit-info { font-size: 13px; color: var(--muted); }
 .fd-commit-info b { color: var(--ink); }
-/* Grouped action buttons (e.g. Pending: Update payment + Send ready items), pinned to the right. */
-.fd-commit-actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
-/* Section head with a trailing status pill (e.g. Payment + Partial/Paid/Unpaid). */
-.fd-section-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.fd-section-head-row .pay { text-transform: none; letter-spacing: 0; }
+/* Grouped action buttons (e.g. Pending: Update payment + Send ready items), left-aligned. */
+.fd-commit-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .ok-text { color: var(--green); font-weight: 600; }
 .warn-text { color: #9C6F1C; font-weight: 600; }
 
@@ -733,6 +735,9 @@ img.sku-img { background: #e8e8e8; }
 .ord-pay-k { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
 .ord-pay-v { font-size: 15px; font-weight: 700; color: var(--ink); }
 .ord-pay-bal { color: var(--red); }
+/* Balance pushed to the right edge of the totals row; green (settled) when nothing is owed. */
+.ord-pay-bal-col { margin-left: auto; text-align: right; }
+.ord-pay-bal.bal-clear { color: var(--green); }
 
 .ord-sum-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ord-sum-line { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
