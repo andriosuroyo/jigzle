@@ -108,7 +108,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // JZ-001: the sell-side stages collapse into a single Sales pipeline window — Pending → Fulfill,
       // plus a History tab. New is a button inside that window. The Sales team's job stops at Fulfill;
       // Outbound (shipping) is a warehouse screen, see below.
-      { key: 'orders', href: '/orders', label: 'Sales', icon: iconOrders, sub: 'The sell-side pipeline — Pending → Fulfill, plus History; + new orders.' },
+      { key: 'orders', href: '/sales', label: 'Sales', icon: iconOrders, sub: 'The sell-side pipeline — Pending → Fulfill, plus History; + new orders.' },
       { key: 'purchasing', href: '/purchasing', label: 'Purchasing', icon: iconOrder, sub: 'Enter & advance purchase orders; group them into shipments.' },
     ],
   },

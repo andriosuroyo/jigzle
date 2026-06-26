@@ -152,7 +152,9 @@ input, textarea, select, button { font-family: inherit; }
 .fq-row.active { border-color: var(--orange); background: var(--orange-tint); }
 .fq-row-top { display: flex; justify-content: space-between; gap: 8px; }
 .fq-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--brown); }
-.fq-cust { font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* margin-left:auto pins the customer name to the right so the order id sits left of it (the Pending row
+   also has a leading status dot, which otherwise centred the id under flex space-between). */
+.fq-cust { font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; }
 .fq-row-bot { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
 .badge { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 20px; margin-left: auto; }
 .badge.ready { background: var(--green-tint); color: #3D6B26; }
@@ -755,15 +757,27 @@ img.sku-img { background: #e8e8e8; }
 /* One sell-side window: segmented tabs (Pending → Fulfill → Outbound → History) with live count
    badges, plus a persistent "+ New order" button. The tab panels are the existing stage boards
    mounted in `embedded` mode, so the .fulfill-layout/.ops-layout styling below is reused as-is. */
-.orders-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; }
-.orders-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
-.orders-tab { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 8px 14px; border: 1px solid var(--line); border-radius: 20px; background: white; color: var(--muted); cursor: pointer; }
+/* Single row: pipeline tabs (left, scroll if cramped) + the compact "+ New" button pinned right beside
+   them — never its own wasteful row. */
+.orders-bar { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; }
+.orders-tabs { display: flex; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+.orders-tab { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 8px 14px; border: 1px solid var(--line); border-radius: 20px; background: white; color: var(--muted); cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 .orders-tab.active { background: var(--orange-tint); border-color: var(--orange); color: #8A5A1A; }
 .orders-tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; background: var(--paper); color: var(--brown-dark); min-width: 20px; text-align: center; }
 .orders-tab.active .orders-tab-count { background: var(--orange); color: white; }
-.orders-new { margin-left: auto; font-size: 13px; font-weight: 700; padding: 9px 16px; border: none; border-radius: 8px; background: var(--brown); color: white; cursor: pointer; white-space: nowrap; }
+.orders-new { flex-shrink: 0; font-size: 13px; font-weight: 700; padding: 9px 14px; border: none; border-radius: 8px; background: var(--brown); color: white; cursor: pointer; white-space: nowrap; }
 .orders-new:active { background: var(--brown-dark); }
-@media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } .orders-new { margin-left: 0; } }
+@media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
+
+/* Readiness filter tabs (Pending queue) — underline style with a count badge, distinct from the pill
+   pipeline tabs above but clearly selectable. */
+.fq-filters { display: flex; gap: 2px; padding: 2px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.fq-filter { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 9px 10px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.fq-filter.active { color: var(--brown-dark); border-bottom-color: var(--orange); }
+.fq-filter:disabled { opacity: 0.5; cursor: default; }
+.fq-filter-count { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 20px; background: var(--paper); color: var(--brown-dark); }
+.fq-filter.active .fq-filter-count { background: var(--orange); color: white; }
+@media (max-width: 760px) { .fq-filter { min-height: 44px; } }
 
 /* Toast — the only signal when a stage action advances an order (no jarring auto tab-switch). */
 .orders-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 80; background: var(--brown-dark); color: white; font-size: 13px; font-weight: 600; padding: 10px 16px; border-radius: 10px; box-shadow: 0 4px 16px rgba(74,51,32,0.25); animation: orders-toast-in 160ms ease-out; }

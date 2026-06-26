@@ -1,54 +1,15 @@
-import { createSupabaseServerClient } from '@jigzle/db/server';
-import OrdersShell, { type OrdersTab } from '@/components/OrdersShell';
-import { getPending } from '@/app/pending/actions';
-import { getToSendQueue } from '@/app/fulfill/actions';
-import { getHistory } from '@/app/history/actions';
-import { getPaymentMethods, getCourierServices } from '@/app/settings/actions';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-const TABS: OrdersTab[] = ['pending', 'fulfill', 'history'];
-
-// JZ-001 — server shell for the Sales pipeline window. Loads the Pending + Fulfill queues, the recent
-// History, and the SETTINGS lists they need, then hands them to the client OrdersShell. ?tab= picks
-// the open tab (default Pending); ?order= deep-links a Fulfill order. (Outbound is a separate screen.)
-export default async function OrdersPage({
+// JZ-001 — the Sales pipeline window moved to /sales. Keep /orders as a redirect for muscle memory +
+// old deep links, preserving the ?tab= / ?order= query so links land on the right tab/order.
+export default function OrdersRedirect({
   searchParams,
 }: {
   searchParams?: { tab?: string; order?: string };
 }) {
-  const supabase = createSupabaseServerClient();
-  const [
-    { data: { user } },
-    pending,
-    toSend,
-    history,
-    paymentMethods,
-    courierServices,
-  ] = await Promise.all([
-    supabase.auth.getUser(),
-    getPending(),
-    getToSendQueue(),
-    getHistory(''),
-    getPaymentMethods(),
-    getCourierServices(),
-  ]);
-
-  const tabParam = (searchParams?.tab ?? '') as OrdersTab;
-  const initialTab: OrdersTab = TABS.includes(tabParam) ? tabParam : 'pending';
-  const initialOrderId = searchParams?.order || null;
-
-  return (
-    <OrdersShell
-      userEmail={user?.email || ''}
-      initialTab={initialTab}
-      initialOrderId={initialOrderId}
-      pending={pending}
-      toSend={toSend}
-      history={history}
-      paymentMethods={paymentMethods}
-      courierServices={courierServices}
-    />
-  );
+  const p = new URLSearchParams();
+  if (searchParams?.tab) p.set('tab', searchParams.tab);
+  if (searchParams?.order) p.set('order', searchParams.order);
+  const qs = p.toString();
+  redirect(qs ? `/sales?${qs}` : '/sales');
 }

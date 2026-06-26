@@ -1,7 +1,55 @@
-import { redirect } from 'next/navigation';
+import { createSupabaseServerClient } from '@jigzle/db/server';
+import OrdersShell, { type OrdersTab } from '@/components/OrdersShell';
+import { getPending } from '@/app/pending/actions';
+import { getToSendQueue } from '@/app/fulfill/actions';
+import { getHistory } from '@/app/history/actions';
+import { getPaymentMethods, getCourierServices } from '@/app/settings/actions';
 
-// JZ-001 — the sell-side flow now lives in the Orders pipeline window. /sales lands on it (Pending
-// tab). The create-order form is still at /sales/new (reached via the window's "+ New order" button).
-export default function SalesRedirect() {
-  redirect('/orders');
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const TABS: OrdersTab[] = ['pending', 'fulfill', 'history'];
+
+// JZ-001 — server shell for the Sales pipeline window (canonical route: /sales). Loads the Pending +
+// Fulfill queues, the recent History, and the SETTINGS lists they need, then hands them to the client
+// OrdersShell. ?tab= picks the open tab (default Pending); ?order= deep-links a Fulfill order. The
+// create-order form is the sibling route /sales/new (opened by the window's "+ New" button).
+export default async function SalesPage({
+  searchParams,
+}: {
+  searchParams?: { tab?: string; order?: string };
+}) {
+  const supabase = createSupabaseServerClient();
+  const [
+    { data: { user } },
+    pending,
+    toSend,
+    history,
+    paymentMethods,
+    courierServices,
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    getPending(),
+    getToSendQueue(),
+    getHistory(''),
+    getPaymentMethods(),
+    getCourierServices(),
+  ]);
+
+  const tabParam = (searchParams?.tab ?? '') as OrdersTab;
+  const initialTab: OrdersTab = TABS.includes(tabParam) ? tabParam : 'pending';
+  const initialOrderId = searchParams?.order || null;
+
+  return (
+    <OrdersShell
+      userEmail={user?.email || ''}
+      initialTab={initialTab}
+      initialOrderId={initialOrderId}
+      pending={pending}
+      toSend={toSend}
+      history={history}
+      paymentMethods={paymentMethods}
+      courierServices={courierServices}
+    />
+  );
 }
