@@ -144,7 +144,6 @@ export default function OrdersShell({
           <HistoryBoard
             embedded
             initialOrders={history}
-            paymentMethods={paymentMethods}
             userEmail={userEmail}
             reloadKey={reloadKey}
           />
