@@ -98,7 +98,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       // JZ-001: the four sell-side stages (New / Pending / Fulfill / Outbound) + History collapse into a
       // single Orders pipeline window. New is a button inside that window; History is its 4th tab.
-      { key: 'orders', href: '/orders', label: 'Orders', icon: iconOrders, sub: 'The sell-side pipeline — Pending → Fulfill → Outbound, plus History; + new orders.' },
+      { key: 'orders', href: '/orders', label: 'Sales', icon: iconOrders, sub: 'The sell-side pipeline — Pending → Fulfill → Outbound, plus History; + new orders.' },
       { key: 'purchasing', href: '/purchasing', label: 'Purchasing', icon: iconOrder, sub: 'Enter & advance purchase orders; group them into shipments.' },
     ],
   },
