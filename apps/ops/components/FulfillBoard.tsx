@@ -176,14 +176,15 @@ export default function FulfillBoard({
             {shown.map((q) => (
               <li key={q.sales_id}>
                 <button className={`fq-row ${selected === q.sales_id ? 'active' : ''}`} onClick={() => openOrder(q.sales_id)}>
-                  {/* FT-3: left = date (bold) / customer; right = item count / SKU list. No sales ID, payment, badge. */}
+                  {/* Styled like Pending: customer name headline, sales id demoted; meta on the second row. */}
                   <div className="fq-row-top">
-                    <span className="fq-id">{q.order_date ? q.order_date.slice(0, 10) : '—'}</span>
-                    <span className="fq-cust">{q.customer_name || '—'}</span>
+                    <span className="fq-headline">{q.customer_name || '—'}</span>
+                    <span className="fq-id-sub">{q.sales_id}</span>
                   </div>
                   <div className="fq-row-bot">
                     <span>{q.item_count} {q.item_count === 1 ? 'item' : 'items'}</span>
                     <span className="ff-sku-list">{q.sku_codes.join(', ') || '—'}</span>
+                    <span className="ord-date">{q.order_date ? q.order_date.slice(0, 10) : '—'}</span>
                   </div>
                 </button>
               </li>
@@ -203,11 +204,10 @@ export default function FulfillBoard({
 
           {detail && (
             <>
-              {/* FT-4: header = date (bold) + customer; Send back to pending */}
+              {/* Header styled like Pending: customer name + sales id · date. */}
               <div className="fd-head">
-                <div className="fd-title">{detail.order_date ? detail.order_date.slice(0, 10) : '—'}</div>
-                <div className="fd-sub">{detail.customer_name || '—'} · {detail.customer_phone || '—'}</div>
-                <button className="btn-link" onClick={sendBack} disabled={committing} style={{ marginTop: 4 }}>↩ Send back to pending</button>
+                <div className="fd-title fd-title-plain">{detail.customer_name || '—'}</div>
+                <div className="fd-sub">{detail.sales_id}{detail.order_date ? ` · ${detail.order_date.slice(0, 10)}` : ''}</div>
               </div>
 
               {/* Address (FT-6: radio + needs-address flag) */}
@@ -229,13 +229,14 @@ export default function FulfillBoard({
                 </ul>
               </section>
 
-              {/* Items — read-only (the whole cut set ships; partial was decided upstream) */}
+              {/* Items — read-only (the whole cut set ships; partial was decided upstream). Same compact
+                  row as the Pending detail. */}
               <section className="fd-section">
-                <div className="fd-section-head">Items (the whole set ships)</div>
+                <div className="fd-section-head">Items</div>
                 <ul className="ff-lines">
                   {detail.lines.map((l) => (
                     <li key={l.line_id} className="ff-line pend-line">
-                      <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
+                      <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
                       <div className="pend-line-main">
                         <span className="ff-code">{l.item_code || '—'}</span>
                         <span className="ff-name">{l.name}</span>
@@ -272,6 +273,11 @@ export default function FulfillBoard({
                 <button className="btn-primary" onClick={sendOut} disabled={!canSend}>
                   {committing ? 'Sending…' : 'Send to Outbound'}
                 </button>
+              </div>
+
+              {/* Send back to pending — bottom, left-aligned (like Pending's "Delete pending order"). */}
+              <div className="ob-return">
+                <button className="btn-link" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
               </div>
             </>
           )}
