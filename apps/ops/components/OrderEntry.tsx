@@ -45,6 +45,17 @@ function deriveReadiness(lines: Line[], subtotal: number, paid: number): string 
 // Thousands separators for the price / DP inputs (display only; the state stores digits). PR24 §4.
 const fmtThousands = (d: string) => d.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
+// Tint class for the rail's Status pill (mirrors the green/yellow/red pills used across Sales).
+function readinessClass(r: string): string {
+  switch (r) {
+    case 'Ready to send': return 'ok';
+    case 'On the way': return 'warn';
+    case 'Need payment':
+    case 'Need to order': return 'bad';
+    default: return 'neutral';
+  }
+}
+
 export default function OrderEntry({
   userEmail,
   paymentMethods,
@@ -479,17 +490,17 @@ export default function OrderEntry({
                 <ul className="lines-list">
                   {lines.map((l, i) => (
                     <li key={`${l.item_code}-${i}`} className="line-item">
-                      <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={SKU_IMG.md} />
+                      <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={SKU_IMG.sm} />
                       <div className="li-main">
                         <span className="li-code">{l.item_code}</span>
                         <span className="li-name">{l.name}</span>
-                        <span className="li-avail">avail {l.available}</span>
+                        <span className="li-avail">available {l.available}</span>
                       </div>
                       <div className="li-right">
                         <span className="li-qty">{l.qty}×</span>
                         <span className="li-total">{fmtRp(l.qty * l.unit_price_idr)}</span>
+                        <button className="li-remove-text" onClick={() => removeLine(i)}>remove</button>
                       </div>
-                      <button className="li-remove" onClick={() => removeLine(i)} aria-label="remove">×</button>
                     </li>
                   ))}
                 </ul>
@@ -536,8 +547,8 @@ export default function OrderEntry({
             <div className="rail-row"><span>Subtotal</span><b>{fmtRp(subtotal)}</b></div>
             <div className="rail-row"><span>Paid</span><b>{fmtRp(paid)}</b></div>
             <div className="rail-sep" />
-            <div className="rail-row"><span>Status</span><b>{readiness}</b></div>
-            <div className="rail-row"><span>Payment</span><b>{payStatus}</b></div>
+            <div className="rail-row"><span>Status</span><span className={`rail-pill ${readinessClass(readiness)}`}>{readiness}</span></div>
+            <div className="rail-row"><span>Payment</span><span className={`pay pay-${payStatus.toLowerCase()}`}>{payStatus}</span></div>
             <button className="btn-primary rail-save" onClick={handleSave} disabled={!canSave}>
               {saving ? 'Saving…' : 'Save order'}
             </button>

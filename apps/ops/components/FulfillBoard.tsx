@@ -182,8 +182,10 @@ export default function FulfillBoard({
                     <span className="fq-id-sub">{q.sales_id}</span>
                   </div>
                   <div className="fq-row-bot">
-                    <span>{q.item_count} {q.item_count === 1 ? 'item' : 'items'}</span>
-                    <span className="ff-sku-list">{q.sku_codes.join(', ') || '—'}</span>
+                    {/* SKU codes folded into the item count so a SKU search hit is obvious at a glance. */}
+                    <span className="ff-items-skus">
+                      {q.item_count} {q.item_count === 1 ? 'item' : 'items'}{q.sku_codes.length ? ` (${q.sku_codes.join(', ')})` : ''}
+                    </span>
                     <span className="ord-date">{q.order_date ? q.order_date.slice(0, 10) : '—'}</span>
                   </div>
                 </button>

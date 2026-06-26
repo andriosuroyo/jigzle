@@ -35,6 +35,16 @@ function sanitize(q: string): string {
   return q.replace(/[,()*\\]/g, ' ').trim();
 }
 
+// Add / edit the free-text note on an order (History annotation). Writes orders.order_note directly —
+// RLS (orders_all: is_allowed_user) gates it; empty input clears the note. Returns the saved value.
+export async function setOrderNote(salesId: string, note: string): Promise<string | null> {
+  const supabase = createSupabaseServerClient();
+  const value = note.trim() || null;
+  const { error } = await supabase.from('orders').update({ order_note: value }).eq('sales_id', salesId);
+  if (error) throw new Error(error.message);
+  return value;
+}
+
 // ── searchable all-orders list (HI-1): match sales_id OR customer name OR order_date; newest first ──
 export async function getHistory(query = ''): Promise<HistoryRow[]> {
   const supabase = createSupabaseServerClient();

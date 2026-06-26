@@ -88,6 +88,7 @@ export interface OrderSummary {
   payment_status: string | null;
   sales_total_idr: number | null;
   paid_idr: number;
+  order_note: string | null;
   lines: ShippedLineSummary[];
   boxes: BoxSummary[];
 }

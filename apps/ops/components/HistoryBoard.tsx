@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { volWeight } from '@jigzle/lib';
 import AppHeader from '@/components/AppHeader';
-import { getHistory } from '@/app/history/actions';
+import { getHistory, setOrderNote } from '@/app/history/actions';
 import { getOrderSummary } from '@/app/pending/actions';
 import type { HistoryRow, HistoryState } from '@/app/history/types';
 import type { OrderSummary, BoxSummary } from '@/app/pending/types';
@@ -47,6 +47,9 @@ export default function HistoryBoard({
   const [summary, setSummary] = useState<OrderSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   const sumReqRef = useRef(0);
   const selId = selRow?.sales_id ?? null;
 
@@ -80,8 +83,29 @@ export default function HistoryBoard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
 
+  function startEditNote() {
+    setNoteDraft(summary?.order_note ?? '');
+    setEditingNote(true);
+  }
+
+  async function doSaveNote() {
+    if (!summary) return;
+    setSavingNote(true);
+    setError(null);
+    try {
+      const saved = await setOrderNote(summary.sales_id, noteDraft);
+      setSummary({ ...summary, order_note: saved });
+      setEditingNote(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save note failed.');
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
   async function openOrder(row: HistoryRow) {
     setError(null);
+    setEditingNote(false);
     setSelRow(row);
     setSummary(null);
     const myReq = ++sumReqRef.current;
@@ -198,6 +222,35 @@ export default function HistoryBoard({
                         );
                       })}
                     </ul>
+                  </>
+                )}
+              </section>
+
+              {/* Note — the one editable thing on History (free text on the order). Add / edit / clear. */}
+              <section className="fd-section">
+                <div className="fd-section-head">Note</div>
+                {!editingNote ? (
+                  <>
+                    {summary.order_note ? (
+                      <p className="order-note">{summary.order_note}</p>
+                    ) : (
+                      <div className="hint">No note yet.</div>
+                    )}
+                    <button className="btn-link" onClick={startEditNote}>{summary.order_note ? 'Edit note' : '+ Add note'}</button>
+                  </>
+                ) : (
+                  <>
+                    <textarea
+                      className="note-input"
+                      rows={3}
+                      placeholder="Add a note for this order…"
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                    />
+                    <div className="fd-commit-actions" style={{ marginTop: 8 }}>
+                      <button className="btn-secondary" onClick={() => setEditingNote(false)} disabled={savingNote}>Cancel</button>
+                      <button className="btn-primary" onClick={doSaveNote} disabled={savingNote}>{savingNote ? 'Saving…' : 'Save note'}</button>
+                    </div>
                   </>
                 )}
               </section>

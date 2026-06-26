@@ -260,13 +260,13 @@ input, textarea, select, button { font-family: inherit; }
 .li-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
 .li-qty { font-weight: 700; font-size: 13px; color: var(--brown); }
 .li-total { font-weight: 700; font-size: 13px; }
-.li-remove { background: none; border: none; color: var(--red); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 6px; flex-shrink: 0; }
+/* Remove is a small text button under the price (aligned with "available"), keeping qty/price/remove
+   right-aligned so the item name gets the width. */
+.li-remove-text { background: none; border: none; color: var(--red); font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 0; }
 
 @media (max-width: 760px) {
-  .li-remove { min-width: 44px; min-height: 44px; }
   /* 44px tap targets on the primary order-entry controls (peripheral ones handled elsewhere) */
   .sku-add input, .sku-add select, .sku-add .btn-secondary { min-height: 44px; }
-  .pay-toggle button { min-height: 44px; }
   .app-header .signout { min-height: 44px; }
 }
 
@@ -278,17 +278,23 @@ input, textarea, select, button { font-family: inherit; }
 .addr-text em { font-style: normal; font-size: 11px; color: var(--muted); }
 
 /* ── Payment ── */
-.pay-toggle { display: flex; gap: 6px; background: var(--paper); padding: 4px; border-radius: 8px; }
-.pay-toggle button { flex: 1; padding: 8px; border: none; background: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--muted); }
+.pay-toggle { display: flex; gap: 6px; background: var(--paper); padding: 3px; border-radius: 8px; }
+.pay-toggle button { flex: 1; padding: 5px; border: none; background: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--muted); }
 .pay-toggle button.active { background: white; color: var(--brown); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 
 /* ── Sticky rail ── */
 .ops-rail { position: sticky; top: 74px; }
 .rail-card { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .rail-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-.rail-row { display: flex; justify-content: space-between; font-size: 13px; }
-.rail-row span { color: var(--muted); }
+.rail-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.rail-row > span:first-child { color: var(--muted); } /* label only — don't tint the value pills */
 .rail-row b { font-weight: 700; }
+/* Status pill in the rail — same tint scheme as the .pay / .ord-state pills across Sales. */
+.rail-pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; color: var(--ink); }
+.rail-pill.ok { background: var(--green-tint); color: #3D6B26; }
+.rail-pill.warn { background: var(--yellow-tint); color: #9C6F1C; }
+.rail-pill.bad { background: var(--red-tint); color: #993525; }
+.rail-pill.neutral { background: var(--paper); color: var(--muted); }
 .rail-sep { height: 1px; background: var(--line); margin: 4px 0; }
 .rail-save { margin-top: 6px; }
 .rail-hint { font-size: 11px; color: var(--muted); text-align: center; }
@@ -744,6 +750,10 @@ img.sku-img { background: #e8e8e8; }
 .ord-pay-status-col { margin-left: auto; align-items: flex-end; }
 .ord-pay-status-col .ord-state { display: inline-flex; align-items: center; min-height: 18px; }
 
+/* Order note (History detail). */
+.order-note { font-size: 13px; color: var(--ink); white-space: pre-wrap; margin: 0 0 8px; }
+.note-input { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); resize: vertical; min-height: 64px; }
+
 /* Box summary rows (History detail) — numbered box icon, two-line descriptor, chargeable on the right. */
 .box-sum { display: flex; align-items: center; gap: 10px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .box-idx { flex-shrink: 0; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--brown-light); border-radius: 5px; font-size: 12px; font-weight: 700; color: var(--brown); background: white; }
@@ -774,6 +784,8 @@ img.sku-img { background: #e8e8e8; }
 
 /* ── PR-B — Fulfill To-send preview SKU list (FT-3) ── */
 .ff-sku-list { margin-left: auto; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+/* Fulfill row: "N items (SKU1, SKU2)" — fills the row, ellipsised; date sits to its right. */
+.ff-items-skus { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── JZ-001 — Orders pipeline window ── */
 /* One sell-side window: segmented tabs (Pending → Fulfill → Outbound → History) with live count
