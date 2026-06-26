@@ -160,7 +160,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
 
   const { data: order } = await supabase
     .from('orders')
-    .select('sales_id,status,payment_status,sales_total_idr,paid_idr,customers(name,phone)')
+    .select('sales_id,status,payment_status,sales_total_idr,paid_idr,order_note,customers(name,phone)')
     .eq('sales_id', salesId)
     .maybeSingle();
   if (!order) return null;
@@ -216,6 +216,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
     payment_status: (order.payment_status as string | null) ?? null,
     sales_total_idr: (order.sales_total_idr as number | null) ?? null,
     paid_idr: (order.paid_idr as number | null) ?? 0,
+    order_note: (order.order_note as string | null) ?? null,
     lines,
     boxes,
   };
