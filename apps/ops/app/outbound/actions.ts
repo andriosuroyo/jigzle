@@ -201,22 +201,26 @@ export async function returnToFulfill(salesId: string): Promise<void> {
   // as getShipQueue/getOrderForShip, so a straddling order's still-in-Fulfill lines aren't touched.
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id')
+    .select('line_id,courier_tracking')
     .eq('sales_id', salesId)
     .not('fulfilled_at', 'is', null)
     .not('courier', 'is', null)
     .is('shipped_at', null)
     .eq('is_cancelled', false);
-  const lineIds = ((lineRows ?? []) as { line_id: string }[]).map((r) => r.line_id);
+  const rows = (lineRows ?? []) as { line_id: string; courier_tracking: string | null }[];
+  const lineIds = rows.map((r) => r.line_id);
   if (!lineIds.length) return; // nothing addressed to return
 
-  // p_courier/speed/label/tracking = null → cleared; p_address_id = null → coalesce keeps the address.
+  // p_courier/speed/label = null → cleared; p_address_id = null → coalesce keeps the address. KEEP the
+  // tracking (set_fulfillment sets it to the value passed) so it survives the round-trip and Fulfill can
+  // re-prefill it — re-picking the courier shouldn't make the operator re-type the resi.
+  const tracking = rows.find((r) => r.courier_tracking)?.courier_tracking ?? null;
   const { error } = await supabase.rpc('set_fulfillment', {
     p_sales_id: salesId,
     p_line_ids: lineIds,
     p_address_id: null,
     p_courier: null,
-    p_tracking: null,
+    p_tracking: tracking,
     p_courier_speed: null,
     p_courier_label: null,
   });

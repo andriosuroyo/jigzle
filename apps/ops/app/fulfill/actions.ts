@@ -66,7 +66,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
   // the cut, not-yet-addressed (courier null), unshipped lines — the set Fulfill addresses + sends out
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,line_note,item_link,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,qty,line_note,item_link,courier_tracking,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .not('fulfilled_at', 'is', null)
     .is('courier', null)
@@ -81,6 +81,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
     qty: number;
     line_note: string | null;
     item_link: string | null;
+    courier_tracking: string | null;
     catalogue: { original_name: string | null; translate_name: string | null; self_code: string | null } | null;
   }[];
 
@@ -105,6 +106,8 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
 
   const cust = one<{ name: string | null; phone: string | null }>(order.customers as never);
   const addressId = (order.address_id as number | null) ?? null;
+  // tracking survives a "Return to Fulfill" (kept on the line, courier cleared) → re-prefill it
+  const courierTracking = rows.find((r) => r.courier_tracking)?.courier_tracking ?? null;
   return {
     sales_id: order.sales_id as string,
     order_date: (order.order_date as string | null) ?? null,
@@ -112,6 +115,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
     customer_phone: cust?.phone ?? null,
     default_address_id: addressId,
     needs_address: addressId == null,
+    courier_tracking: courierTracking,
     lines,
     addresses,
   };

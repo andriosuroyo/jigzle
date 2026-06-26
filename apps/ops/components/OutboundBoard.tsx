@@ -81,16 +81,13 @@ export default function OutboundBoard({
   // line then the courier label + #tracking. The order-code title row is NOT part of the copy text.
   const addressBlock = useMemo(() => {
     if (!detail) return '';
-    const head: string[] = [];
-    const name = detail.recipient_name || detail.customer_name;
-    if (name) head.push(name);
-    if (detail.raw_address) head.push(detail.raw_address);
-    const phone = detail.contact_phone || detail.customer_phone;
-    if (phone) head.push(phone);
+    // The saved address is one combined field (name + full address + contact) — print it verbatim, no
+    // rebuilding from columns (that double-printed the name + phone). Then a blank line + courier/tracking.
+    const head = detail.raw_address || detail.ship_address || detail.customer_name || '';
     const tail: string[] = [];
     if (detail.courier_label) tail.push(detail.courier_label);
     if (detail.courier_tracking) tail.push('#' + detail.courier_tracking);
-    return tail.length ? `${head.join('\n')}\n\n${tail.join('\n')}` : head.join('\n');
+    return tail.length ? `${head}\n\n${tail.join('\n')}` : head;
   }, [detail]);
 
   function applyDetail(d: ShipDetail | null) {
@@ -296,9 +293,10 @@ export default function OutboundBoard({
             {queue.map((q) => (
               <li key={q.sales_id}>
                 <button className={`fq-row ${selected === q.sales_id ? 'active' : ''}`} onClick={() => openOrder(q.sales_id)}>
+                  {/* Styled like Sales: customer name headline, sales id demoted. */}
                   <div className="fq-row-top">
-                    <span className="fq-id">{q.sales_id}</span>
-                    <span className="fq-cust">{q.customer_name || '—'}</span>
+                    <span className="fq-headline">{q.customer_name || '—'}</span>
+                    <span className="fq-id-sub">{q.sales_id}</span>
                   </div>
                   <div className="fq-row-bot">
                     <span>{q.ready_count} {q.ready_count === 1 ? 'item' : 'items'}</span>
@@ -318,9 +316,9 @@ export default function OutboundBoard({
 
           {detail && (
             <>
-              {/* O3: order code + copyable address block */}
+              {/* O3: overview title + copyable address block */}
               <div className="fd-head">
-                <div className="ob-code">{detail.sales_id}</div>
+                <div className="ob-code">Outbound overview</div>
                 <div className="ob-addr">
                   <button className="ob-copy" onClick={copyAddress} aria-label="Copy address block">
                     {copied ? '✓ Copied' : '⧉ Copy'}
@@ -339,18 +337,18 @@ export default function OutboundBoard({
                 </div>
               )}
 
-              {/* Items — verify every one (manual tick or scan), then ship the whole order */}
+              {/* Items — verify every one (manual check or scan), then ship the whole order */}
               <section className="fd-section">
-                <div className="fd-section-head">Items (verify all to ship)</div>
+                <div className="fd-section-head">Items</div>
                 <div className="scan-row">
+                  {/* Enter scans the barcode and auto-clears the field (no scan button). */}
                   <input
                     type="text"
-                    placeholder="scan / type a barcode"
+                    placeholder="scan / type a barcode, then Enter"
                     value={scan}
                     onChange={(e) => setScan(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doScan(); } }}
                   />
-                  <button className="btn-secondary" onClick={doScan}>scan</button>
                   {scanMsg && <span className="scan-msg">{scanMsg}</span>}
                 </div>
                 <ul className="ff-lines">
@@ -360,66 +358,63 @@ export default function OutboundBoard({
                     const countText = mode ? `${l.qty}/${l.qty}` : `${n}/${l.qty}`;
                     const countCls = mode === 'manual' ? 'manual' : mode === 'scan' ? 'scan' : 'zero';
                     return (
-                      <li key={l.line_id} className="ff-line">
-                        <label className="ff-line-main">
-                          <input type="checkbox" checked={verified.has(l.line_id)} onChange={() => toggleLine(l.line_id)} />
-                          <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
+                      <li key={l.line_id} className="ff-line pend-line">
+                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+                        <div className="pend-line-main">
                           <span className="ff-code">{l.item_code || '—'}</span>
                           <span className="ff-name">{l.name}</span>
+                        </div>
+                        <div className="ob-verify">
                           <span className={`ob-count ${countCls}`}>{countText}</span>
-                        </label>
-                        {mode && (
-                          <div className={`ob-note ${mode}`}>{mode === 'manual' ? 'Manually checked' : 'Barcode OK'}</div>
-                        )}
+                          <button className="ob-manual-btn" onClick={() => toggleLine(l.line_id)}>
+                            {mode === 'manual' ? '✓ checked' : mode === 'scan' ? '✓ scanned' : 'manual check'}
+                          </button>
+                        </div>
                       </li>
                     );
                   })}
                 </ul>
               </section>
 
-              {/* Boxes — size from SETTINGS presets (or Custom); real weight in grams (O8/O9) */}
+              {/* Boxes — editable, History-style rows (numbered icon + two lines + chargeable on the right). */}
               <section className="fd-section">
                 <div className="fd-section-head">Boxes</div>
-                <ul className="box-list">
+                <ul className="ff-lines">
                   {boxes.map((b, i) => {
                     const { vol, charge } = boxPreview(b);
                     const dims = boxDims(b);
                     return (
-                      <li key={b.key} className="box-row">
-                        <div className="box-line">
-                          <span className="box-n">Box {i + 1}</span>
-                          <select className="box-preset" value={b.preset} onChange={(e) => setBox(b.key, { preset: e.target.value })}>
-                            {boxPresets.map((p) => <option key={p.code} value={p.code}>{p.code}</option>)}
-                            <option value={CUSTOM}>Custom</option>
-                          </select>
-                          <input className="box-real" type="number" inputMode="numeric" min={0} placeholder="real (g)" value={b.real} onChange={(e) => setBox(b.key, { real: e.target.value })} />
-                          {b.preset === CUSTOM ? (
-                            <>
-                              <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="P" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />
-                              <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="L" value={b.l} onChange={(e) => setBox(b.key, { l: e.target.value })} />
-                              <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="T" value={b.t} onChange={(e) => setBox(b.key, { t: e.target.value })} />
-                            </>
-                          ) : (
-                            <span className="box-dims-ro">{fmtDim(dims.p)}·{fmtDim(dims.l)}·{fmtDim(dims.t)} cm</span>
-                          )}
-                          {boxes.length > 1 && <button className="li-remove" onClick={() => setBoxes((prev) => prev.filter((x) => x.key !== b.key))} aria-label="remove box">×</button>}
+                      <li key={b.key} className="box-sum box-edit">
+                        <span className="box-idx">{i + 1}</span>
+                        <div className="box-sum-main">
+                          <div className="box-edit-line">
+                            <select className="box-preset" value={b.preset} onChange={(e) => setBox(b.key, { preset: e.target.value })}>
+                              {boxPresets.map((p) => <option key={p.code} value={p.code}>{p.code}</option>)}
+                              <option value={CUSTOM}>Custom</option>
+                            </select>
+                            {b.preset === CUSTOM ? (
+                              <>
+                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="P" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />
+                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="L" value={b.l} onChange={(e) => setBox(b.key, { l: e.target.value })} />
+                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="T" value={b.t} onChange={(e) => setBox(b.key, { t: e.target.value })} />
+                              </>
+                            ) : (
+                              <span className="box-dims-ro">{fmtDim(dims.p)} x {fmtDim(dims.l)} x {fmtDim(dims.t)} cm</span>
+                            )}
+                          </div>
+                          <div className="box-edit-line">
+                            <input className="box-real" type="number" inputMode="numeric" min={0} placeholder="real (g)" value={b.real} onChange={(e) => setBox(b.key, { real: e.target.value })} />
+                            <span className="box-sum-l2">vol: {vol != null ? `${vol.toFixed(0)} g` : '—'}</span>
+                          </div>
                         </div>
-                        <div className="box-preview">
-                          <span>vol {vol != null ? vol.toFixed(1) : '—'} g · chargeable {charge != null ? charge.toFixed(1) : '—'} g</span>
-                        </div>
+                        <span className="ff-qty">{charge != null ? `${charge.toFixed(0)} g` : '—'}</span>
+                        {boxes.length > 1 && <button className="box-remove" onClick={() => setBoxes((prev) => prev.filter((x) => x.key !== b.key))} aria-label="remove box">×</button>}
                       </li>
                     );
                   })}
                 </ul>
-                <button className="btn-secondary" onClick={() => setBoxes((prev) => [...prev, makeBox()])}>+ box</button>
+                <button className="btn-link box-add" onClick={() => setBoxes((prev) => [...prev, makeBox()])}>+ box</button>
               </section>
-
-              {/* Return to Fulfill (PR-B §6) — all-or-none: clears the courier, order returns to To-send. */}
-              <div className="ob-return">
-                <button className="btn-secondary" onClick={doReturnToFulfill} disabled={committing}>↩ Return to Fulfill</button>
-                <span className="hint">Clears the courier so the order goes back to the To-send queue to re-pick courier/address.</span>
-              </div>
-
 
               {/* Commit bar (O5: all-or-none; enabled only when every line verified + custom dims filled) */}
               <div className="fd-commit">
@@ -432,6 +427,12 @@ export default function OutboundBoard({
                 <button className="btn-primary" onClick={commit} disabled={committing || !allVerified || customIncomplete}>
                   {committing ? 'Shipping…' : `Mark shipped${unitsShipping ? ` (${unitsShipping} unit${unitsShipping === 1 ? '' : 's'})` : ''}`}
                 </button>
+              </div>
+
+              {/* Return to Fulfill (PR-B §6) — bottom, left-aligned text button (clears courier, keeps
+                  tracking; order drops back to the Fulfill To-send queue). */}
+              <div className="ob-return">
+                <button className="btn-link" onClick={doReturnToFulfill} disabled={committing}>↩ Return to Fulfill</button>
               </div>
             </>
           )}
