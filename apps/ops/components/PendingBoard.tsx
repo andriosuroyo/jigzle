@@ -187,8 +187,8 @@ export default function PendingBoard({
                 <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className={`pend-dot ${o.dot}`} aria-hidden="true" />
-                    <span className="pend-headline">{o.customer_name || '—'}</span>
-                    <span className="pend-id-sub">{o.sales_id}</span>
+                    <span className="fq-headline">{o.customer_name || '—'}</span>
+                    <span className="fq-id-sub">{o.sales_id}</span>
                   </div>
                   <div className="fq-row-bot">
                     <span className={`pay pay-${(o.payment_status || '').toLowerCase()}`}>{o.payment_status || '—'}</span>
@@ -211,7 +211,7 @@ export default function PendingBoard({
           {sel && (
             <>
               <div className="fd-head">
-                <div className="fd-title pend-fd-title">{sel.customer_name || '—'}</div>
+                <div className="fd-title fd-title-plain">{sel.customer_name || '—'}</div>
                 <div className="fd-sub">{sel.sales_id}{sel.order_date ? ` · ${sel.order_date.slice(0, 10)}` : ''}</div>
               </div>
 
