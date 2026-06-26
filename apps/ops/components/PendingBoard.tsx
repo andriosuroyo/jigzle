@@ -187,8 +187,8 @@ export default function PendingBoard({
                 <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className={`pend-dot ${o.dot}`} aria-hidden="true" />
-                    <span className="fq-id">{o.sales_id}</span>
-                    <span className="fq-cust">{o.customer_name || '—'}</span>
+                    <span className="pend-headline">{o.customer_name || '—'}</span>
+                    <span className="pend-id-sub">{o.sales_id}</span>
                   </div>
                   <div className="fq-row-bot">
                     <span className={`pay pay-${(o.payment_status || '').toLowerCase()}`}>{o.payment_status || '—'}</span>
@@ -211,13 +211,12 @@ export default function PendingBoard({
           {sel && (
             <>
               <div className="fd-head">
-                <div className="fd-title">{sel.sales_id}</div>
-                <div className="fd-sub">{sel.customer_name || '—'}</div>
+                <div className="fd-title pend-fd-title">{sel.customer_name || '—'}</div>
+                <div className="fd-sub">{sel.sales_id}{sel.order_date ? ` · ${sel.order_date.slice(0, 10)}` : ''}</div>
               </div>
 
               {/* Lines — compact row: image left, code / name / qty / status to its right */}
               <section className="fd-section">
-                <div className="fd-section-head">Items</div>
                 <ul className="ff-lines">
                   {sel.lines.map((l) => (
                     <li key={l.line_id} className="ff-line pend-line">
@@ -233,21 +232,21 @@ export default function PendingBoard({
                 </ul>
               </section>
 
-              {/* Payment (FP-7) — always shown so the status pill is visible; amount/method only when
-                  there's a balance to settle. Default amount = balance (set on open / after a payment). */}
+              {/* Payment — totals always shown (balance right-aligned, green when clear); amount + method
+                  side-by-side, only when there's a balance. Default amount = balance (set on open / after
+                  a payment). */}
               <section className="fd-section">
-                <div className="fd-section-head fd-section-head-row">
-                  <span>Payment</span>
-                  <span className={`pay pay-${(sel.payment_status || '').toLowerCase()}`}>{sel.payment_status || '—'}</span>
-                </div>
                 <div className="ord-pay-grid">
                   <div><span className="ord-pay-k">Total</span><span className="ord-pay-v">{fmtIDR(sel.sales_total_idr)}</span></div>
                   <div><span className="ord-pay-k">Paid</span><span className="ord-pay-v">{fmtIDR(sel.paid_idr)}</span></div>
-                  <div><span className="ord-pay-k">Balance</span><span className="ord-pay-v ord-pay-bal">{fmtIDR(sel.balance)}</span></div>
+                  <div className="ord-pay-bal-col">
+                    <span className="ord-pay-k">Balance</span>
+                    <span className={`ord-pay-v ord-pay-bal ${sel.balance > 0 ? 'bal-due' : 'bal-clear'}`}>{fmtIDR(sel.balance)}</span>
+                  </div>
                 </div>
                 {sel.balance > 0 && (
-                  <>
-                    <div className="po-field" style={{ marginTop: 12 }}>
+                  <div className="po-inline" style={{ marginTop: 12 }}>
+                    <div className="po-field">
                       <label>Amount (full IDR)</label>
                       <input type="number" inputMode="numeric" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />
                     </div>
@@ -261,13 +260,12 @@ export default function PendingBoard({
                         </select>
                       )}
                     </div>
-                  </>
+                  </div>
                 )}
               </section>
 
-              {/* Actions — Send ready items + Update payment together at the bottom */}
+              {/* Actions — Update payment + Send ready items, left-aligned at the bottom */}
               <div className="fd-commit">
-                {sel.ready_count === 0 && <span className="warn-text">no ready items yet</span>}
                 <div className="fd-commit-actions">
                   {sel.balance > 0 && (
                     <button className="btn-secondary" onClick={doMarkPaid} disabled={busy}>{busy ? 'Saving…' : 'Update payment'}</button>
