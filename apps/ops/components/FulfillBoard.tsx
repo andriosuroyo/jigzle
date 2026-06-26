@@ -15,11 +15,20 @@ export default function FulfillBoard({
   courierServices,
   initialOrderId,
   userEmail,
+  embedded = false,
+  onCountChange,
+  onAdvance,
+  reloadKey = 0,
 }: {
   initialQueue: ToSendQueueRow[];
   courierServices: CourierService[];
   initialOrderId?: string | null;
   userEmail: string;
+  // JZ-001: Orders pipeline window — see PendingBoard for the embedded/onCountChange/onAdvance contract.
+  embedded?: boolean;
+  onCountChange?: (n: number) => void;
+  onAdvance?: (salesId: string, toStage: string) => void;
+  reloadKey?: number;
 }) {
   const [queue, setQueue] = useState<ToSendQueueRow[]>(initialQueue);
   const [search, setSearch] = useState('');
@@ -88,6 +97,11 @@ export default function FulfillBoard({
     try { setQueue(await getToSendQueue()); } catch { /* keep current on transient error */ }
   }
 
+  // JZ-001: live count badge + external reload (see PendingBoard).
+  useEffect(() => { onCountChange?.(queue.length); }, [queue, onCountChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (reloadKey) refreshQueue(); }, [reloadKey]);
+
   // FT-6: Send to Outbound — set address + courier on the whole cut set (set_fulfillment). The order
   // leaves the To-send queue and appears in Outbound.
   async function sendOut() {
@@ -109,6 +123,7 @@ export default function FulfillBoard({
       });
       if (reqIdRef.current !== myReq) return; // superseded — don't clobber a newer selection
       setSuccess(`${detail.sales_id} sent to Outbound (${svc.label}).`);
+      onAdvance?.(detail.sales_id, 'Outbound'); // JZ-001: pipeline toast
       setDetail(null);
       setSelected(null);
       await refreshQueue();
@@ -130,6 +145,7 @@ export default function FulfillBoard({
       await sendBackToPending(detail.sales_id);
       if (reqIdRef.current !== myReq) return;
       setSuccess(`${detail.sales_id} sent back to Pending.`);
+      onAdvance?.(detail.sales_id, 'Pending'); // JZ-001: pipeline toast (moves back a stage)
       setDetail(null);
       setSelected(null);
       await refreshQueue();
@@ -142,10 +158,8 @@ export default function FulfillBoard({
 
   const canSend = !!detail && detail.lines.length > 0 && addressId != null && courierId != null && !committing;
 
-  return (
-    <div className="ops">
-      <AppHeader active="fulfill" userEmail={userEmail} />
-
+  const body = (
+    <>
       <div className="fulfill-layout">
         {/* ── Queue ── */}
         <aside className="fq-pane">
@@ -259,6 +273,14 @@ export default function FulfillBoard({
           )}
         </main>
       </div>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="ops">
+      <AppHeader active="orders" userEmail={userEmail} />
+      {body}
     </div>
   );
 }
