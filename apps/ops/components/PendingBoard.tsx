@@ -129,7 +129,7 @@ export default function PendingBoard({
       if (reqRef.current !== myReq) return;
       setSuccess(`${sel.sales_id}: paid ${fmtIDR(res.paid)}, balance ${fmtIDR(res.balance)} (${res.payment_status}).`);
       await refresh();
-      setAmount('0');
+      setAmount(String(res.balance)); // keep the field defaulted to the (new) remaining balance
     } catch (e) {
       if (reqRef.current === myReq) setError(e instanceof Error ? e.message : 'Mark paid failed.');
     } finally {
@@ -215,13 +215,13 @@ export default function PendingBoard({
                 <div className="fd-sub">{sel.customer_name || '—'}</div>
               </div>
 
-              {/* Lines (Pattern A) */}
+              {/* Lines — compact row: image left, code / name / qty / status to its right */}
               <section className="fd-section">
                 <div className="fd-section-head">Items</div>
                 <ul className="ff-lines">
                   {sel.lines.map((l) => (
                     <li key={l.line_id} className="ff-line pend-line">
-                      <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
+                      <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
                       <div className="pend-line-main">
                         <span className="ff-code">{l.item_code || '—'}</span>
                         <span className="ff-name">{l.name}</span>
@@ -231,50 +231,56 @@ export default function PendingBoard({
                     </li>
                   ))}
                 </ul>
-                <div className="fd-commit">
-                  {sel.ready_count === 0 && <span className="warn-text">no ready items yet</span>}
+              </section>
+
+              {/* Payment (FP-7) — always shown so the status pill is visible; amount/method only when
+                  there's a balance to settle. Default amount = balance (set on open / after a payment). */}
+              <section className="fd-section">
+                <div className="fd-section-head fd-section-head-row">
+                  <span>Payment</span>
+                  <span className={`pay pay-${(sel.payment_status || '').toLowerCase()}`}>{sel.payment_status || '—'}</span>
+                </div>
+                <div className="ord-pay-grid">
+                  <div><span className="ord-pay-k">Total</span><span className="ord-pay-v">{fmtIDR(sel.sales_total_idr)}</span></div>
+                  <div><span className="ord-pay-k">Paid</span><span className="ord-pay-v">{fmtIDR(sel.paid_idr)}</span></div>
+                  <div><span className="ord-pay-k">Balance</span><span className="ord-pay-v ord-pay-bal">{fmtIDR(sel.balance)}</span></div>
+                </div>
+                {sel.balance > 0 && (
+                  <>
+                    <div className="po-field" style={{ marginTop: 12 }}>
+                      <label>Amount (full IDR)</label>
+                      <input type="number" inputMode="numeric" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />
+                    </div>
+                    <div className="po-field">
+                      <label>Method</label>
+                      {paymentMethods.length === 0 ? (
+                        <div className="hint">No payment methods — add them in Settings.</div>
+                      ) : (
+                        <select value={method} onChange={(e) => setMethod(e.target.value)}>
+                          {paymentMethods.map((m) => <option key={m.id} value={m.label}>{m.label}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </>
+                )}
+              </section>
+
+              {/* Actions — Send ready items + Update payment together at the bottom */}
+              <div className="fd-commit">
+                {sel.ready_count === 0 && <span className="warn-text">no ready items yet</span>}
+                <div className="fd-commit-actions">
+                  {sel.balance > 0 && (
+                    <button className="btn-secondary" onClick={doMarkPaid} disabled={busy}>{busy ? 'Saving…' : 'Update payment'}</button>
+                  )}
                   <button className="btn-primary" onClick={doSendReady} disabled={busy || sel.ready_count === 0}>
                     {busy ? 'Working…' : `Send ready items${sel.ready_count ? ` (${sel.ready_count})` : ''}`}
                   </button>
                 </div>
-              </section>
-
-              {/* Payment (FP-7) — show when there's a balance */}
-              {sel.balance > 0 && (
-                <section className="fd-section">
-                  <div className="fd-section-head">Payment</div>
-                  <div className="ord-pay-grid">
-                    <div><span className="ord-pay-k">Total</span><span className="ord-pay-v">{fmtIDR(sel.sales_total_idr)}</span></div>
-                    <div><span className="ord-pay-k">Paid</span><span className="ord-pay-v">{fmtIDR(sel.paid_idr)}</span></div>
-                    <div><span className="ord-pay-k">Balance</span><span className="ord-pay-v ord-pay-bal">{fmtIDR(sel.balance)}</span></div>
-                  </div>
-                  <div className="po-field" style={{ marginTop: 12 }}>
-                    <label>Amount (full IDR)</label>
-                    <input type="number" inputMode="numeric" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />
-                    <button className="btn-link" type="button" onClick={() => setAmount(String(sel.balance))} style={{ marginTop: 4 }}>
-                      Set to balance ({fmtIDR(sel.balance)})
-                    </button>
-                  </div>
-                  <div className="po-field">
-                    <label>Method</label>
-                    {paymentMethods.length === 0 ? (
-                      <div className="hint">No payment methods — add them in Settings.</div>
-                    ) : (
-                      <select value={method} onChange={(e) => setMethod(e.target.value)}>
-                        {paymentMethods.map((m) => <option key={m.id} value={m.label}>{m.label}</option>)}
-                      </select>
-                    )}
-                  </div>
-                  <div className="fd-commit">
-                    <button className="btn-secondary" onClick={doMarkPaid} disabled={busy}>{busy ? 'Saving…' : 'Mark paid'}</button>
-                  </div>
-                </section>
-              )}
+              </div>
 
               {/* Delete pending (FP-4) */}
               <div className="ob-return">
                 <button className="btn-link pend-delete" onClick={doDelete} disabled={busy}>Delete pending order</button>
-                <span className="hint">Permanently removes the order{sel.paid_idr > 0 ? ' and its recorded payments' : ''}.</span>
               </div>
             </>
           )}
