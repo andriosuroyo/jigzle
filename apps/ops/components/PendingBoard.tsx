@@ -117,7 +117,7 @@ export default function PendingBoard({
     try {
       const res = await markOrderPaid(sel.sales_id, sel.balance, 'manual');
       if (reqRef.current !== myReq) return;
-      setSuccess(`${sel.sales_id}: marked paid (${fmtIDR(res.paid)}, ${res.payment_status}).`);
+      setSuccess(`${sel.sales_id}: ${res.balance <= 0 ? 'fully paid' : 'partially paid'}.`);
       await refresh();
     } catch (e) {
       if (reqRef.current === myReq) setError(e instanceof Error ? e.message : 'Mark paid failed.');
@@ -193,9 +193,10 @@ export default function PendingBoard({
 
         {/* ── Detail ── */}
         <main className="fd-pane">
-          {!sel && <div className="fd-empty">Pick an order to send ready items, settle payment, or delete.</div>}
+          {/* success / error pinned to the top of the box for both actions (mark paid + send ready) */}
           {error && <div className="validation err">{error}</div>}
           {success && <div className="validation ok">{success}</div>}
+          {!sel && <div className="fd-empty">Pick an order to send ready items, settle payment, or delete.</div>}
 
           {sel && (
             <>
