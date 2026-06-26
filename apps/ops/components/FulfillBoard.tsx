@@ -46,11 +46,15 @@ export default function FulfillBoard({
   const [success, setSuccess] = useState<string | null>(null); // FT-7: top-level, survives detail clearing
   const reqIdRef = useRef(0);
 
-  // FT-1: filter the queue by customer name (client-side over the loaded worklist)
+  // FT-1: filter the queue by customer name OR SKU code (client-side over the loaded worklist)
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return queue;
-    return queue.filter((r) => (r.customer_name ?? '').toLowerCase().includes(q));
+    return queue.filter(
+      (r) =>
+        (r.customer_name ?? '').toLowerCase().includes(q) ||
+        r.sku_codes.some((c) => c.toLowerCase().includes(q))
+    );
   }, [queue, search]);
 
   const imgCodes = useMemo(() => (detail?.lines ?? []).map((l) => l.item_code).filter((c): c is string => !!c), [detail]);
@@ -163,9 +167,9 @@ export default function FulfillBoard({
       <div className="fulfill-layout">
         {/* ── Queue ── */}
         <aside className="fq-pane">
-          <div className="fq-head"><span>To send queue: {queue.length}</span></div>
-          <div className="search-row" style={{ padding: '0 8px 8px' }}>
-            <input type="text" inputMode="search" placeholder="Search customer…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          {/* No queue-count header — the Fulfill tab badge above already shows the count. */}
+          <div className="search-row" style={{ padding: '8px' }}>
+            <input type="text" inputMode="search" placeholder="Search customer or SKU…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           {shown.length === 0 && <div className="hint fq-empty">{queue.length === 0 ? 'Nothing waiting to send.' : 'No match.'}</div>}
           <ul className="fq-list">
