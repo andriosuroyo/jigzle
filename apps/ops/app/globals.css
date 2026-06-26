@@ -750,3 +750,29 @@ img.sku-img { background: #e8e8e8; }
 
 /* ── PR-B — Fulfill To-send preview SKU list (FT-3) ── */
 .ff-sku-list { margin-left: auto; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+
+/* ── JZ-001 — Orders pipeline window ── */
+/* One sell-side window: segmented tabs (Pending → Fulfill → Outbound → History) with live count
+   badges, plus a persistent "+ New order" button. The tab panels are the existing stage boards
+   mounted in `embedded` mode, so the .fulfill-layout/.ops-layout styling below is reused as-is. */
+.orders-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; }
+.orders-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.orders-tab { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 8px 14px; border: 1px solid var(--line); border-radius: 20px; background: white; color: var(--muted); cursor: pointer; }
+.orders-tab.active { background: var(--orange-tint); border-color: var(--orange); color: #8A5A1A; }
+.orders-tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; background: var(--paper); color: var(--brown-dark); min-width: 20px; text-align: center; }
+.orders-tab.active .orders-tab-count { background: var(--orange); color: white; }
+.orders-new { margin-left: auto; font-size: 13px; font-weight: 700; padding: 9px 16px; border: none; border-radius: 8px; background: var(--brown); color: white; cursor: pointer; white-space: nowrap; }
+.orders-new:active { background: var(--brown-dark); }
+@media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } .orders-new { margin-left: 0; } }
+
+/* Toast — the only signal when a stage action advances an order (no jarring auto tab-switch). */
+.orders-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 80; background: var(--brown-dark); color: white; font-size: 13px; font-weight: 600; padding: 10px 16px; border-radius: 10px; box-shadow: 0 4px 16px rgba(74,51,32,0.25); animation: orders-toast-in 160ms ease-out; }
+@keyframes orders-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* "+ New order" overlay — the existing create-order form, layered over the window. */
+.orders-overlay { position: fixed; inset: 0; z-index: 70; background: var(--cream); display: flex; flex-direction: column; overflow: hidden; }
+.orders-overlay-bar { display: flex; align-items: center; gap: 12px; flex-shrink: 0; background: var(--brown); color: white; padding: 12px 18px; padding-top: calc(12px + env(safe-area-inset-top)); }
+.orders-overlay-title { flex: 1; font-size: 15px; font-weight: 700; }
+.orders-overlay-close { background: rgba(255,255,255,0.15); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; font-size: 22px; line-height: 1; cursor: pointer; flex-shrink: 0; }
+.orders-overlay-close:active { background: rgba(255,255,255,0.25); }
+.orders-overlay-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }

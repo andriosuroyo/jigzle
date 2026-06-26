@@ -1,22 +1,8 @@
-import { createSupabaseServerClient } from '@jigzle/db/server';
-import PendingBoard from '@/components/PendingBoard';
-import { getPending } from '@/app/pending/actions';
-import { getPaymentMethods } from '@/app/settings/actions';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-// Server shell: load the Pending queue (orders with ≥1 uncut line) + SETTINGS payment methods (Mark
-// paid panel), render the board.
-export default async function PendingPage() {
-  const supabase = createSupabaseServerClient();
-  const [
-    {
-      data: { user },
-    },
-    orders,
-    paymentMethods,
-  ] = await Promise.all([supabase.auth.getUser(), getPending(), getPaymentMethods()]);
-
-  return <PendingBoard initialOrders={orders} paymentMethods={paymentMethods} userEmail={user?.email || ''} />;
+// JZ-001 — Pending is now the default tab of the Orders pipeline window. Keep this route as a redirect
+// for muscle memory + old deep links. The board itself lives in @/components/PendingBoard, mounted by
+// the Orders shell.
+export default function PendingRedirect() {
+  redirect('/orders');
 }

@@ -27,11 +27,20 @@ export default function OutboundBoard({
   boxPresets,
   initialOrderId,
   userEmail,
+  embedded = false,
+  onCountChange,
+  onAdvance,
+  reloadKey = 0,
 }: {
   initialQueue: ShipQueueRow[];
   boxPresets: BoxPreset[];
   initialOrderId?: string | null;
   userEmail: string;
+  // JZ-001: Orders pipeline window — see PendingBoard for the embedded/onCountChange/onAdvance contract.
+  embedded?: boolean;
+  onCountChange?: (n: number) => void;
+  onAdvance?: (salesId: string, toStage: string) => void;
+  reloadKey?: number;
 }) {
   const [queue, setQueue] = useState<ShipQueueRow[]>(initialQueue);
   const [selected, setSelected] = useState<string | null>(null);
@@ -125,6 +134,15 @@ export default function OutboundBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOrderId]);
 
+  async function reloadQueue() {
+    try { setQueue(await getShipQueue()); } catch { /* keep current on transient error */ }
+  }
+
+  // JZ-001: live count badge + external reload (see PendingBoard).
+  useEffect(() => { onCountChange?.(queue.length); }, [queue, onCountChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (reloadKey) reloadQueue(); }, [reloadKey]);
+
   // PR-B §6: Return to Fulfill — clear the courier on the whole order (all-or-none). The cut + address
   // stay, so the order drops back into the Fulfill To-send queue (NOT to Pending). No stock movement.
   async function doReturnToFulfill() {
@@ -136,6 +154,7 @@ export default function OutboundBoard({
     try {
       await returnToFulfill(detail.sales_id);
       if (reqIdRef.current !== myReq) return; // superseded by a newer selection — don't clobber it
+      onAdvance?.(detail.sales_id, 'Fulfill'); // JZ-001: pipeline toast (moves back a stage)
       setResult(null);
       setDetail(null);
       setSelected(null);
@@ -240,6 +259,8 @@ export default function OutboundBoard({
         setError('Those lines were already shipped — nothing to do.');
       } else {
         setResult({ ...res, units: unitsShipping, completed: willCompleteNow });
+        // JZ-001: a completed order leaves the pipeline into History; a partial ship stays in Outbound.
+        if (willCompleteNow) onAdvance?.(detail.sales_id, 'History');
       }
       // reload — remaining fulfilled-unshipped lines stay; if none, drop the order from the queue
       const myReq = ++reqIdRef.current;
@@ -264,10 +285,8 @@ export default function OutboundBoard({
     }
   }
 
-  return (
-    <div className="ops">
-      <AppHeader active="outbound" userEmail={userEmail} />
-
+  const body = (
+    <>
       <div className="fulfill-layout">
         {/* ── Queue ── */}
         <aside className="fq-pane">
@@ -418,6 +437,14 @@ export default function OutboundBoard({
           )}
         </main>
       </div>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="ops">
+      <AppHeader active="orders" userEmail={userEmail} />
+      {body}
     </div>
   );
 }

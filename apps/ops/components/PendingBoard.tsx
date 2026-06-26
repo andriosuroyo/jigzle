@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getPending, sendReadyItems, deletePendingOrder, markOrderPaid } from '@/app/pending/actions';
 import type { OrderDot, PendingOrder } from '@/app/pending/types';
@@ -23,10 +23,21 @@ export default function PendingBoard({
   initialOrders,
   paymentMethods,
   userEmail,
+  embedded = false,
+  onCountChange,
+  onAdvance,
+  reloadKey = 0,
 }: {
   initialOrders: PendingOrder[];
   paymentMethods: PaymentMethod[];
   userEmail: string;
+  // JZ-001: when mounted inside the Orders pipeline window, drop the page chrome (the shell owns the
+  // AppHeader + tab bar) and report list count / stage advances up to the shell. Optional → the
+  // standalone /pending deep-link still renders unchanged.
+  embedded?: boolean;
+  onCountChange?: (n: number) => void;
+  onAdvance?: (salesId: string, toStage: string) => void;
+  reloadKey?: number;
 }) {
   const [orders, setOrders] = useState<PendingOrder[]>(initialOrders);
   const [filter, setFilter] = useState<DotFilter>('all');
@@ -60,6 +71,12 @@ export default function PendingBoard({
     }
   }
 
+  // JZ-001: live count badge — report the queue size to the shell whenever it changes.
+  useEffect(() => { onCountChange?.(orders.length); }, [orders, onCountChange]);
+  // JZ-001: refetch when the shell bumps reloadKey (e.g. a new order was just created in the overlay).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (reloadKey) refresh(); }, [reloadKey]);
+
   function openOrder(o: PendingOrder) {
     setError(null);
     setSuccess(null);
@@ -78,6 +95,7 @@ export default function PendingBoard({
     try {
       await sendReadyItems(sel.sales_id, readyIds);
       setSuccess(`${sel.sales_id}: sent ${readyIds.length} ready item${readyIds.length === 1 ? '' : 's'} to Fulfill.`);
+      onAdvance?.(sel.sales_id, 'Fulfill'); // JZ-001: pipeline toast — order advanced a stage
       setSelId(null);
       await refresh();
     } catch (e) {
@@ -132,10 +150,8 @@ export default function PendingBoard({
     }
   }
 
-  return (
-    <div className="ops">
-      <AppHeader active="pending" userEmail={userEmail} />
-
+  const body = (
+    <>
       <div className="fulfill-layout">
         {/* ── Board ── */}
         <aside className="fq-pane">
@@ -246,6 +262,14 @@ export default function PendingBoard({
           )}
         </main>
       </div>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="ops">
+      <AppHeader active="orders" userEmail={userEmail} />
+      {body}
     </div>
   );
 }

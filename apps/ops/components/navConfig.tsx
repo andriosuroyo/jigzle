@@ -37,15 +37,6 @@ const iconOrders = svg(
   </>
 );
 
-// History — clock with a rewind arrow (the read-only all-orders log)
-const iconHistory = svg(
-  <>
-    <path d="M3 3v5h5" />
-    <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
-    <polyline points="12 7 12 12 15 14" />
-  </>
-);
-
 // Purchasing — receipt / document (the Purchase-Order / procurement board)
 const iconOrder = svg(
   <>
@@ -57,38 +48,12 @@ const iconOrder = svg(
   </>
 );
 
-// Sales — shopping cart
-const iconSales = svg(
-  <>
-    <circle cx="8" cy="21" r="1" />
-    <circle cx="19" cy="21" r="1" />
-    <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
-  </>
-);
-
-// Fulfill — check circle (commit / confirm)
-const iconFulfill = svg(
-  <>
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-    <polyline points="22 4 12 14.01 9 11.01" />
-  </>
-);
-
 // Inbound — tray arrow down (goods in)
 const iconInbound = svg(
   <>
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
     <polyline points="7 10 12 15 17 10" />
     <line x1="12" y1="15" x2="12" y2="3" />
-  </>
-);
-
-// Outbound — tray arrow up (goods out) — mirror of Inbound
-const iconOutbound = svg(
-  <>
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="17 8 12 3 7 8" />
-    <line x1="12" y1="3" x2="12" y2="15" />
   </>
 );
 
@@ -131,11 +96,9 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sales & Purchasing',
     items: [
-      { key: 'sales', href: '/sales/new', label: 'New', icon: iconSales, sub: 'Take a new order — customer, address, items, payment.' },
-      { key: 'pending', href: '/pending', label: 'Pending', icon: iconOrders, sub: 'Uncut orders waiting on stock — cut the ready items.' },
-      { key: 'fulfill', href: '/fulfill', label: 'Fulfill', icon: iconFulfill, sub: 'Confirm address + courier on cut orders, then send out.' },
-      { key: 'history', href: '/history', label: 'History', icon: iconHistory, sub: 'Every order, searchable & read-only; settle payments.' },
-      { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound, sub: 'Box, weigh, and ship addressed orders.' },
+      // JZ-001: the four sell-side stages (New / Pending / Fulfill / Outbound) + History collapse into a
+      // single Orders pipeline window. New is a button inside that window; History is its 4th tab.
+      { key: 'orders', href: '/orders', label: 'Orders', icon: iconOrders, sub: 'The sell-side pipeline — Pending → Fulfill → Outbound, plus History; + new orders.' },
       { key: 'purchasing', href: '/purchasing', label: 'Purchasing', icon: iconOrder, sub: 'Enter & advance purchase orders; group them into shipments.' },
     ],
   },

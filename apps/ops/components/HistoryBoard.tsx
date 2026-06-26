@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getHistory } from '@/app/history/actions';
 import { getOrderSummary, markOrderPaid } from '@/app/pending/actions';
@@ -21,10 +21,17 @@ export default function HistoryBoard({
   initialOrders,
   paymentMethods,
   userEmail,
+  embedded = false,
+  onCountChange,
+  reloadKey = 0,
 }: {
   initialOrders: HistoryRow[];
   paymentMethods: PaymentMethod[];
   userEmail: string;
+  // JZ-001: Orders pipeline window. History is a read-only log → no onAdvance, just count + reload.
+  embedded?: boolean;
+  onCountChange?: (n: number) => void;
+  reloadKey?: number;
 }) {
   const [orders, setOrders] = useState<HistoryRow[]>(initialOrders);
   const [query, setQuery] = useState('');
@@ -52,6 +59,11 @@ export default function HistoryBoard({
       setSearching(false);
     }
   }
+
+  // JZ-001: live count badge + external reload (re-runs the current search; see PendingBoard).
+  useEffect(() => { onCountChange?.(orders.length); }, [orders, onCountChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
 
   async function openOrder(row: HistoryRow) {
     setError(null);
@@ -105,10 +117,8 @@ export default function HistoryBoard({
     }
   }
 
-  return (
-    <div className="ops">
-      <AppHeader active="history" userEmail={userEmail} />
-
+  const body = (
+    <>
       <div className="fulfill-layout">
         {/* ── List ── */}
         <aside className="fq-pane">
@@ -225,6 +235,14 @@ export default function HistoryBoard({
           {selId && !loadingSummary && !summary && <div className="hint">Summary not available.</div>}
         </main>
       </div>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="ops">
+      <AppHeader active="orders" userEmail={userEmail} />
+      {body}
     </div>
   );
 }

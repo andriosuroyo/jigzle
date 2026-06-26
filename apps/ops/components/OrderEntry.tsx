@@ -45,7 +45,19 @@ function deriveReadiness(lines: Line[], subtotal: number, paid: number): string 
 // Thousands separators for the price / DP inputs (display only; the state stores digits). PR24 §4.
 const fmtThousands = (d: string) => d.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-export default function OrderEntry({ userEmail, paymentMethods }: { userEmail: string; paymentMethods: PaymentMethod[] }) {
+export default function OrderEntry({
+  userEmail,
+  paymentMethods,
+  embedded = false,
+  onSaved,
+}: {
+  userEmail: string;
+  paymentMethods: PaymentMethod[];
+  // JZ-001: when opened from the Orders window's "+ New order" overlay, drop the page chrome and let the
+  // shell know an order was saved (so it can toast + refresh the pipeline counts).
+  embedded?: boolean;
+  onSaved?: (salesId: string, routed: 'fulfill' | 'pending') => void;
+}) {
   // Panel 1 — customer
   const [customer, setCustomer] = useState<CustomerHit | null>(null);
   const [loyalty, setLoyalty] = useState<LoyaltyReadout | null>(null);
@@ -239,6 +251,7 @@ export default function OrderEntry({ userEmail, paymentMethods }: { userEmail: s
         payment: paid > 0 ? { amount_idr: paid, method: payMethod || null } : null,
       });
       setResult({ sales_id: res.sales_id, total: subtotal, routed: res.routed, pay: payStatus });
+      onSaved?.(res.sales_id, res.routed); // JZ-001: notify the Orders shell (toast + count refresh)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save order.');
     } finally {
@@ -259,30 +272,32 @@ export default function OrderEntry({ userEmail, paymentMethods }: { userEmail: s
   // ── success screen (SA-3: shows where the order went) ──
   if (result) {
     const routedLabel = result.routed === 'fulfill' ? 'Sent to Fulfill' : 'Waiting in Pending';
+    const successBody = (
+      <div className="success-wrap">
+        <div className="success-card">
+          <div className="success-check">✓</div>
+          <h2>Order saved</h2>
+          <div className="success-id">{result.sales_id}</div>
+          <div className="success-rows">
+            <div><span>Total</span><b>{fmtRp(result.total)}</b></div>
+            <div><span>Routed</span><b>{routedLabel}</b></div>
+            <div><span>Payment</span><b>{result.pay}</b></div>
+          </div>
+          <button className="btn-primary" onClick={resetAll}>New order</button>
+        </div>
+      </div>
+    );
+    if (embedded) return successBody;
     return (
       <div className="ops">
-        <AppHeader active="sales" userEmail={userEmail} />
-        <div className="success-wrap">
-          <div className="success-card">
-            <div className="success-check">✓</div>
-            <h2>Order saved</h2>
-            <div className="success-id">{result.sales_id}</div>
-            <div className="success-rows">
-              <div><span>Total</span><b>{fmtRp(result.total)}</b></div>
-              <div><span>Routed</span><b>{routedLabel}</b></div>
-              <div><span>Payment</span><b>{result.pay}</b></div>
-            </div>
-            <button className="btn-primary" onClick={resetAll}>New order</button>
-          </div>
-        </div>
+        <AppHeader active="orders" userEmail={userEmail} />
+        {successBody}
       </div>
     );
   }
 
-  return (
-    <div className="ops">
-      <AppHeader active="sales" userEmail={userEmail} />
-
+  const body = (
+    <>
       <div className="ops-layout">
         <main className="ops-main">
           {error && <div className="validation err">{error}</div>}
@@ -534,6 +549,14 @@ export default function OrderEntry({ userEmail, paymentMethods }: { userEmail: s
           </div>
         </aside>
       </div>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="ops">
+      <AppHeader active="orders" userEmail={userEmail} />
+      {body}
     </div>
   );
 }
