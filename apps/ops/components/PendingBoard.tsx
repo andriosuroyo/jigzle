@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getPending, sendReadyItems, deletePendingOrder, markOrderPaid } from '@/app/pending/actions';
 import type { OrderDot, PendingOrder } from '@/app/pending/types';
-import type { PaymentMethod } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -21,7 +20,6 @@ const fmtIDR = (n: number | null | undefined): string => 'Rp ' + (n ?? 0).toLoca
 
 export default function PendingBoard({
   initialOrders,
-  paymentMethods,
   userEmail,
   embedded = false,
   onCountChange,
@@ -29,7 +27,6 @@ export default function PendingBoard({
   reloadKey = 0,
 }: {
   initialOrders: PendingOrder[];
-  paymentMethods: PaymentMethod[];
   userEmail: string;
   // JZ-001: when mounted inside the Orders pipeline window, drop the page chrome (the shell owns the
   // AppHeader + tab bar) and report list count / stage advances up to the shell. Optional → the
@@ -44,8 +41,6 @@ export default function PendingBoard({
   const [loadingList, setLoadingList] = useState(false);
 
   const [selId, setSelId] = useState<string | null>(null);
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState(paymentMethods[0]?.label ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -90,8 +85,6 @@ export default function PendingBoard({
     setError(null);
     setSuccess(null);
     setSelId(o.sales_id);
-    setAmount(String(o.balance));
-    setMethod(paymentMethods[0]?.label ?? '');
   }
 
   // FP-6: cut the ready lines (available ≥ qty). Short lines stay in Pending; the cut lines move to Fulfill.
@@ -114,22 +107,18 @@ export default function PendingBoard({
     }
   }
 
+  // One-tap settle: pay off the whole remaining balance, method recorded as 'manual' (no amount/method
+  // entry — that detail isn't tracked here). Pending is the single gateway for settling payment.
   async function doMarkPaid() {
-    if (!sel) return;
-    const amt = Math.round(Number(amount));
-    if (!Number.isFinite(amt) || amt <= 0) {
-      setError('Enter a payment amount.');
-      return;
-    }
+    if (!sel || sel.balance <= 0) return;
     const myReq = ++reqRef.current;
     setBusy(true);
     setError(null);
     try {
-      const res = await markOrderPaid(sel.sales_id, amt, method || null);
+      const res = await markOrderPaid(sel.sales_id, sel.balance, 'manual');
       if (reqRef.current !== myReq) return;
-      setSuccess(`${sel.sales_id}: paid ${fmtIDR(res.paid)}, balance ${fmtIDR(res.balance)} (${res.payment_status}).`);
+      setSuccess(`${sel.sales_id}: marked paid (${fmtIDR(res.paid)}, ${res.payment_status}).`);
       await refresh();
-      setAmount(String(res.balance)); // keep the field defaulted to the (new) remaining balance
     } catch (e) {
       if (reqRef.current === myReq) setError(e instanceof Error ? e.message : 'Mark paid failed.');
     } finally {
@@ -232,9 +221,8 @@ export default function PendingBoard({
                 </ul>
               </section>
 
-              {/* Payment — totals always shown (balance right-aligned, green when clear); amount + method
-                  side-by-side, only when there's a balance. Default amount = balance (set on open / after
-                  a payment). */}
+              {/* Payment — totals only; balance right-aligned, green when clear. Settling is the single
+                  "Mark as paid" button below (pays the full balance, method 'manual'). */}
               <section className="fd-section">
                 <div className="ord-pay-grid">
                   <div><span className="ord-pay-k">Total</span><span className="ord-pay-v">{fmtIDR(sel.sales_total_idr)}</span></div>
@@ -244,31 +232,13 @@ export default function PendingBoard({
                     <span className={`ord-pay-v ord-pay-bal ${sel.balance > 0 ? 'bal-due' : 'bal-clear'}`}>{fmtIDR(sel.balance)}</span>
                   </div>
                 </div>
-                {sel.balance > 0 && (
-                  <div className="po-inline" style={{ marginTop: 12 }}>
-                    <div className="po-field">
-                      <label>Amount (full IDR)</label>
-                      <input type="number" inputMode="numeric" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />
-                    </div>
-                    <div className="po-field">
-                      <label>Method</label>
-                      {paymentMethods.length === 0 ? (
-                        <div className="hint">No payment methods — add them in Settings.</div>
-                      ) : (
-                        <select value={method} onChange={(e) => setMethod(e.target.value)}>
-                          {paymentMethods.map((m) => <option key={m.id} value={m.label}>{m.label}</option>)}
-                        </select>
-                      )}
-                    </div>
-                  </div>
-                )}
               </section>
 
-              {/* Actions — Update payment + Send ready items, left-aligned at the bottom */}
+              {/* Actions — Mark as paid + Send ready items, left-aligned at the bottom */}
               <div className="fd-commit">
                 <div className="fd-commit-actions">
                   {sel.balance > 0 && (
-                    <button className="btn-secondary" onClick={doMarkPaid} disabled={busy}>{busy ? 'Saving…' : 'Update payment'}</button>
+                    <button className="btn-secondary" onClick={doMarkPaid} disabled={busy}>{busy ? 'Saving…' : 'Mark as paid'}</button>
                   )}
                   <button className="btn-primary" onClick={doSendReady} disabled={busy || sel.ready_count === 0}>
                     {busy ? 'Working…' : `Send ready items${sel.ready_count ? ` (${sel.ready_count})` : ''}`}
