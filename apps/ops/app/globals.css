@@ -202,6 +202,16 @@ input, textarea, select, button { font-family: inherit; }
 .box-real { width: 90px; } .box-dim { width: 52px; }
 .box-line input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
 .box-preview { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
+
+/* Outbound item verify — count + "manual check" text button (replaces the checkbox), right-aligned. */
+.ob-verify { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.ob-manual-btn { background: none; border: none; color: var(--brown); font-size: 11px; font-weight: 600; cursor: pointer; padding: 0; text-decoration: underline; white-space: nowrap; }
+
+/* Outbound editable box rows — History-style (numbered icon + two lines + chargeable on the right). */
+.box-edit-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.box-edit-line input { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+.box-add { margin-top: 8px; display: inline-block; font-size: 13px; }
+.box-remove { background: none; border: none; color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; flex-shrink: 0; align-self: center; }
 .box-preview label { display: flex; align-items: center; gap: 5px; }
 
 .fd-commit { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--line); flex-wrap: wrap; }
@@ -257,12 +267,13 @@ input, textarea, select, button { font-family: inherit; }
 .li-code { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--brown); }
 .li-name { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .li-avail { font-size: 11px; font-weight: 600; color: var(--green); }
+.li-avail.li-avail-zero { color: var(--muted); } /* no stock → not green */
 .li-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
 .li-qty { font-weight: 700; font-size: 13px; color: var(--brown); }
 .li-total { font-weight: 700; font-size: 13px; }
 /* Remove is a small text button under the price (aligned with "available"), keeping qty/price/remove
    right-aligned so the item name gets the width. */
-.li-remove-text { background: none; border: none; color: var(--red); font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 0; }
+.li-remove-text { background: none; border: none; color: var(--red); font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 0; text-decoration: underline; }
 
 @media (max-width: 760px) {
   /* 44px tap targets on the primary order-entry controls (peripheral ones handled elsewhere) */

@@ -494,7 +494,7 @@ export default function OrderEntry({
                       <div className="li-main">
                         <span className="li-code">{l.item_code}</span>
                         <span className="li-name">{l.name}</span>
-                        <span className="li-avail">available {l.available}</span>
+                        <span className={`li-avail ${l.available > 0 ? '' : 'li-avail-zero'}`}>available {l.available}</span>
                       </div>
                       <div className="li-right">
                         <span className="li-qty">{l.qty}×</span>
@@ -542,7 +542,6 @@ export default function OrderEntry({
           <div className="rail-card">
             <div className="rail-title">Order summary</div>
             <div className="rail-row"><span>Customer</span><b>{customer?.name || '—'}</b></div>
-            <div className="rail-row"><span>Tier</span><b>{customer?.tier || '—'}</b></div>
             <div className="rail-sep" />
             <div className="rail-row"><span>Subtotal</span><b>{fmtRp(subtotal)}</b></div>
             <div className="rail-row"><span>Paid</span><b>{fmtRp(paid)}</b></div>

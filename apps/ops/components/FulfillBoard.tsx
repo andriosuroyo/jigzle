@@ -65,7 +65,7 @@ export default function FulfillBoard({
     if (d) {
       setAddressId(d.default_address_id ?? d.addresses[0]?.address_id ?? null);
       setCourierId(courierServices[0]?.id ?? null);
-      setTracking('');
+      setTracking(d.courier_tracking ?? ''); // re-prefill tracking returned from Outbound
     }
   }
 

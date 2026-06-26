@@ -42,6 +42,7 @@ export interface FulfillDetail {
   customer_phone: string | null;
   default_address_id: number | null; // the order's current address_id (null = SA-1 deferred)
   needs_address: boolean;            // address_id is null → must be set before sending to Outbound
+  courier_tracking: string | null;   // tracking carried back from a "Return to Fulfill" (re-prefilled)
   lines: FulfillCutLine[];           // the cut, courier-null, unshipped lines
   addresses: CustomerAddress[];
 }
