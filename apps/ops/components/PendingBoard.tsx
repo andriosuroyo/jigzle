@@ -52,6 +52,15 @@ export default function PendingBoard({
   const reqRef = useRef(0);
 
   const visible = useMemo(() => (filter === 'all' ? orders : orders.filter((o) => o.dot === filter)), [orders, filter]);
+
+  // Per-filter counts for the readiness tabs (red+yellow+green sum to the All total — every order has
+  // exactly one dot).
+  const dotCounts = useMemo(() => {
+    const c: Record<OrderDot, number> = { red: 0, yellow: 0, green: 0 };
+    for (const o of orders) c[o.dot]++;
+    return c;
+  }, [orders]);
+  const filterCount = (k: DotFilter) => (k === 'all' ? orders.length : dotCounts[k]);
   const sel = useMemo(() => orders.find((o) => o.sales_id === selId) ?? null, [orders, selId]);
 
   const imgCodes = useMemo(
@@ -155,10 +164,19 @@ export default function PendingBoard({
       <div className="fulfill-layout">
         {/* ── Board ── */}
         <aside className="fq-pane">
-          <div className="inv-states" style={{ padding: '8px 8px 0', marginTop: 0 }}>
+          {/* Readiness filter — underline tabs at the top of the queue, each with a live count badge. */}
+          <div className="fq-filters" role="tablist" aria-label="Filter by stock readiness">
             {FILTERS.map((f) => (
-              <button key={f.key} className={`inv-state ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)} disabled={loadingList}>
+              <button
+                key={f.key}
+                role="tab"
+                aria-selected={filter === f.key}
+                className={`fq-filter ${filter === f.key ? 'active' : ''}`}
+                onClick={() => setFilter(f.key)}
+                disabled={loadingList}
+              >
                 {f.label}
+                <span className="fq-filter-count">{filterCount(f.key)}</span>
               </button>
             ))}
           </div>

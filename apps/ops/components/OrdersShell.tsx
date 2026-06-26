@@ -106,7 +106,7 @@ export default function OrdersShell({
             </button>
           ))}
         </nav>
-        <button className="orders-new" onClick={() => setShowNew(true)}>+ New order</button>
+        <button className="orders-new" onClick={() => setShowNew(true)} aria-label="New order">+ New</button>
       </div>
 
       {toast && (
