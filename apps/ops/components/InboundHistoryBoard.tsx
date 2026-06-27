@@ -117,8 +117,7 @@ export default function InboundHistoryBoard({
             <div className="fd-head">
               <div className="fd-title">{sel.ship_id}</div>
               <div className="fd-sub">
-                {sel.tracking ? sel.tracking : sel.is_adhoc ? 'unmarked' : 'no tracking'}
-                {sel.receive_date ? ` · received ${fmtDate(sel.receive_date)}` : ''}
+                {sel.tracking ? `${sel.tracking} · ` : ''}received {fmtDate(sel.receive_date)}
               </div>
             </div>
 

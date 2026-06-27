@@ -632,7 +632,6 @@ export default function InboundBoard({
                     onChange={(e) => setAdhocShipId(e.target.value)}
                     placeholder="📦YYMMXXX or free text"
                   />
-                  <div className="hint">Generated 📦YYMMXXX — override with free text if it belongs to a real shipment.</div>
                 </section>
               )}
 
