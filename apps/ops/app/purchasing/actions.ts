@@ -374,6 +374,30 @@ export async function createPlannedItem(input: PlannedItemInput): Promise<{ po_i
   return { po_id: (data as { po_id: number }).po_id };
 }
 
+// ── Buy a preorder (decision #2): create a Processing PO linked to the customer who ordered it, so it
+// enters To forwarder and drops off the preorder list (covered by an open PO for that SKU + customer). ──
+export async function buyPreorder(input: { item_code: string; qty: number; customer_id: number | null }): Promise<{ po_id: number }> {
+  const supabase = createSupabaseServerClient();
+  const item_code = input.item_code?.trim();
+  if (!item_code) throw new Error('buyPreorder: an item code is required');
+  const qty = Number(input.qty);
+  const today = todayJakarta();
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .insert({
+      item_code,
+      qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+      status: 'Processing',
+      status_since: today,
+      input_date: today,
+      customer_id: input.customer_id ?? null,
+    })
+    .select('po_id')
+    .single();
+  if (error) throw new Error(`buyPreorder: ${error.message}`);
+  return { po_id: (data as { po_id: number }).po_id };
+}
+
 // ── mark / unmark a PO sold out. soldOut=true → status 'Sold out' (auto-date + optional reason);
 // false → back to 'Planned' (clears the date/note). ──
 export async function setSoldOut(poId: number, soldOut: boolean, note?: string | null): Promise<void> {
@@ -605,15 +629,32 @@ export async function getPreorders(): Promise<PreorderRow[]> {
     for (const c of (data ?? []) as { customer_id: number; name: string | null }[]) customerById.set(c.customer_id, c.name);
   }
 
+  // a preorder drops once an OPEN PO for the same SKU + customer covers it (decision #2). Key by
+  // `item_code|customer_id` (customer-less POs don't cover a customer's preorder).
+  const coveredKeys = new Set<string>();
+  {
+    const { data } = await supabase
+      .from('purchase_orders')
+      .select('item_code,customer_id,status')
+      .in('item_code', codes)
+      .not('customer_id', 'is', null)
+      .or('status.is.null,status.neq.Received');
+    for (const p of (data ?? []) as { item_code: string | null; customer_id: number | null }[]) {
+      if (p.item_code && p.customer_id != null) coveredKeys.add(`${p.item_code}|${p.customer_id}`);
+    }
+  }
+
   const out: PreorderRow[] = [];
   for (const r of rows) {
     const order = orderById.get(r.sales_id);
     if (!order || order.status === 'Cancelled' || order.status === 'Complete') continue;
     const available = availByCode.get(r.item_code) ?? 0;
     if (available > 0) continue; // in stock → not a preorder
+    if (order.customer_id != null && coveredKeys.has(`${r.item_code}|${order.customer_id}`)) continue; // already on order
     out.push({
       line_id: r.line_id,
       sales_id: r.sales_id,
+      customer_id: order.customer_id,
       customer_name: order.customer_id != null ? customerById.get(order.customer_id) ?? null : null,
       order_date: order.order_date,
       item_code: r.item_code,

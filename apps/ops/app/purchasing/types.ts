@@ -71,6 +71,7 @@ export interface OpenShipmentRow {
 export interface PreorderRow {
   line_id: string;
   sales_id: string;
+  customer_id: number | null;
   customer_name: string | null;
   order_date: string | null;
   item_code: string | null;
