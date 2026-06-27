@@ -22,3 +22,7 @@ next-env.d.ts
 scripts/**/*.csv
 scripts/**/*.xlsx
 scripts/**/*.tsv
+
+# Python
+__pycache__/
+*.py[cod]
