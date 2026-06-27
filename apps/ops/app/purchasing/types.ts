@@ -65,3 +65,41 @@ export interface OpenShipmentRow {
   origin_country: string | null;
   ship_date: string | null;
 }
+
+// ── To buy → Preorder list (read-only, derived from Sales): an unfulfilled order line whose SKU has
+// ≤0 available — i.e. a customer ordered something we don't have stock for and must buy. ──
+export interface PreorderRow {
+  line_id: string;
+  sales_id: string;
+  customer_name: string | null;
+  order_date: string | null;
+  item_code: string | null;
+  name: string;
+  qty: number;
+  available: number; // live stock_check.available (≤ 0 for a preorder)
+}
+
+// ── Purchasing History → Per item (read-only): a Received PO line — keeps per-item cost / shipID. ──
+export interface ReceivedItemRow {
+  po_id: number;
+  item_code: string | null;
+  name: string;
+  qty: number;
+  item_cost: number | null;
+  ship_id: string | null;
+  supplier_name: string | null;
+  receive_date: string | null;
+  marketplace_order_id: string | null;
+}
+
+// ── Purchasing History → Per shipment (read-only): one completed shipment, so shipment-level data
+// (receive date, tracking) isn't duplicated across its item rows. ──
+export interface ShipmentHistoryRow {
+  ship_id: string;
+  forwarder_prefix: string | null;
+  origin_country: string | null;
+  ship_date: string | null;
+  received_date: string | null;
+  tracking: string | null;
+  item_count: number; // distinct Received SKUs on this ship_id
+}
