@@ -39,18 +39,28 @@ export interface InboundLabel {
   sort_order: number;
 }
 
+// 0035: the reusable shipment-note pick-list (gift wrap, free gift, …). Offered as a dropdown in the
+// Pending/Fulfill note editor alongside free text. Same shape as PaymentMethod (label is the note text).
+export interface CommonNote {
+  id: number;
+  label: string;
+  is_active: boolean;
+  sort_order: number;
+}
+
 // what getSettings() returns — one ordered, active-only list per kind.
 export interface SettingsData {
   paymentMethods: PaymentMethod[];
   courierServices: CourierService[];
   boxPresets: BoxPreset[];
   inboundLabels: InboundLabel[];
+  commonNotes: CommonNote[];
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).
-export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels';
+export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels' | 'common_note';
 
-export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel;
+export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel | CommonNote;
 
 // permissive payload shapes for add/update — the actions whitelist columns per kind, so a stray key
 // can never reach an identity/system column (id / user_id / sort_order / created_at).
