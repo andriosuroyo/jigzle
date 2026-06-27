@@ -4,11 +4,13 @@
 // the sales/fulfill actions: the SSR supabase client (anon key + the signed-in user's session),
 // so RLS (is_allowed_user()) gates every read and write. The service-role key is never used here.
 
+import ExcelJS from 'exceljs';
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { ShipLine, ShipQueueRow } from '@jigzle/db/types';
 import type { ShipDetail, ShipInput, ShipResult, ShippedOrderRow } from './types';
 
 const QUEUE_LIMIT = 100;
+const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 function one<T>(v: T | T[] | null | undefined): T | null {
   if (v == null) return null;
@@ -284,4 +286,116 @@ export async function returnToFulfill(salesId: string): Promise<void> {
     p_courier_label: null,
   });
   if (error) throw new Error(`returnToFulfill: ${error.message}`);
+}
+
+// ── Monthly shipment report (xlsx) ──────────────────────────────────────────────
+// One row per order with ≥1 line shipped in [month, nextMonth). Built server-side with ExcelJS and
+// returned as base64 for the client to download. For reconciling against the courier (e.g. TIKI).
+type MonthShipmentRow = {
+  ship_date: string;
+  order_id: string;
+  customer: string;
+  address: string;
+  courier: string;
+  tracking: string;
+  items: number;
+  skus: string;
+  chargeable_g: number | null;
+};
+
+async function fetchMonthlyShipments(year: number, month0: number): Promise<MonthShipmentRow[]> {
+  const supabase = createSupabaseServerClient();
+  const start = `${year}-${pad2(month0 + 1)}-01`;
+  const endY = month0 === 11 ? year + 1 : year;
+  const endM = month0 === 11 ? 1 : month0 + 2;
+  const end = `${endY}-${pad2(endM)}-01`;
+
+  // !inner + embedded shipped_at range → only orders with a line shipped in the month, and only those lines
+  const { data } = await supabase
+    .from('orders')
+    .select('sales_id,order_date,address_id,customers(name),order_lines!inner(item_code,courier_label,courier_tracking,shipped_at,address_id)')
+    .gte('order_lines.shipped_at', start)
+    .lt('order_lines.shipped_at', end)
+    .eq('order_lines.is_cancelled', false)
+    .order('order_date', { ascending: true });
+
+  const orders = (data ?? []) as unknown as {
+    sales_id: string;
+    address_id: number | null;
+    customers: { name: string | null } | { name: string | null }[] | null;
+    order_lines: { item_code: string | null; courier_label: string | null; courier_tracking: string | null; shipped_at: string | null; address_id: number | null }[];
+  }[];
+  if (!orders.length) return [];
+
+  // resolve shipped-to addresses (verbatim raw_address) for all referenced address_ids
+  const addrIds = new Set<number>();
+  for (const o of orders) {
+    const id = (o.order_lines.find((l) => l.address_id != null)?.address_id ?? o.address_id) ?? null;
+    if (id != null) addrIds.add(id);
+  }
+  const addrMap = new Map<number, string>();
+  if (addrIds.size) {
+    const { data: addrs } = await supabase.from('customer_addresses').select('address_id,raw_address').in('address_id', [...addrIds]);
+    for (const a of (addrs ?? []) as { address_id: number; raw_address: string | null }[]) {
+      if (a.raw_address) addrMap.set(a.address_id, a.raw_address);
+    }
+  }
+
+  // chargeable weight per order: sales_id → send_ids (outbound_shipments) → boxes
+  const salesIds = orders.map((o) => o.sales_id);
+  const sendToSales = new Map<string, string>();
+  const { data: shp } = await supabase.from('outbound_shipments').select('sales_id,send_id').in('sales_id', salesIds).not('send_id', 'is', null);
+  for (const s of (shp ?? []) as { sales_id: string; send_id: string | null }[]) {
+    if (s.send_id) sendToSales.set(s.send_id, s.sales_id);
+  }
+  const chargeBySales = new Map<string, number>();
+  const sendIds = [...sendToSales.keys()];
+  if (sendIds.length) {
+    const { data: bx } = await supabase.from('boxes').select('send_id,chargeable_weight').in('send_id', sendIds);
+    for (const b of (bx ?? []) as { send_id: string; chargeable_weight: number | null }[]) {
+      const sid = sendToSales.get(b.send_id);
+      if (sid && b.chargeable_weight != null) chargeBySales.set(sid, (chargeBySales.get(sid) ?? 0) + b.chargeable_weight);
+    }
+  }
+
+  return orders.map((o) => {
+    const lines = o.order_lines;
+    const cust = Array.isArray(o.customers) ? o.customers[0] : o.customers;
+    const addrId = (lines.find((l) => l.address_id != null)?.address_id ?? o.address_id) ?? null;
+    const shippedAts = lines.map((l) => l.shipped_at).filter((s): s is string => !!s).sort();
+    const skus = [...new Set(lines.map((l) => l.item_code).filter((c): c is string => !!c))];
+    return {
+      ship_date: shippedAts.length ? shippedAts[shippedAts.length - 1].slice(0, 10) : '',
+      order_id: o.sales_id,
+      customer: cust?.name ?? '',
+      address: (addrId != null ? addrMap.get(addrId) : '') ?? '',
+      courier: lines.find((l) => l.courier_label)?.courier_label ?? '',
+      tracking: lines.find((l) => l.courier_tracking)?.courier_tracking ?? '',
+      items: lines.length,
+      skus: skus.join(', '),
+      chargeable_g: chargeBySales.get(o.sales_id) ?? null,
+    };
+  });
+}
+
+export async function getMonthlyShipmentsXlsx(year: number, month0: number): Promise<{ filename: string; base64: string; count: number }> {
+  const rows = await fetchMonthlyShipments(year, month0);
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Shipments');
+  ws.columns = [
+    { header: 'Ship date', key: 'ship_date', width: 12 },
+    { header: 'Order ID', key: 'order_id', width: 24 },
+    { header: 'Customer', key: 'customer', width: 24 },
+    { header: 'Address', key: 'address', width: 50 },
+    { header: 'Courier', key: 'courier', width: 14 },
+    { header: 'Tracking', key: 'tracking', width: 18 },
+    { header: 'Items', key: 'items', width: 8 },
+    { header: 'SKUs', key: 'skus', width: 30 },
+    { header: 'Chargeable (g)', key: 'chargeable_g', width: 14 },
+  ];
+  ws.getRow(1).font = { bold: true };
+  rows.forEach((r) => ws.addRow(r));
+  const buf = await wb.xlsx.writeBuffer();
+  const base64 = Buffer.from(buf as ArrayBuffer).toString('base64');
+  return { filename: `outbound-shipments-${year}-${pad2(month0 + 1)}.xlsx`, base64, count: rows.length };
 }
