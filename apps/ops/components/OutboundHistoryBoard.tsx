@@ -1,15 +1,14 @@
 'use client';
 
-// Outbound → History tab: orders this team has shipped. Read-only, searchable by name / SKU / tracking.
-// List comes from getShippedHistory; the detail reuses getOrderSummary (shipped lines + boxes), styled
-// like the Sales History detail but with no note / no payment write.
+// Outbound → History tab: the full shipped log, read from outbound_shipments (canonical) via
+// getOutboundHistory. Read-only, searchable by name / SKU / courier. Each shipment row carries its own
+// detail (CSV/legacy rows have no sales_id to re-fetch by), so the detail pane renders straight from the
+// selected row. Past shipments with no box dims are shown as the assumed Custom 1×1×1 box with the real
+// weight filled in; ✅ marks barcode-scanned items, ○ manually checked ones.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { volWeight } from '@jigzle/lib';
-import { getShippedHistory } from '@/app/outbound/actions';
-import { getOrderSummary } from '@/app/pending/actions';
-import type { ShippedOrderRow } from '@/app/outbound/types';
-import type { OrderSummary, BoxSummary } from '@/app/pending/types';
+import { getOutboundHistory } from '@/app/outbound/actions';
+import type { ShipmentHistoryRow, ShipmentHistoryBox } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -23,38 +22,27 @@ export default function OutboundHistoryBoard({
   onCountChange,
   reloadKey = 0,
 }: {
-  initialOrders: ShippedOrderRow[];
+  initialOrders: ShipmentHistoryRow[];
   boxPresets: BoxPreset[];
   onCountChange?: (n: number) => void;
   reloadKey?: number;
 }) {
-  const [orders, setOrders] = useState<ShippedOrderRow[]>(initialOrders);
+  const [orders, setOrders] = useState<ShipmentHistoryRow[]>(initialOrders);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const [selKey, setSelKey] = useState<string | null>(null);
+  const reqRef = useRef(0);
 
-  const [selRow, setSelRow] = useState<ShippedOrderRow | null>(null);
-  const [summary, setSummary] = useState<OrderSummary | null>(null);
-  const [loadingSummary, setLoadingSummary] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const sumReqRef = useRef(0);
-  const selId = selRow?.sales_id ?? null;
+  const sel = useMemo(() => orders.find((o) => o.key === selKey) ?? null, [orders, selKey]);
 
   const imgCodes = useMemo(
-    () => (summary?.lines ?? []).map((l) => l.item_code).filter((c): c is string => !!c),
-    [summary]
+    () => (sel?.items ?? []).map((i) => i.item_code).filter((c): c is string => !!c),
+    [sel]
   );
   const imgMap = useSkuImages(imgCodes);
 
-  // order-level courier + tracking (courier_label already falls back to legacy `courier` server-side)
-  const courierLine = useMemo(() => {
-    if (!summary) return null;
-    const label = summary.lines.find((l) => l.courier_label)?.courier_label ?? null;
-    const track = summary.lines.find((l) => l.courier_tracking)?.courier_tracking ?? null;
-    const parts = [label, track ? `#${track}` : null].filter(Boolean);
-    return parts.length ? parts.join(' · ') : null;
-  }, [summary]);
-
-  function boxType(b: BoxSummary): string {
+  // a box's type label: match real dims back to a SETTINGS preset, else "Custom".
+  function boxType(b: ShipmentHistoryBox): string {
     if (b.dim_p == null || b.dim_l == null || b.dim_t == null) return 'Custom';
     const m = boxPresets.find((p) => p.dim_p === b.dim_p && p.dim_l === b.dim_l && p.dim_t === b.dim_t);
     return m ? m.code : 'Custom';
@@ -62,12 +50,14 @@ export default function OutboundHistoryBoard({
 
   async function runSearch() {
     setSearching(true);
+    const myReq = ++reqRef.current;
     try {
-      setOrders(await getShippedHistory(query.trim()));
+      const rows = await getOutboundHistory(query.trim());
+      if (reqRef.current === myReq) setOrders(rows);
     } catch {
       /* keep current on transient error */
     } finally {
-      setSearching(false);
+      if (reqRef.current === myReq) setSearching(false);
     }
   }
 
@@ -75,21 +65,7 @@ export default function OutboundHistoryBoard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
 
-  async function openOrder(row: ShippedOrderRow) {
-    setError(null);
-    setSelRow(row);
-    setSummary(null);
-    const myReq = ++sumReqRef.current;
-    setLoadingSummary(true);
-    try {
-      const s = await getOrderSummary(row.sales_id);
-      if (sumReqRef.current === myReq) setSummary(s);
-    } catch (e) {
-      if (sumReqRef.current === myReq) setError(e instanceof Error ? e.message : 'Failed to load summary.');
-    } finally {
-      if (sumReqRef.current === myReq) setLoadingSummary(false);
-    }
-  }
+  const courierLine = sel?.courier || null;
 
   return (
     <div className="fulfill-layout">
@@ -99,7 +75,7 @@ export default function OutboundHistoryBoard({
           <input
             type="text"
             inputMode="search"
-            placeholder="Search name, SKU, or tracking…"
+            placeholder="Search name, SKU, or courier…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
@@ -109,17 +85,16 @@ export default function OutboundHistoryBoard({
         {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No shipped orders.'}</div>}
         <ul className="fq-list">
           {orders.map((o) => (
-            <li key={o.sales_id}>
-              <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
+            <li key={o.key}>
+              <button className={`fq-row ${selKey === o.key ? 'active' : ''}`} onClick={() => setSelKey(o.key)}>
                 <div className="fq-row-top">
-                  <span className="fq-headline">{o.customer_name || '—'}</span>
-                  <span className="fq-id-sub">{o.sales_id}</span>
+                  <span className="fq-headline">{o.customer || '—'}</span>
+                  <span className="fq-id-sub">{fmtDate(o.ship_date)}</span>
                 </div>
                 <div className="fq-row-bot">
-                  {/* SKU codes (not the often-blank tracking) — like the Fulfill rows, helps SKU search. */}
+                  {/* SKU codes (CSV rows carry no tracking) — like the Fulfill rows, helps SKU search. */}
                   <span className="ff-items-skus">{o.item_count} {o.item_count === 1 ? 'item' : 'items'}{o.sku_codes.length ? ` (${o.sku_codes.join(', ')})` : ''}</span>
-                  {o.courier_label && <span className="badge ready">{o.courier_label}</span>}
-                  <span className="ord-date">{fmtDate(o.ship_date)}</span>
+                  {o.courier && <span className="badge ready">{o.courier}</span>}
                 </div>
               </button>
             </li>
@@ -129,20 +104,18 @@ export default function OutboundHistoryBoard({
 
       {/* ── Detail (read-only) ── */}
       <main className="fd-pane">
-        {!selId && <div className="fd-empty">Pick an order to see what shipped.</div>}
-        {error && <div className="validation err">{error}</div>}
-        {selId && loadingSummary && <div className="hint">Loading…</div>}
-        {selId && !loadingSummary && summary && (
+        {!sel && <div className="fd-empty">Pick an order to see what shipped.</div>}
+        {sel && (
           <>
             <div className="fd-head">
-              <div className="fd-title fd-title-plain">{summary.customer_name || '—'}</div>
-              <div className="fd-sub">{summary.sales_id}{selRow?.ship_date ? ` · shipped ${fmtDate(selRow.ship_date)}` : ''}</div>
+              <div className="fd-title fd-title-plain">{sel.customer || '—'}</div>
+              <div className="fd-sub">shipped {fmtDate(sel.ship_date)}</div>
             </div>
 
-            {summary.ship_address && (
+            {sel.address && (
               <section className="fd-section">
                 <div className="fd-section-head">Shipped to</div>
-                <pre className="ob-addr-block">{summary.ship_address}</pre>
+                <pre className="ob-addr-block">{sel.address}</pre>
               </section>
             )}
 
@@ -153,54 +126,68 @@ export default function OutboundHistoryBoard({
               </section>
             )}
 
+            {sel.note && (
+              <section className="fd-section">
+                <div className="fd-section-head">Notes</div>
+                <pre className="ob-addr-block">{sel.note}</pre>
+              </section>
+            )}
+
             <section className="fd-section">
               <div className="fd-section-head">Shipped items</div>
               <ul className="ff-lines">
-                {summary.lines.map((l) => (
-                  <li key={l.line_id} className="ff-line pend-line">
+                {sel.items.map((l, i) => (
+                  <li key={i} className="ff-line pend-line">
+                    {/* ✅ scanned · ○ manually checked */}
+                    {l.verify_method === 'scan'
+                      ? <span className="vmark scan" title="Barcode scanned">✅</span>
+                      : l.verify_method === 'manual'
+                        ? <span className="vmark manual" title="Manually checked">○</span>
+                        : <span className="vmark" aria-hidden="true" />}
                     <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
                     <div className="pend-line-main">
                       <span className="ff-code">{l.item_code || '—'}</span>
                       <span className="ff-name">{l.name}</span>
                     </div>
                     <span className="ff-qty">×{l.qty}</span>
-                    {(l.courier_label || l.courier_tracking) && (
-                      <span className="ord-sum-courier">{l.courier_label || '—'}{l.courier_tracking ? ` · #${l.courier_tracking}` : ''}</span>
-                    )}
                   </li>
                 ))}
-                {summary.lines.length === 0 && <li className="hint">No shipped lines.</li>}
+                {sel.items.length === 0 && <li className="hint">No shipped items.</li>}
               </ul>
 
-              {summary.boxes.length > 0 && (
-                <>
-                  <div className="fd-section-head" style={{ marginTop: 12 }}>Boxes</div>
-                  <ul className="ff-lines">
-                    {summary.boxes.map((b, i) => {
-                      const dims = b.dim_p != null && b.dim_l != null && b.dim_t != null
-                        ? `${b.dim_p} x ${b.dim_l} x ${b.dim_t} cm`
-                        : '— cm';
-                      const vol = b.dim_p != null && b.dim_l != null && b.dim_t != null
-                        ? Math.round(volWeight(b.dim_p, b.dim_l, b.dim_t))
-                        : null;
-                      return (
-                        <li key={b.box_id} className="box-sum">
-                          <span className="box-idx" aria-label={`Box ${i + 1}`}>{i + 1}</span>
-                          <div className="box-sum-main">
-                            <span className="box-sum-l1">{boxType(b)} · {dims}</span>
-                            <span className="box-sum-l2">vol: {vol != null ? `${vol} g` : '—'} · real: {b.real_weight != null ? `${b.real_weight} g` : '—'}</span>
-                          </div>
-                          <span className="ff-qty">{b.chargeable_weight != null ? `${b.chargeable_weight} g` : '—'}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </>
-              )}
+              <div className="fd-section-head" style={{ marginTop: 12 }}>Boxes</div>
+              <ul className="ff-lines">
+                {sel.boxes.length > 0 ? (
+                  sel.boxes.map((b, i) => {
+                    const dims = b.dim_p != null && b.dim_l != null && b.dim_t != null
+                      ? `${b.dim_p} x ${b.dim_l} x ${b.dim_t} cm`
+                      : '— cm';
+                    return (
+                      <li key={i} className="box-sum">
+                        <span className="box-idx" aria-label={`Box ${i + 1}`}>{i + 1}</span>
+                        <div className="box-sum-main">
+                          <span className="box-sum-l1">{boxType(b)} · {dims}</span>
+                          <span className="box-sum-l2">real: {b.real_weight != null ? `${b.real_weight} g` : '—'}</span>
+                        </div>
+                        <span className="ff-qty">{b.chargeable_weight != null ? `${b.chargeable_weight} g` : '—'}</span>
+                      </li>
+                    );
+                  })
+                ) : (
+                  // legacy/CSV shipment: no box dims captured → assume a Custom 1×1×1 box, real weight filled in.
+                  <li className="box-sum">
+                    <span className="box-idx" aria-label="Box 1">1</span>
+                    <div className="box-sum-main">
+                      <span className="box-sum-l1">Custom · 1 x 1 x 1 cm</span>
+                      <span className="box-sum-l2">real: {sel.real_weight != null ? `${sel.real_weight} g` : '—'} · assumed box</span>
+                    </div>
+                    <span className="ff-qty">{sel.chargeable_g != null ? `${sel.chargeable_g} g` : '—'}</span>
+                  </li>
+                )}
+              </ul>
             </section>
           </>
         )}
-        {selId && !loadingSummary && !summary && <div className="hint">Summary not available.</div>}
       </main>
     </div>
   );

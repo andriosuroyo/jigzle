@@ -10,7 +10,7 @@ import OutboundBoard from '@/components/OutboundBoard';
 import OutboundHistoryBoard from '@/components/OutboundHistoryBoard';
 import { getMonthlyShipmentsXlsx, getShipmentMonthRange } from '@/app/outbound/actions';
 import type { ShipQueueRow } from '@jigzle/db/types';
-import type { ShippedOrderRow } from '@/app/outbound/types';
+import type { ShipmentHistoryRow } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 
 type OutboundTab = 'ready' | 'history';
@@ -26,7 +26,7 @@ export default function OutboundShell({
   userEmail: string;
   initialQueue: ShipQueueRow[];
   boxPresets: BoxPreset[];
-  shippedHistory: ShippedOrderRow[];
+  shippedHistory: ShipmentHistoryRow[];
   initialOrderId: string | null;
 }) {
   const [tab, setTab] = useState<OutboundTab>('ready');

@@ -785,6 +785,11 @@ img.sku-img { background: #e8e8e8; }
 .ord-sum-line { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .ord-sum-courier { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
 
+/* Outbound History verify mark: ✅ barcode-scanned (green) | ○ manually checked (yellow). */
+.vmark { flex-shrink: 0; font-size: 13px; line-height: 1; width: 16px; text-align: center; }
+.vmark.scan { color: var(--green); }
+.vmark.manual { color: #E0A92E; }
+
 /* ── PR27 — Outbound Return-to-Fulfill row ── */
 .ob-return { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); flex-wrap: wrap; }
 

@@ -47,14 +47,37 @@ export interface ShipResult {
   stock: { item_code: string; available: number; physical: number; reserved: number }[];
 }
 
-// ── Outbound History row (orders we've shipped; read-only) ──
-export interface ShippedOrderRow {
-  sales_id: string;
-  order_date: string | null;
-  customer_name: string | null;
-  ship_date: string | null;        // most recent shipped_at across the order's lines
-  item_count: number;              // shipped lines
-  sku_codes: string[];             // for the SKU search
-  courier_label: string | null;
-  courier_tracking: string | null;
+// ── Outbound History (read-only) — now sourced from outbound_shipments, the canonical log, so the FULL
+// shipped history shows (not just app-pipeline orders). Each shipment carries everything the detail
+// needs, so the board renders the detail straight from the selected row (CSV/legacy rows have no
+// sales_id to re-fetch by). ──
+export interface ShipmentHistoryItem {
+  item_code: string | null;                 // resolved catalogue code (or the raw code when unmatched)
+  name: string;                              // catalogue name (falls back to the code)
+  qty: number;
+  verify_method: 'scan' | 'manual' | null;  // ✅ barcode-scanned | ○ manually checked | unknown
+  scanned_barcode: string | null;           // the barcode read when scanned (kept for the report)
+}
+
+export interface ShipmentHistoryBox {
+  real_weight: number | null;
+  dim_p: number | null;
+  dim_l: number | null;
+  dim_t: number | null;
+  chargeable_weight: number | null;
+}
+
+export interface ShipmentHistoryRow {
+  key: string;                     // synthetic id (send_id, or a composite) — for React keys + selection
+  ship_date: string | null;
+  customer: string | null;
+  address: string | null;          // verbatim, as shipped (the CSV address text / order address)
+  courier: string | null;
+  note: string | null;             // combined shipment notes (from Sales)
+  items: ShipmentHistoryItem[];
+  sku_codes: string[];             // for the SKU search / quick-view line
+  item_count: number;
+  real_weight: number | null;      // CSV: weight_gram; app ships: summed box real weights
+  chargeable_g: number | null;     // CSV: weight_gram; app ships: summed box chargeable weights
+  boxes: ShipmentHistoryBox[];     // real boxes for app ships; empty for CSV (→ assume Custom 1×1×1)
 }

@@ -7,7 +7,16 @@
 import ExcelJS from 'exceljs';
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { ShipLine, ShipQueueRow } from '@jigzle/db/types';
-import type { ShipDetail, ShipInput, ShipResult, ShippedOrderRow } from './types';
+import type {
+  ShipDetail,
+  ShipInput,
+  ShipResult,
+  ShipmentHistoryBox,
+  ShipmentHistoryItem,
+  ShipmentHistoryRow,
+} from './types';
+
+const HISTORY_LIMIT = 100; // shipments shown in the History tab
 
 const QUEUE_LIMIT = 100;
 const pad2 = (n: number): string => String(n).padStart(2, '0');
@@ -64,57 +73,137 @@ function sanitize(q: string): string {
   return q.replace(/[,()*\\]/g, ' ').trim();
 }
 
-// ── Outbound History (orders we've shipped): orders with ≥1 shipped line, newest by ship date. Search
-// matches sales_id OR customer name OR a shipped line's courier_tracking. Read-only. ──
-export async function getShippedHistory(query = ''): Promise<ShippedOrderRow[]> {
+// ── Outbound History — the full shipped log, read from outbound_shipments (canonical). One row per
+// SHIPMENT (item rows grouped: by send_id for app ships, else a composite of the repeated shipment-level
+// fields for CSV/legacy rows). Newest first, capped at HISTORY_LIMIT shipments. Search matches customer /
+// courier / note / SKU (item_code). Read-only; each row carries its full detail (no sales_id to re-fetch
+// CSV rows by). ──
+export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow[]> {
   const supabase = createSupabaseServerClient();
   const raw = sanitize(query);
 
-  // resolve customer-name / tracking matches to sales_ids first, so the main query can OR them in
-  let orFilter: string | null = null;
-  if (raw) {
-    const ors = [`sales_id.ilike.%${raw}%`];
-    const { data: custs } = await supabase.from('customers').select('customer_id').ilike('name', `%${raw}%`).limit(500);
-    const ids = ((custs ?? []) as { customer_id: number }[]).map((c) => c.customer_id);
-    if (ids.length) ors.push(`customer_id.in.(${ids.join(',')})`);
-    const { data: trk } = await supabase
-      .from('order_lines')
-      .select('sales_id')
-      .ilike('courier_tracking', `%${raw}%`)
-      .not('shipped_at', 'is', null)
-      .limit(500);
-    const trkIds = [...new Set(((trk ?? []) as { sales_id: string }[]).map((t) => t.sales_id))];
-    if (trkIds.length) ors.push(`sales_id.in.(${trkIds.map((s) => `"${s}"`).join(',')})`);
-    orFilter = ors.join(',');
-  }
-
+  // pull a generous recent window of item rows; group into shipments, then cap. ~2.2 items/shipment, so
+  // a 600/900-row window comfortably yields ≥HISTORY_LIMIT complete shipments at the cut (a shipment
+  // straddling the very end may show fewer items — acceptable for the tail of a 100-shipment view).
   let q = supabase
-    .from('orders')
-    .select('sales_id,order_date,customer_id,customers(name),order_lines!inner(item_code,courier,courier_label,courier_tracking,shipped_at)')
-    .not('order_lines.shipped_at', 'is', null)
-    .eq('order_lines.is_cancelled', false)
-    .order('order_date', { ascending: false, nullsFirst: false })
-    .limit(QUEUE_LIMIT);
-  if (orFilter) q = q.or(orFilter);
-
+    .from('outbound_shipments')
+    .select('customer_ref,recipient_name,ship_date,address,courier,weight_gram,qty,item_code,item_code_raw,note,verify_method,scanned_barcode,sales_id,customer_id,send_id')
+    .not('ship_date', 'is', null)
+    .order('ship_date', { ascending: false })
+    .limit(raw ? 900 : 600);
+  if (raw) {
+    q = q.or(
+      `recipient_name.ilike.%${raw}%,customer_ref.ilike.%${raw}%,courier.ilike.%${raw}%,note.ilike.%${raw}%,item_code.ilike.%${raw}%,item_code_raw.ilike.%${raw}%`
+    );
+  }
   const { data, error } = await q;
   if (error || !data) return [];
 
-  return data.map((o) => {
-    const lines = (o.order_lines ?? []) as { item_code: string | null; courier: string | null; courier_label: string | null; courier_tracking: string | null; shipped_at: string | null }[];
-    const cust = one<{ name: string | null }>(o.customers as never);
-    const shippedAts = lines.map((l) => l.shipped_at).filter((s): s is string => !!s).sort();
+  const items = data as {
+    customer_ref: string | null;
+    recipient_name: string | null;
+    ship_date: string | null;
+    address: string | null;
+    courier: string | null;
+    weight_gram: number | null;
+    qty: number | null;
+    item_code: string | null;
+    item_code_raw: string | null;
+    note: string | null;
+    verify_method: string | null;
+    scanned_barcode: string | null;
+    sales_id: string | null;
+    customer_id: number | null;
+    send_id: string | null;
+  }[];
+  if (!items.length) return [];
+
+  // resolve catalogue names for coded items
+  const codes = [...new Set(items.map((i) => i.item_code).filter((c): c is string => !!c))];
+  const nameByCode = new Map<string, string>();
+  if (codes.length) {
+    const { data: cat } = await supabase
+      .from('catalogue')
+      .select('item_code,original_name,translate_name,self_code')
+      .in('item_code', codes);
+    for (const c of (cat ?? []) as { item_code: string; original_name: string | null; translate_name: string | null; self_code: string | null }[]) {
+      nameByCode.set(c.item_code, skuName(c, c.item_code));
+    }
+  }
+
+  // app ships (send_id) carry real boxes; customer names for app rows come via customer_id (the CSV
+  // rows already carry recipient_name/customer_ref)
+  const sendIds = [...new Set(items.map((i) => i.send_id).filter((s): s is string => !!s))];
+  const boxesBySend = new Map<string, ShipmentHistoryBox[]>();
+  if (sendIds.length) {
+    const { data: bx } = await supabase
+      .from('boxes')
+      .select('send_id,real_weight,dim_p,dim_l,dim_t,chargeable_weight')
+      .in('send_id', sendIds);
+    for (const b of (bx ?? []) as (ShipmentHistoryBox & { send_id: string })[]) {
+      const arr = boxesBySend.get(b.send_id) ?? [];
+      arr.push({ real_weight: b.real_weight, dim_p: b.dim_p, dim_l: b.dim_l, dim_t: b.dim_t, chargeable_weight: b.chargeable_weight });
+      boxesBySend.set(b.send_id, arr);
+    }
+  }
+  const custIds = [...new Set(items.filter((i) => i.send_id && i.customer_id != null).map((i) => i.customer_id as number))];
+  const custName = new Map<number, string>();
+  if (custIds.length) {
+    const { data: cs } = await supabase.from('customers').select('customer_id,name').in('customer_id', custIds);
+    for (const c of (cs ?? []) as { customer_id: number; name: string | null }[]) if (c.name) custName.set(c.customer_id, c.name);
+  }
+
+  type Group = {
+    key: string; ship_date: string | null; customer: string | null; address: string | null;
+    courier: string | null; weight_gram: number | null; send_id: string | null; customer_id: number | null;
+    items: ShipmentHistoryItem[]; codes: string[]; notes: Set<string>;
+  };
+  const groups = new Map<string, Group>();
+  for (const it of items) {
+    const key = it.send_id
+      ? `S:${it.send_id}`
+      : `C:${it.customer_ref ?? ''}|${it.ship_date ?? ''}|${it.address ?? ''}|${it.courier ?? ''}|${it.weight_gram ?? ''}`;
+    let g = groups.get(key);
+    if (!g) {
+      if (groups.size >= HISTORY_LIMIT) continue; // capped; ignore older shipments beyond the window
+      g = {
+        key, ship_date: it.ship_date, customer: it.recipient_name || it.customer_ref,
+        address: it.address, courier: it.courier, weight_gram: it.weight_gram, send_id: it.send_id,
+        customer_id: it.customer_id, items: [], codes: [], notes: new Set(),
+      };
+      groups.set(key, g);
+    }
+    const vm = it.verify_method === 'scan' || it.verify_method === 'manual' ? it.verify_method : null;
+    g.items.push({
+      item_code: it.item_code ?? it.item_code_raw ?? null,
+      name: it.item_code ? (nameByCode.get(it.item_code) ?? it.item_code) : (it.item_code_raw ?? '—'),
+      qty: it.qty ?? 1,
+      verify_method: vm,
+      scanned_barcode: it.scanned_barcode,
+    });
+    if (it.item_code) g.codes.push(it.item_code);
+    if (it.note) g.notes.add(it.note);
+  }
+
+  return [...groups.values()].map((g) => {
+    const boxes = g.send_id ? (boxesBySend.get(g.send_id) ?? []) : [];
+    const realFromBoxes = boxes.reduce((s, b) => s + (b.real_weight ?? 0), 0);
+    const chargeFromBoxes = boxes.reduce((s, b) => s + (b.chargeable_weight ?? 0), 0);
     return {
-      sales_id: o.sales_id as string,
-      order_date: (o.order_date as string | null) ?? null,
-      customer_name: cust?.name ?? null,
-      ship_date: shippedAts.length ? shippedAts[shippedAts.length - 1] : null,
-      item_count: lines.length,
-      sku_codes: lines.map((l) => l.item_code).filter((c): c is string => !!c),
-      // fall back to `courier` (where legacy/imported shipments store it) when courier_label is null
-      courier_label: lines.find((l) => l.courier_label ?? l.courier)?.courier_label
-        ?? lines.find((l) => l.courier)?.courier ?? null,
-      courier_tracking: lines.find((l) => l.courier_tracking)?.courier_tracking ?? null,
+      key: g.key,
+      ship_date: g.ship_date,
+      customer: g.customer || (g.customer_id != null ? custName.get(g.customer_id) ?? null : null),
+      address: g.address,
+      courier: g.courier,
+      note: g.notes.size ? [...g.notes].join('\n') : null,
+      items: g.items,
+      sku_codes: [...new Set(g.codes)],
+      item_count: g.items.length,
+      // CSV/legacy: the chargeable weight is stored directly in weight_gram (real == chargeable, no dims).
+      // app ships: sum the real boxes.
+      real_weight: boxes.length ? realFromBoxes : g.weight_gram,
+      chargeable_g: boxes.length ? chargeFromBoxes : g.weight_gram,
+      boxes,
     };
   });
 }

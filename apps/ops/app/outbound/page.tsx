@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import OutboundShell from '@/components/OutboundShell';
-import { getShipQueue, getShippedHistory } from '@/app/outbound/actions';
+import { getShipQueue, getOutboundHistory } from '@/app/outbound/actions';
 import { getBoxPresets } from '@/app/settings/actions';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ export default async function OutboundPage({ searchParams }: { searchParams?: { 
   const [{ data: { user } }, queue, shippedHistory, boxPresets] = await Promise.all([
     supabase.auth.getUser(),
     getShipQueue(),
-    getShippedHistory(''),
+    getOutboundHistory(''),
     getBoxPresets(),
   ]);
   return (
