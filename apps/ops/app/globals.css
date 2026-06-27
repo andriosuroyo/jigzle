@@ -844,3 +844,11 @@ img.sku-img { background: #e8e8e8; }
 .orders-overlay-close { background: rgba(255,255,255,0.15); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; font-size: 22px; line-height: 1; cursor: pointer; flex-shrink: 0; }
 .orders-overlay-close:active { background: rgba(255,255,255,0.25); }
 .orders-overlay-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* Monthly report month-picker. */
+.report-body { max-width: 480px; margin: 0 auto; padding: 16px; }
+.month-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.month-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: 15px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.month-btn:active { background: var(--paper); }
+.month-btn:disabled { opacity: 0.6; cursor: default; }
+.month-btn-cta { font-size: 12px; font-weight: 600; color: var(--brown); white-space: nowrap; }
