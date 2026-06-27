@@ -16,7 +16,9 @@ merge, deploy. Concretely, for every build:
    If deps aren't installed yet, run `npm install` at the repo root first.
    **Only proceed if both pass.** A red build must never reach `main`.
 3. **PR.** Open a pull request into `main` with a clear title + body. The PR gives a paper
-   trail and a Vercel **preview** deployment URL.
+   trail and a Vercel **preview** deployment URL. **Continue the PR sequence:** before
+   opening, check the repo's most recent PR number and number this work as the next one
+   (e.g. last is #52 → this is #53). Code comments reference work by that number (`PR53`).
 4. **Merge.** Once the gate is green, **squash-merge the PR into `main` automatically** — no
    need to ask first. (This is the standing instruction; it overrides the usual
    "don't merge without asking".)

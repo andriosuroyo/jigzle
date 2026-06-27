@@ -435,6 +435,7 @@ export type ReceiveQueueRow = {
   ship_date: string | null;
   tracking: string | null;
   expected_count: number;            // distinct expected SKUs (0 when nothing was recorded)
+  sku_codes: string[];               // the distinct expected item_codes, A-Z (for the quick-view line)
 };
 
 // One expected SKU in the receive detail, merged from shipment contents AND POs (D3).

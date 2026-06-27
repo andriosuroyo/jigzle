@@ -344,6 +344,21 @@ input, textarea, select, button { font-family: inherit; }
 .rcv-card-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rcv-card-status .rcv-badge { margin-left: 0; }
 
+/* Inbound item row — Sales/Outbound-style line with an editable received/expected (0/X) counter at the
+   right. The number field colours by progress: muted at 0, yellow while short, green once met. */
+.rcv-item .pend-line { align-items: center; }
+.rcv-count { display: flex; align-items: baseline; gap: 4px; flex-shrink: 0; }
+.rcv-qty-in { width: 52px; text-align: center; padding: 6px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; font-weight: 700; background: white; }
+.rcv-qty-in.zero  { color: var(--muted); }
+.rcv-qty-in.short { color: #9C6F1C; border-color: var(--yellow-tint); }
+.rcv-qty-in.ok    { color: var(--green); }
+.rcv-denom { font-size: 13px; font-weight: 700; color: var(--muted); }
+
+/* compact receive-date row (was a tall stacked field) */
+.rcv-date-row { display: flex; align-items: center; gap: 10px; }
+.rcv-date-row .fd-label { margin-bottom: 0; white-space: nowrap; }
+.rcv-date-input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
+
 .rcv-controls { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .rcv-ctl { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-weight: 600; }
 .rcv-ctl input, .rcv-ctl select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }

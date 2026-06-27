@@ -81,6 +81,28 @@ export interface ShipIdSuggestion {
   open_qty: number; // Σ open PO qty for the scanned SKU on this ship_id
 }
 
+// ── Inbound History (read-only) — confirmed receipts grouped per ship_id, newest first. Sourced from
+// the inbound ledger (the canonical "what arrived"), so it covers both real shipments and 📦 ad-hoc
+// receives. Each row carries everything the detail pane needs to render straight from the selection. ──
+export interface InboundHistoryItem {
+  item_code: string | null;          // resolved catalogue code (or the raw code when unmatched)
+  name: string;                      // catalogue name (falls back to the code)
+  qty: number;                       // Σ sellable received (signed; excludes the damaged subset)
+  excluded_qty: number;              // Σ arrived-but-damaged (0 sellable)
+}
+
+export interface InboundHistoryRow {
+  ship_id: string;                   // the join key + React key + selection id
+  receive_date: string | null;       // latest receive_date across this shipment's rows
+  origin_country: string | null;
+  tracking: string | null;
+  is_adhoc: boolean;                 // a 📦YYMMXXX id with no shipments-ledger row
+  items: InboundHistoryItem[];
+  sku_codes: string[];               // A-Z, for the SKU search / quick-view line
+  item_count: number;                // distinct SKUs received
+  total_qty: number;                 // Σ sellable units received
+}
+
 // ── receive close-confirm window (ReceiveConfirm; reuses the .sc-modal* chrome) ──
 // per SKU: expected (open PO qty) vs counted, classified; shorts revert only on close.
 export type ReceiveClass = 'ok' | 'short' | 'over' | 'unexpected';
