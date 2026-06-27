@@ -79,6 +79,43 @@ export interface PreorderRow {
   available: number; // live stock_check.available (≤ 0 for a preorder)
 }
 
+// ── To buy → Planned (manual buy-list; PO status 'Planned'). Created with no supplier yet. ──
+export interface PlannedItemInput {
+  item_code: string;
+  qty: number;
+  product_link?: string | null;
+  item_note?: string | null;
+}
+
+export interface PlannedItemRow {
+  po_id: number;
+  item_code: string | null;
+  name: string;
+  qty: number;
+  product_link: string | null;
+  available: number;     // live stock_check.available (warehouse)
+  on_the_way: number;    // Σ 'On the way' PO qty (shipped, en route)
+  with_forwarder: number; // Σ 'With Forwarder' PO qty (in forwarder)
+}
+
+// ── To buy → Sold out (PO status 'Sold out' + auto date + optional reason). ──
+export interface SoldOutRow {
+  po_id: number;
+  item_code: string | null;
+  name: string;
+  qty: number;
+  sold_out_date: string | null;
+  sold_out_note: string | null;
+}
+
+// ── live stock figures for the add-item overlay: warehouse / forwarder / shipped (en route). ──
+export interface SkuStockInfo {
+  item_code: string;
+  available: number;
+  on_the_way: number;     // 'On the way'
+  with_forwarder: number; // 'With Forwarder'
+}
+
 // ── Purchasing History → Per item (read-only): a Received PO line — keeps per-item cost / shipID. ──
 export interface ReceivedItemRow {
   po_id: number;

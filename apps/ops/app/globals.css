@@ -65,6 +65,8 @@ input, textarea, select, button { font-family: inherit; }
 .purch-subtabs { display: flex; gap: 6px; }
 .purch-subtab { font-size: 13px; font-weight: 600; padding: 6px 12px; border: 1px solid var(--line); border-radius: 20px; background: white; color: var(--muted); cursor: pointer; }
 .purch-subtab.active { background: var(--orange-tint); border-color: var(--orange); color: var(--brown-dark); }
+/* To-buy Planned section header: title left, "+ add item" right */
+.po-tobuy-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 
 /* ── Panels ── */
 .panel { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }

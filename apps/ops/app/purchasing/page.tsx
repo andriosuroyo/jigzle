@@ -4,9 +4,11 @@ import {
   getForwarders,
   getOpenPOs,
   getOpenShipments,
+  getPlannedItems,
   getPreorders,
   getReceivedItems,
   getShipmentHistory,
+  getSoldOutItems,
   getSuppliers,
 } from '@/app/purchasing/actions';
 
@@ -23,7 +25,9 @@ export default async function OrderPage() {
     suppliers,
     forwarders,
     shipments,
+    planned,
     preorders,
+    soldOut,
     receivedItems,
     shipmentHistory,
   ] = await Promise.all([
@@ -32,7 +36,9 @@ export default async function OrderPage() {
     getSuppliers(),
     getForwarders(),
     getOpenShipments(),
+    getPlannedItems(),
     getPreorders(),
+    getSoldOutItems(),
     getReceivedItems(''),
     getShipmentHistory(''),
   ]);
@@ -43,7 +49,9 @@ export default async function OrderPage() {
       suppliers={suppliers}
       forwarders={forwarders}
       shipments={shipments}
+      planned={planned}
       preorders={preorders}
+      soldOut={soldOut}
       receivedItems={receivedItems}
       shipmentHistory={shipmentHistory}
       userEmail={user?.email || ''}

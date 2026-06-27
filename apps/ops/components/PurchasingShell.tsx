@@ -11,7 +11,7 @@ import OrderBoard from '@/components/OrderBoard';
 import ToBuyBoard from '@/components/ToBuyBoard';
 import PurchasingHistoryBoard from '@/components/PurchasingHistoryBoard';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier } from '@jigzle/db/types';
-import type { OpenShipmentRow, PreorderRow, ReceivedItemRow, ShipmentHistoryRow } from '@/app/purchasing/types';
+import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ReceivedItemRow, ShipmentHistoryRow, SoldOutRow } from '@/app/purchasing/types';
 
 type PurchasingTab = 'tobuy' | 'forwarder' | 'ship' | 'history';
 
@@ -22,7 +22,9 @@ export default function PurchasingShell({
   suppliers,
   forwarders,
   shipments,
+  planned,
   preorders,
+  soldOut,
   receivedItems,
   shipmentHistory,
   userEmail,
@@ -31,7 +33,9 @@ export default function PurchasingShell({
   suppliers: Supplier[];
   forwarders: Forwarder[];
   shipments: OpenShipmentRow[];
+  planned: PlannedItemRow[];
   preorders: PreorderRow[];
+  soldOut: SoldOutRow[];
   receivedItems: ReceivedItemRow[];
   shipmentHistory: ShipmentHistoryRow[];
   userEmail: string;
@@ -49,7 +53,7 @@ export default function PurchasingShell({
       <div className="orders-bar">
         <nav className="orders-tabs" role="tablist" aria-label="Purchasing">
           <button role="tab" aria-selected={tab === 'tobuy'} className={`orders-tab ${tab === 'tobuy' ? 'active' : ''}`} onClick={() => setTab('tobuy')}>
-            To buy<span className="orders-tab-count">{preorders.length}</span>
+            To buy<span className="orders-tab-count">{planned.length + preorders.length}</span>
           </button>
           <button role="tab" aria-selected={tab === 'forwarder'} className={`orders-tab ${tab === 'forwarder' ? 'active' : ''}`} onClick={() => setTab('forwarder')}>
             To forwarder<span className="orders-tab-count">{forwarderCount}</span>
@@ -64,7 +68,7 @@ export default function PurchasingShell({
       </div>
 
       <div className="orders-panels">
-        {tab === 'tobuy' && <ToBuyBoard preorders={preorders} />}
+        {tab === 'tobuy' && <ToBuyBoard planned={planned} preorders={preorders} soldOut={soldOut} />}
         {tab === 'forwarder' && (
           <OrderBoard
             embedded
