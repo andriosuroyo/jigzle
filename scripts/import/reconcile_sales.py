@@ -182,16 +182,22 @@ def main():
     valid = {c["item_code"] for c in page_all(client, "catalogue", "item_code", "item_code")}
     print(f"  catalogue codes      {len(valid)}")
 
-    # 2) customers — reuse existing by phone, insert missing; build label → customer_id
-    phone_to_id = {}
-    for c in page_all(client, "customers", "customer_id,phone", "customer_id"):
+    # 2) customers — reuse existing (by phone, else by name), insert the rest; build label → id.
+    #    The name fallback keeps a RE-RUN idempotent: phone-less customers inserted on a prior run are
+    #    matched by name instead of duplicated.
+    phone_to_id, name_to_id = {}, {}
+    for c in page_all(client, "customers", "customer_id,phone,name", "customer_id"):
         if c["phone"]:
-            phone_to_id[c["phone"]] = c["customer_id"]
+            phone_to_id.setdefault(c["phone"], c["customer_id"])
+        if c["name"]:
+            name_to_id.setdefault(c["name"], c["customer_id"])
     key_to_id, to_insert, insert_keys = {}, [], []
     for k in key_order:
         cust = by_key[k]
         if cust["phone"] and cust["phone"] in phone_to_id:
             key_to_id[k] = phone_to_id[cust["phone"]]
+        elif not cust["phone"] and cust["name"] and cust["name"] in name_to_id:
+            key_to_id[k] = name_to_id[cust["name"]]
         else:
             to_insert.append(cust)
             insert_keys.append(k)
@@ -202,15 +208,17 @@ def main():
     label_to_id = {lbl: key_to_id.get(key) for lbl, key in label_to_key.items()}
     print(f"  customers (+{len(to_insert)} new) {len(key_to_id)}")
 
-    # 3) orders — full reload (delete-all cascades order_lines + payments).
-    #    FIRST clear outbound_shipments' refs to orders/order_lines: those FKs are NO ACTION, so they
-    #    would block the orders delete (and the cascade to order_lines). The rows are denormalized —
-    #    History/reports read their own columns, not the join — so nulling the link is harmless.
+    # 3) orders — full reload. Clear outbound_shipments' refs first (NO ACTION FKs would block the
+    #    delete), then delete the cluster CHILDREN-FIRST in small batches: a cascade-delete of orders
+    #    re-checks the outbound_shipments FK per cascaded order_line, which times out without an index.
+    #    Deleting order_lines / payments directly (then orders) keeps each statement small.
     print("\n  clearing outbound_shipments → orders/order_lines refs (FK guard)…")
     client._req("PATCH", "outbound_shipments?or=(sales_id.not.is.null,order_line_id.not.is.null)",
                 body={"sales_id": None, "order_line_id": None}, prefer="return=minimal")
-    print("  reloading orders + order_lines (delete-all orders → cascade)…")
-    client.delete_all("orders")
+    print("  deleting old order_lines / payments / orders (children first)…")
+    client.delete_all("order_lines", chunk=1000)
+    client.delete_all("payments", chunk=1000)
+    client.delete_all("orders", chunk=1000)
 
     o_unmatched_cust = 0
     o_db = []
