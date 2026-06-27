@@ -63,6 +63,8 @@ export default function OutboundBoard({
   // scanCounts drives the {n}/{qty} counter. (O1/O2)
   const [verified, setVerified] = useState<Map<string, 'manual' | 'scan'>>(new Map());
   const [scanCounts, setScanCounts] = useState<Map<string, number>>(new Map());
+  // 0035: the barcode read for a scan-verified line (last one wins) — captured at ship for the report.
+  const [scannedBarcodes, setScannedBarcodes] = useState<Map<string, string>>(new Map());
   const [scan, setScan] = useState('');
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [boxes, setBoxes] = useState<BoxDraft[]>([]);
@@ -106,6 +108,7 @@ export default function OutboundBoard({
     if (d) {
       setVerified(new Map());      // O1: lines start UNCHECKED
       setScanCounts(new Map());
+      setScannedBarcodes(new Map());
       setBoxes([makeBox()]);
       setScan('');
       setScanMsg(null);
@@ -200,6 +203,7 @@ export default function OutboundBoard({
     if (!target) { setScanMsg(`${item} already fully scanned`); return; }
     const n = Math.min((scanCounts.get(target.line_id) ?? 0) + 1, target.qty);
     setScanCounts((prev) => new Map(prev).set(target.line_id, n));
+    setScannedBarcodes((prev) => new Map(prev).set(target.line_id, code)); // remember the read barcode
     if (n >= target.qty) {
       setVerified((prev) => new Map(prev).set(target.line_id, 'scan'));
       setScanMsg(`✓ ${item} complete`);
@@ -253,6 +257,12 @@ export default function OutboundBoard({
       const res = await recordShipment({
         sales_id: detail.sales_id,
         line_ids: detail.lines.map((l) => l.line_id), // all-or-none: ship every fulfilled-unshipped line
+        // 0035: how each line was checked — 'scan' carries the read barcode, 'manual' a tick. The gate
+        // (allVerified) guarantees every line has a method; default to 'manual' defensively.
+        verify: detail.lines.map((l) => {
+          const method = verified.get(l.line_id) ?? 'manual';
+          return { line_id: l.line_id, method, barcode: method === 'scan' ? (scannedBarcodes.get(l.line_id) ?? null) : null };
+        }),
         boxes: boxes
           .filter((b) => {
             const d = boxDims(b);

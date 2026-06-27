@@ -321,12 +321,15 @@ export async function recordShipment(payload: ShipInput): Promise<ShipResult> {
 
   // O4: courier/tracking are set at Fulfill and travel on the line — Outbound never re-sends them.
   // The RPC COALESCEs these nulls, preserving the fulfill-stamped values.
+  // 0035: p_verify carries how each line was checked (scan/manual + barcode) → stamped onto the
+  // outbound_shipments rows so the report/History ✅/○ marks populate for app ships.
   const { data, error } = await supabase.rpc('record_shipment', {
     p_sales_id: payload.sales_id,
     p_line_ids: payload.line_ids,
     p_courier: null,
     p_tracking: null,
     p_boxes: payload.boxes ?? [],
+    p_verify: payload.verify ?? [],
   });
   if (error) throw new Error(`recordShipment: ${error.message}`);
 
