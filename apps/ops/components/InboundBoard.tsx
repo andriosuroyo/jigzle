@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import type { ExpectedLine, ReceiveLine, ReceiveQueueRow } from '@jigzle/db/types';
 import {
@@ -61,10 +61,15 @@ export default function InboundBoard({
   initialQueue,
   inboundLabels,
   userEmail,
+  embedded = false,
+  onCountChange,
 }: {
   initialQueue: ReceiveQueueRow[];
   inboundLabels: InboundLabel[];
   userEmail: string;
+  // Inbound window (InboundShell): same embedded/onCountChange contract as OutboundBoard.
+  embedded?: boolean;
+  onCountChange?: (n: number) => void;
 }) {
   const [queue, setQueue] = useState<ReceiveQueueRow[]>(initialQueue);
   const [selected, setSelected] = useState<string | null>(null); // ship_id, or ADHOC_SENTINEL
@@ -88,6 +93,7 @@ export default function InboundBoard({
   const [searching, setSearching] = useState(false);
   const [skuSearched, setSkuSearched] = useState(false); // true after a real search → drives "No results"
   const skuInputRef = useRef<HTMLInputElement>(null);
+  const [manualAdd, setManualAdd] = useState(false); // the "manual add" search overlay
 
   const [receiveDate, setReceiveDate] = useState(todayStr());
   const [closeShipment, setCloseShipment] = useState(true);
@@ -114,6 +120,9 @@ export default function InboundBoard({
   // SKUs, so this maps to a LIST. The fast path only fires when exactly ONE expected SKU owns the
   // scanned code; a shared barcode (>1 owner) defers to the server resolveBarcode so the collision
   // picker shows — never silently attributing the scan to one arbitrary owner.
+  // live count badge for the shell tab (mirrors OutboundBoard)
+  useEffect(() => { onCountChange?.(queue.length); }, [queue, onCountChange]);
+
   const barcodeMap = useMemo(() => {
     const m = new Map<string, string[]>();
     detail?.barcodes.forEach((b) => {
@@ -155,6 +164,7 @@ export default function InboundBoard({
     setSkuQuery('');
     setSkuHits([]);
     setSkuSearched(false);
+    setManualAdd(false);
     setReceiveDate(todayStr());
     setResult(null);
     setError(null);
@@ -253,16 +263,18 @@ export default function InboundBoard({
       return next;
     });
   }
-  function receiveExpected(e: ExpectedLine) {
-    if (!e.item_code) return;
-    const qty = e.expected_qty > 0 ? e.expected_qty : 1;
+  // direct qty entry on a line's counter field (creates the line on first edit; clamps excluded ≤ qty).
+  function setQty(item_code: string, name: string, qty: number) {
     setReceived((prev) => {
       const next = new Map(prev);
-      const cur = next.get(e.item_code!);
-      next.set(
-        e.item_code!,
-        cur ? { ...cur, qty } : { item_code: e.item_code!, name: e.name, qty, excluded: false, excluded_qty: null, exclude_reason: null, label: null, dimension_weight: null }
-      );
+      const cur = next.get(item_code);
+      if (cur) {
+        const patch: Partial<ReceiveLine> = { qty };
+        if (cur.excluded_qty != null) patch.excluded_qty = Math.min(cur.excluded_qty, Math.max(qty, 0));
+        next.set(item_code, { ...cur, ...patch });
+      } else {
+        next.set(item_code, { item_code, name, qty, excluded: false, excluded_qty: null, exclude_reason: null, label: null, dimension_weight: null });
+      }
       return next;
     });
   }
@@ -383,19 +395,10 @@ export default function InboundBoard({
   );
 
   const receivedList = [...received.values()];
-  const totalUnits = receivedList.reduce((s, l) => s + l.qty, 0);
   const sellableUnits = receivedList.reduce((s, l) => s + sellableOf(l), 0);
   const saveLines = receivedList.filter((l) => l.qty !== 0);
   const shipIdForSave = mode === 'adhoc' ? adhocShipId.trim() : detail?.ship_id ?? '';
   const canClose = mode === 'shipment' && !!detail?.is_shipment;
-
-  function badgeFor(exp: number, got: number): { cls: string; text: string } {
-    if (exp > 0 && got === 0) return { cls: 'miss', text: '✗ missing' };
-    if (exp === 0 && got !== 0) return { cls: 'extra', text: '⚠ extra' };
-    if (got < exp) return { cls: 'short', text: '⚠ short' };
-    if (got > exp) return { cls: 'over', text: '✓ over' };
-    return { cls: 'match', text: '✓ match' };
-  }
 
   function classify(exp: number, counted: number): ReceiveClass {
     if (exp === 0 && counted !== 0) return 'unexpected';
@@ -505,15 +508,11 @@ export default function InboundBoard({
 
   const headerTitle = mode === 'adhoc' ? 'Ad-hoc receive' : detail?.ship_id ?? '';
 
-  return (
-    <div className="ops">
-      <AppHeader active="inbound" userEmail={userEmail} />
-
+  const body = (
+    <>
       <div className="fulfill-layout">
         {/* ── Arrivals queue ── */}
         <aside className="fq-pane">
-          <div className="fq-head"><span>Arrivals: {queue.length}</span></div>
-
           {/* §5 scan-to-find-shipment */}
           <div className="rcv-find">
             <div className="scan-row">
@@ -553,15 +552,21 @@ export default function InboundBoard({
             {queue.map((q) => (
               <li key={q.ship_id}>
                 <button className={`fq-row ${selected === q.ship_id ? 'active' : ''}`} onClick={() => openShipment(q.ship_id)}>
+                  {/* top: ship id (left) · ship date (right) */}
                   <div className="fq-row-top">
                     <span className="fq-id">{q.ship_id}</span>
-                    <span className="fq-cust">{q.origin_country || '—'}</span>
+                    <span className="fq-id-sub">{q.ship_date || 'no date'}</span>
                   </div>
+                  {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
                   <div className="fq-row-bot">
-                    <span>{q.ship_date || 'no ship date'}</span>
-                    <span className="badge ready" style={{ marginLeft: 'auto' }}>
-                      {q.expected_count > 0 ? `${q.expected_count} expected` : 'no list'}
-                    </span>
+                    {q.expected_count > 0 ? (
+                      <span className="ff-items-skus">
+                        {q.expected_count} {q.expected_count === 1 ? 'item' : 'items'}
+                        {q.sku_codes.length ? ` · ${q.sku_codes.join(', ')}` : ''}
+                      </span>
+                    ) : (
+                      <span className="badge ready" style={{ marginLeft: 0 }}>no list</span>
+                    )}
                   </div>
                 </button>
               </li>
@@ -604,9 +609,8 @@ export default function InboundBoard({
                 <div className="fd-sub">
                   {mode === 'shipment' ? (
                     <>
-                      {detail.origin_country || '—'}
+                      {detail.tracking || 'no tracking'}
                       {detail.ship_date ? ` · ${detail.ship_date}` : ''}
-                      {detail.tracking ? ` · ${detail.tracking}` : ''}
                       {!detail.is_shipment && <span className="warn-text"> · not in the shipment ledger</span>}
                     </>
                   ) : (
@@ -632,18 +636,18 @@ export default function InboundBoard({
                 </section>
               )}
 
-              {/* Scan / add */}
+              {/* Scan / add — Enter (or the scanner's auto-return) submits; no add button. */}
               <section className="fd-section">
                 <div className="fd-section-head">Scan / add</div>
                 <div className="scan-row">
                   <input
                     type="text"
-                    placeholder="scan / type a barcode"
+                    placeholder="scan / type a barcode, then Enter"
                     value={scan}
                     onChange={(e) => setScan(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doScan(); } }}
                   />
-                  <button className="btn-secondary" onClick={doScan}>add</button>
+                  <button className="btn-secondary" onClick={() => { setManualAdd(true); setSkuSearched(false); }}>Manual add</button>
                   {scanMsg && <span className="scan-msg">{scanMsg}</span>}
                 </div>
 
@@ -666,134 +670,95 @@ export default function InboundBoard({
                     </div>
                   </div>
                 )}
-
-                {/* manual SKU search (shared search_skus RPC) */}
-                <div className="scan-row" style={{ marginTop: 8 }}>
-                  <input
-                    ref={skuInputRef}
-                    type="text"
-                    placeholder="Code, name, or piece count…"
-                    value={skuQuery}
-                    onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
-                  />
-                  <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
-                  {(skuQuery || skuHits.length > 0) && <button className="btn-link" onClick={clearSearch}>Clear</button>}
-                </div>
-                {searching && <div className="hint">Searching…</div>}
-                {!searching && skuSearched && skuHits.length === 0 && (
-                  <div className="hint"><em>No results</em></div>
-                )}
-                {skuHits.length > 0 && (
-                  <ul className="result-list" style={{ marginTop: 6 }}>
-                    {skuHits.map((h) => (
-                      <li key={h.item_code}>
-                        {/* §4a Pattern A: image left, code / name / avail stacked beside (ff-card family) */}
-                        <button className="result-item ff-card" onClick={() => { addUnit(h.item_code, h.name); clearSearch(); }}>
-                          <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
-                          <div className="ff-card-info">
-                            <div className="ff-card-code">{h.item_code}</div>
-                            <div className="ff-card-name">{displayName(h.name, h.item_code)}</div>
-                            <div className="ff-card-status">avail {h.available}</div>
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </section>
 
-              {/* Expected vs received */}
+              {/* Items — Sales/Outbound row format; the counter shows received/expected (0/X) and is
+                  directly editable. Each scan +1s the matching line. */}
               <section className="fd-section">
-                <div className="fd-section-head">Expected vs received</div>
+                <div className="fd-section-head">Items</div>
                 {detail.expected.length === 0 && extras.length === 0 && (
-                  <div className="hint">No expected list — scan or search to add what arrived.</div>
+                  <div className="hint">No item list — scan or use Manual add to record what arrived.</div>
                 )}
                 <ul className="ff-lines">
-                  {expectedResolved.map((e) => {
-                    const line = received.get(e.item_code!);
-                    const got = line?.qty ?? 0;
-                    const b = badgeFor(e.expected_qty, got);
-                    return (
-                      <li key={`exp-${e.item_code}`} className="ff-line">
-                        {/* §4b Pattern A: image left, code / name / (exp + badge) stacked beside */}
-                        <div className="ff-card">
-                          <SkuImage status={imgMap[e.item_code!]?.status} displayUrl={imgMap[e.item_code!]?.displayUrl} name={e.name} size={SKU_IMG.md} />
-                          <div className="ff-card-info">
-                            <div className="ff-card-code">{e.item_code}</div>
-                            <div className="ff-card-name">{displayName(e.name, e.item_code)}</div>
-                            <div className="ff-card-status rcv-card-status">
-                              <span className="rcv-exp">exp {e.expected_qty}</span>
-                              <span className={`rcv-badge ${b.cls}`}>{b.text}</span>
-                              {!line && <button className="btn-link" onClick={() => receiveExpected(e)}>+ receive</button>}
-                            </div>
-                          </div>
-                        </div>
-                        {line && renderControls(line)}
-                      </li>
-                    );
-                  })}
-
-                  {extras.map((line) => {
-                    const b = badgeFor(0, line.qty);
-                    return (
-                      <li key={`got-${line.item_code}`} className="ff-line">
-                        {/* §4b extra (received, not expected): no `exp`, badge only */}
-                        <div className="ff-card">
-                          <SkuImage status={imgMap[line.item_code]?.status} displayUrl={imgMap[line.item_code]?.displayUrl} name={line.name} size={SKU_IMG.md} />
-                          <div className="ff-card-info">
-                            <div className="ff-card-code">{line.item_code}</div>
-                            <div className="ff-card-name">{displayName(line.name, line.item_code)}</div>
-                            <div className="ff-card-status rcv-card-status">
-                              <span className={`rcv-badge ${b.cls}`}>{b.text}</span>
-                            </div>
-                          </div>
-                        </div>
-                        {renderControls(line)}
-                      </li>
-                    );
-                  })}
+                  {expectedResolved.map((e) => renderItemLine(e.item_code!, e.name, e.expected_qty))}
+                  {extras.map((line) => renderItemLine(line.item_code, line.name, 0))}
 
                   {expectedUnresolved.map((e, i) => (
                     <li key={`unres-${i}`} className="ff-line">
                       <div className="rcv-line-head">
                         <span className="ff-name">{e.name}</span>
                         <span className="rcv-exp">exp {e.expected_qty}</span>
-                        <span className="rcv-badge miss">unresolved — search to map a SKU</span>
+                        <span className="rcv-badge miss">unresolved — Manual add to map a SKU</span>
                       </div>
                     </li>
                   ))}
                 </ul>
               </section>
 
-              {/* Receive date */}
-              <section className="fd-section fd-courier">
-                <div>
-                  <label className="fd-label">Receive date</label>
-                  <input type="date" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} />
-                </div>
-                {canClose && (
-                  <div style={{ flex: 1 }}>
-                    <label className="fd-label">Shipment</label>
-                    <div className="hint">Leave-open vs close is chosen on the next step (shorts revert only on close).</div>
-                  </div>
-                )}
+              {/* Receive date — compact inline row (the leave-open vs close choice now lives only in the
+                  Save recap). */}
+              <section className="fd-section rcv-date-row">
+                <label className="fd-label">Receive date</label>
+                <input type="date" className="rcv-date-input" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} />
               </section>
 
-              {/* Commit bar → opens the §6 confirmation window */}
+              {/* Commit bar → opens the §6 confirmation window (the received + short recap). */}
               <div className="fd-commit">
-                <div className="fd-commit-info">
-                  Σ receiving <b>{sellableUnits}</b> sellable unit{sellableUnits === 1 ? '' : 's'} across {saveLines.length} item{saveLines.length === 1 ? '' : 's'}
-                  {totalUnits !== sellableUnits ? ` · ${totalUnits - sellableUnits} excluded` : ''}
-                </div>
                 <button className="btn-primary" onClick={openConfirm} disabled={committing || saveLines.length === 0 || !shipIdForSave}>
-                  Review &amp; save…
+                  {canClose ? 'Mark received' : 'Save inbound'}
                 </button>
               </div>
             </>
           )}
         </main>
       </div>
+
+      {/* Manual add — full-screen search overlay (replaces the inline search field). Adds to the
+          received list; stays open so several SKUs can be added in a row. */}
+      {manualAdd && detail && (
+        <div className="orders-overlay" role="dialog" aria-modal="true" aria-label="Manual add">
+          <div className="orders-overlay-bar">
+            <span className="orders-overlay-title">Manual add</span>
+            <button className="orders-overlay-close" onClick={() => { setManualAdd(false); clearSearch(); }} aria-label="Close">×</button>
+          </div>
+          <div className="orders-overlay-body" style={{ padding: '14px 16px' }}>
+            <div className="scan-row">
+              <input
+                ref={skuInputRef}
+                type="text"
+                autoFocus
+                placeholder="Code, name, or piece count…"
+                value={skuQuery}
+                onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
+              />
+              <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
+              {(skuQuery || skuHits.length > 0) && <button className="btn-link" onClick={clearSearch}>Clear</button>}
+            </div>
+            {searching && <div className="hint">Searching…</div>}
+            {!searching && skuSearched && skuHits.length === 0 && (
+              <div className="hint"><em>No results</em></div>
+            )}
+            {skuHits.length > 0 && (
+              <ul className="result-list" style={{ marginTop: 6 }}>
+                {skuHits.map((h) => (
+                  <li key={h.item_code}>
+                    {/* §4a Pattern A: image left, code / name / avail stacked beside (ff-card family) */}
+                    <button className="result-item ff-card" onClick={() => { addUnit(h.item_code, h.name); setScanMsg(`✓ ${h.item_code} +1`); clearSearch(); }}>
+                      <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
+                      <div className="ff-card-info">
+                        <div className="ff-card-code">{h.item_code}</div>
+                        <div className="ff-card-name">{displayName(h.name, h.item_code)}</div>
+                        <div className="ff-card-status">avail {h.available}</div>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* §6 pre-submit confirmation window */}
       {showConfirm && detail && (
@@ -807,31 +772,58 @@ export default function InboundBoard({
           onCancel={() => setShowConfirm(false)}
         />
       )}
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="ops">
+      <AppHeader active="inbound" userEmail={userEmail} />
+      {body}
     </div>
   );
 
-  // per-received-line controls: qty (signed) · exclude (+ qty/reason) · label · dim/weight · remove
+  // one item row: image · code/name · an editable received/expected (0/X) counter. Each scan +1s the
+  // matching line; the counter field accepts direct entry. The exclude/label/dim controls drop in
+  // below once the line has been touched.
+  function renderItemLine(item_code: string, name: string, exp: number) {
+    const line = received.get(item_code);
+    const got = line?.qty ?? 0;
+    const countCls = got === 0 ? 'zero' : exp > 0 && got < exp ? 'short' : 'ok';
+    return (
+      <li key={`item-${item_code}`} className="ff-line rcv-item">
+        <div className="pend-line">
+          <SkuImage status={imgMap[item_code]?.status} displayUrl={imgMap[item_code]?.displayUrl} name={name} size={SKU_IMG.sm} />
+          <div className="pend-line-main">
+            <span className="ff-code">{item_code}</span>
+            <span className="ff-name">{displayName(name, item_code)}</span>
+          </div>
+          <div className="rcv-count">
+            <input
+              type="number"
+              inputMode="numeric"
+              step={1}
+              className={`rcv-qty-in ${countCls}`}
+              value={got}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                setQty(item_code, name, Number.isFinite(n) ? n : 0);
+              }}
+              aria-label={`received qty for ${item_code}`}
+            />
+            <span className="rcv-denom">/ {exp > 0 ? exp : '—'}</span>
+          </div>
+        </div>
+        {line && renderControls(line)}
+      </li>
+    );
+  }
+
+  // per-received-line controls: exclude (+ qty/reason) · label · dim/weight · remove
   function renderControls(line: ReceiveLine) {
     const excl = excludedOf(line);
     return (
       <div className="rcv-controls">
-        <label className="rcv-ctl">
-          <span>qty</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            step={1}
-            className="rcv-qty"
-            value={line.qty}
-            onChange={(e) => {
-              const q = Number.isFinite(parseInt(e.target.value, 10)) ? parseInt(e.target.value, 10) : 0;
-              const patch: Partial<ReceiveLine> = { qty: q };
-              // keep the excluded subset <= the (new) counted total — never a negative sellable.
-              if (line.excluded_qty != null) patch.excluded_qty = Math.min(line.excluded_qty, Math.max(q, 0));
-              setField(line.item_code, patch);
-            }}
-          />
-        </label>
         <label className="rcv-ctl rcv-ex">
           <input
             type="checkbox"

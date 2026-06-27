@@ -17,11 +17,15 @@ import type {
   RecordReceiptResult,
   ReverseResult,
   ShipIdSuggestion,
+  InboundHistoryRow,
+  InboundHistoryItem,
 } from './types';
 
 type Supabase = ReturnType<typeof createSupabaseServerClient>;
 
 const QUEUE_LIMIT = 100;
+const HISTORY_ROW_SCAN = 2000; // inbound rows scanned to build the History tab before grouping
+const HISTORY_LIMIT = 100;     // shipments shown in History
 
 // PostgREST `.or()` / `.ilike()` interpolate the raw string into a filter grammar where
 // , ( ) * \ are operators. Strip them from operator-typed input (defense-in-depth — the
@@ -85,6 +89,7 @@ export async function getReceiveQueue(): Promise<ReceiveQueueRow[]> {
       ship_date: (s.ship_date as string | null) ?? null,
       tracking: (s.tracking as string | null) ?? null,
       expected_count: expected.size,
+      sku_codes: [...expected].sort((a, b) => a.localeCompare(b)),
     };
   });
 }
@@ -189,6 +194,104 @@ export async function getShipmentForReceive(shipId: string): Promise<ReceiveDeta
     expected,
     barcodes,
   };
+}
+
+// ── Inbound History: confirmed receipts grouped per ship_id, newest first (types in ./types) ──
+// Reads the inbound ledger (the canonical "what arrived"), skipping opening balances. Groups by
+// ship_id, sums sellable qty per SKU, resolves names in one catalogue round-trip, and tags whether a
+// ship_id is a real shipment (origin/tracking) or a 📦 ad-hoc receive. Search filters the grouped
+// rows by ship_id / SKU code / name (the field is optional — '' returns the newest shipments).
+export async function getReceiveHistory(query: string): Promise<InboundHistoryRow[]> {
+  const supabase = createSupabaseServerClient();
+  const q = sanitize(query).toLowerCase();
+
+  const { data, error } = await supabase
+    .from('inbound')
+    .select('item_code,item_code_raw,qty,excluded_qty,ship_id,receive_date')
+    .eq('is_opening_balance', false)
+    .not('ship_id', 'is', null)
+    .order('receive_date', { ascending: false, nullsFirst: false })
+    .limit(HISTORY_ROW_SCAN);
+  if (error || !data) return [];
+
+  type Row = { item_code: string | null; item_code_raw: string | null; qty: number; excluded_qty: number | null; ship_id: string | null; receive_date: string | null };
+  const rows = (data ?? []) as Row[];
+
+  // resolve names for every candidate code in one round-trip
+  const codes = new Set<string>();
+  for (const r of rows) if (r.item_code) codes.add(r.item_code);
+  const nameByCode = new Map<string, string>();
+  if (codes.size) {
+    const { data: cat } = await supabase
+      .from('catalogue')
+      .select('item_code,translate_name,original_name,self_code')
+      .in('item_code', [...codes]);
+    for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+  }
+
+  // group by ship_id → per-SKU summed qty + latest receive_date
+  type Group = { ship_id: string; receive_date: string | null; items: Map<string, InboundHistoryItem> };
+  const groups = new Map<string, Group>();
+  for (const r of rows) {
+    const sid = r.ship_id as string;
+    const g = groups.get(sid) ?? groups.set(sid, { ship_id: sid, receive_date: null, items: new Map() }).get(sid)!;
+    if (r.receive_date && (!g.receive_date || r.receive_date > g.receive_date)) g.receive_date = r.receive_date;
+    const key = r.item_code ?? `raw:${r.item_code_raw ?? ''}`;
+    const name = r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : r.item_code_raw ?? '(unnamed)';
+    const excl = Number(r.excluded_qty ?? 0) || 0;
+    const sellable = (Number(r.qty ?? 0) || 0) - excl;
+    const cur = g.items.get(key);
+    if (cur) { cur.qty += sellable; cur.excluded_qty += excl; }
+    else g.items.set(key, { item_code: r.item_code, name, qty: sellable, excluded_qty: excl });
+  }
+
+  // shipment meta (origin / tracking) for the grouped ship_ids — and which are real shipments
+  const shipIds = [...groups.keys()];
+  const metaByShip = new Map<string, { origin_country: string | null; tracking: string | null }>();
+  if (shipIds.length) {
+    const { data: ships } = await supabase
+      .from('shipments')
+      .select('ship_id,origin_country,tracking')
+      .in('ship_id', shipIds);
+    for (const s of (ships ?? []) as { ship_id: string; origin_country: string | null; tracking: string | null }[]) {
+      metaByShip.set(s.ship_id, { origin_country: s.origin_country ?? null, tracking: s.tracking ?? null });
+    }
+  }
+
+  let out: InboundHistoryRow[] = [...groups.values()].map((g) => {
+    const items = [...g.items.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const sku_codes = items.map((i) => i.item_code).filter((c): c is string => !!c).sort((a, b) => a.localeCompare(b));
+    const meta = metaByShip.get(g.ship_id);
+    return {
+      ship_id: g.ship_id,
+      receive_date: g.receive_date,
+      origin_country: meta?.origin_country ?? null,
+      tracking: meta?.tracking ?? null,
+      is_adhoc: !meta, // no shipments-ledger row → an ad-hoc receive
+      items,
+      sku_codes,
+      item_count: items.length,
+      total_qty: items.reduce((s, i) => s + i.qty, 0),
+    };
+  });
+
+  if (q) {
+    out = out.filter(
+      (r) =>
+        r.ship_id.toLowerCase().includes(q) ||
+        r.sku_codes.some((c) => c.toLowerCase().includes(q)) ||
+        r.items.some((i) => i.name.toLowerCase().includes(q))
+    );
+  }
+
+  // newest first (nulls last); ship_id tiebreak for stable order
+  out.sort((a, b) => {
+    if (a.receive_date && b.receive_date) return a.receive_date < b.receive_date ? 1 : a.receive_date > b.receive_date ? -1 : a.ship_id.localeCompare(b.ship_id);
+    if (a.receive_date) return -1;
+    if (b.receive_date) return 1;
+    return a.ship_id.localeCompare(b.ship_id);
+  });
+  return out.slice(0, HISTORY_LIMIT);
 }
 
 // ── scan resolution: barcode → SKU, a collision picker (D1), or not-found (D2) ── (types in ./types)
