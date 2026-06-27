@@ -127,6 +127,7 @@ export interface ReceivedItemRow {
   supplier_name: string | null;
   receive_date: string | null;
   marketplace_order_id: string | null;
+  product_link: string | null;
 }
 
 // ── Purchasing History → Per shipment (read-only): one completed shipment, so shipment-level data
@@ -138,5 +139,7 @@ export interface ShipmentHistoryRow {
   ship_date: string | null;
   received_date: string | null;
   tracking: string | null;
-  item_count: number; // distinct Received SKUs on this ship_id
+  item_count: number;       // distinct Received SKUs on this ship_id
+  total_cost: number | null; // Σ item_cost across the ship's Received lines (roll-up)
+  suppliers: string[];      // distinct supplier names on the ship (roll-up)
 }

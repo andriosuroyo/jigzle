@@ -638,14 +638,14 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,qty,status,item_cost,ship_id,supplier_id,receive_date,marketplace_order_id')
+    .select('po_id,item_code,qty,status,item_cost,ship_id,supplier_id,receive_date,marketplace_order_id,product_link')
     .eq('status', 'Received')
     .order('receive_date', { ascending: false, nullsFirst: false })
     .order('po_id', { ascending: false })
     .limit(500);
   const rows = (data ?? []) as {
     po_id: number; item_code: string | null; qty: number; item_cost: number | null;
-    ship_id: string | null; supplier_id: number | null; receive_date: string | null; marketplace_order_id: string | null;
+    ship_id: string | null; supplier_id: number | null; receive_date: string | null; marketplace_order_id: string | null; product_link: string | null;
   }[];
   if (!rows.length) return [];
 
@@ -676,6 +676,7 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
     supplier_name: r.supplier_id != null ? supplierById.get(r.supplier_id) ?? null : null,
     receive_date: r.receive_date,
     marketplace_order_id: r.marketplace_order_id,
+    product_link: r.product_link,
   }));
 
   const q = sanitize(query).toLowerCase();
@@ -710,17 +711,32 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
   ships = ships.slice(0, HISTORY_LIMIT);
   if (!ships.length) return [];
 
-  // distinct Received SKUs per ship_id (one round-trip over the visible ship_ids)
+  // roll-up the Received PO lines per ship_id: distinct SKUs, Σ cost, distinct supplier ids
   const shipIds = ships.map((s) => s.ship_id);
   const skusByShip = new Map<string, Set<string>>();
+  const costByShip = new Map<string, number>();
+  const supIdsByShip = new Map<string, Set<number>>();
+  const allSupIds = new Set<number>();
   const { data: pos } = await supabase
     .from('purchase_orders')
-    .select('ship_id,item_code,status')
+    .select('ship_id,item_code,item_cost,supplier_id,status')
     .in('ship_id', shipIds)
     .eq('status', 'Received');
-  for (const p of (pos ?? []) as { ship_id: string | null; item_code: string | null }[]) {
-    if (!p.ship_id || !p.item_code) continue;
-    (skusByShip.get(p.ship_id) ?? skusByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.item_code);
+  for (const p of (pos ?? []) as { ship_id: string | null; item_code: string | null; item_cost: number | null; supplier_id: number | null }[]) {
+    if (!p.ship_id) continue;
+    if (p.item_code) (skusByShip.get(p.ship_id) ?? skusByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.item_code);
+    if (p.item_cost != null) costByShip.set(p.ship_id, (costByShip.get(p.ship_id) ?? 0) + Number(p.item_cost));
+    if (p.supplier_id != null) {
+      (supIdsByShip.get(p.ship_id) ?? supIdsByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.supplier_id);
+      allSupIds.add(p.supplier_id);
+    }
+  }
+
+  // resolve supplier names once
+  const supName = new Map<number, string>();
+  if (allSupIds.size) {
+    const { data: sup } = await supabase.from('suppliers').select('supplier_id,name').in('supplier_id', [...allSupIds]);
+    for (const s of (sup ?? []) as { supplier_id: number; name: string | null }[]) supName.set(s.supplier_id, s.name ?? `#${s.supplier_id}`);
   }
 
   return ships.map((s) => ({
@@ -731,5 +747,7 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     received_date: s.received_date,
     tracking: s.tracking,
     item_count: skusByShip.get(s.ship_id)?.size ?? 0,
+    total_cost: costByShip.has(s.ship_id) ? costByShip.get(s.ship_id)! : null,
+    suppliers: [...(supIdsByShip.get(s.ship_id) ?? [])].map((id) => supName.get(id) ?? `#${id}`).sort(),
   }));
 }

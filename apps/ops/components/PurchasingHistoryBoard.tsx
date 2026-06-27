@@ -86,8 +86,9 @@ export default function PurchasingHistoryBoard({
               <div className="fq-row-bot">
                 <span className="ff-items-skus">
                   {s.item_count} {s.item_count === 1 ? 'SKU' : 'SKUs'}
+                  {s.total_cost != null ? ` · cost ${s.total_cost}` : ''}
+                  {s.suppliers.length ? ` · ${s.suppliers.join(', ')}` : ''}
                   {s.forwarder_prefix ? ` · ${s.forwarder_prefix}` : ''}
-                  {s.origin_country ? ` · ${s.origin_country}` : ''}
                   {s.tracking ? ` · ${s.tracking}` : ''}
                 </span>
               </div>
@@ -108,6 +109,7 @@ export default function PurchasingHistoryBoard({
                   {it.item_cost != null ? ` · cost ${it.item_cost}` : ''}
                   {it.supplier_name ? ` · ${it.supplier_name}` : ''}
                   {it.receive_date ? ` · ${fmtDate(it.receive_date)}` : ''}
+                  {it.product_link ? <> · <a href={it.product_link} target="_blank" rel="noreferrer" className="btn-link">link ↗</a></> : null}
                 </span>
               </div>
               <span className="ff-qty">×{it.qty}</span>
