@@ -160,14 +160,14 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
 
   const { data: order } = await supabase
     .from('orders')
-    .select('sales_id,status,payment_status,sales_total_idr,paid_idr,order_note,customers(name,phone)')
+    .select('sales_id,status,payment_status,sales_total_idr,paid_idr,order_note,address_id,customers(name,phone)')
     .eq('sales_id', salesId)
     .maybeSingle();
   if (!order) return null;
 
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,qty,address_id,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .not('shipped_at', 'is', null)
     .eq('is_cancelled', false)
@@ -177,6 +177,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
     line_id: string;
     item_code: string | null;
     qty: number;
+    address_id: number | null;
     courier_label: string | null;
     courier_tracking: string | null;
     catalogue: { original_name: string | null; translate_name: string | null; self_code: string | null } | null;
@@ -207,6 +208,19 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
     boxes = (bx ?? []) as BoxSummary[];
   }
 
+  // the address the order shipped to — stamped on the line at Fulfill (fall back to the order's). Print
+  // the raw_address verbatim (it's the saved one-field combination). Outbound History surfaces this.
+  const addressId = (lr.find((r) => r.address_id != null)?.address_id ?? (order.address_id as number | null)) ?? null;
+  let shipAddress: string | null = null;
+  if (addressId != null) {
+    const { data: a } = await supabase
+      .from('customer_addresses')
+      .select('raw_address')
+      .eq('address_id', addressId)
+      .maybeSingle();
+    shipAddress = (a?.raw_address as string | null) ?? null;
+  }
+
   const cust = one<{ name: string | null; phone: string | null }>(order.customers as never);
   return {
     sales_id: order.sales_id as string,
@@ -217,6 +231,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
     sales_total_idr: (order.sales_total_idr as number | null) ?? null,
     paid_idr: (order.paid_idr as number | null) ?? 0,
     order_note: (order.order_note as string | null) ?? null,
+    ship_address: shipAddress,
     lines,
     boxes,
   };

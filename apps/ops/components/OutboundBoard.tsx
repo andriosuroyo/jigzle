@@ -330,9 +330,9 @@ export default function OutboundBoard({
 
           {detail && (
             <>
-              {/* O3: overview title + copyable address block */}
+              {/* O3: shipping-details label (section-head style) + copyable address block */}
               <div className="fd-head">
-                <div className="ob-code">Outbound overview</div>
+                <div className="fd-section-head">Shipping details</div>
                 <div className="ob-addr">
                   <button className="ob-copy" onClick={copyAddress} aria-label="Copy address block">
                     {copied ? '✓ Copied' : '⧉ Copy'}
@@ -422,7 +422,6 @@ export default function OutboundBoard({
                                 <input className="box-dim box-dim-ro" type="text" readOnly aria-label="height (cm)" value={dims.t ?? ''} />
                               </>
                             )}
-                            <span className="box-unit">cm</span>
                             {boxes.length > 1 && <button className="box-remove" onClick={() => setBoxes((prev) => prev.filter((x) => x.key !== b.key))} aria-label="remove box">×</button>}
                           </div>
                           <div className="box-meta-row">
@@ -437,17 +436,15 @@ export default function OutboundBoard({
                 <button className="btn-link box-add" onClick={() => setBoxes((prev) => [...prev, makeBox()])}>+ box</button>
               </section>
 
-              {/* Commit bar (O5: all-or-none; enabled only when every line verified + custom dims filled) */}
+              {/* Commit bar (O5: all-or-none) — button + a two-line readiness checklist (grey → green). */}
               <div className="fd-commit">
-                {detail.lines.length > 0 && !allVerified && (
-                  <span className="warn-text">verify all {detail.lines.length} item{detail.lines.length === 1 ? '' : 's'} to ship</span>
-                )}
-                {allVerified && customIncomplete && (
-                  <span className="warn-text">fill the custom box dimensions</span>
-                )}
                 <button className="btn-primary" onClick={commit} disabled={committing || !allVerified || customIncomplete}>
-                  {committing ? 'Shipping…' : `Mark shipped${unitsShipping ? ` (${unitsShipping} unit${unitsShipping === 1 ? '' : 's'})` : ''}`}
+                  {committing ? 'Shipping…' : 'Mark shipped'}
                 </button>
+                <ul className="ship-checks">
+                  <li className={allVerified ? 'done' : ''}>{allVerified ? '✓' : '○'} All items checked</li>
+                  <li className={!customIncomplete ? 'done' : ''}>{!customIncomplete ? '✓' : '○'} Box details filled</li>
+                </ul>
               </div>
 
               {/* Return to Fulfill (PR-B §6) — bottom, left-aligned text button (clears courier, keeps

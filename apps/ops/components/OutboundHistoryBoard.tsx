@@ -107,9 +107,9 @@ export default function OutboundHistoryBoard({
                   <span className="fq-id-sub">{o.sales_id}</span>
                 </div>
                 <div className="fq-row-bot">
-                  <span>{o.item_count} {o.item_count === 1 ? 'item' : 'items'}</span>
+                  {/* SKU codes (not the often-blank tracking) — like the Fulfill rows, helps SKU search. */}
+                  <span className="ff-items-skus">{o.item_count} {o.item_count === 1 ? 'item' : 'items'}{o.sku_codes.length ? ` (${o.sku_codes.join(', ')})` : ''}</span>
                   {o.courier_label && <span className="badge ready">{o.courier_label}</span>}
-                  {o.courier_tracking && <span className="ff-sku-list">#{o.courier_tracking}</span>}
                   <span className="ord-date">{fmtDate(o.ship_date)}</span>
                 </div>
               </button>
@@ -129,6 +129,13 @@ export default function OutboundHistoryBoard({
               <div className="fd-title fd-title-plain">{summary.customer_name || '—'}</div>
               <div className="fd-sub">{summary.sales_id}{selRow?.ship_date ? ` · shipped ${fmtDate(selRow.ship_date)}` : ''}</div>
             </div>
+
+            {summary.ship_address && (
+              <section className="fd-section">
+                <div className="fd-section-head">Shipped to</div>
+                <pre className="ob-addr-block">{summary.ship_address}</pre>
+              </section>
+            )}
 
             <section className="fd-section">
               <div className="fd-section-head">Shipped items</div>
