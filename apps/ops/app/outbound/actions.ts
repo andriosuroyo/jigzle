@@ -6,7 +6,7 @@
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { ShipLine, ShipQueueRow } from '@jigzle/db/types';
-import type { ShipDetail, ShipInput, ShipResult } from './types';
+import type { ShipDetail, ShipInput, ShipResult, ShippedOrderRow } from './types';
 
 const QUEUE_LIMIT = 100;
 
@@ -30,7 +30,7 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
   // embedded filters restrict both which orders return and which lines come back.
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,customer_id,customers(name,phone),order_lines!inner(line_id,courier)')
+    .select('sales_id,order_date,customer_id,customers(name,phone),order_lines!inner(line_id,item_code,courier)')
     .is('order_lines.shipped_at', null)
     .not('order_lines.fulfilled_at', 'is', null)
     // PR-B §6: a line only ships once it's ADDRESSED (courier set in Fulfill). Without this, cut-but-
@@ -42,7 +42,7 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
   if (error || !data) return [];
 
   return data.map((o) => {
-    const lines = (o.order_lines ?? []) as { line_id: string; courier: string | null }[];
+    const lines = (o.order_lines ?? []) as { line_id: string; item_code: string | null; courier: string | null }[];
     const cust = one<{ name: string | null; phone: string | null }>(o.customers as never);
     const planned = lines.find((l) => l.courier)?.courier ?? null;
     return {
@@ -52,6 +52,65 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
       customer_phone: cust?.phone ?? null,
       ready_count: lines.length,
       planned_courier: planned,
+      sku_codes: lines.map((l) => l.item_code).filter((c): c is string => !!c),
+    };
+  });
+}
+
+// PostgREST .or()/.ilike() interpolate into a filter grammar — strip operator chars from user input.
+function sanitize(q: string): string {
+  return q.replace(/[,()*\\]/g, ' ').trim();
+}
+
+// ── Outbound History (orders we've shipped): orders with ≥1 shipped line, newest by ship date. Search
+// matches sales_id OR customer name OR a shipped line's courier_tracking. Read-only. ──
+export async function getShippedHistory(query = ''): Promise<ShippedOrderRow[]> {
+  const supabase = createSupabaseServerClient();
+  const raw = sanitize(query);
+
+  // resolve customer-name / tracking matches to sales_ids first, so the main query can OR them in
+  let orFilter: string | null = null;
+  if (raw) {
+    const ors = [`sales_id.ilike.%${raw}%`];
+    const { data: custs } = await supabase.from('customers').select('customer_id').ilike('name', `%${raw}%`).limit(500);
+    const ids = ((custs ?? []) as { customer_id: number }[]).map((c) => c.customer_id);
+    if (ids.length) ors.push(`customer_id.in.(${ids.join(',')})`);
+    const { data: trk } = await supabase
+      .from('order_lines')
+      .select('sales_id')
+      .ilike('courier_tracking', `%${raw}%`)
+      .not('shipped_at', 'is', null)
+      .limit(500);
+    const trkIds = [...new Set(((trk ?? []) as { sales_id: string }[]).map((t) => t.sales_id))];
+    if (trkIds.length) ors.push(`sales_id.in.(${trkIds.map((s) => `"${s}"`).join(',')})`);
+    orFilter = ors.join(',');
+  }
+
+  let q = supabase
+    .from('orders')
+    .select('sales_id,order_date,customer_id,customers(name),order_lines!inner(item_code,courier_label,courier_tracking,shipped_at)')
+    .not('order_lines.shipped_at', 'is', null)
+    .eq('order_lines.is_cancelled', false)
+    .order('order_date', { ascending: false, nullsFirst: false })
+    .limit(QUEUE_LIMIT);
+  if (orFilter) q = q.or(orFilter);
+
+  const { data, error } = await q;
+  if (error || !data) return [];
+
+  return data.map((o) => {
+    const lines = (o.order_lines ?? []) as { item_code: string | null; courier_label: string | null; courier_tracking: string | null; shipped_at: string | null }[];
+    const cust = one<{ name: string | null }>(o.customers as never);
+    const shippedAts = lines.map((l) => l.shipped_at).filter((s): s is string => !!s).sort();
+    return {
+      sales_id: o.sales_id as string,
+      order_date: (o.order_date as string | null) ?? null,
+      customer_name: cust?.name ?? null,
+      ship_date: shippedAts.length ? shippedAts[shippedAts.length - 1] : null,
+      item_count: lines.length,
+      sku_codes: lines.map((l) => l.item_code).filter((c): c is string => !!c),
+      courier_label: lines.find((l) => l.courier_label)?.courier_label ?? null,
+      courier_tracking: lines.find((l) => l.courier_tracking)?.courier_tracking ?? null,
     };
   });
 }
