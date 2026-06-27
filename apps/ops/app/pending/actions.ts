@@ -51,7 +51,7 @@ export async function getPending(): Promise<PendingOrder[]> {
   // order's uncut lines only (a partial order's already-cut lines live in Fulfill/Outbound, not here).
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customers(name),order_lines!inner(line_id,item_code,qty,catalogue(original_name,translate_name,self_code))')
+    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customers(name),order_lines!inner(line_id,item_code,qty,line_note,catalogue(original_name,translate_name,self_code))')
     .neq('status', 'Cancelled')
     .is('order_lines.fulfilled_at', null)
     .is('order_lines.shipped_at', null)
@@ -82,6 +82,7 @@ export async function getPending(): Promise<PendingOrder[]> {
       line_id: string;
       item_code: string | null;
       qty: number;
+      line_note: string | null;
       catalogue: { original_name: string | null; translate_name: string | null; self_code: string | null } | null;
     }[];
     const lines: PendingLine[] = lineRows.map((r) => {
@@ -92,6 +93,7 @@ export async function getPending(): Promise<PendingOrder[]> {
         item_code: r.item_code,
         name: nameOf(one(r.catalogue as never), r.item_code ?? r.line_id),
         qty: r.qty,
+        line_note: r.line_note,
         available: a.available,
         on_the_way: a.on_the_way,
         status,
@@ -121,6 +123,16 @@ export async function getPending(): Promise<PendingOrder[]> {
     };
   });
   return out;
+}
+
+// ── set a line's note (0035): the per-line shipment note, editable in Pending/Fulfill. Empty → NULL.
+// RLS gates the write; the note travels on the line to Outbound (shown) and onto the shipped log. ──
+export async function setLineNote(lineId: string, note: string | null): Promise<void> {
+  if (!lineId) throw new Error('setLineNote: line_id is required');
+  const supabase = createSupabaseServerClient();
+  const clean = note && note.trim() ? note.trim() : null;
+  const { error } = await supabase.from('order_lines').update({ line_note: clean }).eq('line_id', lineId);
+  if (error) throw new Error(`setLineNote: ${error.message}`);
 }
 
 // ── Send ready items (FP-6): cut the selected ready line_ids (cut_order_lines, PR-A). No payment gate

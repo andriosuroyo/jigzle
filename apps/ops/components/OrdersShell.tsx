@@ -18,7 +18,7 @@ import OrderEntry from '@/components/OrderEntry';
 import type { PendingOrder } from '@/app/pending/types';
 import type { ToSendQueueRow } from '@/app/fulfill/types';
 import type { HistoryRow } from '@/app/history/types';
-import type { PaymentMethod, CourierService, BoxPreset } from '@/app/settings/types';
+import type { PaymentMethod, CourierService, BoxPreset, CommonNote } from '@/app/settings/types';
 
 export type OrdersTab = 'pending' | 'fulfill' | 'history';
 // `badge: false` → a read-only log (History) shows no count; only the work-queues do.
@@ -38,6 +38,7 @@ export default function OrdersShell({
   paymentMethods,
   courierServices,
   boxPresets,
+  commonNotes,
 }: {
   userEmail: string;
   initialTab: OrdersTab;
@@ -48,6 +49,7 @@ export default function OrdersShell({
   paymentMethods: PaymentMethod[];
   courierServices: CourierService[];
   boxPresets: BoxPreset[];
+  commonNotes: CommonNote[];
 }) {
   const [tab, setTab] = useState<OrdersTab>(initialTab);
   const [counts, setCounts] = useState<{ pending: number; fulfill: number }>({
@@ -124,6 +126,7 @@ export default function OrdersShell({
             embedded
             initialOrders={pending}
             userEmail={userEmail}
+            commonNotes={commonNotes}
             onCountChange={onPendingCount}
             onAdvance={onAdvance}
             reloadKey={reloadKey}
@@ -134,6 +137,7 @@ export default function OrdersShell({
             embedded
             initialQueue={toSend}
             courierServices={courierServices}
+            commonNotes={commonNotes}
             initialOrderId={initialTab === 'fulfill' ? initialOrderId : null}
             userEmail={userEmail}
             onCountChange={onFulfillCount}

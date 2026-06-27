@@ -382,18 +382,24 @@ export default function OutboundBoard({
                     const countText = mode ? `${l.qty}/${l.qty}` : `${n}/${l.qty}`;
                     const countCls = mode === 'manual' ? 'manual' : mode === 'scan' ? 'scan' : 'zero';
                     return (
-                      <li key={l.line_id} className="ff-line pend-line">
-                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
-                        <div className="pend-line-main">
-                          <span className="ff-code">{l.item_code || '—'}</span>
-                          <span className="ff-name">{l.name}</span>
+                      <li key={l.line_id} className="ff-line pend-line-card">
+                        <div className="pend-line">
+                          <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+                          <div className="pend-line-main">
+                            <span className="ff-code">{l.item_code || '—'}</span>
+                            <span className="ff-name">{l.name}</span>
+                          </div>
+                          <div className="ob-verify">
+                            <span className={`ob-count ${countCls}`}>{countText}</span>
+                            <button className="ob-manual-btn" onClick={() => toggleLine(l.line_id)}>
+                              {mode === 'manual' ? '✓ checked' : mode === 'scan' ? '✓ scanned' : 'manual check'}
+                            </button>
+                          </div>
                         </div>
-                        <div className="ob-verify">
-                          <span className={`ob-count ${countCls}`}>{countText}</span>
-                          <button className="ob-manual-btn" onClick={() => toggleLine(l.line_id)}>
-                            {mode === 'manual' ? '✓ checked' : mode === 'scan' ? '✓ scanned' : 'manual check'}
-                          </button>
-                        </div>
+                        {/* note set in Pending/Fulfill — read-only here */}
+                        {l.line_note && (
+                          <div className="note-show"><span className="note-show-tag" aria-hidden="true">✎</span><span className="note-show-text">{l.line_note}</span></div>
+                        )}
                       </li>
                     );
                   })}

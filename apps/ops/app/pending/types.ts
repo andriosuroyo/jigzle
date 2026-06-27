@@ -34,6 +34,7 @@ export interface PendingLine {
   item_code: string | null;
   name: string;
   qty: number;
+  line_note: string | null; // per-line shipment note (editable here, shown in Outbound, locked in History)
   available: number;
   on_the_way: number;
   status: LineStatus;

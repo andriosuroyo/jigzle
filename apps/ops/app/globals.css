@@ -810,6 +810,18 @@ img.sku-img { background: #e8e8e8; }
 .ord-sum-line { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .ord-sum-courier { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
 
+/* Per-line note editor (0035) — a second row inside the line card (.ff-line is a plain card; the new
+   .pend-line-card stacks the item row + the note). Read-only display reuses .note-show. */
+.pend-line-card { display: flex; flex-direction: column; gap: 6px; }
+.note-edit { display: flex; align-items: center; gap: 6px; }
+.note-edit-tag { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+.note-edit-input { flex: 1; min-width: 0; font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); }
+.note-edit-input:focus { outline: none; border-color: var(--brown-light); }
+.note-edit-ok { font-size: 12px; color: var(--green); flex-shrink: 0; }
+.note-show { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+.note-show-tag { color: var(--brown); flex-shrink: 0; }
+.note-show-text { color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+
 /* Outbound History verify mark: ✅ barcode-scanned (green) | ○ manually checked (yellow). */
 .vmark { flex-shrink: 0; font-size: 13px; line-height: 1; width: 16px; text-align: center; }
 .vmark.scan { color: var(--green); }
