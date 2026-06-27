@@ -43,10 +43,22 @@ export default function OutboundBoard({
   reloadKey?: number;
 }) {
   const [queue, setQueue] = useState<ShipQueueRow[]>(initialQueue);
+  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<ShipDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const reqIdRef = useRef(0);
+
+  // filter the Ready-to-ship queue by customer name OR SKU code (client-side over the loaded worklist)
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return queue;
+    return queue.filter(
+      (r) =>
+        (r.customer_name ?? '').toLowerCase().includes(q) ||
+        r.sku_codes.some((c) => c.toLowerCase().includes(q))
+    );
+  }, [queue, search]);
 
   // verification state: presence in `verified` = the line is confirmed (manual tick or full scan);
   // scanCounts drives the {n}/{qty} counter. (O1/O2)
@@ -287,10 +299,13 @@ export default function OutboundBoard({
       <div className="fulfill-layout">
         {/* ── Queue ── */}
         <aside className="fq-pane">
-          <div className="fq-head"><span>Ready to ship</span></div>
-          {queue.length === 0 && <div className="hint fq-empty">Nothing fulfilled and waiting to ship.</div>}
+          {/* No queue header — the tab badge shows the count. Search by customer or SKU. */}
+          <div className="search-row" style={{ padding: '8px' }}>
+            <input type="text" inputMode="search" placeholder="Search customer or SKU…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          {shown.length === 0 && <div className="hint fq-empty">{queue.length === 0 ? 'Nothing fulfilled and waiting to ship.' : 'No match.'}</div>}
           <ul className="fq-list">
-            {queue.map((q) => (
+            {shown.map((q) => (
               <li key={q.sales_id}>
                 <button className={`fq-row ${selected === q.sales_id ? 'active' : ''}`} onClick={() => openOrder(q.sales_id)}>
                   {/* Styled like Sales: customer name headline, sales id demoted. */}

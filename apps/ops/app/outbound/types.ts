@@ -46,3 +46,15 @@ export interface ShipResult {
   affected: string[];
   stock: { item_code: string; available: number; physical: number; reserved: number }[];
 }
+
+// ── Outbound History row (orders we've shipped; read-only) ──
+export interface ShippedOrderRow {
+  sales_id: string;
+  order_date: string | null;
+  customer_name: string | null;
+  ship_date: string | null;        // most recent shipped_at across the order's lines
+  item_count: number;              // shipped lines
+  sku_codes: string[];             // for the SKU search
+  courier_label: string | null;
+  courier_tracking: string | null;
+}

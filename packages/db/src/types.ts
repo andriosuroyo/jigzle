@@ -351,6 +351,7 @@ export type ShipQueueRow = {
   customer_phone: string | null;
   ready_count: number;              // fulfilled, unshipped, non-cancelled lines
   planned_courier: string | null;   // courier captured at fulfill
+  sku_codes: string[];              // for the name/SKU search in the Ready-to-ship list
 };
 
 // One fulfilled-unshipped line in the ship detail pane.
