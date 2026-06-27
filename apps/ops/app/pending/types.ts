@@ -89,6 +89,7 @@ export interface OrderSummary {
   sales_total_idr: number | null;
   paid_idr: number;
   order_note: string | null;
+  ship_address: string | null;     // the address the order was sent to (verbatim raw_address)
   lines: ShippedLineSummary[];
   boxes: BoxSummary[];
 }
