@@ -167,7 +167,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
 
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,address_id,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,qty,address_id,courier,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .not('shipped_at', 'is', null)
     .eq('is_cancelled', false)
@@ -178,6 +178,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
     item_code: string | null;
     qty: number;
     address_id: number | null;
+    courier: string | null;
     courier_label: string | null;
     courier_tracking: string | null;
     catalogue: { original_name: string | null; translate_name: string | null; self_code: string | null } | null;
@@ -187,7 +188,9 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
     item_code: r.item_code,
     name: nameOf(one(r.catalogue as never), r.item_code ?? r.line_id),
     qty: r.qty,
-    courier_label: r.courier_label,
+    // imported/legacy orders store the courier in `courier`; the structured `courier_label` (added later)
+    // is only set by Fulfill going forward. Fall back so old shipments still show their courier.
+    courier_label: r.courier_label ?? r.courier,
     courier_tracking: r.courier_tracking,
   }));
 

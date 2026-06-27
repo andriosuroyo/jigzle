@@ -90,7 +90,7 @@ export async function getShippedHistory(query = ''): Promise<ShippedOrderRow[]> 
 
   let q = supabase
     .from('orders')
-    .select('sales_id,order_date,customer_id,customers(name),order_lines!inner(item_code,courier_label,courier_tracking,shipped_at)')
+    .select('sales_id,order_date,customer_id,customers(name),order_lines!inner(item_code,courier,courier_label,courier_tracking,shipped_at)')
     .not('order_lines.shipped_at', 'is', null)
     .eq('order_lines.is_cancelled', false)
     .order('order_date', { ascending: false, nullsFirst: false })
@@ -101,7 +101,7 @@ export async function getShippedHistory(query = ''): Promise<ShippedOrderRow[]> 
   if (error || !data) return [];
 
   return data.map((o) => {
-    const lines = (o.order_lines ?? []) as { item_code: string | null; courier_label: string | null; courier_tracking: string | null; shipped_at: string | null }[];
+    const lines = (o.order_lines ?? []) as { item_code: string | null; courier: string | null; courier_label: string | null; courier_tracking: string | null; shipped_at: string | null }[];
     const cust = one<{ name: string | null }>(o.customers as never);
     const shippedAts = lines.map((l) => l.shipped_at).filter((s): s is string => !!s).sort();
     return {
@@ -111,7 +111,9 @@ export async function getShippedHistory(query = ''): Promise<ShippedOrderRow[]> 
       ship_date: shippedAts.length ? shippedAts[shippedAts.length - 1] : null,
       item_count: lines.length,
       sku_codes: lines.map((l) => l.item_code).filter((c): c is string => !!c),
-      courier_label: lines.find((l) => l.courier_label)?.courier_label ?? null,
+      // fall back to `courier` (where legacy/imported shipments store it) when courier_label is null
+      courier_label: lines.find((l) => l.courier_label ?? l.courier)?.courier_label
+        ?? lines.find((l) => l.courier)?.courier ?? null,
       courier_tracking: lines.find((l) => l.courier_tracking)?.courier_tracking ?? null,
     };
   });
@@ -313,7 +315,7 @@ async function fetchMonthlyShipments(year: number, month0: number): Promise<Mont
   // !inner + embedded shipped_at range → only orders with a line shipped in the month, and only those lines
   const { data } = await supabase
     .from('orders')
-    .select('sales_id,order_date,address_id,customers(name),order_lines!inner(item_code,courier_label,courier_tracking,shipped_at,address_id)')
+    .select('sales_id,order_date,address_id,customers(name),order_lines!inner(item_code,qty,courier,courier_label,courier_tracking,shipped_at,address_id,catalogue(original_name,translate_name,self_code))')
     .gte('order_lines.shipped_at', start)
     .lt('order_lines.shipped_at', end)
     .eq('order_lines.is_cancelled', false)
@@ -323,7 +325,16 @@ async function fetchMonthlyShipments(year: number, month0: number): Promise<Mont
     sales_id: string;
     address_id: number | null;
     customers: { name: string | null } | { name: string | null }[] | null;
-    order_lines: { item_code: string | null; courier_label: string | null; courier_tracking: string | null; shipped_at: string | null; address_id: number | null }[];
+    order_lines: {
+      item_code: string | null;
+      qty: number;
+      courier: string | null;
+      courier_label: string | null;
+      courier_tracking: string | null;
+      shipped_at: string | null;
+      address_id: number | null;
+      catalogue: { original_name: string | null; translate_name: string | null; self_code: string | null } | null;
+    }[];
   }[];
   if (!orders.length) return [];
 
@@ -363,16 +374,21 @@ async function fetchMonthlyShipments(year: number, month0: number): Promise<Mont
     const cust = Array.isArray(o.customers) ? o.customers[0] : o.customers;
     const addrId = (lines.find((l) => l.address_id != null)?.address_id ?? o.address_id) ?? null;
     const shippedAts = lines.map((l) => l.shipped_at).filter((s): s is string => !!s).sort();
-    const skus = [...new Set(lines.map((l) => l.item_code).filter((c): c is string => !!c))];
+    // one line per item: "qty× CODE Name" (legacy `courier` covers orders shipped before courier_label)
+    const items = lines.map((l) => {
+      const code = l.item_code ?? '';
+      const name = skuName(one(l.catalogue as never), '');
+      return `${l.qty}× ${code}${name ? ` ${name}` : ''}`.trim();
+    });
     return {
       ship_date: shippedAts.length ? shippedAts[shippedAts.length - 1].slice(0, 10) : '',
       order_id: o.sales_id,
       customer: cust?.name ?? '',
       address: (addrId != null ? addrMap.get(addrId) : '') ?? '',
-      courier: lines.find((l) => l.courier_label)?.courier_label ?? '',
+      courier: lines.find((l) => l.courier_label)?.courier_label ?? lines.find((l) => l.courier)?.courier ?? '',
       tracking: lines.find((l) => l.courier_tracking)?.courier_tracking ?? '',
       items: lines.length,
-      skus: skus.join(', '),
+      skus: items.join('\n'),
       chargeable_g: chargeBySales.get(o.sales_id) ?? null,
     };
   });
@@ -390,11 +406,14 @@ export async function getMonthlyShipmentsXlsx(year: number, month0: number): Pro
     { header: 'Courier', key: 'courier', width: 14 },
     { header: 'Tracking', key: 'tracking', width: 18 },
     { header: 'Items', key: 'items', width: 8 },
-    { header: 'SKUs', key: 'skus', width: 30 },
+    { header: 'Items (qty × SKU)', key: 'skus', width: 44 },
     { header: 'Chargeable (g)', key: 'chargeable_g', width: 14 },
   ];
   ws.getRow(1).font = { bold: true };
   rows.forEach((r) => ws.addRow(r));
+  // the per-item lines live in one cell — wrap so each "qty× SKU Name" shows on its own line
+  ws.getColumn('skus').alignment = { wrapText: true, vertical: 'top' };
+  ws.getColumn('address').alignment = { wrapText: true, vertical: 'top' };
   const buf = await wb.xlsx.writeBuffer();
   const base64 = Buffer.from(buf as ArrayBuffer).toString('base64');
   return { filename: `outbound-shipments-${year}-${pad2(month0 + 1)}.xlsx`, base64, count: rows.length };

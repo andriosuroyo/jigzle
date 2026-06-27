@@ -45,6 +45,15 @@ export default function OutboundHistoryBoard({
   );
   const imgMap = useSkuImages(imgCodes);
 
+  // order-level courier + tracking (courier_label already falls back to legacy `courier` server-side)
+  const courierLine = useMemo(() => {
+    if (!summary) return null;
+    const label = summary.lines.find((l) => l.courier_label)?.courier_label ?? null;
+    const track = summary.lines.find((l) => l.courier_tracking)?.courier_tracking ?? null;
+    const parts = [label, track ? `#${track}` : null].filter(Boolean);
+    return parts.length ? parts.join(' · ') : null;
+  }, [summary]);
+
   function boxType(b: BoxSummary): string {
     if (b.dim_p == null || b.dim_l == null || b.dim_t == null) return 'Custom';
     const m = boxPresets.find((p) => p.dim_p === b.dim_p && p.dim_l === b.dim_l && p.dim_t === b.dim_t);
@@ -134,6 +143,13 @@ export default function OutboundHistoryBoard({
               <section className="fd-section">
                 <div className="fd-section-head">Shipped to</div>
                 <pre className="ob-addr-block">{summary.ship_address}</pre>
+              </section>
+            )}
+
+            {courierLine && (
+              <section className="fd-section">
+                <div className="fd-section-head">Courier &amp; tracking</div>
+                <div className="order-note">{courierLine}</div>
               </section>
             )}
 
