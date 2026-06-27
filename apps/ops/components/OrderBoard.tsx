@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
@@ -103,18 +103,32 @@ const formFromPO = (po: OpenPORow): PoForm => ({
 
 type RightMode = 'new' | 'edit' | 'group' | null;
 
+// Purchasing pipeline buckets (PurchasingShell tabs): 'forwarder' = Processing + On the way (bought,
+// awaiting details/tracking); 'ship' = With Forwarder (confirmed, grouped into shipments).
+const BUCKET_STATUSES: Record<'forwarder' | 'ship', POOpenStatus[]> = {
+  forwarder: ['Processing', 'On the way'],
+  ship: ['With Forwarder'],
+};
+
 export default function OrderBoard({
   initialQueue,
   suppliers: initialSuppliers,
   forwarders: initialForwarders,
   shipments: initialShipments,
   userEmail,
+  embedded = false,
+  bucket,
+  onCountChange,
 }: {
   initialQueue: OpenPORow[];
   suppliers: Supplier[];
   forwarders: Forwarder[];
   shipments: OpenShipmentRow[];
   userEmail: string;
+  // PurchasingShell embedding: render without the app chrome and constrain the queue to one bucket.
+  embedded?: boolean;
+  bucket?: 'forwarder' | 'ship';
+  onCountChange?: (n: number) => void;
 }) {
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
@@ -156,6 +170,14 @@ export default function OrderBoard({
 
   const selectedCount = selectedPoIds.size;
   const selectedPOs = useMemo(() => queue.filter((p) => selectedPoIds.has(p.po_id)), [queue, selectedPoIds]);
+
+  // constrain the displayed queue to the tab's bucket (client-side over the loaded open queue)
+  const shown = useMemo(() => {
+    if (!bucket) return queue;
+    const allowed = BUCKET_STATUSES[bucket];
+    return queue.filter((p) => allowed.includes(p.status as POOpenStatus));
+  }, [queue, bucket]);
+  useEffect(() => { onCountChange?.(shown.length); }, [shown, onCountChange]);
 
   // SKU thumbnails for the PO queue rows + the SKU search picker
   const imgCodes = useMemo(() => {
@@ -483,29 +505,35 @@ export default function OrderBoard({
     }
   }
 
-  return (
-    <div className="ops">
-      <AppHeader active="purchasing" userEmail={userEmail} />
-
+  const body = (
+    <>
       <div className="fulfill-layout">
         {/* ── Open-PO queue ── */}
         <aside className="fq-pane">
-          <div className="fq-head"><span>Open POs</span></div>
+          {!embedded && <div className="fq-head"><span>Open POs</span></div>}
           <div className="po-filters">
-            <select value={filterStatus} onChange={(e) => applyFilters(e.target.value, filterSupplier)}>
-              <option value="">All open</option>
-              {OPEN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            {/* status dropdown only in the un-bucketed (standalone) board; the tab already scopes status */}
+            {!bucket && (
+              <select value={filterStatus} onChange={(e) => applyFilters(e.target.value, filterSupplier)}>
+                <option value="">All open</option>
+                {OPEN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
             <select value={filterSupplier} onChange={(e) => applyFilters(filterStatus, e.target.value)}>
               <option value="">All suppliers</option>
               {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}
             </select>
           </div>
-          <div className="po-newbtn">
-            <button className="btn-primary" style={{ width: '100%' }} onClick={startNew}>+ New PO</button>
-          </div>
+          {/* New PO belongs to the buying stage — hide it in the 'ship' (already-grouped) bucket */}
+          {bucket !== 'ship' && (
+            <div className="po-newbtn">
+              <button className="btn-primary" style={{ width: '100%' }} onClick={startNew}>+ New PO</button>
+            </div>
+          )}
 
-          {selectedCount > 0 && (
+          {/* Grouping moves Processing/On-the-way POs → With Forwarder, so it lives in the 'forwarder'
+              bucket (and the standalone board); the 'ship' bucket is already grouped. */}
+          {selectedCount > 0 && bucket !== 'ship' && (
             <div className="po-group-bar">
               <span className="gb-count">{selectedCount} selected</span>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -515,9 +543,9 @@ export default function OrderBoard({
             </div>
           )}
 
-          {queue.length === 0 && <div className="hint fq-empty">No open POs.</div>}
+          {shown.length === 0 && <div className="hint fq-empty">{bucket ? 'Nothing here yet.' : 'No open POs.'}</div>}
           <ul className="fq-list">
-            {queue.map((po) => (
+            {shown.map((po) => (
               <li key={po.po_id}>
                 <div className="po-row-wrap">
                   <input
@@ -576,6 +604,14 @@ export default function OrderBoard({
           )}
         </main>
       </div>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="ops">
+      <AppHeader active="purchasing" userEmail={userEmail} />
+      {body}
     </div>
   );
 

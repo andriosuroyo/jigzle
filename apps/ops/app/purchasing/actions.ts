@@ -25,9 +25,13 @@ import type {
   OpenShipmentRow,
   SkuHit,
   UpdatePOPatch,
+  PreorderRow,
+  ReceivedItemRow,
+  ShipmentHistoryRow,
 } from './types';
 
 const QUEUE_LIMIT = 200;
+const HISTORY_LIMIT = 100;
 
 // PostgREST `.or()` / `.ilike()` interpolate the raw string into a filter grammar where
 // , ( ) * \ are operators. Strip them from operator-typed input (defense-in-depth — the
@@ -401,4 +405,181 @@ export async function groupIntoShipment(payload: GroupShipmentInput): Promise<{ 
   });
   if (error) throw new Error(`groupIntoShipment: ${error.message}`);
   return { affected: (data as number[] | null) ?? [] };
+}
+
+// ── To buy → Preorder (read-only): unfulfilled, non-cancelled sales lines whose SKU is ≤0 available —
+// what customers ordered that we must still buy. Newest order first. (types in ./types) ──
+export async function getPreorders(): Promise<PreorderRow[]> {
+  const supabase = createSupabaseServerClient();
+
+  // unfulfilled, live order lines with a resolved SKU (no stock gate exists for code-less lines)
+  const { data: lines } = await supabase
+    .from('order_lines')
+    .select('line_id,sales_id,item_code,qty')
+    .is('fulfilled_at', null)
+    .eq('is_cancelled', false)
+    .not('item_code', 'is', null)
+    .limit(1000);
+  const rows = (lines ?? []) as { line_id: string; sales_id: string; item_code: string; qty: number }[];
+  if (!rows.length) return [];
+
+  const salesIds = [...new Set(rows.map((r) => r.sales_id))];
+  const codes = [...new Set(rows.map((r) => r.item_code))];
+
+  // orders (skip Cancelled/Complete), catalogue names, customers, and live availability — in parallel
+  const orderById = new Map<string, { order_date: string | null; status: string | null; customer_id: number | null }>();
+  const nameByCode = new Map<string, string>();
+  const availByCode = new Map<string, number>();
+  const customerById = new Map<number, string | null>();
+
+  await Promise.all([
+    (async () => {
+      const { data } = await supabase.from('orders').select('sales_id,order_date,status,customer_id').in('sales_id', salesIds);
+      for (const o of (data ?? []) as { sales_id: string; order_date: string | null; status: string | null; customer_id: number | null }[]) {
+        orderById.set(o.sales_id, { order_date: o.order_date, status: o.status, customer_id: o.customer_id });
+      }
+    })(),
+    (async () => {
+      const { data } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
+      for (const c of (data ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+    })(),
+    (async () => {
+      const { data } = await supabase.from('stock_check').select('item_code,available').in('item_code', codes);
+      for (const s of (data ?? []) as { item_code: string; available: number }[]) availByCode.set(s.item_code, Number(s.available) || 0);
+    })(),
+  ]);
+
+  const customerIds = [...new Set([...orderById.values()].map((o) => o.customer_id).filter((c): c is number => c != null))];
+  if (customerIds.length) {
+    const { data } = await supabase.from('customers').select('customer_id,name').in('customer_id', customerIds);
+    for (const c of (data ?? []) as { customer_id: number; name: string | null }[]) customerById.set(c.customer_id, c.name);
+  }
+
+  const out: PreorderRow[] = [];
+  for (const r of rows) {
+    const order = orderById.get(r.sales_id);
+    if (!order || order.status === 'Cancelled' || order.status === 'Complete') continue;
+    const available = availByCode.get(r.item_code) ?? 0;
+    if (available > 0) continue; // in stock → not a preorder
+    out.push({
+      line_id: r.line_id,
+      sales_id: r.sales_id,
+      customer_name: order.customer_id != null ? customerById.get(order.customer_id) ?? null : null,
+      order_date: order.order_date,
+      item_code: r.item_code,
+      name: nameByCode.get(r.item_code) ?? r.item_code,
+      qty: r.qty,
+      available,
+    });
+  }
+  // newest order first (nulls last), then sales_id for stability
+  out.sort((a, b) => {
+    if (a.order_date && b.order_date) return a.order_date < b.order_date ? 1 : a.order_date > b.order_date ? -1 : a.sales_id.localeCompare(b.sales_id);
+    if (a.order_date) return -1;
+    if (b.order_date) return 1;
+    return a.sales_id.localeCompare(b.sales_id);
+  });
+  return out;
+}
+
+// ── History → Per item (read-only): Received PO lines, newest first; keeps per-item cost / shipID.
+// Optional text filter matches item_code / name / ship_id. (types in ./types) ──
+export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('purchase_orders')
+    .select('po_id,item_code,qty,status,item_cost,ship_id,supplier_id,receive_date,marketplace_order_id')
+    .eq('status', 'Received')
+    .order('receive_date', { ascending: false, nullsFirst: false })
+    .order('po_id', { ascending: false })
+    .limit(500);
+  const rows = (data ?? []) as {
+    po_id: number; item_code: string | null; qty: number; item_cost: number | null;
+    ship_id: string | null; supplier_id: number | null; receive_date: string | null; marketplace_order_id: string | null;
+  }[];
+  if (!rows.length) return [];
+
+  const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
+  const supplierIds = [...new Set(rows.map((r) => r.supplier_id).filter((c): c is number => c != null))];
+  const nameByCode = new Map<string, string>();
+  const supplierById = new Map<number, string | null>();
+  await Promise.all([
+    (async () => {
+      if (!codes.length) return;
+      const { data } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
+      for (const c of (data ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+    })(),
+    (async () => {
+      if (!supplierIds.length) return;
+      const { data } = await supabase.from('suppliers').select('supplier_id,name').in('supplier_id', supplierIds);
+      for (const s of (data ?? []) as { supplier_id: number; name: string | null }[]) supplierById.set(s.supplier_id, s.name);
+    })(),
+  ]);
+
+  let out: ReceivedItemRow[] = rows.map((r) => ({
+    po_id: r.po_id,
+    item_code: r.item_code,
+    name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : '(unnamed)',
+    qty: r.qty,
+    item_cost: r.item_cost,
+    ship_id: r.ship_id,
+    supplier_name: r.supplier_id != null ? supplierById.get(r.supplier_id) ?? null : null,
+    receive_date: r.receive_date,
+    marketplace_order_id: r.marketplace_order_id,
+  }));
+
+  const q = sanitize(query).toLowerCase();
+  if (q) {
+    out = out.filter(
+      (r) =>
+        (r.item_code ?? '').toLowerCase().includes(q) ||
+        r.name.toLowerCase().includes(q) ||
+        (r.ship_id ?? '').toLowerCase().includes(q)
+    );
+  }
+  return out.slice(0, HISTORY_LIMIT);
+}
+
+// ── History → Per shipment (read-only): completed shipments, newest received first; one row per
+// shipment with a count of its Received SKUs. Optional filter matches ship_id. (types in ./types) ──
+export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('shipments')
+    .select('ship_id,forwarder_prefix,origin_country,ship_date,received_date,tracking,status')
+    .not('received_date', 'is', null)
+    .order('received_date', { ascending: false, nullsFirst: false })
+    .limit(300);
+  let ships = (data ?? []) as {
+    ship_id: string; forwarder_prefix: string | null; origin_country: string | null;
+    ship_date: string | null; received_date: string | null; tracking: string | null;
+  }[];
+
+  const q = sanitize(query).toLowerCase();
+  if (q) ships = ships.filter((s) => s.ship_id.toLowerCase().includes(q));
+  ships = ships.slice(0, HISTORY_LIMIT);
+  if (!ships.length) return [];
+
+  // distinct Received SKUs per ship_id (one round-trip over the visible ship_ids)
+  const shipIds = ships.map((s) => s.ship_id);
+  const skusByShip = new Map<string, Set<string>>();
+  const { data: pos } = await supabase
+    .from('purchase_orders')
+    .select('ship_id,item_code,status')
+    .in('ship_id', shipIds)
+    .eq('status', 'Received');
+  for (const p of (pos ?? []) as { ship_id: string | null; item_code: string | null }[]) {
+    if (!p.ship_id || !p.item_code) continue;
+    (skusByShip.get(p.ship_id) ?? skusByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.item_code);
+  }
+
+  return ships.map((s) => ({
+    ship_id: s.ship_id,
+    forwarder_prefix: s.forwarder_prefix,
+    origin_country: s.origin_country,
+    ship_date: s.ship_date,
+    received_date: s.received_date,
+    tracking: s.tracking,
+    item_count: skusByShip.get(s.ship_id)?.size ?? 0,
+  }));
 }
