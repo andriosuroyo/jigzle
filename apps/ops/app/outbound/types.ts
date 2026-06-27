@@ -35,11 +35,20 @@ export interface BoxInput {
   dim_t: number | null;
 }
 
+// 0035: how each line was checked at ship — 'scan' (barcode) carries the scanned code; 'manual' a tick.
+// Written onto the outbound_shipments rows by record_shipment so the report/History ✅/○ marks populate.
+export interface ShipVerify {
+  line_id: string;
+  method: 'scan' | 'manual';
+  barcode: string | null;
+}
+
 // Courier + tracking are set at Fulfill now and travel on the line (O4) — Outbound never sends them.
 export interface ShipInput {
   sales_id: string;
   line_ids: string[];
   boxes: BoxInput[];
+  verify?: ShipVerify[];   // per-line verification captured at Mark-shipped (0035)
 }
 
 export interface ShipResult {
