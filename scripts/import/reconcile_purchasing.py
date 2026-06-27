@@ -275,28 +275,30 @@ def main():
     client = Client(env.get("NEXT_PUBLIC_SUPABASE_URL", ""), env.get("SUPABASE_SERVICE_ROLE_KEY", ""))
     client.ping()
 
-    # 1) catalogue codes (FK) — unmatched → item_code NULL, keep raw
+    # 1) catalogue codes (FK) — unmatched → item_code NULL, keep raw. PostgREST caps each response at
+    # its db-max-rows (Supabase default 1000), so page by the ACTUAL returned count and stop only on an
+    # empty page — never trust a single `limit=N` to return N (the old `limit=2000` silently truncated).
     valid = set()
     offset = 0
     while True:
-        page = client._req("GET", f"catalogue?select=item_code&limit=2000&offset={offset}") or []
-        valid.update(c["item_code"] for c in page)
-        if len(page) < 2000:
+        page = client._req("GET", f"catalogue?select=item_code&order=item_code&limit=1000&offset={offset}") or []
+        if not page:
             break
-        offset += 2000
+        valid.update(c["item_code"] for c in page)
+        offset += len(page)
     print(f"  catalogue codes      {len(valid)}")
 
-    # 2) suppliers — read existing, insert missing, map name → id
+    # 2) suppliers — read existing, insert missing, map name → id (same robust paging)
     sup_map = {}
     offset = 0
     while True:
-        page = client._req("GET", f"suppliers?select=supplier_id,name&limit=2000&offset={offset}") or []
+        page = client._req("GET", f"suppliers?select=supplier_id,name&order=supplier_id&limit=1000&offset={offset}") or []
+        if not page:
+            break
         for s in page:
             if s["name"]:
                 sup_map[s["name"]] = s["supplier_id"]
-        if len(page) < 2000:
-            break
-        offset += 2000
+        offset += len(page)
     want_sup = {r["supplier"] for r in order_rows if r["supplier"]}
     flag_by_name = {r["supplier"]: r["supplier_flag"] for r in order_rows if r["supplier"] and r["supplier_flag"]}
     missing_sup = sorted(want_sup - set(sup_map))
