@@ -355,11 +355,12 @@ input, textarea, select, button { font-family: inherit; }
 .rcv-qty-in.ok    { color: var(--green); }
 .rcv-denom { font-size: 13px; font-weight: 700; color: var(--muted); }
 
-/* receive-date field — sits to the right of the Mark-received button in the commit bar; label on top,
-   date input below, right-aligned, so the Items area above stays clean. */
-.rcv-date-field { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin-left: auto; }
+/* receive-date field — sits to the right of the Mark-received button in the commit bar; small label on
+   top, the date below styled like a (big) text-button: no box, brown, right-aligned, tap to edit. */
+.rcv-date-field { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-left: auto; }
 .rcv-date-field .fd-label { margin-bottom: 0; white-space: nowrap; }
-.rcv-date-input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
+.rcv-date-input { padding: 0; border: none; background: none; font-size: 17px; font-weight: 700; color: var(--brown); text-align: right; cursor: pointer; }
+.rcv-date-input::-webkit-calendar-picker-indicator { display: none; }
 
 .rcv-controls { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .rcv-ctl { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-weight: 600; }
