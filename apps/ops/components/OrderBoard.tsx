@@ -7,6 +7,7 @@ import {
   addForwarder,
   addSupplier,
   createPO,
+  deletePO,
   getOpenPOs,
   getOpenShipments,
   groupIntoShipment,
@@ -147,6 +148,7 @@ export default function OrderBoard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState(false); // inline delete-order confirm (edit pane)
 
   // SKU search
   const [skuQuery, setSkuQuery] = useState('');
@@ -178,6 +180,9 @@ export default function OrderBoard({
     return queue.filter((p) => allowed.includes(p.status as POOpenStatus));
   }, [queue, bucket]);
   useEffect(() => { onCountChange?.(shown.length); }, [shown, onCountChange]);
+  // embedded tabs mount fresh on each switch — refetch so a confirm/group done in a sibling tab shows.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (embedded) refreshQueue(); }, []);
 
   // SKU thumbnails for the PO queue rows + the SKU search picker
   const imgCodes = useMemo(() => {
@@ -233,6 +238,7 @@ export default function OrderBoard({
     setCustQuery('');
     setCustHits([]);
     setSupForm(null);
+    setConfirmDel(false);
   }
 
   function openEdit(po: OpenPORow) {
@@ -245,6 +251,43 @@ export default function OrderBoard({
     setCustQuery('');
     setCustHits([]);
     setSupForm(null);
+    setConfirmDel(false);
+  }
+
+  // ── Confirm get: advance the selected To-forwarder POs to With Forwarder → they move to To ship ──
+  async function confirmSelected() {
+    if (selectedCount === 0) return;
+    resetMessages();
+    setBusy(true);
+    try {
+      for (const id of selectedPoIds) await setPOStatus(id, 'With Forwarder');
+      setSuccess(`Confirmed ${selectedCount} item${selectedCount === 1 ? '' : 's'} → To ship.`);
+      setSelectedPoIds(new Set());
+      await refreshQueue();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to confirm.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ── delete an open order (the PO won't be confirmed) ──
+  async function doDelete() {
+    if (!editPo) return;
+    resetMessages();
+    setBusy(true);
+    try {
+      await deletePO(editPo.po_id);
+      setSuccess(`PO #${editPo.po_id} deleted.`);
+      setMode(null);
+      setEditPo(null);
+      setConfirmDel(false);
+      await refreshQueue();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   function toggleSelect(poId: number) {
@@ -531,9 +574,19 @@ export default function OrderBoard({
             </div>
           )}
 
-          {/* Grouping moves Processing/On-the-way POs → With Forwarder, so it lives in the 'forwarder'
-              bucket (and the standalone board); the 'ship' bucket is already grouped. */}
-          {selectedCount > 0 && bucket !== 'ship' && (
+          {/* To forwarder → Confirm get advances the selected items to To ship (With Forwarder). */}
+          {selectedCount > 0 && bucket === 'forwarder' && (
+            <div className="po-group-bar">
+              <span className="gb-count">{selectedCount} selected</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn-primary" style={{ flex: 1 }} onClick={confirmSelected} disabled={busy}>Confirm get →</button>
+                <button className="btn-secondary" onClick={() => setSelectedPoIds(new Set())}>clear</button>
+              </div>
+            </div>
+          )}
+
+          {/* To ship (and the standalone board) → group the confirmed items into a shipment. */}
+          {selectedCount > 0 && bucket !== 'forwarder' && (
             <div className="po-group-bar">
               <span className="gb-count">{selectedCount} selected</span>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -557,9 +610,10 @@ export default function OrderBoard({
                   />
                   <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                   <button className={`fq-row ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
+                    {/* Sales-style: product name headline, SKU code demoted to a muted mono tail. */}
                     <div className="fq-row-top">
-                      <span className="fq-id">{po.item_code || '—'}</span>
-                      <span className="fq-cust">{po.name}</span>
+                      <span className="fq-headline">{po.name}</span>
+                      <span className="fq-id-sub">{po.item_code || '—'}</span>
                     </div>
                     <div className="fq-row-bot">
                       <span>×{po.qty}{po.supplier_name ? ` · ${po.supplier_name}` : ''}</span>
@@ -783,6 +837,21 @@ export default function OrderBoard({
             {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create PO'}
           </button>
         </div>
+
+        {/* Delete order — for an order that won't be confirmed (danger text-button + inline confirm). */}
+        {isEdit && (
+          <div className="ob-return">
+            {!confirmDel ? (
+              <button className="btn-link danger" onClick={() => setConfirmDel(true)} disabled={busy}>Delete order</button>
+            ) : (
+              <span className="rcv-reverse-ask">
+                Delete PO #{editPo?.po_id}? This removes the order entirely.
+                <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
+                <button className="btn-primary danger" onClick={doDelete} disabled={busy}>{busy ? 'Deleting…' : 'Yes, delete'}</button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
     );
   }

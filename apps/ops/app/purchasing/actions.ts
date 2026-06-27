@@ -334,6 +334,16 @@ export async function setPOStatus(poId: number, status: POOpenStatus): Promise<v
   if (error) throw new Error(`setPOStatus: ${error.message}`);
 }
 
+// ── delete an open PO (an order that won't be confirmed). Open POs are incoming-only (they feed the
+// pending / on-the-way stock columns, not actual stock), so removing one just drops it from those
+// counts. Received POs are owned by Receiving and never deleted here. ──
+export async function deletePO(poId: number): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  await assertNotReceived(supabase, poId, 'deletePO');
+  const { error } = await supabase.from('purchase_orders').delete().eq('po_id', poId);
+  if (error) throw new Error(`deletePO: ${error.message}`);
+}
+
 // ── inline "+ add" supplier (idempotent on the unique name) ──
 export async function addSupplier(input: NewSupplierInput): Promise<Supplier> {
   const supabase = createSupabaseServerClient();
