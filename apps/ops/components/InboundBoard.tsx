@@ -506,7 +506,7 @@ export default function InboundBoard({
     }
   }
 
-  const headerTitle = mode === 'adhoc' ? 'Ad-hoc receive' : detail?.ship_id ?? '';
+  const headerTitle = mode === 'adhoc' ? 'Unmarked shipment' : detail?.ship_id ?? '';
 
   const body = (
     <>
@@ -543,8 +543,8 @@ export default function InboundBoard({
 
           <div style={{ padding: '6px 6px 0' }}>
             <button className={`fq-row ${selected === ADHOC_SENTINEL ? 'active' : ''}`} onClick={startAdhoc} style={{ borderStyle: 'dashed' }}>
-              <div className="fq-row-top"><span className="fq-id">+ ad-hoc receive</span></div>
-              <div className="fq-row-bot"><span>goods with no shipment ledger entry (📦)</span></div>
+              <div className="fq-row-top"><span className="fq-id">+ unmarked shipment</span></div>
+              <div className="fq-row-bot"><span>goods with no shipment ID (📦)</span></div>
             </button>
           </div>
           {queue.length === 0 && <div className="hint fq-empty">No open shipments.</div>}
@@ -614,7 +614,7 @@ export default function InboundBoard({
                       {!detail.is_shipment && <span className="warn-text"> · not in the shipment ledger</span>}
                     </>
                   ) : (
-                    <>goods with no shipment ledger entry</>
+                    <>goods with no shipment ID</>
                   )}
                 </div>
               </div>
@@ -624,7 +624,7 @@ export default function InboundBoard({
               {/* Ad-hoc id (editable; operator can override with free text) */}
               {mode === 'adhoc' && (
                 <section className="fd-section">
-                  <div className="fd-section-head">Ad-hoc ship id</div>
+                  <div className="fd-section-head">Unmarked ship id</div>
                   <input
                     type="text"
                     className="rcv-shipid"
@@ -636,9 +636,11 @@ export default function InboundBoard({
                 </section>
               )}
 
-              {/* Scan / add — Enter (or the scanner's auto-return) submits; no add button. */}
+              {/* Items — one section: the scan/manual-add row, then the list. Enter (or the scanner's
+                  auto-return) submits a scan; the counter shows received/expected (0/X), directly
+                  editable, and each scan +1s the matching line. */}
               <section className="fd-section">
-                <div className="fd-section-head">Scan / add</div>
+                <div className="fd-section-head">Items</div>
                 <div className="scan-row">
                   <input
                     type="text"
@@ -670,12 +672,7 @@ export default function InboundBoard({
                     </div>
                   </div>
                 )}
-              </section>
 
-              {/* Items — Sales/Outbound row format; the counter shows received/expected (0/X) and is
-                  directly editable. Each scan +1s the matching line. */}
-              <section className="fd-section">
-                <div className="fd-section-head">Items</div>
                 {detail.expected.length === 0 && extras.length === 0 && (
                   <div className="hint">No item list — scan or use Manual add to record what arrived.</div>
                 )}
@@ -695,18 +692,16 @@ export default function InboundBoard({
                 </ul>
               </section>
 
-              {/* Receive date — compact inline row (the leave-open vs close choice now lives only in the
-                  Save recap). */}
-              <section className="fd-section rcv-date-row">
-                <label className="fd-label">Receive date</label>
-                <input type="date" className="rcv-date-input" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} />
-              </section>
-
-              {/* Commit bar → opens the §6 confirmation window (the received + short recap). */}
+              {/* Commit bar → opens the §6 confirmation window (the received + short recap). The receive
+                  date sits to the right of the button (two lines) to keep the Items area clean. */}
               <div className="fd-commit">
                 <button className="btn-primary" onClick={openConfirm} disabled={committing || saveLines.length === 0 || !shipIdForSave}>
                   {canClose ? 'Mark received' : 'Save inbound'}
                 </button>
+                <label className="rcv-date-field">
+                  <span className="fd-label">Receive date</span>
+                  <input type="date" className="rcv-date-input" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} />
+                </label>
               </div>
             </>
           )}
