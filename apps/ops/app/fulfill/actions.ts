@@ -91,6 +91,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
     // F4: catalogue name if matched, else line_note → item_link → "Unmatched item" (never line_id)
     name: catName(one(r.catalogue as never)) || fallbackName(r.line_note, r.item_link),
     qty: r.qty,
+    line_note: r.line_note,
   }));
 
   const customerId = (order.customer_id as number | null) ?? null;

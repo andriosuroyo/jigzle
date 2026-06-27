@@ -361,6 +361,7 @@ export type ShipLine = {
   name: string;
   qty: number;
   courier: string | null;           // planned courier from fulfill
+  line_note: string | null;         // per-line note (set in Pending/Fulfill) — shown read-only in Outbound
 };
 
 // ── Receiving (Inbound) module (J2 — the "+" side of stock) ───────────────────

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending } from '@/app/fulfill/actions';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
-import type { CourierService } from '@/app/settings/types';
+import type { CourierService, CommonNote } from '@/app/settings/types';
+import NoteEditor from '@/components/NoteEditor';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -13,6 +14,7 @@ import { addressLine } from '@/components/addressLine';
 export default function FulfillBoard({
   initialQueue,
   courierServices,
+  commonNotes = [],
   initialOrderId,
   userEmail,
   embedded = false,
@@ -22,6 +24,7 @@ export default function FulfillBoard({
 }: {
   initialQueue: ToSendQueueRow[];
   courierServices: CourierService[];
+  commonNotes?: CommonNote[];
   initialOrderId?: string | null;
   userEmail: string;
   // JZ-001: Orders pipeline window — see PendingBoard for the embedded/onCountChange/onAdvance contract.
@@ -237,13 +240,25 @@ export default function FulfillBoard({
                 <div className="fd-section-head">Items</div>
                 <ul className="ff-lines">
                   {detail.lines.map((l) => (
-                    <li key={l.line_id} className="ff-line pend-line">
-                      <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
-                      <div className="pend-line-main">
-                        <span className="ff-code">{l.item_code || '—'}</span>
-                        <span className="ff-name">{l.name}</span>
+                    <li key={l.line_id} className="ff-line pend-line-card">
+                      <div className="pend-line">
+                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+                        <div className="pend-line-main">
+                          <span className="ff-code">{l.item_code || '—'}</span>
+                          <span className="ff-name">{l.name}</span>
+                        </div>
+                        <span className="ff-qty">×{l.qty}</span>
                       </div>
-                      <span className="ff-qty">×{l.qty}</span>
+                      <NoteEditor
+                        lineId={l.line_id}
+                        value={l.line_note}
+                        commonNotes={commonNotes}
+                        onSaved={(note) =>
+                          setDetail((d) =>
+                            d ? { ...d, lines: d.lines.map((x) => (x.line_id === l.line_id ? { ...x, line_note: note } : x)) } : d
+                          )
+                        }
+                      />
                     </li>
                   ))}
                 </ul>

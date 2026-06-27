@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getPending, sendReadyItems, deletePendingOrder, markOrderPaid } from '@/app/pending/actions';
 import type { OrderDot, PendingOrder } from '@/app/pending/types';
+import type { CommonNote } from '@/app/settings/types';
+import NoteEditor from '@/components/NoteEditor';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -21,6 +23,7 @@ const fmtIDR = (n: number | null | undefined): string => 'Rp ' + (n ?? 0).toLoca
 export default function PendingBoard({
   initialOrders,
   userEmail,
+  commonNotes = [],
   embedded = false,
   onCountChange,
   onAdvance,
@@ -28,6 +31,7 @@ export default function PendingBoard({
 }: {
   initialOrders: PendingOrder[];
   userEmail: string;
+  commonNotes?: CommonNote[];
   // JZ-001: when mounted inside the Orders pipeline window, drop the page chrome (the shell owns the
   // AppHeader + tab bar) and report list count / stage advances up to the shell. Optional → the
   // standalone /pending deep-link still renders unchanged.
@@ -85,6 +89,17 @@ export default function PendingBoard({
     setError(null);
     setSuccess(null);
     setSelId(o.sales_id);
+  }
+
+  // reflect a saved per-line note in local state so it survives re-renders without a refetch.
+  function applyLineNote(salesId: string, lineId: string, note: string | null) {
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.sales_id === salesId
+          ? { ...o, lines: o.lines.map((l) => (l.line_id === lineId ? { ...l, line_note: note } : l)) }
+          : o
+      )
+    );
   }
 
   // FP-6: cut the ready lines (available ≥ qty). Short lines stay in Pending; the cut lines move to Fulfill.
@@ -209,14 +224,17 @@ export default function PendingBoard({
               <section className="fd-section">
                 <ul className="ff-lines">
                   {sel.lines.map((l) => (
-                    <li key={l.line_id} className="ff-line pend-line">
-                      <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
-                      <div className="pend-line-main">
-                        <span className="ff-code">{l.item_code || '—'}</span>
-                        <span className="ff-name">{l.name}</span>
+                    <li key={l.line_id} className="ff-line pend-line-card">
+                      <div className="pend-line">
+                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+                        <div className="pend-line-main">
+                          <span className="ff-code">{l.item_code || '—'}</span>
+                          <span className="ff-name">{l.name}</span>
+                        </div>
+                        <span className="ff-qty">×{l.qty}</span>
+                        <span className={`pend-status ${l.status}`}>{STATUS_LABEL[l.status] ?? l.status}</span>
                       </div>
-                      <span className="ff-qty">×{l.qty}</span>
-                      <span className={`pend-status ${l.status}`}>{STATUS_LABEL[l.status] ?? l.status}</span>
+                      <NoteEditor lineId={l.line_id} value={l.line_note} commonNotes={commonNotes} onSaved={(note) => applyLineNote(sel.sales_id, l.line_id, note)} />
                     </li>
                   ))}
                 </ul>

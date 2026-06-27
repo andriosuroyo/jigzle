@@ -32,6 +32,7 @@ export interface FulfillCutLine {
   item_code: string | null;
   name: string;
   qty: number;
+  line_note: string | null; // per-line shipment note (editable here, shown in Outbound, locked in History)
 }
 
 // ── the detail pane (prep-only: confirm address + pick courier, then send to Outbound) ──
