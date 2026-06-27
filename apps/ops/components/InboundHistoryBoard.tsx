@@ -5,7 +5,7 @@
 // the detail pane renders straight from the selected row. Mirrors OutboundHistoryBoard's shape.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getReceiveHistory } from '@/app/inbound/actions';
+import { getReceiveHistory, deleteInboundShipment } from '@/app/inbound/actions';
 import type { InboundHistoryRow } from '@/app/inbound/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -26,6 +26,8 @@ export default function InboundHistoryBoard({
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [selKey, setSelKey] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const reqRef = useRef(0);
 
   const sel = useMemo(() => rows.find((r) => r.ship_id === selKey) ?? null, [rows, selKey]);
@@ -49,7 +51,26 @@ export default function InboundHistoryBoard({
     }
   }
 
+  // delete this received entry — removes its inbound rows (stock self-corrects via the stock_check
+  // view). Destructive, so it's behind an inline confirm.
+  async function doDelete() {
+    if (!sel) return;
+    setDeleting(true);
+    try {
+      await deleteInboundShipment(sel.ship_id);
+      setRows((prev) => prev.filter((r) => r.ship_id !== sel.ship_id));
+      setSelKey(null);
+      setConfirmDelete(false);
+    } catch {
+      /* keep the row on a transient error */
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   useEffect(() => { onCountChange?.(rows.length); }, [rows, onCountChange]);
+  // reset the delete confirm whenever the selection changes
+  useEffect(() => { setConfirmDelete(false); }, [selKey]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
 
@@ -96,7 +117,7 @@ export default function InboundHistoryBoard({
             <div className="fd-head">
               <div className="fd-title">{sel.ship_id}</div>
               <div className="fd-sub">
-                {sel.tracking ? sel.tracking : sel.is_adhoc ? 'ad-hoc receive' : 'no tracking'}
+                {sel.tracking ? sel.tracking : sel.is_adhoc ? 'unmarked' : 'no tracking'}
                 {sel.receive_date ? ` · received ${fmtDate(sel.receive_date)}` : ''}
               </div>
             </div>
@@ -120,6 +141,19 @@ export default function InboundHistoryBoard({
                 {sel.items.length === 0 && <li className="hint">No received items.</li>}
               </ul>
             </section>
+
+            {/* Delete this received entry (text-button; removes the inbound rows, stock self-corrects). */}
+            <div className="ob-return">
+              {!confirmDelete ? (
+                <button className="btn-link danger" onClick={() => setConfirmDelete(true)} disabled={deleting}>Delete entry</button>
+              ) : (
+                <span className="rcv-reverse-ask">
+                  Delete {sel.ship_id}? Its received stock will be removed.
+                  <button className="btn-secondary" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
+                  <button className="btn-primary danger" onClick={doDelete} disabled={deleting}>{deleting ? 'Deleting…' : 'Yes, delete'}</button>
+                </span>
+              )}
+            </div>
           </>
         )}
       </main>

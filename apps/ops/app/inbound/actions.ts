@@ -245,29 +245,15 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
     else g.items.set(key, { item_code: r.item_code, name, qty: sellable, excluded_qty: excl });
   }
 
-  // shipment meta (origin / tracking) for the grouped ship_ids — and which are real shipments
-  const shipIds = [...groups.keys()];
-  const metaByShip = new Map<string, { origin_country: string | null; tracking: string | null }>();
-  if (shipIds.length) {
-    const { data: ships } = await supabase
-      .from('shipments')
-      .select('ship_id,origin_country,tracking')
-      .in('ship_id', shipIds);
-    for (const s of (ships ?? []) as { ship_id: string; origin_country: string | null; tracking: string | null }[]) {
-      metaByShip.set(s.ship_id, { origin_country: s.origin_country ?? null, tracking: s.tracking ?? null });
-    }
-  }
-
   let out: InboundHistoryRow[] = [...groups.values()].map((g) => {
     const items = [...g.items.values()].sort((a, b) => a.name.localeCompare(b.name));
     const sku_codes = items.map((i) => i.item_code).filter((c): c is string => !!c).sort((a, b) => a.localeCompare(b));
-    const meta = metaByShip.get(g.ship_id);
     return {
       ship_id: g.ship_id,
       receive_date: g.receive_date,
-      origin_country: meta?.origin_country ?? null,
-      tracking: meta?.tracking ?? null,
-      is_adhoc: !meta, // no shipments-ledger row → an ad-hoc receive
+      origin_country: null, // meta filled in below for the final (sliced) rows only
+      tracking: null,
+      is_adhoc: false,
       items,
       sku_codes,
       item_count: items.length,
@@ -291,7 +277,46 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
     if (b.receive_date) return 1;
     return a.ship_id.localeCompare(b.ship_id);
   });
-  return out.slice(0, HISTORY_LIMIT);
+  out = out.slice(0, HISTORY_LIMIT);
+
+  // shipment meta (origin / tracking) for ONLY the visible rows — bounds the .in() to ≤100 ids (a
+  // 200-id .in() over the full scan was silently failing, mislabelling real shipments as "unmarked").
+  // A ship_id with no shipments-ledger row is an unmarked (📦) receive.
+  const shipIds = out.map((r) => r.ship_id);
+  if (shipIds.length) {
+    const { data: ships } = await supabase
+      .from('shipments')
+      .select('ship_id,origin_country,tracking')
+      .in('ship_id', shipIds);
+    const metaByShip = new Map<string, { origin_country: string | null; tracking: string | null }>();
+    for (const s of (ships ?? []) as { ship_id: string; origin_country: string | null; tracking: string | null }[]) {
+      metaByShip.set(s.ship_id, { origin_country: s.origin_country ?? null, tracking: s.tracking ?? null });
+    }
+    for (const r of out) {
+      const meta = metaByShip.get(r.ship_id);
+      r.origin_country = meta?.origin_country ?? null;
+      r.tracking = meta?.tracking ?? null;
+      r.is_adhoc = !meta;
+    }
+  }
+  return out;
+}
+
+// ── delete an Inbound History entry: remove every inbound row for a ship_id. stock_check is a view
+// over inbound, so deleting the rows reverses the stock those receipts added (no separate undo). This
+// does NOT reopen a closed shipment or restore PO status — it's a record-correction for receives. ──
+export async function deleteInboundShipment(shipId: string): Promise<{ deleted: number }> {
+  const sid = shipId.trim();
+  if (!sid) throw new Error('deleteInboundShipment: a ship id is required');
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('inbound')
+    .delete()
+    .eq('ship_id', sid)
+    .eq('is_opening_balance', false)
+    .select('inbound_id');
+  if (error) throw new Error(`deleteInboundShipment: ${error.message}`);
+  return { deleted: (data ?? []).length };
 }
 
 // ── scan resolution: barcode → SKU, a collision picker (D1), or not-found (D2) ── (types in ./types)

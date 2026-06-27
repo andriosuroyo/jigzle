@@ -57,6 +57,7 @@ input, textarea, select, button { font-family: inherit; }
 .btn-secondary:active { background: var(--paper); }
 .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-link { background: none; border: none; color: var(--brown); font-size: 12px; cursor: pointer; text-decoration: underline; padding: 0; }
+.btn-link.danger { color: var(--red); }
 
 /* ── Panels ── */
 .panel { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
@@ -354,9 +355,10 @@ input, textarea, select, button { font-family: inherit; }
 .rcv-qty-in.ok    { color: var(--green); }
 .rcv-denom { font-size: 13px; font-weight: 700; color: var(--muted); }
 
-/* compact receive-date row (was a tall stacked field) */
-.rcv-date-row { display: flex; align-items: center; gap: 10px; }
-.rcv-date-row .fd-label { margin-bottom: 0; white-space: nowrap; }
+/* receive-date field — sits to the right of the Mark-received button in the commit bar; label on top,
+   date input below, right-aligned, so the Items area above stays clean. */
+.rcv-date-field { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin-left: auto; }
+.rcv-date-field .fd-label { margin-bottom: 0; white-space: nowrap; }
 .rcv-date-input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
 
 .rcv-controls { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
@@ -368,7 +370,7 @@ input, textarea, select, button { font-family: inherit; }
 .rcv-close { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); padding: 6px 0; }
 
 /* ── PR17: scan-to-find-shipment (§5), result banner + Reverse, confirm window extras ── */
-.rcv-find { padding: 8px 8px 2px; border-bottom: 1px solid var(--line); }
+.rcv-find { padding: 8px 8px 2px; }
 .rcv-suggest { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .rcv-suggest-opt { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: white; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 12px; cursor: pointer; }
 .rcv-suggest-opt:active { background: var(--paper); }
