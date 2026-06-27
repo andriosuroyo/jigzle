@@ -28,6 +28,10 @@ import type {
   PreorderRow,
   ReceivedItemRow,
   ShipmentHistoryRow,
+  PlannedItemInput,
+  PlannedItemRow,
+  SoldOutRow,
+  SkuStockInfo,
 } from './types';
 
 const QUEUE_LIMIT = 200;
@@ -342,6 +346,142 @@ export async function deletePO(poId: number): Promise<void> {
   await assertNotReceived(supabase, poId, 'deletePO');
   const { error } = await supabase.from('purchase_orders').delete().eq('po_id', poId);
   if (error) throw new Error(`deletePO: ${error.message}`);
+}
+
+// ── To buy → Planned: create a manual buy-list item (PO status 'Planned', no supplier yet). ──
+export async function createPlannedItem(input: PlannedItemInput): Promise<{ po_id: number }> {
+  const supabase = createSupabaseServerClient();
+  const item_code = input.item_code?.trim();
+  if (!item_code) throw new Error('createPlannedItem: an item code is required');
+  const qty = Number(input.qty);
+  if (!Number.isFinite(qty) || qty < 0) throw new Error('createPlannedItem: qty must be a number >= 0');
+
+  const today = todayJakarta();
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .insert({
+      item_code,
+      qty,
+      status: 'Planned',
+      status_since: today,
+      input_date: today,
+      product_link: input.product_link?.trim() || null,
+      item_note: input.item_note?.trim() || null,
+    })
+    .select('po_id')
+    .single();
+  if (error) throw new Error(`createPlannedItem: ${error.message}`);
+  return { po_id: (data as { po_id: number }).po_id };
+}
+
+// ── mark / unmark a PO sold out. soldOut=true → status 'Sold out' (auto-date + optional reason);
+// false → back to 'Planned' (clears the date/note). ──
+export async function setSoldOut(poId: number, soldOut: boolean, note?: string | null): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  await assertNotReceived(supabase, poId, 'setSoldOut');
+  const upd = soldOut
+    ? { status: 'Sold out', status_since: todayJakarta(), sold_out_date: todayJakarta(), sold_out_note: note?.trim() || null }
+    : { status: 'Planned', status_since: todayJakarta(), sold_out_date: null, sold_out_note: null };
+  const { error } = await supabase.from('purchase_orders').update(upd).eq('po_id', poId);
+  if (error) throw new Error(`setSoldOut: ${error.message}`);
+}
+
+// pipeline figures per SKU: live warehouse availability + incoming PO qty split by status.
+async function pipelineFor(supabase: ReturnType<typeof createSupabaseServerClient>, codes: string[]): Promise<Map<string, { available: number; on_the_way: number; with_forwarder: number }>> {
+  const m = new Map<string, { available: number; on_the_way: number; with_forwarder: number }>();
+  for (const c of codes) m.set(c, { available: 0, on_the_way: 0, with_forwarder: 0 });
+  if (!codes.length) return m;
+  await Promise.all([
+    (async () => {
+      const { data } = await supabase.from('stock_check').select('item_code,available').in('item_code', codes);
+      for (const s of (data ?? []) as { item_code: string; available: number }[]) {
+        const e = m.get(s.item_code); if (e) e.available = Number(s.available) || 0;
+      }
+    })(),
+    (async () => {
+      const { data } = await supabase.from('purchase_orders').select('item_code,qty,status').in('item_code', codes).in('status', ['On the way', 'With Forwarder']);
+      for (const p of (data ?? []) as { item_code: string | null; qty: number | null; status: string | null }[]) {
+        if (!p.item_code) continue;
+        const e = m.get(p.item_code); if (!e) continue;
+        if (p.status === 'On the way') e.on_the_way += Number(p.qty) || 0;
+        else if (p.status === 'With Forwarder') e.with_forwarder += Number(p.qty) || 0;
+      }
+    })(),
+  ]);
+  return m;
+}
+
+// live stock figures for one SKU (the add-item overlay).
+export async function getSkuStock(itemCode: string): Promise<SkuStockInfo> {
+  const code = itemCode.trim();
+  const supabase = createSupabaseServerClient();
+  const m = await pipelineFor(supabase, code ? [code] : []);
+  const e = m.get(code) ?? { available: 0, on_the_way: 0, with_forwarder: 0 };
+  return { item_code: code, available: e.available, on_the_way: e.on_the_way, with_forwarder: e.with_forwarder };
+}
+
+// ── To buy → Planned list (PO status 'Planned'), newest first, with live stock figures. ──
+export async function getPlannedItems(): Promise<PlannedItemRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('purchase_orders')
+    .select('po_id,item_code,qty,product_link,status,status_since')
+    .eq('status', 'Planned')
+    .order('po_id', { ascending: false })
+    .limit(QUEUE_LIMIT);
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; product_link: string | null }[];
+  if (!rows.length) return [];
+
+  const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
+  const nameByCode = new Map<string, string>();
+  if (codes.length) {
+    const { data: cat } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
+    for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+  }
+  const pipe = await pipelineFor(supabase, codes);
+
+  return rows.map((r) => {
+    const p = (r.item_code && pipe.get(r.item_code)) || { available: 0, on_the_way: 0, with_forwarder: 0 };
+    return {
+      po_id: r.po_id,
+      item_code: r.item_code,
+      name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : '(unnamed)',
+      qty: r.qty,
+      product_link: r.product_link,
+      available: p.available,
+      on_the_way: p.on_the_way,
+      with_forwarder: p.with_forwarder,
+    };
+  });
+}
+
+// ── To buy → Sold out list (PO status 'Sold out'), newest sold-out first. ──
+export async function getSoldOutItems(): Promise<SoldOutRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('purchase_orders')
+    .select('po_id,item_code,qty,sold_out_date,sold_out_note,status')
+    .eq('status', 'Sold out')
+    .order('sold_out_date', { ascending: false, nullsFirst: false })
+    .order('po_id', { ascending: false })
+    .limit(QUEUE_LIMIT);
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; sold_out_date: string | null; sold_out_note: string | null }[];
+  if (!rows.length) return [];
+
+  const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
+  const nameByCode = new Map<string, string>();
+  if (codes.length) {
+    const { data: cat } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
+    for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+  }
+  return rows.map((r) => ({
+    po_id: r.po_id,
+    item_code: r.item_code,
+    name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : '(unnamed)',
+    qty: r.qty,
+    sold_out_date: r.sold_out_date,
+    sold_out_note: r.sold_out_note,
+  }));
 }
 
 // ── inline "+ add" supplier (idempotent on the unique name) ──

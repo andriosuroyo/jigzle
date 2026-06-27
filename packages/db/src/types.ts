@@ -466,8 +466,10 @@ export type ReceiveLine = {
 // purchase_orders / suppliers / forwarders (0007). Procurement creates + advances open POs
 // and groups them into a forwarder shipment; Receiving owns the terminal 'Received' (set by
 // record_receipt, 0015). Column names mirror 0007_procurement.sql exactly.
-export type POStatus = 'Processing' | 'On the way' | 'With Forwarder' | 'Received';
-// the three states Procurement may set (Receiving owns 'Received')
+// 0036 added the two "To buy" states: 'Planned' (manual buy-list, not yet bought) and 'Sold out'
+// (can't buy now). Neither counts as incoming stock in stock_check.
+export type POStatus = 'Planned' | 'Processing' | 'On the way' | 'With Forwarder' | 'Received' | 'Sold out';
+// the three pipeline states Procurement may set with setPOStatus (Receiving owns 'Received')
 export type POOpenStatus = 'Processing' | 'On the way' | 'With Forwarder';
 export type SupplierType = 'Taobao account' | 'agent' | 'marketplace' | 'other';
 
@@ -493,6 +495,9 @@ export type PurchaseOrder = {
   shipment_note: string | null;
   input_date: string | null;
   receive_date: string | null;
+  product_link: string | null;       // 0036 — supplier/marketplace URL for a Planned buy
+  sold_out_date: string | null;      // 0036 — date first seen sold out (stamped on mark)
+  sold_out_note: string | null;      // 0036 — optional reason
   created_at: string;
 };
 
