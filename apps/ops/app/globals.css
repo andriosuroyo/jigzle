@@ -207,11 +207,17 @@ input, textarea, select, button { font-family: inherit; }
 .ob-verify { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
 .ob-manual-btn { background: none; border: none; color: var(--brown); font-size: 11px; font-weight: 600; cursor: pointer; padding: 0; text-decoration: underline; white-space: nowrap; }
 
-/* Outbound editable box rows — History-style (numbered icon + two lines + chargeable on the right). */
-.box-edit-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.box-edit-line input { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+/* Outbound editable box rows — row 1: box type (largest) + L/W/H side-by-side; row 2: real + chargeable. */
+.box-dim-row { display: flex; align-items: center; gap: 6px; }
+.box-dim-row .box-preset { flex: 1; min-width: 56px; }   /* box type = the largest of the four */
+.box-dim { width: 56px; flex-shrink: 0; text-align: center; padding: 5px 6px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+.box-dim.box-dim-ro { background: var(--paper); color: var(--ink); }  /* preset → static, not editable */
+.box-unit { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+.box-meta-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.box-meta-row .box-real { width: 96px; flex-shrink: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+.box-meta { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
 .box-add { margin-top: 8px; display: inline-block; font-size: 13px; }
-.box-remove { background: none; border: none; color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; flex-shrink: 0; align-self: center; }
+.box-remove { background: none; border: none; color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
 .box-preview label { display: flex; align-items: center; gap: 5px; }
 
 .fd-commit { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--line); flex-wrap: wrap; }
