@@ -20,7 +20,6 @@ const numOrNull = (s: string): number | null => {
   const n = parseFloat(s);
   return s.trim() && isFinite(n) ? n : null;
 };
-const fmtDim = (n: number | null): string => (n == null ? '—' : String(n));
 
 export default function OutboundBoard({
   initialQueue,
@@ -391,39 +390,46 @@ export default function OutboundBoard({
                 </ul>
               </section>
 
-              {/* Boxes — editable, History-style rows (numbered icon + two lines + chargeable on the right). */}
+              {/* Boxes — numbered icon; row 1 = box type (largest) + L/W/H side-by-side (static for a
+                  preset, editable for Custom); row 2 = real weight + the chargeable (largest of vol/real).
+                  Dims are in cm; L=length(P) W=width(L) H=height(T). */}
               <section className="fd-section">
                 <div className="fd-section-head">Boxes</div>
                 <ul className="ff-lines">
                   {boxes.map((b, i) => {
                     const { vol, charge } = boxPreview(b);
                     const dims = boxDims(b);
+                    const custom = b.preset === CUSTOM;
                     return (
                       <li key={b.key} className="box-sum box-edit">
                         <span className="box-idx">{i + 1}</span>
                         <div className="box-sum-main">
-                          <div className="box-edit-line">
+                          <div className="box-dim-row">
                             <select className="box-preset" value={b.preset} onChange={(e) => setBox(b.key, { preset: e.target.value })}>
                               {boxPresets.map((p) => <option key={p.code} value={p.code}>{p.code}</option>)}
                               <option value={CUSTOM}>Custom</option>
                             </select>
-                            {b.preset === CUSTOM ? (
+                            {custom ? (
                               <>
-                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="P" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />
-                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="L" value={b.l} onChange={(e) => setBox(b.key, { l: e.target.value })} />
-                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="T" value={b.t} onChange={(e) => setBox(b.key, { t: e.target.value })} />
+                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="L" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />
+                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="W" value={b.l} onChange={(e) => setBox(b.key, { l: e.target.value })} />
+                                <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="H" value={b.t} onChange={(e) => setBox(b.key, { t: e.target.value })} />
                               </>
                             ) : (
-                              <span className="box-dims-ro">{fmtDim(dims.p)} x {fmtDim(dims.l)} x {fmtDim(dims.t)} cm</span>
+                              <>
+                                <input className="box-dim box-dim-ro" type="text" readOnly aria-label="length (cm)" value={dims.p ?? ''} />
+                                <input className="box-dim box-dim-ro" type="text" readOnly aria-label="width (cm)" value={dims.l ?? ''} />
+                                <input className="box-dim box-dim-ro" type="text" readOnly aria-label="height (cm)" value={dims.t ?? ''} />
+                              </>
                             )}
+                            <span className="box-unit">cm</span>
+                            {boxes.length > 1 && <button className="box-remove" onClick={() => setBoxes((prev) => prev.filter((x) => x.key !== b.key))} aria-label="remove box">×</button>}
                           </div>
-                          <div className="box-edit-line">
+                          <div className="box-meta-row">
                             <input className="box-real" type="number" inputMode="numeric" min={0} placeholder="real (g)" value={b.real} onChange={(e) => setBox(b.key, { real: e.target.value })} />
-                            <span className="box-sum-l2">vol: {vol != null ? `${vol.toFixed(0)} g` : '—'}</span>
+                            <span className="box-meta">vol {vol != null ? `${vol.toFixed(0)} g` : '—'} · chargeable {charge != null ? `${charge.toFixed(0)} g` : '—'}</span>
                           </div>
                         </div>
-                        <span className="ff-qty">{charge != null ? `${charge.toFixed(0)} g` : '—'}</span>
-                        {boxes.length > 1 && <button className="box-remove" onClick={() => setBoxes((prev) => prev.filter((x) => x.key !== b.key))} aria-label="remove box">×</button>}
                       </li>
                     );
                   })}
