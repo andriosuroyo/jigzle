@@ -9,8 +9,10 @@
 
 import { useMemo, useState } from 'react';
 import {
+  buyPreorder,
   createPlannedItem,
   getPlannedItems,
+  getPreorders,
   getSkuStock,
   getSoldOutItems,
   searchSkus,
@@ -27,7 +29,7 @@ const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
 export default function ToBuyBoard({
   planned: initialPlanned,
-  preorders,
+  preorders: initialPreorders,
   soldOut: initialSoldOut,
 }: {
   planned: PlannedItemRow[];
@@ -35,6 +37,7 @@ export default function ToBuyBoard({
   soldOut: SoldOutRow[];
 }) {
   const [planned, setPlanned] = useState<PlannedItemRow[]>(initialPlanned);
+  const [preorders, setPreorders] = useState<PreorderRow[]>(initialPreorders);
   const [soldOut, setSoldOutList] = useState<SoldOutRow[]>(initialSoldOut);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +132,17 @@ export default function ToBuyBoard({
     finally { setBusy(false); }
   }
 
+  // Buy a preorder → a Processing PO linked to the customer; it drops off the preorder list.
+  async function buyPre(p: PreorderRow) {
+    if (!p.item_code) return;
+    setBusy(true); setError(null);
+    try {
+      await buyPreorder({ item_code: p.item_code, qty: p.qty, customer_id: p.customer_id });
+      setPreorders(await getPreorders());
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); }
+    finally { setBusy(false); }
+  }
+
   return (
     <div className="purch-tobuy">
       {error && <div className="validation err">{error}</div>}
@@ -178,14 +192,19 @@ export default function ToBuyBoard({
         {preorders.length === 0 && <div className="hint">No preorders — every ordered SKU is in stock.</div>}
         <ul className="ff-lines">
           {preorders.map((p) => (
-            <li key={p.line_id} className="ff-line pend-line">
-              <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
-              <div className="pend-line-main">
-                <span className="ff-code">{p.item_code || '—'}</span>
-                <span className="ff-name">{p.name}</span>
-                <span className="hint">{p.sales_id} · {p.customer_name || 'no customer'} · {fmtDate(p.order_date)}</span>
+            <li key={p.line_id} className="ff-line">
+              <div className="pend-line">
+                <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
+                <div className="pend-line-main">
+                  <span className="ff-code">{p.item_code || '—'}</span>
+                  <span className="ff-name">{p.name}</span>
+                  <span className="hint">{p.sales_id} · {p.customer_name || 'no customer'} · {fmtDate(p.order_date)}</span>
+                </div>
+                <span className="ff-qty">×{p.qty}</span>
               </div>
-              <span className="ff-qty">×{p.qty}</span>
+              <div className="rcv-controls">
+                <button className="btn-secondary" onClick={() => buyPre(p)} disabled={busy}>Buy →</button>
+              </div>
             </li>
           ))}
         </ul>
