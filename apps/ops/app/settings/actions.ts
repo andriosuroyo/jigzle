@@ -8,6 +8,7 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type {
   BoxPreset,
+  CommonNote,
   CourierService,
   InboundLabel,
   PaymentMethod,
@@ -24,6 +25,7 @@ const TABLE: Record<SettingsKind, string> = {
   courier: 'settings_courier_services',
   box: 'settings_box_presets',
   inbound_labels: 'settings_inbound_labels',
+  common_note: 'settings_common_notes',
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -34,6 +36,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   courier: ['courier', 'speed', 'label', 'is_active'],
   box: ['code', 'dim_p', 'dim_l', 'dim_t', 'is_active'],
   inbound_labels: ['label', 'is_active'],
+  common_note: ['label', 'is_active'],
 };
 
 function pick(kind: SettingsKind, src: Record<string, unknown>): Record<string, unknown> {
@@ -58,13 +61,14 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, inboundLabels] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
     list<InboundLabel>(TABLE.inbound_labels),
+    list<CommonNote>(TABLE.common_note),
   ]);
-  return { paymentMethods, courierServices, boxPresets, inboundLabels };
+  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes };
 }
 
 // ── lighter single-list reads (PR26: Fulfill needs couriers, Outbound box presets; PR27: Orders
@@ -120,6 +124,20 @@ export async function getInboundLabels(): Promise<InboundLabel[]> {
     .order('id', { ascending: true });
   if (error) throw new Error(`getInboundLabels: ${error.message}`);
   return (data ?? []) as InboundLabel[];
+}
+
+// 0035: the Pending/Fulfill note editor reads this for its common-note dropdown.
+export async function getCommonNotes(): Promise<CommonNote[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.common_note)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) throw new Error(`getCommonNotes: ${error.message}`);
+  return (data ?? []) as CommonNote[];
 }
 
 // ── add: a new global row at the end of its list (sort_order = current max + 1) ──

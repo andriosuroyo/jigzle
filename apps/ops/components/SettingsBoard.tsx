@@ -72,6 +72,14 @@ const SECTIONS: SectionDef[] = [
     sortKey: 'label',
     blank: { label: '' },
   },
+  {
+    kind: 'common_note',
+    title: 'Common notes',
+    sub: 'Reusable shipment notes (gift wrap, free gift, …) offered in the Pending/Fulfill note picker.',
+    cols: [{ key: 'label', label: 'Note', type: 'text', grow: true }],
+    sortKey: 'label',
+    blank: { label: '' },
+  },
 ];
 
 const val = (row: SettingRow, key: string): unknown => (row as unknown as Record<string, unknown>)[key];
@@ -101,6 +109,7 @@ export default function SettingsBoard({ initial, userEmail }: { initial: Setting
     courier: initial.courierServices,
     box: initial.boxPresets,
     inbound_labels: initial.inboundLabels,
+    common_note: initial.commonNotes,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
