@@ -638,13 +638,13 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,qty,status,item_cost,ship_id,supplier_id,receive_date,marketplace_order_id,product_link')
+    .select('po_id,item_code,item_code_raw,qty,status,item_cost,ship_id,supplier_id,receive_date,marketplace_order_id,product_link')
     .eq('status', 'Received')
     .order('receive_date', { ascending: false, nullsFirst: false })
     .order('po_id', { ascending: false })
     .limit(500);
   const rows = (data ?? []) as {
-    po_id: number; item_code: string | null; qty: number; item_cost: number | null;
+    po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; item_cost: number | null;
     ship_id: string | null; supplier_id: number | null; receive_date: string | null; marketplace_order_id: string | null; product_link: string | null;
   }[];
   if (!rows.length) return [];
@@ -668,8 +668,9 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
 
   let out: ReceivedItemRow[] = rows.map((r) => ({
     po_id: r.po_id,
-    item_code: r.item_code,
-    name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : '(unnamed)',
+    // uncatalogued codes (kept in item_code_raw by the reconcile) still show their code, not "(unnamed)"
+    item_code: r.item_code ?? r.item_code_raw,
+    name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : r.item_code_raw ?? '(no SKU)',
     qty: r.qty,
     item_cost: r.item_cost,
     ship_id: r.ship_id,
