@@ -37,6 +37,21 @@ from db import load_env, Client  # type: ignore
 PREFIX_RE = re.compile(r"^([A-Za-z]+)")
 OPEN_STATUSES = {"Processing", "On the way", "With Forwarder"}
 
+# Suppliers were imported flag-stripped (name in `name`, flag in `flag`) — match that so we REUSE
+# existing suppliers instead of creating "🇨🇳 …" duplicates (transforms.strip_flag parity).
+_FLAG_RE = re.compile(r"^([\U0001F1E6-\U0001F1FF]{2}|🌎|🌏|🌍)\s*")
+_FLAG_COUNTRY = {"🇨🇳": "China", "🇯🇵": "Japan", "🇹🇼": "Taiwan", "🇭🇰": "Hong Kong",
+                 "🇰🇷": "Korea", "🇺🇸": "USA", "🌎": "Worldwide", "🌏": "Worldwide", "🌍": "Worldwide"}
+
+
+def strip_flag(s):
+    """('🇨🇳 1709-892-4989') → ('🇨🇳', '1709-892-4989')."""
+    s = clean(s) or ""
+    m = _FLAG_RE.match(s)
+    if m:
+        return m.group(1), s[m.end():].strip()
+    return None, s
+
 
 def clean(v):
     if v is None:
@@ -136,8 +151,11 @@ def parse_order(path):
             if not any(clean(x) for x in raw):
                 continue
             g = lambda key: clean(raw[c[key]]) if c[key] is not None and c[key] < len(raw) else None  # noqa: E731
+            sup_raw = g("supplier")
+            sup_flag, sup_name = strip_flag(sup_raw) if sup_raw else (None, None)
             rows.append({
-                "supplier": g("supplier"),
+                "supplier": sup_name or None,        # flag-stripped, to match existing suppliers
+                "supplier_flag": sup_flag,
                 "input_date": parse_date(g("input_date")),
                 "item_code": g("item_code"),
                 "qty": to_num(g("qty")) or 0,
@@ -280,9 +298,12 @@ def main():
             break
         offset += 2000
     want_sup = {r["supplier"] for r in order_rows if r["supplier"]}
+    flag_by_name = {r["supplier"]: r["supplier_flag"] for r in order_rows if r["supplier"] and r["supplier_flag"]}
     missing_sup = sorted(want_sup - set(sup_map))
     if missing_sup:
-        made = client.insert("suppliers", [{"name": n} for n in missing_sup], returning=True)
+        new_rows = [{"name": n, "flag": flag_by_name.get(n),
+                     "country": _FLAG_COUNTRY.get(flag_by_name.get(n) or "")} for n in missing_sup]
+        made = client.insert("suppliers", new_rows, returning=True)
         for n, row in zip(missing_sup, made):
             sup_map[n] = row["supplier_id"]
     print(f"  suppliers (+{len(missing_sup)} new) {len(sup_map)}")
