@@ -76,12 +76,16 @@ for new orders, the first row for old). `order_lines` = the non-`📦` rows (old
 
 1. **Migration `0037_customer_lifetime.sql`** (drafted alongside this doc, review-only) — the derived
    LTV view. Apply before/with the load.
-2. **`reconcile_customers.py`** — upsert `customers` (+ `customer_addresses`) from the Customer CSV.
-   Run FIRST (orders FK customers).
-3. **`reconcile_sales.py`** — full-reload `orders` + `order_lines` from both sales CSVs (deduped),
-   resolving item_codes (paged past the 1000-row cap), mapping status → enum + cuts, linking customers
-   by parsed id. Delete order children first (`order_lines`, then `orders`) to respect FKs.
-4. **Stock check** — after loading, `available` should drop to realistic levels (11 years of sales now
+2. **`reconcile_sales.py`** (built — the customer + order cluster is loaded together because
+   `customer_id` is generated and orders link by the customer *label* built at customer load):
+   - **Customers** — add-missing (reuse by phone, never delete → external FKs stay intact). Addresses
+     are deferred (order `address_id` NULL; not needed for stock/revenue/LTV).
+   - **Orders + lines** — full reload. `customer_id` ← label map; status → enum + cuts; totals ×1000;
+     `📦` rows are the order header (skip as a line); item_codes paged past the 1000-row cap.
+   - **FK guard** — before the delete, null `outbound_shipments.sales_id` / `order_line_id` (those FKs
+     are NO ACTION and would block the orders delete + the cascade to order_lines). Harmless — those
+     rows are denormalized.
+3. **Stock check** — after loading, `available` should drop to realistic levels (11 years of sales now
    deplete). Run the verification SQL (stock identity, negatives) to confirm.
 
 ## Caveats
