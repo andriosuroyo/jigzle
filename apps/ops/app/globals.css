@@ -858,6 +858,18 @@ img.sku-img { background: #e8e8e8; }
 .set-del:active { background: #f3c9bf; }
 .set-del:disabled { opacity: 0.45; cursor: not-allowed; }
 .set-toolbar { display: flex; gap: 8px; margin-top: 10px; }
+/* per-row icon cell (emoji or uploaded image) + its picker modal */
+.set-ico { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; padding: 0; }
+.set-ico:disabled { opacity: 0.5; cursor: not-allowed; }
+.set-ico-img { width: 100%; height: 100%; object-fit: cover; }
+.set-ico-emoji { font-size: 18px; line-height: 1; }
+.set-ico-add { font-size: 18px; color: var(--muted); line-height: 1; }
+.set-ico-preview { display: flex; align-items: center; justify-content: center; height: 84px; margin-bottom: 12px; background: var(--paper); border-radius: 8px; }
+.set-ico-preview img { max-width: 84px; max-height: 84px; object-fit: contain; border-radius: 8px; }
+.set-ico-preview-emoji { font-size: 48px; line-height: 1; }
+.set-ico-upload { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.set-ico-upload.disabled { opacity: 0.5; cursor: not-allowed; }
+.set-ico-remove { margin-top: 12px; }
 
 /* ── PR26 — Fulfill 3-line item card (F5); PR28 §4c — Pattern A card primitive ── */
 /* Self-sufficient flex row (image left, description column beside). Combined with .result-item on
