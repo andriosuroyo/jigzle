@@ -13,7 +13,7 @@ import {
   searchSkus,
   submitOrder,
 } from '@/app/sales/actions';
-import type { CustomerHit, LoyaltyReadout, SkuHit } from '@/app/sales/types';
+import type { CustomerHit, LoyaltyReadout, SkuHit, Urgency } from '@/app/sales/types';
 import type { PaymentMethod } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -21,6 +21,14 @@ import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
 
 const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEBSITE', 'LINE', 'OTHER'];
+
+// PR73: buy-priority options — low / mid / high → green / yellow / red. Shared visual language with the
+// Purchasing To-buy cards. Optional (an order may carry no urgency).
+const URGENCY_OPTS: { key: Urgency; label: string }[] = [
+  { key: 'low', label: 'Low' },
+  { key: 'mid', label: 'Mid' },
+  { key: 'high', label: 'High' },
+];
 
 type Line = { item_code: string; name: string; qty: number; unit_price_idr: number; available: number; on_the_way: number };
 
@@ -109,6 +117,9 @@ export default function OrderEntry({
   const [payMode, setPayMode] = useState<'none' | 'full' | 'dp'>('none');
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState(paymentMethods[0]?.label ?? '');
+
+  // Panel 5 — urgency (PR73, optional buy-priority)
+  const [urgency, setUrgency] = useState<Urgency | null>(null);
 
   // save
   const [saving, setSaving] = useState(false);
@@ -258,6 +269,7 @@ export default function OrderEntry({
       const res = await submitOrder({
         customer_id: customer.id,
         address_id: confirmLater ? null : addressId,
+        urgency,
         lines: lines.map((l) => ({ item_code: l.item_code, qty: l.qty, unit_price_idr: l.unit_price_idr })),
         payment: paid > 0 ? { amount_idr: paid, method: payMethod || null } : null,
       });
@@ -277,6 +289,7 @@ export default function OrderEntry({
     setNaRecipient(''); setNaContact(''); setNaAddr('');
     setSkuQuery(''); setSkuResults([]); setSkuSearched(false); setDraftQty({}); setDraftPrice({}); setLines([]);
     setPayMode('none'); setPayAmount(''); setPayMethod(paymentMethods[0]?.label ?? '');
+    setUrgency(null);
     setError(null); setResult(null);
   }
 
@@ -533,6 +546,27 @@ export default function OrderEntry({
                   </select>
                 )
               )}
+            </div>
+          </section>
+
+          {/* Panel 5 — Priority (PR73): optional buy-urgency, surfaced on the Purchasing From-Sales cards */}
+          <section className={`panel ${!customer ? 'panel-locked' : ''}`}>
+            <div className="panel-head"><span className="panel-num">5</span> Priority</div>
+            <div className="panel-body">
+              <div className="urg-toggle" role="group" aria-label="Order urgency">
+                {URGENCY_OPTS.map((u) => (
+                  <button
+                    key={u.key}
+                    type="button"
+                    className={`urg-btn urg-${u.key} ${urgency === u.key ? 'active' : ''}`}
+                    aria-pressed={urgency === u.key}
+                    onClick={() => setUrgency(urgency === u.key ? null : u.key)}
+                  >
+                    {u.label}
+                  </button>
+                ))}
+              </div>
+              <div className="hint">How urgently this order needs buying — shown on the Purchasing buy-list. Tap again to clear.</div>
             </div>
           </section>
         </main>

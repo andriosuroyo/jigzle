@@ -60,10 +60,16 @@ export interface OrderPaymentInput {
   note?: string | null;
 }
 
+// PR73: buy-priority for the order — low / mid / high (green / yellow / red). Surfaced on the
+// Purchasing From-Sales cards (a preorder reads its order's urgency). Optional; stamped after
+// create_order with a plain UPDATE (the RPC is unchanged).
+export type Urgency = 'low' | 'mid' | 'high';
+
 export interface CreateOrderInput {
   customer_id: number | null;
   address_id: number | null;   // null = SA-1 "confirm address later" (set in Fulfill)
   order_note?: string | null;
+  urgency?: Urgency | null;
   lines: OrderLineInput[];
   payment: OrderPaymentInput | null;
 }

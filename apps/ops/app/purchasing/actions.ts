@@ -32,6 +32,7 @@ import type {
   PlannedItemRow,
   SoldOutRow,
   SkuStockInfo,
+  Urgency,
 } from './types';
 
 const QUEUE_LIMIT = 200;
@@ -184,35 +185,58 @@ export async function getOpenShipments(): Promise<OpenShipmentRow[]> {
   return data as OpenShipmentRow[];
 }
 
-// ── SKU search (catalogue text + barcode), with live available + incoming (D3) ── (SkuHit in ./types)
+// ── SKU search (catalogue text + barcode + brand name), with live available + incoming (D3) ──
+// (SkuHit in ./types). PR73: the add-item search also matches on brand — brands.name → brand_prefix →
+// catalogue.brand_prefix — so "lego", a piece count, a code, a name, or a barcode all resolve a SKU.
 export async function searchSkus(q: string): Promise<SkuHit[]> {
   const raw = sanitize(q);
   if (raw.length < 2) return [];
   const supabase = createSupabaseServerClient();
 
+  // resolve brand prefixes whose name matches the query (for the brand-name search arm)
+  const { data: brandRows } = await supabase.from('brands').select('prefix').ilike('name', `%${raw}%`).limit(20);
+  const brandPrefixes = [...new Set((brandRows ?? []).map((b) => b.prefix as string))];
+
   const named = new Map<string, string>();
-  const [catRes, bcRes] = await Promise.all([
+  const [catRes, bcRes, brandCatRes] = await Promise.all([
     supabase
       .from('catalogue')
-      .select('item_code,original_name,translate_name,self_code')
-      .or(`item_code.ilike.%${raw}%,self_code.ilike.%${raw}%,original_name.ilike.%${raw}%,translate_name.ilike.%${raw}%`)
+      .select('item_code,original_name,translate_name,self_code,brand_prefix')
+      .or(`item_code.ilike.%${raw}%,self_code.ilike.%${raw}%,original_name.ilike.%${raw}%,translate_name.ilike.%${raw}%,piece_count.ilike.%${raw}%`)
       .limit(15),
     supabase.from('barcodes').select('item_code').ilike('barcode', `%${raw}%`).limit(15),
+    brandPrefixes.length
+      ? supabase.from('catalogue').select('item_code,original_name,translate_name,self_code,brand_prefix').in('brand_prefix', brandPrefixes).limit(15)
+      : Promise.resolve({ data: [] as CatRow[] }),
   ]);
 
-  for (const c of (catRes.data ?? []) as CatNameRow[]) named.set(c.item_code, nameOf(c, c.item_code));
+  type CatRow = CatNameRow & { brand_prefix: string | null };
+  const brandByCode = new Map<string, string | null>();
+  const absorb = (rows: CatRow[]) => {
+    for (const c of rows) { named.set(c.item_code, nameOf(c, c.item_code)); brandByCode.set(c.item_code, c.brand_prefix); }
+  };
+  absorb((catRes.data ?? []) as CatRow[]);
+  absorb((brandCatRes.data ?? []) as CatRow[]);
 
   const bcCodes = [...new Set((bcRes.data ?? []).map((b) => b.item_code as string))].filter((code) => !named.has(code));
   if (bcCodes.length) {
     const { data: cat2 } = await supabase
       .from('catalogue')
-      .select('item_code,original_name,translate_name,self_code')
+      .select('item_code,original_name,translate_name,self_code,brand_prefix')
       .in('item_code', bcCodes);
-    for (const c of (cat2 ?? []) as CatNameRow[]) named.set(c.item_code, nameOf(c, c.item_code));
+    absorb((cat2 ?? []) as CatRow[]);
   }
 
   const codes = [...named.keys()].slice(0, 20);
   if (!codes.length) return [];
+
+  // resolve brand display names for the matched SKUs (prefix → name)
+  const prefixes = [...new Set([...brandByCode.values()].filter((p): p is string => !!p))];
+  const brandName = new Map<string, string>();
+  if (prefixes.length) {
+    const { data: bn } = await supabase.from('brands').select('prefix,name').in('prefix', prefixes);
+    for (const b of (bn ?? []) as { prefix: string; name: string | null }[]) if (b.name) brandName.set(b.prefix, b.name);
+  }
 
   const { data: stock } = await supabase
     .from('stock_check')
@@ -224,14 +248,31 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
 
   return codes.map((item_code) => {
     const s = sm.get(item_code);
+    const prefix = brandByCode.get(item_code) ?? null;
     return {
       item_code,
       name: named.get(item_code)!,
+      brand: prefix ? brandName.get(prefix) ?? prefix : null,
       available: s?.available ?? 0,
       pending: s?.pending ?? 0,
       on_the_way: s?.on_the_way ?? 0,
     };
   });
+}
+
+// ── PR73: the buy links for one SKU shown in the To-buy "Buy" overlay: the catalogue's stored supplier
+// sources (sku_sources, ordered). The card's own product_link (manual) / item_link (preorder) is passed
+// separately by the client — this fills in the catalogue fallback ("draws from the catalog database"). ──
+export async function getSkuSources(itemCode: string): Promise<string[]> {
+  const code = itemCode.trim();
+  if (!code) return [];
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('sku_sources')
+    .select('url,source_index')
+    .eq('item_code', code)
+    .order('source_index', { ascending: true });
+  return [...new Set(((data ?? []) as { url: string }[]).map((r) => r.url).filter(Boolean))];
 }
 
 // ── customer search (name + phone) for the optional "for customer" field ── (CustomerHit in ./types)
@@ -356,6 +397,7 @@ export async function createPlannedItem(input: PlannedItemInput): Promise<{ po_i
   const qty = Number(input.qty);
   if (!Number.isFinite(qty) || qty < 0) throw new Error('createPlannedItem: qty must be a number >= 0');
 
+  const urgency = input.urgency && ['low', 'mid', 'high'].includes(input.urgency) ? input.urgency : null;
   const today = todayJakarta();
   const { data, error } = await supabase
     .from('purchase_orders')
@@ -367,10 +409,44 @@ export async function createPlannedItem(input: PlannedItemInput): Promise<{ po_i
       input_date: today,
       product_link: input.product_link?.trim() || null,
       item_note: input.item_note?.trim() || null,
+      urgency,
     })
     .select('po_id')
     .single();
   if (error) throw new Error(`createPlannedItem: ${error.message}`);
+  return { po_id: (data as { po_id: number }).po_id };
+}
+
+// ── PR73: set the qty of a manual (Planned) buy-list item — the card's editable ± stepper. Reuses the
+// guarded updatePO path (blocked once Received; qty must be a number ≥ 0). ──
+export async function setPlannedQty(poId: number, qty: number): Promise<void> {
+  await updatePO(poId, { qty });
+}
+
+// ── PR73: mark a SKU sold out straight from the From-Sales card (no PO exists yet) by creating a
+// 'Sold out' PO for that item + customer. It then both shows in the Out-of-Stock list and covers the
+// preorder (an open, non-Received PO for the SKU + customer), so the line drops off From Sales. ──
+export async function markSkuSoldOut(input: { item_code: string; customer_id: number | null; qty: number; note?: string | null }): Promise<{ po_id: number }> {
+  const supabase = createSupabaseServerClient();
+  const item_code = input.item_code?.trim();
+  if (!item_code) throw new Error('markSkuSoldOut: an item code is required');
+  const qty = Number(input.qty);
+  const today = todayJakarta();
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .insert({
+      item_code,
+      qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+      status: 'Sold out',
+      status_since: today,
+      input_date: today,
+      sold_out_date: today,
+      sold_out_note: input.note?.trim() || null,
+      customer_id: input.customer_id ?? null,
+    })
+    .select('po_id')
+    .single();
+  if (error) throw new Error(`markSkuSoldOut: ${error.message}`);
   return { po_id: (data as { po_id: number }).po_id };
 }
 
@@ -449,11 +525,11 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,qty,product_link,status,status_since')
+    .select('po_id,item_code,qty,product_link,item_note,urgency,status,status_since')
     .eq('status', 'Planned')
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
-  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; product_link: string | null }[];
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null }[];
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -472,6 +548,8 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
       name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : '(unnamed)',
       qty: r.qty,
       product_link: r.product_link,
+      item_note: r.item_note,
+      urgency: r.urgency,
       available: p.available,
       on_the_way: p.on_the_way,
       with_forwarder: p.with_forwarder,
@@ -484,12 +562,12 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,qty,sold_out_date,sold_out_note,status')
+    .select('po_id,item_code,qty,product_link,urgency,sold_out_date,sold_out_note,status')
     .eq('status', 'Sold out')
     .order('sold_out_date', { ascending: false, nullsFirst: false })
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
-  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; sold_out_date: string | null; sold_out_note: string | null }[];
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; product_link: string | null; urgency: Urgency | null; sold_out_date: string | null; sold_out_note: string | null }[];
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -503,6 +581,8 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
     item_code: r.item_code,
     name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : '(unnamed)',
     qty: r.qty,
+    product_link: r.product_link,
+    urgency: r.urgency,
     sold_out_date: r.sold_out_date,
     sold_out_note: r.sold_out_note,
   }));
@@ -589,28 +669,28 @@ export async function getPreorders(): Promise<PreorderRow[]> {
   // unfulfilled, live order lines with a resolved SKU (no stock gate exists for code-less lines)
   const { data: lines } = await supabase
     .from('order_lines')
-    .select('line_id,sales_id,item_code,qty')
+    .select('line_id,sales_id,item_code,qty,item_link')
     .is('fulfilled_at', null)
     .eq('is_cancelled', false)
     .not('item_code', 'is', null)
     .limit(1000);
-  const rows = (lines ?? []) as { line_id: string; sales_id: string; item_code: string; qty: number }[];
+  const rows = (lines ?? []) as { line_id: string; sales_id: string; item_code: string; qty: number; item_link: string | null }[];
   if (!rows.length) return [];
 
   const salesIds = [...new Set(rows.map((r) => r.sales_id))];
   const codes = [...new Set(rows.map((r) => r.item_code))];
 
   // orders (skip Cancelled/Complete), catalogue names, customers, and live availability — in parallel
-  const orderById = new Map<string, { order_date: string | null; status: string | null; customer_id: number | null }>();
+  const orderById = new Map<string, { order_date: string | null; status: string | null; customer_id: number | null; urgency: Urgency | null }>();
   const nameByCode = new Map<string, string>();
   const availByCode = new Map<string, number>();
   const customerById = new Map<number, string | null>();
 
   await Promise.all([
     (async () => {
-      const { data } = await supabase.from('orders').select('sales_id,order_date,status,customer_id').in('sales_id', salesIds);
-      for (const o of (data ?? []) as { sales_id: string; order_date: string | null; status: string | null; customer_id: number | null }[]) {
-        orderById.set(o.sales_id, { order_date: o.order_date, status: o.status, customer_id: o.customer_id });
+      const { data } = await supabase.from('orders').select('sales_id,order_date,status,customer_id,urgency').in('sales_id', salesIds);
+      for (const o of (data ?? []) as { sales_id: string; order_date: string | null; status: string | null; customer_id: number | null; urgency: Urgency | null }[]) {
+        orderById.set(o.sales_id, { order_date: o.order_date, status: o.status, customer_id: o.customer_id, urgency: o.urgency });
       }
     })(),
     (async () => {
@@ -661,6 +741,8 @@ export async function getPreorders(): Promise<PreorderRow[]> {
       name: nameByCode.get(r.item_code) ?? r.item_code,
       qty: r.qty,
       available,
+      urgency: order.urgency,
+      product_link: r.item_link,
     });
   }
   // newest order first (nulls last), then sales_id for stability

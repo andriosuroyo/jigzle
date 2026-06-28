@@ -5,15 +5,29 @@
 
 import type { SupplierType } from '@jigzle/db/types';
 
+// Buy-priority flag (PR73): low / mid / high → green / yellow / red across the To-buy cards. Stored on
+// purchase_orders.urgency (manual items) and orders.urgency (sales orders, surfaced on From-Sales cards).
+export type Urgency = 'low' | 'mid' | 'high';
+
 // SKU search hit for the PO form — live stock_check.available plus the incoming columns
 // (D3: pending = Σ Processing POs, on_the_way = Σ 'On the way' / 'With Forwarder' POs). This is
-// where incoming stock is surfaced (apps/ops has no standalone Stock Check screen yet).
+// where incoming stock is surfaced (apps/ops has no standalone Stock Check screen yet). PR73 adds the
+// brand name (matched via brands.name → brand_prefix) so the add-item search can find by brand too.
 export interface SkuHit {
   item_code: string;
   name: string;
+  brand: string | null;
   available: number;
   pending: number;
   on_the_way: number;
+}
+
+// PR73: the purchase links shown in the To-buy "Buy" overlay for one SKU — the buy-list item's own
+// product link (if any) plus the catalogue's stored supplier sources (sku_sources). When both are
+// empty the overlay offers "Mark as Out of Stock" only.
+export interface BuyLinks {
+  product_link: string | null;
+  sources: string[];
 }
 
 // customer search hit for the optional "for customer" field
@@ -78,6 +92,8 @@ export interface PreorderRow {
   name: string;
   qty: number;
   available: number; // live stock_check.available (≤ 0 for a preorder)
+  urgency: Urgency | null; // from the order (orders.urgency)
+  product_link: string | null; // the order line's item_link, if any (used by the Buy overlay)
 }
 
 // ── To buy → Planned (manual buy-list; PO status 'Planned'). Created with no supplier yet. ──
@@ -86,6 +102,7 @@ export interface PlannedItemInput {
   qty: number;
   product_link?: string | null;
   item_note?: string | null;
+  urgency?: Urgency | null;
 }
 
 export interface PlannedItemRow {
@@ -94,6 +111,8 @@ export interface PlannedItemRow {
   name: string;
   qty: number;
   product_link: string | null;
+  item_note: string | null;
+  urgency: Urgency | null;
   available: number;     // live stock_check.available (warehouse)
   on_the_way: number;    // Σ 'On the way' PO qty (shipped, en route)
   with_forwarder: number; // Σ 'With Forwarder' PO qty (in forwarder)
@@ -105,6 +124,8 @@ export interface SoldOutRow {
   item_code: string | null;
   name: string;
   qty: number;
+  urgency: Urgency | null;
+  product_link: string | null;
   sold_out_date: string | null;
   sold_out_note: string | null;
 }
