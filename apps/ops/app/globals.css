@@ -107,7 +107,12 @@ input, textarea, select, button { font-family: inherit; }
 
 /* add-item quick-view rows (search results + the chosen SKU): small picture, code + name, an
    availability sub-line. The chosen row carries a red × to remove. */
-.po-pick { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.po-pick { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--ink); }
+/* the name reads as ink, not the iOS default button-tint (blue) */
+.po-pick .ff-name { color: var(--ink); }
+.po-pick-l2 .fig-pos { color: var(--green); }
+.fig-pos { color: var(--green); font-weight: 700; }
+.fig-zero { color: var(--muted); font-weight: 700; }
 button.po-pick-btn { cursor: pointer; }
 button.po-pick-btn:active { background: var(--paper); }
 .po-pick-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -117,8 +122,10 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-pick-x { flex-shrink: 0; width: 30px; height: 30px; border: none; border-radius: 8px; background: var(--red-tint); color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; }
 .po-pick-x:active { background: #f3c9bf; }
 
-/* add-item footer: left-aligned action, helper text to its right (shown only when nothing chosen) */
-.po-commit { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--line); }
+/* add-item footer: helper text left, action right (matches the Buy overlay's layout) */
+.po-commit { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 16px; padding-top: 14px; padding-bottom: env(safe-area-inset-bottom); border-top: 1px solid var(--line); }
+.po-commit .fd-commit-info { flex: 1; min-width: 0; }
+.po-commit .btn-primary { flex-shrink: 0; }
 
 /* ── Panels ── */
 .panel { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }

@@ -51,6 +51,13 @@ function UrgencyChip({ urgency }: { urgency: Urgency | null }) {
   return <span className={`urg-chip urg-${urgency}`}>{urgency}</span>;
 }
 
+// pipeline figures in the canonical order — forwarder → shipped → warehouse. A non-zero number reads
+// green; a zero stays muted.
+function StockFigs({ wf, otw, avail }: { wf: number; otw: number; avail: number }) {
+  const fig = (n: number) => <b className={n > 0 ? 'fig-pos' : 'fig-zero'}>{n}</b>;
+  return <>at forwarder {fig(wf)} · shipped {fig(otw)} · warehouse {fig(avail)}</>;
+}
+
 // the active "Buy" overlay target — enough to load + render its links and run the right write-backs.
 type BuyTarget = {
   kind: SubTab;
@@ -256,7 +263,7 @@ export default function ToBuyBoard({
                     <UrgencyChip urgency={p.urgency} />
                   </div>
                   <div className="po-card-l2 hint">
-                    warehouse {p.available} · forwarder {p.with_forwarder} · shipped {p.on_the_way}
+                    <StockFigs wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />
                     {p.item_note ? ` · ${p.item_note}` : ''}
                   </div>
                   <div className="po-card-l3">
@@ -370,7 +377,7 @@ export default function ToBuyBoard({
                         <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
                         <div className="po-pick-main">
                           <div className="po-pick-l1"><span className="ff-code">{h.item_code}</span><span className="ff-name">{h.name}{h.brand ? ` · ${h.brand}` : ''}</span></div>
-                          <div className="po-pick-l2">at forwarder {h.with_forwarder} · shipped {h.on_the_way} · warehouse {h.available}</div>
+                          <div className="po-pick-l2"><StockFigs wf={h.with_forwarder} otw={h.on_the_way} avail={h.available} /></div>
                         </div>
                       </button>
                     </li>
@@ -386,7 +393,7 @@ export default function ToBuyBoard({
                     <div className="po-pick-l1"><span className="ff-code">{picked.item_code}</span><span className="ff-name">{picked.name}</span></div>
                     <div className="po-pick-l2">
                       {pickedStock
-                        ? `at forwarder ${pickedStock.with_forwarder} · shipped ${pickedStock.on_the_way} · warehouse ${pickedStock.available}`
+                        ? <StockFigs wf={pickedStock.with_forwarder} otw={pickedStock.on_the_way} avail={pickedStock.available} />
                         : 'loading…'}
                     </div>
                   </div>
@@ -436,8 +443,8 @@ export default function ToBuyBoard({
                 </div>
 
                 <div className="po-commit">
+                  <span className="fd-commit-info">{!canAdd ? 'Search a SKU, or type a new SKU code and search.' : ''}</span>
                   <button className="btn-primary" onClick={submitPlanned} disabled={busy || !canAdd}>{busy ? 'Adding…' : 'Add item'}</button>
-                  {!canAdd && <span className="fd-commit-info">Search a SKU, or type a new SKU code and search.</span>}
                 </div>
               </div>
             </div>
@@ -450,14 +457,17 @@ export default function ToBuyBoard({
         <div className="sc-modal-backdrop" onClick={() => setBuyTarget(null)}>
           <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Buy item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
-              <span className="sc-modal-title">Buy · {buyTarget.item_code || buyTarget.name}</span>
+              <span className="sc-modal-title">Buy this item</span>
               <button className="sc-modal-x" onClick={() => setBuyTarget(null)} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
-              <div className="po-current" style={{ marginBottom: 10 }}>
-                <span className="ff-code">{buyTarget.item_code || '—'}</span>
-                <span className="ff-name">{buyTarget.name}</span>
+              <div className="po-pick" style={{ marginBottom: 12 }}>
+                <SkuImage status={imgMap[buyTarget.item_code]?.status} displayUrl={imgMap[buyTarget.item_code]?.displayUrl} name={buyTarget.name} size={SKU_IMG.sm} />
+                <div className="po-pick-main">
+                  <div className="po-pick-l1"><span className="ff-code">{buyTarget.item_code || '—'}</span></div>
+                  <div className="po-pick-l2"><span className="ff-name">{buyTarget.name}</span></div>
+                </div>
               </div>
 
               <div className="fd-section-head">Where to buy</div>
