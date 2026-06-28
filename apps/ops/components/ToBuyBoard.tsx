@@ -123,6 +123,9 @@ export default function ToBuyBoard({
   const [buySources, setBuySources] = useState<string[]>([]);
   const [buyLoading, setBuyLoading] = useState(false);
 
+  // delete-confirm overlay (Manual + Out-of-Stock): holds the po_id awaiting a Yes/No
+  const [confirmDelId, setConfirmDelId] = useState<number | null>(null);
+
   const imgCodes = useMemo(() => {
     const set = new Set<string>();
     planned.forEach((p) => { if (p.item_code) set.add(p.item_code); });
@@ -233,9 +236,10 @@ export default function ToBuyBoard({
   }
 
   // delete a real PO (manual buy-list item, or an out-of-stock row). From-Sales rows aren't POs → no delete.
+  // Gated behind the "Cancel this item?" confirm overlay (confirmDelId).
   async function delItem(po_id: number) {
     setBusy(true); setError(null);
-    try { await deletePO(po_id); await refresh(); }
+    try { await deletePO(po_id); setConfirmDelId(null); await refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); }
     finally { setBusy(false); }
   }
@@ -302,10 +306,10 @@ export default function ToBuyBoard({
                     <div className="po-card-actions">
                       <button className="btn-secondary" onClick={() => openBuy({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link })}>Buy</button>
                       <button className="btn-primary" onClick={() => done({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link })} disabled={busy}>Done →</button>
+                      <button className="po-del-x" onClick={() => setConfirmDelId(p.po_id)} disabled={busy} aria-label="Cancel this item">×</button>
                     </div>
                   </div>
                 </div>
-                <button className="po-del-side" onClick={() => delItem(p.po_id)} disabled={busy} aria-label="Delete">×</button>
               </li>
             ))}
           </ul>
@@ -377,10 +381,10 @@ export default function ToBuyBoard({
                     <div className="po-card-actions">
                       <button className="btn-secondary" onClick={() => openBuy({ kind: 'oos', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link })}>Buy</button>
                       <button className="btn-primary" onClick={() => done({ kind: 'oos', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link })} disabled={busy}>Done →</button>
+                      <button className="po-del-x" onClick={() => setConfirmDelId(p.po_id)} disabled={busy} aria-label="Cancel this item">×</button>
                     </div>
                   </div>
                 </div>
-                <button className="po-del-side" onClick={() => delItem(p.po_id)} disabled={busy} aria-label="Delete">×</button>
               </li>
             ))}
           </ul>
@@ -525,6 +529,21 @@ export default function ToBuyBoard({
               <div className="buy-oos">
                 <div className="hint">All links sold out?</div>
                 <button className="btn-primary danger" onClick={markOutOfStock} disabled={busy}>Mark as Out of Stock</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* delete confirm — small centered overlay shared by Manual + Out-of-Stock cards */}
+      {confirmDelId != null && (
+        <div className="sc-modal-backdrop" onClick={() => setConfirmDelId(null)}>
+          <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Cancel item" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-body">
+              <div className="confirm-q">Cancel this item?</div>
+              <div className="confirm-actions">
+                <button className="btn-secondary" onClick={() => setConfirmDelId(null)} disabled={busy}>No</button>
+                <button className="btn-primary danger" onClick={() => delItem(confirmDelId)} disabled={busy}>{busy ? 'Cancelling…' : 'Yes, cancel'}</button>
               </div>
             </div>
           </div>

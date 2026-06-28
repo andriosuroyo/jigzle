@@ -55,6 +55,7 @@ export interface UpdatePOPatch {
   marketplace_order_id?: string | null;
   customer_id?: number | null;
   item_note?: string | null;
+  tracking_to_forwarder?: string | null;
   ship_id?: string | null;
 }
 

@@ -81,7 +81,7 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
   let query = supabase
     .from('purchase_orders')
     .select(
-      'po_id,item_code,item_code_raw,qty,status,status_since,ship_id,supplier_id,item_cost,method,marketplace_order_id,customer_id,item_note,shipment_note'
+      'po_id,item_code,item_code_raw,qty,status,status_since,ship_id,supplier_id,item_cost,method,marketplace_order_id,customer_id,item_note,tracking_to_forwarder,shipment_note'
     )
     .or('status.is.null,status.neq.Received')
     .order('po_id', { ascending: false })
@@ -106,6 +106,7 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
     marketplace_order_id: string | null;
     customer_id: number | null;
     item_note: string | null;
+    tracking_to_forwarder: string | null;
     shipment_note: string | null;
   }[];
 
@@ -156,6 +157,7 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
     customer_id: r.customer_id,
     customer_name: r.customer_id != null ? customerById.get(r.customer_id) ?? null : null,
     item_note: r.item_note,
+    tracking_to_forwarder: r.tracking_to_forwarder,
     shipment_note: r.shipment_note,
   }));
 }
@@ -362,6 +364,7 @@ export async function updatePO(poId: number, patch: UpdatePOPatch): Promise<void
   if (patch.marketplace_order_id !== undefined) upd.marketplace_order_id = patch.marketplace_order_id?.trim() || null;
   if (patch.customer_id !== undefined) upd.customer_id = patch.customer_id ?? null;
   if (patch.item_note !== undefined) upd.item_note = patch.item_note?.trim() || null;
+  if (patch.tracking_to_forwarder !== undefined) upd.tracking_to_forwarder = patch.tracking_to_forwarder?.trim() || null;
   if (patch.ship_id !== undefined) upd.ship_id = patch.ship_id?.trim() || null;
 
   if (Object.keys(upd).length === 0) return;

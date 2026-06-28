@@ -22,6 +22,9 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
+// To forwarder bucket: the two pre-shipment states a card can sit in (With Forwarder = the "confirm"
+// transition to To ship, handled by an explicit button — not offered as a plain status pick here).
+const FORWARDER_FORM_STATUSES: POOpenStatus[] = ['Processing', 'On the way'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
 const METHODS = ['EMS', 'ZTO', 'SF', 'YTO', 'STO', 'JD', 'Yunda', 'Best', 'China Post'];
 
@@ -68,6 +71,7 @@ type PoForm = {
   customer_id: number | null;
   customer_label: string;
   item_note: string;
+  tracking_to_forwarder: string;
   status: POOpenStatus;
   ship_id: string | null;
 };
@@ -83,6 +87,7 @@ const emptyForm = (): PoForm => ({
   customer_id: null,
   customer_label: '',
   item_note: '',
+  tracking_to_forwarder: '',
   status: 'Processing',
   ship_id: null,
 });
@@ -98,6 +103,7 @@ const formFromPO = (po: OpenPORow): PoForm => ({
   customer_id: po.customer_id,
   customer_label: po.customer_name ?? (po.customer_id != null ? `#${po.customer_id}` : ''),
   item_note: po.item_note ?? '',
+  tracking_to_forwarder: po.tracking_to_forwarder ?? '',
   status: OPEN_STATUSES.includes(po.status as POOpenStatus) ? (po.status as POOpenStatus) : 'Processing',
   ship_id: po.ship_id,
 });
@@ -254,15 +260,26 @@ export default function OrderBoard({
     setConfirmDel(false);
   }
 
-  // ── Confirm get: advance the selected To-forwarder POs to With Forwarder → they move to To ship ──
-  async function confirmSelected() {
-    if (selectedCount === 0) return;
+  // ── To forwarder: confirm a single item is with the forwarder → With Forwarder (moves to To ship).
+  // Per-item (not bulk) because cost / tracking differ per item, so they're handled one card at a time. ──
+  async function confirmOne() {
+    if (!editPo) return;
     resetMessages();
     setBusy(true);
     try {
-      for (const id of selectedPoIds) await setPOStatus(id, 'With Forwarder');
-      setSuccess(`Confirmed ${selectedCount} item${selectedCount === 1 ? '' : 's'} → To ship.`);
-      setSelectedPoIds(new Set());
+      // persist any field edits made in the detail view before advancing
+      await updatePO(editPo.po_id, {
+        supplier_id: form.supplier_id ? Number(form.supplier_id) : undefined,
+        item_cost: numOrNull(form.item_cost),
+        method: form.method.trim() || null,
+        marketplace_order_id: form.marketplace_order_id.trim() || null,
+        item_note: form.item_note.trim() || null,
+        tracking_to_forwarder: form.tracking_to_forwarder.trim() || null,
+      });
+      await setPOStatus(editPo.po_id, 'With Forwarder');
+      setSuccess(`PO #${editPo.po_id} confirmed → To ship.`);
+      setMode(null);
+      setEditPo(null);
       await refreshQueue();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to confirm.');
@@ -465,6 +482,7 @@ export default function OrderBoard({
         marketplace_order_id: form.marketplace_order_id.trim() || null,
         customer_id: form.customer_id,
         item_note: form.item_note.trim() || null,
+        tracking_to_forwarder: form.tracking_to_forwarder.trim() || null,
       });
       if (form.status !== editPo.status) {
         await setPOStatus(editPo.po_id, form.status);
@@ -567,25 +585,16 @@ export default function OrderBoard({
               {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}
             </select>
           </div>
-          {/* New PO belongs to the buying stage — hide it in the 'ship' (already-grouped) bucket */}
-          {bucket !== 'ship' && (
+          {/* New PO only on the standalone board — the embedded buckets are fed by the To-buy "Done →"
+              flow (forwarder) / the confirm step (ship), so manual PO creation doesn't belong here. */}
+          {!bucket && (
             <div className="po-newbtn">
               <button className="btn-primary" style={{ width: '100%' }} onClick={startNew}>+ New PO</button>
             </div>
           )}
 
-          {/* To forwarder → Confirm get advances the selected items to To ship (With Forwarder). */}
-          {selectedCount > 0 && bucket === 'forwarder' && (
-            <div className="po-group-bar">
-              <span className="gb-count">{selectedCount} selected</span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn-primary" style={{ flex: 1 }} onClick={confirmSelected} disabled={busy}>Confirm get →</button>
-                <button className="btn-secondary" onClick={() => setSelectedPoIds(new Set())}>clear</button>
-              </div>
-            </div>
-          )}
-
-          {/* To ship (and the standalone board) → group the confirmed items into a shipment. */}
+          {/* To ship (and the standalone board) → group the confirmed items into a shipment. (To forwarder
+              advances per-item from the detail view — no row checkboxes, since cost/tracking differ.) */}
           {selectedCount > 0 && bucket !== 'forwarder' && (
             <div className="po-group-bar">
               <span className="gb-count">{selectedCount} selected</span>
@@ -597,42 +606,76 @@ export default function OrderBoard({
           )}
 
           {shown.length === 0 && <div className="hint fq-empty">{bucket ? 'Nothing here yet.' : 'No open POs.'}</div>}
-          <ul className="fq-list">
-            {shown.map((po) => (
-              <li key={po.po_id}>
-                <div className="po-row-wrap">
-                  <input
-                    type="checkbox"
-                    className="po-check"
-                    checked={selectedPoIds.has(po.po_id)}
-                    onChange={() => toggleSelect(po.po_id)}
-                    aria-label={`select PO ${po.po_id}`}
-                  />
-                  <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                  <button className={`fq-row ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
-                    {/* Sales-style: product name headline, SKU code demoted to a muted mono tail. */}
-                    <div className="fq-row-top">
-                      <span className="fq-headline">{po.name}</span>
-                      <span className="fq-id-sub">{po.item_code || '—'}</span>
+
+          {/* To forwarder: To-buy-style quick-view cards (image + code/name + sub-line), no checkbox —
+              tap a card to open its detail editor (cost / tracking / supplier differ per item). */}
+          {bucket === 'forwarder' ? (
+            <ul className="po-cards" style={{ padding: 8 }}>
+              {shown.map((po) => (
+                <li key={po.po_id}>
+                  <button className={`po-card po-card-btn ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
+                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.md} />
+                    <div className="po-card-main">
+                      <div className="po-card-l1">
+                        <span className="ff-code">{po.item_code || '—'}</span>
+                        <span className="ff-name">{po.name}</span>
+                        <span className={`po-status ${statusClass(po.status)}`}>{po.status || '—'}</span>
+                      </div>
+                      <div className="po-card-l2 hint">
+                        ×{po.qty}
+                        {po.supplier_name ? ` · ${po.supplier_name}` : ' · no supplier yet'}
+                        {po.item_cost != null ? ` · ${po.item_cost}/ea` : ''}
+                        {po.tracking_to_forwarder ? ` · ✓ tracked` : ''}
+                      </div>
                     </div>
-                    <div className="fq-row-bot">
-                      <span>×{po.qty}{po.supplier_name ? ` · ${po.supplier_name}` : ''}</span>
-                      <span className={`po-status ${statusClass(po.status)}`}>{po.status || '—'}</span>
-                    </div>
-                    {po.ship_id && <div className="fq-row-bot"><span>ship {po.ship_id}</span></div>}
-                    {shortFromShip(po) && (
-                      <div className="fq-row-bot"><span className="badge short">Short · from {shortFromShip(po)}</span></div>
-                    )}
                   </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="fq-list">
+              {shown.map((po) => (
+                <li key={po.po_id}>
+                  <div className="po-row-wrap">
+                    <input
+                      type="checkbox"
+                      className="po-check"
+                      checked={selectedPoIds.has(po.po_id)}
+                      onChange={() => toggleSelect(po.po_id)}
+                      aria-label={`select PO ${po.po_id}`}
+                    />
+                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                    <button className={`fq-row ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
+                      {/* Sales-style: product name headline, SKU code demoted to a muted mono tail. */}
+                      <div className="fq-row-top">
+                        <span className="fq-headline">{po.name}</span>
+                        <span className="fq-id-sub">{po.item_code || '—'}</span>
+                      </div>
+                      <div className="fq-row-bot">
+                        <span>×{po.qty}{po.supplier_name ? ` · ${po.supplier_name}` : ''}</span>
+                        <span className={`po-status ${statusClass(po.status)}`}>{po.status || '—'}</span>
+                      </div>
+                      {po.ship_id && <div className="fq-row-bot"><span>ship {po.ship_id}</span></div>}
+                      {shortFromShip(po) && (
+                        <div className="fq-row-bot"><span className="badge short">Short · from {shortFromShip(po)}</span></div>
+                      )}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </aside>
 
         {/* ── Detail ── */}
         <main className="fd-pane">
-          {!mode && !success && !error && <div className="fd-empty">Select a PO to edit, hit “+ New PO”, or check rows to group into a shipment.</div>}
+          {!mode && !success && !error && (
+            <div className="fd-empty">
+              {bucket === 'forwarder'
+                ? 'Select an item to add its supplier, unit cost and tracking, then confirm it to To ship.'
+                : 'Select a PO to edit, hit “+ New PO”, or check rows to group into a shipment.'}
+            </div>
+          )}
 
           {error && <div className="validation err">{error}</div>}
           {success && <div className="validation ok">{success}</div>}
@@ -768,6 +811,15 @@ export default function OrderBoard({
           </div>
         </div>
 
+        {/* domestic tracking to the forwarder — the To-forwarder stage's own field (paired with Method
+            above as "how it reached the forwarder"). Only relevant while items await consolidation. */}
+        {bucket === 'forwarder' && (
+          <div className="po-field">
+            <label>Domestic tracking # <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(to forwarder)</em></label>
+            <input type="text" placeholder="courier tracking number (opt)" value={form.tracking_to_forwarder} onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))} />
+          </div>
+        )}
+
         {/* for customer (optional) */}
         <div className="po-field">
           <label>For customer <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
@@ -815,8 +867,10 @@ export default function OrderBoard({
           <>
             <div className="po-field">
               <label>Status</label>
+              {/* In To forwarder the only two pre-shipment states apply; advancing to With Forwarder is the
+                  explicit "Confirm → To ship" action below (not a dropdown pick). */}
               <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as POOpenStatus }))}>
-                {OPEN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                {(bucket === 'forwarder' ? FORWARDER_FORM_STATUSES : OPEN_STATUSES).map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             {form.ship_id && (
@@ -832,10 +886,19 @@ export default function OrderBoard({
         )}
 
         <div className="fd-commit">
-          <div className="fd-commit-info">{isEdit ? 'Editing is blocked once Received.' : 'New PO → Processing.'}</div>
-          <button className="btn-primary" onClick={isEdit ? submitEdit : submitCreate} disabled={busy}>
-            {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create PO'}
-          </button>
+          <div className="fd-commit-info">
+            {bucket === 'forwarder' && isEdit ? 'Save your edits, then confirm when it’s with the forwarder.' : isEdit ? 'Editing is blocked once Received.' : 'New PO → Processing.'}
+          </div>
+          <div className="fd-commit-actions">
+            {/* In the forwarder bucket the primary action is Confirm → To ship, so Save is demoted there. */}
+            <button className={bucket === 'forwarder' && isEdit ? 'btn-secondary' : 'btn-primary'} onClick={isEdit ? submitEdit : submitCreate} disabled={busy}>
+              {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create PO'}
+            </button>
+            {/* To forwarder: per-item advance to To ship (With Forwarder). Saves edits first. */}
+            {bucket === 'forwarder' && isEdit && (
+              <button className="btn-primary" onClick={confirmOne} disabled={busy}>{busy ? '…' : 'Confirm → To ship'}</button>
+            )}
+          </div>
         </div>
 
         {/* Delete order — for an order that won't be confirmed (danger text-button + inline confirm). */}

@@ -83,10 +83,22 @@ input, textarea, select, button { font-family: inherit; }
 .po-card-l3 .qty-step button { width: 26px; height: 28px; font-size: 16px; }
 .po-card-l3 .qty-step input { width: 36px; height: 28px; }
 .po-card-l3 .qty-ro { height: 30px; min-width: 38px; }
-/* delete (×) — its own top-right column, beside the SKU / name / availability lines */
-.po-del-side { align-self: flex-start; flex-shrink: 0; width: 30px; height: 30px; border: 1px solid var(--red); border-radius: 8px; background: var(--red-tint); color: var(--red); font-size: 17px; line-height: 1; cursor: pointer; }
-.po-del-side:active { background: #f3c9bf; }
-.po-del-side:disabled { opacity: 0.5; cursor: not-allowed; }
+/* delete (×) — a quiet text button to the right of Done; muted until tapped (opens a confirm overlay) */
+.po-del-x { flex-shrink: 0; width: 30px; height: 30px; border: none; border-radius: 8px; background: none; color: var(--muted); font-size: 19px; line-height: 1; cursor: pointer; }
+.po-del-x:active { background: var(--red-tint); color: var(--red); }
+.po-del-x:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* delete confirm — a small centered overlay ("Cancel this item?" Yes/No, Yes coloured) */
+.sc-modal-sm { max-width: 340px; }
+.confirm-q { font-size: 15px; font-weight: 700; color: var(--brown-dark); text-align: center; padding: 6px 0 14px; }
+.confirm-actions { display: flex; gap: 10px; }
+.confirm-actions .btn-secondary, .confirm-actions .btn-primary { flex: 1; justify-content: center; }
+
+/* To-forwarder quick-view cards: the To-buy Manual card as a tap-to-edit button (no checkbox) */
+.po-card-btn { width: 100%; text-align: left; cursor: pointer; }
+.po-card-btn:active { background: var(--paper); }
+.po-card-btn.active { border-color: var(--orange); background: var(--orange-tint); }
+.po-card-btn .po-card-l1 .po-status { margin-left: auto; }
 
 /* qty: editable ± stepper (Manual) and a read-only field (From Sales / Out of Stock) */
 .qty-step { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: white; }
