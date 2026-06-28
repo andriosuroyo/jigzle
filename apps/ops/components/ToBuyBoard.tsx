@@ -18,6 +18,7 @@ import {
   buyPreorder,
   createDraftSku,
   createPlannedItem,
+  deletePO,
   getPlannedItems,
   getPreorders,
   getSkuSources,
@@ -58,6 +59,24 @@ function StockFigs({ wf, otw, avail }: { wf: number; otw: number; avail: number 
   return <>at forwarder {fig(wf)} · shipped {fig(otw)} · warehouse {fig(avail)}</>;
 }
 
+// the bare hostname of a URL (no www.), for the favicon + a tidy fallback
+function hostOf(url: string): string | null {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; }
+}
+
+// a buy link rendered as the URL itself (truncated), with the site's favicon on the left
+function BuyLink({ url, primary }: { url: string; primary?: boolean }) {
+  const host = hostOf(url);
+  const fav = host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : null;
+  return (
+    <a className={`buy-link ${primary ? 'primary' : ''}`} href={url} target="_blank" rel="noreferrer">
+      {/* eslint-disable-next-line @next/next/no-img-element -- favicon from an external host, off the data path */}
+      {fav && <img className="buy-fav" src={fav} alt="" width={18} height={18} referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
+      <span className="buy-link-url">{url}</span>
+    </a>
+  );
+}
+
 // the active "Buy" overlay target — enough to load + render its links and run the right write-backs.
 type BuyTarget = {
   kind: SubTab;
@@ -66,6 +85,7 @@ type BuyTarget = {
   qty: number;
   po_id: number | null;        // present for manual / oos (a real PO)
   customer_id: number | null;  // present for a from-sales preorder
+  sales_id: string | null;     // the originating sale (from-sales preorder), kept on a sold-out mark
   product_link: string | null; // the card's own link (manual product_link / preorder item_link)
 };
 
@@ -175,7 +195,9 @@ export default function ToBuyBoard({
   // ── manual qty ± stepper: optimistic local update + a guarded server write ──
   async function changeQty(po_id: number, next: number) {
     const q = Math.max(0, next);
+    // po_id is unique to one list; updating both keeps the manual + manual-origin OOS steppers live
     setPlanned((prev) => prev.map((p) => (p.po_id === po_id ? { ...p, qty: q } : p)));
+    setSoldOutList((prev) => prev.map((p) => (p.po_id === po_id ? { ...p, qty: q } : p)));
     try { await setPlannedQty(po_id, q); } catch (e) { setError(e instanceof Error ? e.message : 'Failed to set qty.'); }
   }
 
@@ -203,16 +225,17 @@ export default function ToBuyBoard({
     setBusy(true); setError(null);
     try {
       if (t.po_id != null) await setSoldOut(t.po_id, true, null);
-      else await markSkuSoldOut({ item_code: t.item_code, customer_id: t.customer_id, qty: t.qty });
+      else await markSkuSoldOut({ item_code: t.item_code, customer_id: t.customer_id, qty: t.qty, sales_id: t.sales_id });
       setBuyTarget(null);
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); }
     finally { setBusy(false); }
   }
 
-  async function restore(po_id: number) {
+  // delete a real PO (manual buy-list item, or an out-of-stock row). From-Sales rows aren't POs → no delete.
+  async function delItem(po_id: number) {
     setBusy(true); setError(null);
-    try { await setSoldOut(po_id, false); await refresh(); }
+    try { await deletePO(po_id); await refresh(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); }
     finally { setBusy(false); }
   }
@@ -277,8 +300,9 @@ export default function ToBuyBoard({
                       <button type="button" onClick={() => changeQty(p.po_id, p.qty + 1)} aria-label="increase">+</button>
                     </span>
                     <div className="po-card-actions">
-                      <button className="btn-secondary" onClick={() => openBuy({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, product_link: p.product_link })}>Buy</button>
-                      <button className="btn-primary" onClick={() => done({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, product_link: p.product_link })} disabled={busy}>Done →</button>
+                      <button className="btn-secondary" onClick={() => openBuy({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link })}>Buy</button>
+                      <button className="btn-primary" onClick={() => done({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link })} disabled={busy}>Done →</button>
+                      <button className="po-del" onClick={() => delItem(p.po_id)} disabled={busy} aria-label="Delete">×</button>
                     </div>
                   </div>
                 </div>
@@ -306,8 +330,8 @@ export default function ToBuyBoard({
                   <div className="po-card-l3">
                     <span className="qty-ro" aria-label="quantity">{p.qty}</span>
                     <div className="po-card-actions">
-                      <button className="btn-secondary" onClick={() => openBuy({ kind: 'sales', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, product_link: p.product_link })}>Buy</button>
-                      <button className="btn-primary" onClick={() => done({ kind: 'sales', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, product_link: p.product_link })} disabled={busy}>Done →</button>
+                      <button className="btn-secondary" onClick={() => openBuy({ kind: 'sales', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link })}>Buy</button>
+                      <button className="btn-primary" onClick={() => done({ kind: 'sales', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link })} disabled={busy}>Done →</button>
                     </div>
                   </div>
                 </div>
@@ -317,7 +341,7 @@ export default function ToBuyBoard({
         </section>
       )}
 
-      {/* Out of Stock */}
+      {/* Out of Stock — each card mirrors its origin (manual figures / sales order context) */}
       {tab === 'oos' && (
         <section className="fd-section">
           {soldOut.length === 0 && <div className="hint">Nothing marked out of stock.</div>}
@@ -331,11 +355,29 @@ export default function ToBuyBoard({
                     <span className="ff-name">{p.name}</span>
                     <UrgencyChip urgency={p.urgency} />
                   </div>
-                  <div className="po-card-l2 hint">out of stock {fmtDate(p.sold_out_date)}{p.sold_out_note ? ` · ${p.sold_out_note}` : ''}</div>
+                  <div className="po-card-l2 hint">
+                    {p.origin === 'sales'
+                      ? <>{p.sales_id} · {p.customer_name || 'no customer'} · {fmtDate(p.order_date)}</>
+                      : <StockFigs wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />}
+                  </div>
                   <div className="po-card-l3">
-                    <span className="qty-ro" aria-label="quantity">{p.qty}</span>
+                    {p.origin === 'manual'
+                      ? (
+                        <span className="qty-step">
+                          <button type="button" onClick={() => changeQty(p.po_id, p.qty - 1)} disabled={p.qty <= 0} aria-label="decrease">−</button>
+                          <input
+                            type="number" inputMode="numeric" min={0} value={p.qty}
+                            onChange={(e) => setSoldOutList((prev) => prev.map((x) => (x.po_id === p.po_id ? { ...x, qty: Math.max(0, parseInt(e.target.value, 10) || 0) } : x)))}
+                            onBlur={(e) => changeQty(p.po_id, Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          />
+                          <button type="button" onClick={() => changeQty(p.po_id, p.qty + 1)} aria-label="increase">+</button>
+                        </span>
+                      )
+                      : <span className="qty-ro" aria-label="quantity">{p.qty}</span>}
                     <div className="po-card-actions">
-                      <button className="btn-link" onClick={() => restore(p.po_id)} disabled={busy}>↩ Restore to manual</button>
+                      <button className="btn-secondary" onClick={() => openBuy({ kind: 'oos', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link })}>Buy</button>
+                      <button className="btn-primary" onClick={() => done({ kind: 'oos', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link })} disabled={busy}>Done →</button>
+                      <button className="po-del" onClick={() => delItem(p.po_id)} disabled={busy} aria-label="Delete">×</button>
                     </div>
                   </div>
                 </div>
@@ -472,13 +514,9 @@ export default function ToBuyBoard({
 
               <div className="fd-section-head">Where to buy</div>
               <div className="buy-links">
-                {buyTarget.product_link && (
-                  <a className="buy-link primary" href={buyTarget.product_link} target="_blank" rel="noreferrer">Open product link ↗</a>
-                )}
+                {buyTarget.product_link && <BuyLink url={buyTarget.product_link} primary />}
                 {buyLoading && <div className="hint">Loading catalogue sources…</div>}
-                {!buyLoading && buySources.map((url, i) => (
-                  <a key={url} className="buy-link" href={url} target="_blank" rel="noreferrer">Catalogue source {i + 1} ↗</a>
-                ))}
+                {!buyLoading && buySources.map((url) => <BuyLink key={url} url={url} />)}
                 {!buyLoading && !buyTarget.product_link && buySources.length === 0 && (
                   <div className="hint">No links on file for this SKU.</div>
                 )}

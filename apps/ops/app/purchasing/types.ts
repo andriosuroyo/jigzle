@@ -119,7 +119,10 @@ export interface PlannedItemRow {
   with_forwarder: number; // Σ 'With Forwarder' PO qty (in forwarder)
 }
 
-// ── To buy → Sold out (PO status 'Sold out' + auto date + optional reason). ──
+// ── To buy → Out of Stock (PO status 'Sold out' + auto date + optional reason). The card mirrors its
+// origin: a manual-origin row shows the pipeline figures (available/with_forwarder/on_the_way); a
+// sales-origin row (created from a From-Sales preorder) shows the order context (sales_id/customer/date)
+// and is read-only on qty. ──
 export interface SoldOutRow {
   po_id: number;
   item_code: string | null;
@@ -129,6 +132,13 @@ export interface SoldOutRow {
   product_link: string | null;
   sold_out_date: string | null;
   sold_out_note: string | null;
+  origin: 'manual' | 'sales';
+  sales_id: string | null;
+  customer_name: string | null;
+  order_date: string | null;
+  available: number;
+  with_forwarder: number;
+  on_the_way: number;
 }
 
 // ── live stock figures for the add-item overlay: warehouse / forwarder / shipped (en route). ──
