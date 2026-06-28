@@ -537,6 +537,8 @@ export type OpenPORow = {
   customer_id: number | null;
   customer_name: string | null;
   item_note: string | null;
+  product_link: string | null;       // supplier/marketplace URL (carried from the To-buy "item link")
+  input_date: string | null;         // when the PO was first entered (To-forwarder subheader date)
   tracking_to_forwarder: string | null; // domestic tracking number to the forwarder (To-forwarder stage)
   shipment_note: string | null;      // (0023) carries the "shorted from <ship_id> on <date>" breadcrumb
 };

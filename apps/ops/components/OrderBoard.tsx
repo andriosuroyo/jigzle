@@ -16,17 +16,38 @@ import {
   setPOStatus,
   updatePO,
 } from '@/app/purchasing/actions';
-import type { CustomerHit, OpenShipmentRow, SkuHit } from '@/app/purchasing/types';
+import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
-// To forwarder bucket: the two pre-shipment states a card can sit in (With Forwarder = the "confirm"
-// transition to To ship, handled by an explicit button — not offered as a plain status pick here).
-const FORWARDER_FORM_STATUSES: POOpenStatus[] = ['Processing', 'On the way'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
 const METHODS = ['EMS', 'ZTO', 'SF', 'YTO', 'STO', 'JD', 'Yunda', 'Best', 'China Post'];
+
+// supplier-country → unit-cost currency filler (To forwarder). Keyed by the supplier's country
+// (case-insensitive). Unknown / unset country → a generic "supplier ccy" label, no symbol.
+const CURRENCY_BY_COUNTRY: Record<string, { label: string; symbol: string }> = {
+  china: { label: 'yuan', symbol: '¥' },
+  japan: { label: 'yen', symbol: '¥' },
+  taiwan: { label: 'NT$', symbol: 'NT$' },
+  'hong kong': { label: 'HKD', symbol: 'HK$' },
+  korea: { label: 'won', symbol: '₩' },
+  'south korea': { label: 'won', symbol: '₩' },
+  singapore: { label: 'SGD', symbol: 'S$' },
+  thailand: { label: 'baht', symbol: '฿' },
+  malaysia: { label: 'MYR', symbol: 'RM' },
+  indonesia: { label: 'rupiah', symbol: 'Rp' },
+  'united states': { label: 'USD', symbol: '$' },
+  usa: { label: 'USD', symbol: '$' },
+};
+function currencyForCountry(country: string | null | undefined): { label: string; symbol: string } | null {
+  if (!country) return null;
+  return CURRENCY_BY_COUNTRY[country.trim().toLowerCase()] ?? null;
+}
+const isChina = (country: string | null | undefined): boolean => (country ?? '').trim().toLowerCase() === 'china';
+
+const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '');
 
 function todayStr(): string {
   const d = new Date();
@@ -71,6 +92,7 @@ type PoForm = {
   customer_id: number | null;
   customer_label: string;
   item_note: string;
+  product_link: string;
   tracking_to_forwarder: string;
   status: POOpenStatus;
   ship_id: string | null;
@@ -87,6 +109,7 @@ const emptyForm = (): PoForm => ({
   customer_id: null,
   customer_label: '',
   item_note: '',
+  product_link: '',
   tracking_to_forwarder: '',
   status: 'Processing',
   ship_id: null,
@@ -103,6 +126,7 @@ const formFromPO = (po: OpenPORow): PoForm => ({
   customer_id: po.customer_id,
   customer_label: po.customer_name ?? (po.customer_id != null ? `#${po.customer_id}` : ''),
   item_note: po.item_note ?? '',
+  product_link: po.product_link ?? '',
   tracking_to_forwarder: po.tracking_to_forwarder ?? '',
   status: OPEN_STATUSES.includes(po.status as POOpenStatus) ? (po.status as POOpenStatus) : 'Processing',
   ship_id: po.ship_id,
@@ -260,6 +284,19 @@ export default function OrderBoard({
     setConfirmDel(false);
   }
 
+  // ── To forwarder: auto-save one field (there's no Save button — fields persist as you fill them,
+  // mirroring the Settings editors). Merges the change back into the queue + the open edit row. ──
+  async function autoSaveForwarder(patch: UpdatePOPatch) {
+    if (!editPo) return;
+    try {
+      await updatePO(editPo.po_id, patch);
+      setQueue((prev) => prev.map((p) => (p.po_id === editPo.po_id ? { ...p, ...patch } as OpenPORow : p)));
+      setEditPo((prev) => (prev ? ({ ...prev, ...patch } as OpenPORow) : prev));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save.');
+    }
+  }
+
   // ── To forwarder: confirm a single item is with the forwarder → With Forwarder (moves to To ship).
   // Per-item (not bulk) because cost / tracking differ per item, so they're handled one card at a time. ──
   async function confirmOne() {
@@ -267,9 +304,11 @@ export default function OrderBoard({
     resetMessages();
     setBusy(true);
     try {
-      // persist any field edits made in the detail view before advancing
+      // persist any field edits made in the detail view before advancing (fields auto-save on blur,
+      // but a value still focused when Confirm is tapped may not have fired its blur yet)
       await updatePO(editPo.po_id, {
         supplier_id: form.supplier_id ? Number(form.supplier_id) : undefined,
+        product_link: form.product_link.trim() || null,
         item_cost: numOrNull(form.item_cost),
         method: form.method.trim() || null,
         marketplace_order_id: form.marketplace_order_id.trim() || null,
@@ -572,19 +611,23 @@ export default function OrderBoard({
         {/* ── Open-PO queue ── */}
         <aside className="fq-pane">
           {!embedded && <div className="fq-head"><span>Open POs</span></div>}
-          <div className="po-filters">
-            {/* status dropdown only in the un-bucketed (standalone) board; the tab already scopes status */}
-            {!bucket && (
-              <select value={filterStatus} onChange={(e) => applyFilters(e.target.value, filterSupplier)}>
-                <option value="">All open</option>
-                {OPEN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {/* To forwarder drops the filters entirely (single "All items" list); the standalone + ship
+              boards keep the supplier filter (and the standalone board its status filter). */}
+          {bucket !== 'forwarder' && (
+            <div className="po-filters">
+              {/* status dropdown only in the un-bucketed (standalone) board; the tab already scopes status */}
+              {!bucket && (
+                <select value={filterStatus} onChange={(e) => applyFilters(e.target.value, filterSupplier)}>
+                  <option value="">All open</option>
+                  {OPEN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              )}
+              <select value={filterSupplier} onChange={(e) => applyFilters(filterStatus, e.target.value)}>
+                <option value="">All suppliers</option>
+                {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}
               </select>
-            )}
-            <select value={filterSupplier} onChange={(e) => applyFilters(filterStatus, e.target.value)}>
-              <option value="">All suppliers</option>
-              {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>)}
-            </select>
-          </div>
+            </div>
+          )}
           {/* New PO only on the standalone board — the embedded buckets are fed by the To-buy "Done →"
               flow (forwarder) / the confirm step (ship), so manual PO creation doesn't belong here. */}
           {!bucket && (
@@ -607,25 +650,22 @@ export default function OrderBoard({
 
           {shown.length === 0 && <div className="hint fq-empty">{bucket ? 'Nothing here yet.' : 'No open POs.'}</div>}
 
-          {/* To forwarder: To-buy-style quick-view cards (image + code/name + sub-line), no checkbox —
-              tap a card to open its detail editor (cost / tracking / supplier differ per item). */}
+          {/* To forwarder: compact two-line quick-view cards (small image; line 1 SKU + PO#,
+              line 2 name + qty), no checkbox — tap a card to open its detail editor. */}
           {bucket === 'forwarder' ? (
-            <ul className="po-cards" style={{ padding: 8 }}>
+            <ul className="po-cards po-cards-compact" style={{ padding: 8 }}>
               {shown.map((po) => (
                 <li key={po.po_id}>
                   <button className={`po-card po-card-btn ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
-                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.md} />
+                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                     <div className="po-card-main">
                       <div className="po-card-l1">
                         <span className="ff-code">{po.item_code || '—'}</span>
-                        <span className="ff-name">{po.name}</span>
-                        <span className={`po-status ${statusClass(po.status)}`}>{po.status || '—'}</span>
+                        <span className="po-card-poid">#{po.po_id}</span>
                       </div>
-                      <div className="po-card-l2 hint">
-                        ×{po.qty}
-                        {po.supplier_name ? ` · ${po.supplier_name}` : ' · no supplier yet'}
-                        {po.item_cost != null ? ` · ${po.item_cost}/ea` : ''}
-                        {po.tracking_to_forwarder ? ` · ✓ tracked` : ''}
+                      <div className="po-card-l2">
+                        <span className="ff-name">{po.name}</span>
+                        <span className="po-card-qty">×{po.qty}</span>
                       </div>
                     </div>
                   </button>
@@ -680,7 +720,20 @@ export default function OrderBoard({
           {error && <div className="validation err">{error}</div>}
           {success && <div className="validation ok">{success}</div>}
 
-          {(mode === 'new' || mode === 'edit') && (
+          {(mode === 'new' || mode === 'edit') && bucket === 'forwarder' && editPo ? (
+            <>
+              {/* To-forwarder detail: header = SKU + qty; subheader = PO# · date · customer (sales only) */}
+              <div className="fd-head">
+                <div className="fd-title">{editPo.item_code || '—'} · ×{editPo.qty}</div>
+                <div className="fd-sub">
+                  PO #{editPo.po_id}
+                  {fmtDay(editPo.input_date) ? ` · ${fmtDay(editPo.input_date)}` : ''}
+                  {editPo.customer_id != null ? ` · ${editPo.customer_name || `#${editPo.customer_id}`}` : ''}
+                </div>
+              </div>
+              {renderForwarderForm()}
+            </>
+          ) : (mode === 'new' || mode === 'edit') ? (
             <>
               <div className="fd-head">
                 <div className="fd-title">{mode === 'edit' && editPo ? `PO #${editPo.po_id}` : 'New PO'}</div>
@@ -688,7 +741,7 @@ export default function OrderBoard({
               </div>
               {renderPoForm(mode === 'edit')}
             </>
-          )}
+          ) : null}
 
           {mode === 'group' && (
             <>
@@ -711,6 +764,133 @@ export default function OrderBoard({
       {body}
     </div>
   );
+
+  // ── the To-forwarder detail form: record what was bought, then confirm it to To ship. No Save
+  // button — every field auto-saves on blur/change (mirrors the Settings editors). Fields, in fill
+  // order: Supplier · Item link · Unit cost · Courier · Tracking # · Taobao ID (China only) · Note. ──
+  function renderForwarderForm() {
+    const selSup = suppliers.find((s) => s.supplier_id === Number(form.supplier_id));
+    const ccy = currencyForCountry(selSup?.country);
+    return (
+      <div className="po-form">
+        {/* 1 · Supplier — managed in Settings → Suppliers (no inline add here). Flag + name, A–Z. */}
+        <div className="po-field">
+          <label>Supplier</label>
+          <select
+            value={form.supplier_id}
+            onChange={(e) => {
+              const supplier_id = e.target.value ? Number(e.target.value) : '';
+              setForm((f) => ({ ...f, supplier_id }));
+              autoSaveForwarder({ supplier_id: supplier_id ? Number(supplier_id) : undefined });
+            }}
+          >
+            <option value="">— pick a supplier —</option>
+            {suppliers.map((s) => (
+              <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* 2 · Item link */}
+        <div className="po-field">
+          <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <input
+            type="text"
+            placeholder="https://…"
+            value={form.product_link}
+            onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
+            onBlur={(e) => autoSaveForwarder({ product_link: e.target.value.trim() || null })}
+          />
+        </div>
+
+        {/* 3 · Unit cost — currency filler follows the supplier's country (¥ yuan, ¥ yen, …). 0 is valid. */}
+        <div className="po-field">
+          <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>({ccy ? ccy.label : 'supplier ccy'})</em></label>
+          <div className="po-cost-row">
+            {ccy && <span className="po-cost-ccy">{ccy.symbol}</span>}
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="any"
+              placeholder="0"
+              value={form.item_cost}
+              onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
+              onBlur={(e) => autoSaveForwarder({ item_cost: numOrNull(e.target.value) })}
+            />
+          </div>
+        </div>
+
+        {/* 4 · Courier (optional) */}
+        <div className="po-field">
+          <label>Courier <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <input
+            type="text"
+            list="po-methods"
+            placeholder="domestic courier"
+            value={form.method}
+            onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
+            onBlur={(e) => autoSaveForwarder({ method: e.target.value.trim() || null })}
+          />
+          <datalist id="po-methods">{METHODS.map((m) => <option key={m} value={m} />)}</datalist>
+        </div>
+
+        {/* 5 · Tracking number (optional) */}
+        <div className="po-field">
+          <label>Tracking number <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(to forwarder, optional)</em></label>
+          <input
+            type="text"
+            placeholder="courier tracking number"
+            value={form.tracking_to_forwarder}
+            onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))}
+            onBlur={(e) => autoSaveForwarder({ tracking_to_forwarder: e.target.value.trim() || null })}
+          />
+        </div>
+
+        {/* 6 · Taobao ID — only meaningful for a China supplier */}
+        {isChina(selSup?.country) && (
+          <div className="po-field">
+            <label>Taobao ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+            <input
+              type="text"
+              placeholder="Taobao order id"
+              value={form.marketplace_order_id}
+              onChange={(e) => setForm((f) => ({ ...f, marketplace_order_id: e.target.value }))}
+              onBlur={(e) => autoSaveForwarder({ marketplace_order_id: e.target.value.trim() || null })}
+            />
+          </div>
+        )}
+
+        {/* 7 · Note (optional) */}
+        <div className="po-field">
+          <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <textarea
+            value={form.item_note}
+            onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
+            onBlur={(e) => autoSaveForwarder({ item_note: e.target.value.trim() || null })}
+          />
+        </div>
+
+        {/* Confirm → To ship (the only button; edits already auto-save). Delete stays below. */}
+        <div className="fd-commit">
+          <div className="fd-commit-info">Fields save as you go. Confirm once it’s with the forwarder.</div>
+          <button className="btn-primary" onClick={confirmOne} disabled={busy}>{busy ? '…' : 'Confirm → To ship'}</button>
+        </div>
+
+        <div className="ob-return">
+          {!confirmDel ? (
+            <button className="btn-link danger" onClick={() => setConfirmDel(true)} disabled={busy}>Delete order</button>
+          ) : (
+            <span className="rcv-reverse-ask">
+              Delete PO #{editPo?.po_id}? This removes the order entirely.
+              <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
+              <button className="btn-primary danger" onClick={doDelete} disabled={busy}>{busy ? 'Deleting…' : 'Yes, delete'}</button>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ── the new/edit PO form ──
   function renderPoForm(isEdit: boolean) {
@@ -811,15 +991,6 @@ export default function OrderBoard({
           </div>
         </div>
 
-        {/* domestic tracking to the forwarder — the To-forwarder stage's own field (paired with Method
-            above as "how it reached the forwarder"). Only relevant while items await consolidation. */}
-        {bucket === 'forwarder' && (
-          <div className="po-field">
-            <label>Domestic tracking # <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(to forwarder)</em></label>
-            <input type="text" placeholder="courier tracking number (opt)" value={form.tracking_to_forwarder} onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))} />
-          </div>
-        )}
-
         {/* for customer (optional) */}
         <div className="po-field">
           <label>For customer <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
@@ -867,10 +1038,8 @@ export default function OrderBoard({
           <>
             <div className="po-field">
               <label>Status</label>
-              {/* In To forwarder the only two pre-shipment states apply; advancing to With Forwarder is the
-                  explicit "Confirm → To ship" action below (not a dropdown pick). */}
               <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as POOpenStatus }))}>
-                {(bucket === 'forwarder' ? FORWARDER_FORM_STATUSES : OPEN_STATUSES).map((s) => <option key={s} value={s}>{s}</option>)}
+                {OPEN_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             {form.ship_id && (
@@ -886,19 +1055,10 @@ export default function OrderBoard({
         )}
 
         <div className="fd-commit">
-          <div className="fd-commit-info">
-            {bucket === 'forwarder' && isEdit ? 'Save your edits, then confirm when it’s with the forwarder.' : isEdit ? 'Editing is blocked once Received.' : 'New PO → Processing.'}
-          </div>
-          <div className="fd-commit-actions">
-            {/* In the forwarder bucket the primary action is Confirm → To ship, so Save is demoted there. */}
-            <button className={bucket === 'forwarder' && isEdit ? 'btn-secondary' : 'btn-primary'} onClick={isEdit ? submitEdit : submitCreate} disabled={busy}>
-              {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create PO'}
-            </button>
-            {/* To forwarder: per-item advance to To ship (With Forwarder). Saves edits first. */}
-            {bucket === 'forwarder' && isEdit && (
-              <button className="btn-primary" onClick={confirmOne} disabled={busy}>{busy ? '…' : 'Confirm → To ship'}</button>
-            )}
-          </div>
+          <div className="fd-commit-info">{isEdit ? 'Editing is blocked once Received.' : 'New PO → Processing.'}</div>
+          <button className="btn-primary" onClick={isEdit ? submitEdit : submitCreate} disabled={busy}>
+            {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create PO'}
+          </button>
         </div>
 
         {/* Delete order — for an order that won't be confirmed (danger text-button + inline confirm). */}

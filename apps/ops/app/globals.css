@@ -100,6 +100,25 @@ input, textarea, select, button { font-family: inherit; }
 .po-card-btn.active { border-color: var(--orange); background: var(--orange-tint); }
 .po-card-btn .po-card-l1 .po-status { margin-left: auto; }
 
+/* compact variant — small image, two tight lines: line1 SKU + PO#, line2 name + qty */
+.po-cards-compact .po-card { align-items: center; gap: 10px; padding: 8px 10px; }
+.po-cards-compact .po-card-main { gap: 2px; }
+.po-cards-compact .po-card-l1 .ff-code { flex: 1; min-width: 0; }
+.po-cards-compact .po-card-l2 { display: flex; align-items: center; gap: 8px; overflow: visible; }
+.po-cards-compact .po-card-l2 .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-card-poid { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--muted); }
+.po-card-qty { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--brown-dark); }
+
+/* unit-cost row with a leading currency symbol (To forwarder) */
+.po-cost-row { display: flex; align-items: center; gap: 8px; }
+.po-cost-row .po-cost-ccy { flex-shrink: 0; font-weight: 700; color: var(--muted); }
+.po-cost-row input { flex: 1; min-width: 0; }
+
+/* Settings → Suppliers: select matches the text inputs; flag column is narrow + centred */
+.set-f select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
+.set-f.sup-flag { flex: 0 0 58px; }
+.set-f.sup-flag input { text-align: center; }
+
 /* qty: editable ± stepper (Manual) and a read-only field (From Sales / Out of Stock) */
 .qty-step { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: white; }
 .qty-step button { width: 32px; height: 32px; border: none; background: var(--paper); color: var(--brown-dark); font-size: 18px; line-height: 1; cursor: pointer; }

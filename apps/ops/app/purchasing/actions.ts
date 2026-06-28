@@ -21,6 +21,7 @@ import type {
   CustomerHit,
   NewForwarderInput,
   NewSupplierInput,
+  UpdateSupplierPatch,
   OpenPOFilter,
   OpenShipmentRow,
   SkuHit,
@@ -81,7 +82,7 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
   let query = supabase
     .from('purchase_orders')
     .select(
-      'po_id,item_code,item_code_raw,qty,status,status_since,ship_id,supplier_id,item_cost,method,marketplace_order_id,customer_id,item_note,tracking_to_forwarder,shipment_note'
+      'po_id,item_code,item_code_raw,qty,status,status_since,ship_id,supplier_id,item_cost,method,marketplace_order_id,customer_id,item_note,product_link,input_date,tracking_to_forwarder,shipment_note'
     )
     .or('status.is.null,status.neq.Received')
     .order('po_id', { ascending: false })
@@ -106,6 +107,8 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
     marketplace_order_id: string | null;
     customer_id: number | null;
     item_note: string | null;
+    product_link: string | null;
+    input_date: string | null;
     tracking_to_forwarder: string | null;
     shipment_note: string | null;
   }[];
@@ -157,6 +160,8 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
     customer_id: r.customer_id,
     customer_name: r.customer_id != null ? customerById.get(r.customer_id) ?? null : null,
     item_note: r.item_note,
+    product_link: r.product_link,
+    input_date: r.input_date,
     tracking_to_forwarder: r.tracking_to_forwarder,
     shipment_note: r.shipment_note,
   }));
@@ -364,6 +369,7 @@ export async function updatePO(poId: number, patch: UpdatePOPatch): Promise<void
   if (patch.marketplace_order_id !== undefined) upd.marketplace_order_id = patch.marketplace_order_id?.trim() || null;
   if (patch.customer_id !== undefined) upd.customer_id = patch.customer_id ?? null;
   if (patch.item_note !== undefined) upd.item_note = patch.item_note?.trim() || null;
+  if (patch.product_link !== undefined) upd.product_link = patch.product_link?.trim() || null;
   if (patch.tracking_to_forwarder !== undefined) upd.tracking_to_forwarder = patch.tracking_to_forwarder?.trim() || null;
   if (patch.ship_id !== undefined) upd.ship_id = patch.ship_id?.trim() || null;
 
@@ -687,6 +693,39 @@ export async function addSupplier(input: NewSupplierInput): Promise<Supplier> {
     throw new Error(`addSupplier: ${error.message}`);
   }
   return data as Supplier;
+}
+
+// ── edit a supplier (Settings → Suppliers). Whitelisted fields only; name stays unique. ──
+export async function updateSupplier(supplierId: number, patch: UpdateSupplierPatch): Promise<Supplier> {
+  const supabase = createSupabaseServerClient();
+  const upd: Record<string, unknown> = {};
+  if (patch.name !== undefined) {
+    const name = patch.name?.trim();
+    if (!name) throw new Error('updateSupplier: a name is required');
+    upd.name = name;
+  }
+  if (patch.country !== undefined) upd.country = patch.country?.trim() || null;
+  if (patch.flag !== undefined) upd.flag = patch.flag?.trim() || null;
+  if (patch.type !== undefined) upd.type = patch.type ?? null;
+
+  const { data, error } = await supabase.from('suppliers').update(upd).eq('supplier_id', supplierId).select('*').single();
+  if (error) {
+    if (error.code === '23505') throw new Error('updateSupplier: a supplier with that name already exists');
+    throw new Error(`updateSupplier: ${error.message}`);
+  }
+  return data as Supplier;
+}
+
+// ── delete a supplier (Settings → Suppliers). Blocked by the FK if any PO still references it. ──
+export async function deleteSupplier(supplierId: number): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { count } = await supabase
+    .from('purchase_orders')
+    .select('po_id', { count: 'exact', head: true })
+    .eq('supplier_id', supplierId);
+  if ((count ?? 0) > 0) throw new Error(`deleteSupplier: in use by ${count} order(s) — reassign them first`);
+  const { error } = await supabase.from('suppliers').delete().eq('supplier_id', supplierId);
+  if (error) throw new Error(`deleteSupplier: ${error.message}`);
 }
 
 // ── inline "+ add" forwarder (idempotent on the prefix PK) ──

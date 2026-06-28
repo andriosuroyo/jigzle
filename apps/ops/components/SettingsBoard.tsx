@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import SupplierSettings from '@/components/SupplierSettings';
+import type { Supplier } from '@jigzle/db/types';
 import {
   addSetting,
   deleteSetting,
@@ -103,7 +105,7 @@ function suggestLabel(d: Record<string, string>): string {
   return `${(d.courier ?? '').trim()} ${(d.speed ?? '').trim()}`.replace(/\s+/g, ' ').trim();
 }
 
-export default function SettingsBoard({ initial, userEmail }: { initial: SettingsData; userEmail: string }) {
+export default function SettingsBoard({ initial, suppliers, userEmail }: { initial: SettingsData; suppliers: Supplier[]; userEmail: string }) {
   const [lists, setLists] = useState<Record<SettingsKind, SettingRow[]>>({
     payment: initial.paymentMethods,
     courier: initial.courierServices,
@@ -240,6 +242,8 @@ export default function SettingsBoard({ initial, userEmail }: { initial: Setting
             </section>
           );
         })}
+
+        <SupplierSettings initial={suppliers} />
       </div>
     </div>
   );

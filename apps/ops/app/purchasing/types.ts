@@ -55,6 +55,7 @@ export interface UpdatePOPatch {
   marketplace_order_id?: string | null;
   customer_id?: number | null;
   item_note?: string | null;
+  product_link?: string | null;
   tracking_to_forwarder?: string | null;
   ship_id?: string | null;
 }
@@ -62,6 +63,14 @@ export interface UpdatePOPatch {
 // inline "+ add supplier" input (name required; suppliers.name is unique)
 export interface NewSupplierInput {
   name: string;
+  country?: string | null;
+  flag?: string | null;
+  type?: SupplierType | null;
+}
+
+// Settings → Suppliers edit patch (name unique; all fields optional on update)
+export interface UpdateSupplierPatch {
+  name?: string;
   country?: string | null;
   flag?: string | null;
   type?: SupplierType | null;
