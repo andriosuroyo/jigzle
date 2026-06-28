@@ -417,6 +417,31 @@ export async function createPlannedItem(input: PlannedItemInput): Promise<{ po_i
   return { po_id: (data as { po_id: number }).po_id };
 }
 
+// ── PR74: stub a brand-new SKU as a draft catalogue row (the add-item "first step"). It's a real
+// catalogue row so a PO can FK to it, but is_draft = true marks it as not-yet-completed (the Catalog
+// screen will enrich it later). Idempotent on the code. region is required + CHECK-constrained, so a
+// draft lands in 'Rest of World' until Catalog sets the real one. ──
+export async function createDraftSku(input: { item_code: string; name: string }): Promise<{ item_code: string; name: string }> {
+  const supabase = createSupabaseServerClient();
+  const item_code = input.item_code?.trim();
+  const name = input.name?.trim();
+  if (!item_code) throw new Error('createDraftSku: an item code is required');
+  if (!name) throw new Error('createDraftSku: a name is required');
+
+  const { data: existing } = await supabase
+    .from('catalogue')
+    .select('item_code,translate_name,original_name,self_code')
+    .eq('item_code', item_code)
+    .maybeSingle();
+  if (existing) return { item_code, name: nameOf(existing as CatNameRow, item_code) };
+
+  const { error } = await supabase
+    .from('catalogue')
+    .insert({ item_code, region: 'Rest of World', translate_name: name, is_draft: true });
+  if (error) throw new Error(`createDraftSku: ${error.message}`);
+  return { item_code, name };
+}
+
 // ── PR73: set the qty of a manual (Planned) buy-list item — the card's editable ± stepper. Reuses the
 // guarded updatePO path (blocked once Received; qty must be a number ≥ 0). ──
 export async function setPlannedQty(poId: number, qty: number): Promise<void> {
