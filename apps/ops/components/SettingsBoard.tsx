@@ -7,6 +7,7 @@
 // picker). Single-field lists drop the redundant per-row field caption.
 
 import { useMemo, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import Link from 'next/link';
 import AppHeader from '@/components/AppHeader';
 import SupplierSettings from '@/components/SupplierSettings';
@@ -16,6 +17,7 @@ import {
   deleteSetting,
   reorderSetting,
   updateSetting,
+  uploadSettingIcon,
 } from '@/app/settings/actions';
 import type {
   SettingPayload,
@@ -233,6 +235,23 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     }
   }
 
+  // upload an icon image and return its public URL (caller stores it on the row via saveRow).
+  async function uploadIcon(file: File): Promise<string> {
+    setBusy(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { url } = await uploadSettingIcon(fd);
+      return url;
+    } catch (e) {
+      fail(e);
+      throw e;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(kind: SettingsKind, id: number) {
     setBusy(true);
     setError(null);
@@ -262,6 +281,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
             last={i === rows.length - 1}
             busy={busy}
             onSave={(patch) => saveRow(sec.kind, row.id, patch)}
+            onUpload={uploadIcon}
             onMove={(dir) => move(sec.kind, i, dir)}
             onRemove={() => remove(sec.kind, row.id)}
           />
@@ -356,8 +376,11 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
   );
 }
 
-// ── one editable row: text/number fields (saved on blur), up/down sort, remove. No active toggle —
-//    removing a row is how you retire it. ──
+// an icon value is an uploaded image when it's a URL; otherwise it's a short emoji/text.
+const isIconUrl = (icon: string | null | undefined): boolean => !!icon && /^https?:\/\//.test(icon);
+
+// ── one editable row: an optional icon (emoji or uploaded image), text/number fields (saved on blur),
+//    up/down sort, remove. No active toggle — removing a row is how you retire it. ──
 function SettingRowEditor({
   sec,
   row,
@@ -365,6 +388,7 @@ function SettingRowEditor({
   last,
   busy,
   onSave,
+  onUpload,
   onMove,
   onRemove,
 }: {
@@ -374,9 +398,14 @@ function SettingRowEditor({
   last: boolean;
   busy: boolean;
   onSave: (patch: SettingPatch) => void;
+  onUpload: (file: File) => Promise<string>;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
 }) {
+  const icon = (val(row, 'icon') as string | null) ?? null;
+  const [iconOpen, setIconOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [emoji, setEmoji] = useState(icon && !isIconUrl(icon) ? icon : '');
   const initDraft = (): Record<string, string> => {
     const d: Record<string, string> = {};
     for (const c of sec.cols) {
@@ -424,8 +453,45 @@ function SettingRowEditor({
     if (Object.keys(patch).length) onSave(patch);
   }
 
+  function saveEmoji() {
+    onSave({ icon: emoji.trim() || null });
+    setIconOpen(false);
+  }
+  async function pickImage(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file later
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await onUpload(file);
+      onSave({ icon: url });
+      setIconOpen(false);
+    } catch {
+      /* error surfaced by the parent's upload handler */
+    } finally {
+      setUploading(false);
+    }
+  }
+  function removeIcon() {
+    setEmoji('');
+    onSave({ icon: null });
+    setIconOpen(false);
+  }
+
   return (
     <div className="set-row">
+      {/* icon cell — tap to set an emoji or upload an image */}
+      <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">
+        {icon ? (
+          isIconUrl(icon)
+            // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
+            ? <img className="set-ico-img" src={icon} alt="" />
+            : <span className="set-ico-emoji">{icon}</span>
+        ) : (
+          <span className="set-ico-add">+</span>
+        )}
+      </button>
+
       <div className="set-fields">
         {sec.cols.map((c) => (
           <div className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}`} key={c.key}>
@@ -450,6 +516,45 @@ function SettingRowEditor({
         <button className="set-arrow" aria-label="Move down" onClick={() => onMove(1)} disabled={busy || last}>▼</button>
         <button className="set-del" aria-label="Remove" onClick={onRemove} disabled={busy}>✕</button>
       </div>
+
+      {/* icon picker — emoji or uploaded image */}
+      {iconOpen && (
+        <div className="sc-modal-backdrop" onClick={() => setIconOpen(false)}>
+          <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Set icon" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <span className="sc-modal-title">Icon</span>
+              <button className="sc-modal-x" onClick={() => setIconOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="sc-modal-body">
+              <div className="set-ico-preview">
+                {icon ? (
+                  isIconUrl(icon)
+                    // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
+                    ? <img src={icon} alt="" />
+                    : <span className="set-ico-preview-emoji">{icon}</span>
+                ) : (
+                  <span className="hint">No icon yet</span>
+                )}
+              </div>
+
+              <div className="po-field">
+                <label>Emoji</label>
+                <input type="text" value={emoji} maxLength={8} placeholder="🏦  📦  🎁" onChange={(e) => setEmoji(e.target.value)} />
+              </div>
+
+              <div className="confirm-actions" style={{ marginTop: 4 }}>
+                <button className="btn-secondary" onClick={saveEmoji} disabled={busy || uploading}>Use emoji</button>
+                <label className={`btn-secondary set-ico-upload${uploading ? ' disabled' : ''}`}>
+                  {uploading ? 'Uploading…' : 'Upload image'}
+                  <input type="file" accept="image/*" hidden disabled={busy || uploading} onChange={pickImage} />
+                </label>
+              </div>
+
+              {icon && <button className="btn-link danger set-ico-remove" onClick={removeIcon} disabled={busy || uploading}>Remove icon</button>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

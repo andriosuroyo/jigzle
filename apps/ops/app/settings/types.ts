@@ -4,9 +4,12 @@
 
 // ── the three list-row shapes (NULL-only / global rows; user_id & created_at omitted — never
 //    surfaced to the editor in this PR) ──
+// PR84: every list row carries an optional `icon` — a short emoji ('🏦') or a public Storage URL for
+// an uploaded image (settings-icons bucket). The UI renders an <img> for a URL, else the text/emoji.
 export interface PaymentMethod {
   id: number;
   label: string;
+  icon: string | null;
   is_active: boolean;
   sort_order: number;
 }
@@ -16,6 +19,7 @@ export interface CourierService {
   courier: string;
   speed: string | null;
   label: string;
+  icon: string | null;
   is_active: boolean;
   sort_order: number;
 }
@@ -26,6 +30,7 @@ export interface BoxPreset {
   dim_p: number | null;
   dim_l: number | null;
   dim_t: number | null;
+  icon: string | null;
   is_active: boolean;
   sort_order: number;
 }
@@ -35,6 +40,7 @@ export interface BoxPreset {
 export interface InboundLabel {
   id: number;
   label: string;
+  icon: string | null;
   is_active: boolean;
   sort_order: number;
 }
@@ -44,6 +50,7 @@ export interface InboundLabel {
 export interface CommonNote {
   id: number;
   label: string;
+  icon: string | null;
   is_active: boolean;
   sort_order: number;
 }

@@ -32,12 +32,15 @@ const TABLE: Record<SettingsKind, string> = {
 // never touch an identity/system column (id / user_id / sort_order / created_at). is_active is set
 // via updateSetting; sort_order via reorderSetting.
 const WRITABLE: Record<SettingsKind, string[]> = {
-  payment: ['label', 'is_active'],
-  courier: ['courier', 'speed', 'label', 'is_active'],
-  box: ['code', 'dim_p', 'dim_l', 'dim_t', 'is_active'],
-  inbound_labels: ['label', 'is_active'],
-  common_note: ['label', 'is_active'],
+  payment: ['label', 'icon', 'is_active'],
+  courier: ['courier', 'speed', 'label', 'icon', 'is_active'],
+  box: ['code', 'dim_p', 'dim_l', 'dim_t', 'icon', 'is_active'],
+  inbound_labels: ['label', 'icon', 'is_active'],
+  common_note: ['label', 'icon', 'is_active'],
 };
+
+// uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
+const ICON_BUCKET = 'settings-icons';
 
 function pick(kind: SettingsKind, src: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -201,4 +204,32 @@ export async function deleteSetting(kind: SettingsKind, id: number): Promise<voi
     .eq('id', id)
     .is('user_id', null);
   if (error) throw new Error(`deleteSetting(${kind}): ${error.message}`);
+}
+
+// ── PR84: upload an icon image → public Storage URL. The client passes the file in a FormData; we
+// write it to the public `settings-icons` bucket (RLS: allowed users only) and return its public URL,
+// which the caller then stores in the row's `icon` column via updateSetting. ──
+const ICON_MAX_BYTES = 2 * 1024 * 1024; // 2 MB — icons are tiny; reject anything larger
+export async function uploadSettingIcon(form: FormData): Promise<{ url: string }> {
+  const file = form.get('file');
+  if (!(file instanceof File) || file.size === 0) throw new Error('uploadSettingIcon: no file');
+  if (file.size > ICON_MAX_BYTES) throw new Error('uploadSettingIcon: image too large (max 2 MB)');
+  if (!file.type.startsWith('image/')) throw new Error('uploadSettingIcon: not an image');
+
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) throw new Error('uploadSettingIcon: storage URL not configured');
+
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+  // a stable-ish unique path; no Math.random/Date in scope concerns here (server action, not a workflow)
+  const path = `${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
+
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.storage.from(ICON_BUCKET).upload(path, file, {
+    contentType: file.type,
+    cacheControl: '31536000',
+    upsert: false,
+  });
+  if (error) throw new Error(`uploadSettingIcon: ${error.message}`);
+
+  return { url: `${base}/storage/v1/object/public/${ICON_BUCKET}/${path}` };
 }
