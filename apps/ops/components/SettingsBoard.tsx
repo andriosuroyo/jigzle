@@ -7,6 +7,7 @@
 // picker). Single-field lists drop the redundant per-row field caption.
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import AppHeader from '@/components/AppHeader';
 import SupplierSettings from '@/components/SupplierSettings';
 import type { Supplier } from '@jigzle/db/types';
@@ -278,6 +279,21 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
       <AppHeader active="settings" userEmail={userEmail} />
 
       <div className="set-wrap">
+        {/* breadcrumbs — Home and Settings both navigate back (Home → hub, Settings → category list) */}
+        <nav className="set-crumbs" aria-label="Breadcrumb">
+          <Link href="/" className="crumb-link">Home</Link>
+          <span className="crumb-sep" aria-hidden>›</span>
+          {category ? (
+            <>
+              <button className="crumb-link" onClick={backToCategories}>Settings</button>
+              <span className="crumb-sep" aria-hidden>›</span>
+              <span className="crumb-current">{category.title}</span>
+            </>
+          ) : (
+            <span className="crumb-current">Settings</span>
+          )}
+        </nav>
+
         {error && <div className="validation err">{error}</div>}
         {success && <div className="validation ok">{success}</div>}
 
@@ -297,14 +313,9 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
           </div>
         )}
 
-        {/* ── a category: back + title, tabs (with counts), then the active tab body ── */}
+        {/* ── a category: tabs (with counts), then the active tab body ── */}
         {category && (
           <>
-            <div className="set-cat-head">
-              <button className="set-back" onClick={backToCategories} aria-label="Back to settings">‹</button>
-              <div className="set-cat-headtitle">{category.title}</div>
-            </div>
-
             <div className="fq-filters" role="tablist" aria-label={category.title}>
               {category.tabs.map((t) => {
                 const k = tabKey(t);
@@ -433,12 +444,11 @@ function SettingRowEditor({
         ))}
       </div>
 
+      {/* three compact buttons to the right of the field: up, down, remove (red ×) */}
       <div className="set-row-ctl">
-        <div className="set-arrows">
-          <button className="set-arrow" aria-label="Move up" onClick={() => onMove(-1)} disabled={busy || first}>▲</button>
-          <button className="set-arrow" aria-label="Move down" onClick={() => onMove(1)} disabled={busy || last}>▼</button>
-        </div>
-        <button className="btn-link" onClick={onRemove} disabled={busy}>Remove</button>
+        <button className="set-arrow" aria-label="Move up" onClick={() => onMove(-1)} disabled={busy || first}>▲</button>
+        <button className="set-arrow" aria-label="Move down" onClick={() => onMove(1)} disabled={busy || last}>▼</button>
+        <button className="set-del" aria-label="Remove" onClick={onRemove} disabled={busy}>✕</button>
       </div>
     </div>
   );

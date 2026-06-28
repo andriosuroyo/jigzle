@@ -832,37 +832,32 @@ img.sku-img { background: #e8e8e8; }
 .set-cat-sub { font-size: 12px; color: var(--muted); }
 .set-cat-count { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--brown-dark); background: var(--paper); border-radius: 20px; padding: 2px 10px; }
 .set-cat-chev { flex-shrink: 0; font-size: 22px; line-height: 1; color: var(--muted); }
-/* Settings category header — back + title; the tab bar reuses the .fq-filters style */
-.set-cat-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.set-back { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown-dark); font-size: 20px; line-height: 1; cursor: pointer; }
-.set-back:active { background: var(--paper); }
-.set-cat-headtitle { font-size: 18px; font-weight: 700; color: var(--brown-dark); }
+/* Settings breadcrumbs — Home › Settings › <category> (Home + Settings link back) */
+.set-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; font-size: 15px; }
+.crumb-link { background: none; border: none; padding: 0; font: inherit; font-weight: 600; color: var(--orange); cursor: pointer; text-decoration: none; }
+.crumb-link:active { opacity: 0.6; }
+.crumb-sep { color: var(--muted); }
+.crumb-current { font-weight: 700; color: var(--brown-dark); }
 .set-wrap .fq-filters { margin-bottom: 14px; }
 .set-sec { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
 .set-sec-title { font-size: 14px; font-weight: 700; color: var(--ink); }
 .set-sec-sub { font-size: 12px; color: var(--muted); margin: 2px 0 12px; }
-.set-list { display: flex; flex-direction: column; gap: 8px; }
-.set-row { display: flex; align-items: flex-end; gap: 10px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); }
-.set-row.inactive { opacity: 0.5; }
-.set-fields { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; min-width: 0; }
+.set-list { display: flex; flex-direction: column; gap: 6px; }
+/* compact single-line row: narrower field(s) + three buttons to the right (up · down · remove) */
+.set-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); }
+.set-fields { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .set-f { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.set-f.grow { flex: 1 1 140px; }
-.set-f.num { width: 78px; flex: 0 0 auto; }
+.set-f.grow { flex: 1 1 120px; }
+.set-f.num { width: 70px; flex: 0 0 auto; }
 .set-f > label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
-.set-f input { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
-.set-row-ctl { display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding-bottom: 1px; }
-.set-arrows { display: flex; flex-direction: column; gap: 3px; }
-.set-arrow { width: 28px; height: 19px; line-height: 1; border: 1px solid var(--line); border-radius: 5px; background: white; color: var(--muted); font-size: 10px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.set-f input { width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
+.set-row-ctl { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.set-arrow { width: 30px; height: 30px; line-height: 1; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--muted); font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .set-arrow:disabled { opacity: 0.35; cursor: not-allowed; }
-.set-active { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; }
-.set-toolbar { display: flex; gap: 8px; margin-top: 12px; }
-@media (max-width: 760px) {
-  .set-row { flex-wrap: wrap; align-items: stretch; }
-  .set-row-ctl { width: 100%; justify-content: space-between; }
-  .set-arrows { flex-direction: row; }
-  .set-arrow { min-width: 40px; height: 30px; }
-  .set-active input { min-width: 18px; min-height: 18px; }
-}
+.set-del { width: 30px; height: 30px; line-height: 1; border: 1px solid var(--red); border-radius: 6px; background: var(--red-tint); color: var(--red); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.set-del:active { background: #f3c9bf; }
+.set-del:disabled { opacity: 0.45; cursor: not-allowed; }
+.set-toolbar { display: flex; gap: 8px; margin-top: 10px; }
 
 /* ── PR26 — Fulfill 3-line item card (F5); PR28 §4c — Pattern A card primitive ── */
 /* Self-sufficient flex row (image left, description column beside). Combined with .result-item on
