@@ -39,6 +39,8 @@ type SectionDef = {
   autoLabel?: { from: string[]; target: string }; // courier: label follows "{courier} {speed}" while unset
   blank: SettingPayload; // payload for "+ add" (NOT NULL text cols seeded as '')
   rowClass?: string; // extra class on each .set-row (e.g. box presets pack all dims on one line)
+  colHeader?: boolean; // show the column captions once as a fixed header (instead of above every row)
+  noIcon?: boolean; // hide the per-row icon cell (e.g. box presets — the code is identifier enough)
 };
 
 const SECTIONS: SectionDef[] = [
@@ -62,7 +64,7 @@ const SECTIONS: SectionDef[] = [
   {
     kind: 'box',
     title: 'Box presets',
-    sub: 'Volumetric box sizes (cm). Code + P/L/T fit on one line — each is at most two digits.',
+    sub: '',
     cols: [
       { key: 'code', label: 'Code', type: 'text', grow: true },
       { key: 'dim_p', label: 'P', type: 'number', nullable: true },
@@ -72,6 +74,8 @@ const SECTIONS: SectionDef[] = [
     sortKey: 'code',
     blank: { code: '' },
     rowClass: 'set-row-box',
+    colHeader: true,
+    noIcon: true,
   },
   {
     kind: 'inbound_labels',
@@ -269,6 +273,17 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     const rows = lists[sec.kind];
     return (
       <div className="set-list">
+        {/* fixed column header (e.g. box presets) — shown once instead of above every row */}
+        {sec.colHeader && rows.length > 0 && (
+          <div className={`set-colhead ${sec.rowClass ?? ''}`} aria-hidden>
+            <div className="set-fields">
+              {sec.cols.map((c) => (
+                <div key={c.key} className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}`}>{c.label}</div>
+              ))}
+            </div>
+            <div className="set-colhead-ctl" />
+          </div>
+        )}
         {rows.length === 0 && <div className="hint">No rows yet — add one below.</div>}
         {rows.map((row, i) => (
           <SettingRowEditor
@@ -357,7 +372,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
                 <section className="set-sec" key={k}>
                   {'kind' in t ? (
                     <>
-                      <div className="set-sec-sub">{SECTION_BY_KIND[t.kind].sub}</div>
+                      {SECTION_BY_KIND[t.kind].sub && <div className="set-sec-sub">{SECTION_BY_KIND[t.kind].sub}</div>}
                       {renderKindList(SECTION_BY_KIND[t.kind])}
                     </>
                   ) : (
@@ -417,8 +432,9 @@ function SettingRowEditor({
   const [labelAuto, setLabelAuto] = useState<boolean>(
     () => !sec.autoLabel || draft[sec.autoLabel.target] === suggestLabel(draft)
   );
-  // single-field lists drop the redundant per-row caption (the tab title already names the list).
-  const showCaptions = sec.cols.length > 1;
+  // single-field lists drop the redundant per-row caption (the tab title already names the list);
+  // multi-field lists with a fixed column header drop them too (the header carries the captions).
+  const showCaptions = sec.cols.length > 1 && !sec.colHeader;
 
   function onChange(key: string, value: string) {
     setDraft((prev) => {
@@ -477,17 +493,19 @@ function SettingRowEditor({
 
   return (
     <div className={`set-row ${sec.rowClass ?? ''}`}>
-      {/* icon cell — tap to set an emoji or upload an image */}
-      <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">
-        {icon ? (
-          isIconUrl(icon)
-            // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
-            ? <img className="set-ico-img" src={icon} alt="" />
-            : <span className="set-ico-emoji">{icon}</span>
-        ) : (
-          <span className="set-ico-add">+</span>
-        )}
-      </button>
+      {/* icon cell — tap to set an emoji or upload an image (hidden for lists that don't use icons) */}
+      {!sec.noIcon && (
+        <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">
+          {icon ? (
+            isIconUrl(icon)
+              // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
+              ? <img className="set-ico-img" src={icon} alt="" />
+              : <span className="set-ico-emoji">{icon}</span>
+          ) : (
+            <span className="set-ico-add">+</span>
+          )}
+        </button>
+      )}
 
       <div className="set-fields">
         {sec.cols.map((c) => (
