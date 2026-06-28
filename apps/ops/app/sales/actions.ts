@@ -199,6 +199,12 @@ export async function submitOrder(payload: CreateOrderInput): Promise<SubmitResu
   if (error) throw new Error(`submitOrder: ${error.message}`);
   const salesId = sid as string;
 
+  // PR73: stamp the order's urgency (the create_order RPC predates the column → set it here). Best-effort:
+  // a failed urgency write must never lose the just-created order.
+  if (payload.urgency && ['low', 'mid', 'high'].includes(payload.urgency)) {
+    await supabase.from('orders').update({ urgency: payload.urgency }).eq('sales_id', salesId);
+  }
+
   // read back the lines the RPC created
   const { data: lineRows } = await supabase
     .from('order_lines')

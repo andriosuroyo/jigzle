@@ -68,6 +68,43 @@ input, textarea, select, button { font-family: inherit; }
 /* To-buy Planned section header: title left, "+ add item" right */
 .po-tobuy-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 
+/* ── To-buy cards (PR73): one 3-line layout for Manual / From Sales / Out of Stock ── */
+.po-cards { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.po-card { display: flex; align-items: stretch; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; justify-content: center; }
+.po-card-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.po-card-l1 .ff-name { flex: 1; }
+.po-card-l2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-card-l3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+.po-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+
+/* qty: editable ± stepper (Manual) and a read-only field (From Sales / Out of Stock) */
+.qty-step { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: white; }
+.qty-step button { width: 32px; height: 32px; border: none; background: var(--paper); color: var(--brown-dark); font-size: 18px; line-height: 1; cursor: pointer; }
+.qty-step button:disabled { opacity: 0.4; cursor: default; }
+.qty-step input { width: 46px; height: 32px; border: none; border-left: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center; font-size: 14px; font-weight: 700; background: white; -moz-appearance: textfield; }
+.qty-step input::-webkit-outer-spin-button, .qty-step input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.qty-ro { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font-size: 14px; font-weight: 700; }
+
+/* urgency chip (on a card) + the low/mid/high selector (forms) — green / yellow / red */
+.urg-chip { flex-shrink: 0; margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 20px; }
+.urg-chip.urg-low  { background: var(--green-tint);  color: #3D6B26; }
+.urg-chip.urg-mid  { background: var(--yellow-tint); color: #9C6F1C; }
+.urg-chip.urg-high { background: var(--red-tint);    color: #993525; }
+.urg-toggle { display: flex; gap: 8px; }
+.urg-btn { flex: 1; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
+.urg-btn.active.urg-low  { background: var(--green-tint);  color: #3D6B26; border-color: var(--green); }
+.urg-btn.active.urg-mid  { background: var(--yellow-tint); color: #9C6F1C; border-color: var(--yellow); }
+.urg-btn.active.urg-high { background: var(--red-tint);    color: #993525; border-color: var(--red); }
+
+/* Buy overlay link list + mark-out-of-stock fallback */
+.buy-links { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 16px; }
+.buy-link { display: block; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; font-size: 14px; font-weight: 600; color: var(--brown-dark); text-decoration: none; }
+.buy-link.primary { background: var(--orange-tint); border-color: var(--orange); }
+.buy-link:active { background: var(--paper); }
+.buy-oos { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; flex-wrap: wrap; }
+.po-nosku { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; align-items: flex-start; }
+
 /* ── Panels ── */
 .panel { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .panel-head { background: var(--paper); padding: 10px 14px; font-size: 13px; font-weight: 700; color: var(--brown-dark); display: flex; align-items: center; gap: 8px; }
@@ -410,6 +447,8 @@ input, textarea, select, button { font-family: inherit; }
   width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream);
 }
 .po-field textarea { min-height: 48px; resize: vertical; }
+/* the qty ± stepper inside the add-item form keeps its own compact box (not the full-width input rule) */
+.po-field .qty-step input[type=number] { width: 46px; padding: 0; border-radius: 0; background: white; }
 .po-inline { display: flex; gap: 8px; }
 .po-inline > .po-field { flex: 1; min-width: 0; }
 .po-current { background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; }
