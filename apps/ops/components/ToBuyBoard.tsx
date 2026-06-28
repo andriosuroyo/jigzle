@@ -90,10 +90,6 @@ export default function ToBuyBoard({
   const [link, setLink] = useState('');
   const [note, setNote] = useState('');
   const [addUrgency, setAddUrgency] = useState<Urgency | null>(null);
-  // new-SKU "first step" draft (shown when the search finds nothing)
-  const [newSkuMode, setNewSkuMode] = useState(false);
-  const [newCode, setNewCode] = useState('');
-  const [newName, setNewName] = useState('');
 
   // buy overlay
   const [buyTarget, setBuyTarget] = useState<BuyTarget | null>(null);
@@ -121,37 +117,13 @@ export default function ToBuyBoard({
     setAdding(true);
     setSkuQuery(''); setSkuHits([]); setSearched(false); setPicked(null); setPickedStock(null);
     setQty(1); setLink(''); setNote(''); setAddUrgency(null);
-    setNewSkuMode(false); setNewCode(''); setNewName('');
     setError(null);
   }
 
-  // open the new-SKU "first step" draft form, prefilled with the unmatched search text
-  function startNewSku() {
-    setNewSkuMode(true);
-    setNewCode(skuQuery.trim());
-    setNewName('');
-    setError(null);
-  }
-
-  // save the draft SKU (a real catalogue row flagged is_draft) then drop into the normal item form
-  async function continueNewSku() {
-    const code = newCode.trim();
-    const nm = newName.trim();
-    if (!code) { setError('Enter a SKU code.'); return; }
-    if (!nm) { setError('Enter a name.'); return; }
-    setBusy(true); setError(null);
-    try {
-      const draft = await createDraftSku({ item_code: code, name: nm });
-      setPicked(draft);
-      setPickedStock(null);
-      setNewSkuMode(false);
-      try { setPickedStock(await getSkuStock(draft.item_code)); } catch { /* best-effort */ }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add SKU.');
-    } finally {
-      setBusy(false);
-    }
-  }
+  // a search that returns nothing means the typed text is a brand-new SKU code (the code IS the
+  // identifier; no name needed). It gets added to the catalogue as a draft on submit.
+  const isNewSku = !picked && searched && !searching && skuHits.length === 0 && skuQuery.trim().length > 0;
+  const canAdd = !!picked || isNewSku;
 
   async function runSearch() {
     const q = skuQuery.trim();
@@ -168,12 +140,15 @@ export default function ToBuyBoard({
   }
 
   async function submitPlanned() {
-    if (!picked) return;
+    const code = picked ? picked.item_code : skuQuery.trim();
+    if (!code) { setError('Search for a SKU, or type a new SKU code.'); return; }
     if (!Number.isFinite(qty) || qty < 0) { setError('Qty must be a number ≥ 0.'); return; }
     setBusy(true); setError(null);
     try {
+      // a brand-new code is stubbed into the catalogue (draft) so the buy-list item can reference it
+      if (!picked) await createDraftSku({ item_code: code });
       await createPlannedItem({
-        item_code: picked.item_code,
+        item_code: code,
         qty,
         product_link: link.trim() || null,
         item_note: note.trim() || null,
@@ -373,67 +348,35 @@ export default function ToBuyBoard({
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
 
-              {/* (a) search */}
-              {!picked && !newSkuMode && (
-                <>
-                  <div className="scan-row">
-                    <input
-                      type="text"
-                      autoFocus
-                      placeholder="search SKU by code / name / piece count / brand"
-                      value={skuQuery}
-                      onChange={(e) => { setSkuQuery(e.target.value); setSearched(false); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
-                    />
-                    <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
-                  </div>
-                  {skuHits.length > 0 && (
-                    <ul className="result-list" style={{ marginTop: 6 }}>
-                      {skuHits.map((h) => (
-                        <li key={h.item_code}>
-                          <button className="result-item po-sku-hit" onClick={() => pick(h)}>
-                            <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} /> {h.item_code} · {h.name}{h.brand ? ` · ${h.brand}` : ''}</span>
-                            <span className="po-sku-meta">avail <b>{h.available}</b> · on the way <b>{h.on_the_way}</b></span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {/* no match → start the new-SKU "first step" draft */}
-                  {searched && !searching && skuHits.length === 0 && (
-                    <div className="po-nosku">
-                      <div className="hint">No SKU found for “{skuQuery.trim()}”.</div>
-                      <button className="btn-secondary" onClick={startNewSku}>+ Add new SKU (Catalog)</button>
-                    </div>
-                  )}
-                </>
+              {/* search — code / name / piece count / brand */}
+              <div className="scan-row">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="search SKU by code / name / piece count / brand"
+                  value={skuQuery}
+                  onChange={(e) => { setSkuQuery(e.target.value); setSearched(false); setSkuHits([]); if (picked) { setPicked(null); setPickedStock(null); } }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
+                />
+                <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
+              </div>
+              {!picked && skuHits.length > 0 && (
+                <ul className="result-list" style={{ marginTop: 6 }}>
+                  {skuHits.map((h) => (
+                    <li key={h.item_code}>
+                      <button className="result-item po-sku-hit" onClick={() => pick(h)}>
+                        <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} /> {h.item_code} · {h.name}{h.brand ? ` · ${h.brand}` : ''}</span>
+                        <span className="po-sku-meta">avail <b>{h.available}</b> · on the way <b>{h.on_the_way}</b></span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
 
-              {/* (b) new-SKU first step — a draft saved to Catalog (is_draft), enriched there later */}
-              {!picked && newSkuMode && (
-                <div className="po-form">
-                  <div className="hint" style={{ marginBottom: 10 }}>
-                    New SKU — a Catalog draft. It’s saved so you can buy it now; finish its details in Catalog later (it stays a draft until then).
-                  </div>
-                  <div className="po-field">
-                    <label>SKU code</label>
-                    <input type="text" autoFocus value={newCode} onChange={(e) => setNewCode(e.target.value)} />
-                  </div>
-                  <div className="po-field">
-                    <label>Name</label>
-                    <input type="text" placeholder="short name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-                  </div>
-                  <div className="fd-commit">
-                    <button className="btn-link" onClick={() => { setNewSkuMode(false); setError(null); }}>← back to search</button>
-                    <button className="btn-primary" onClick={continueNewSku} disabled={busy}>{busy ? 'Saving…' : 'Continue'}</button>
-                  </div>
-                </div>
-              )}
-
-              {/* (c) item details */}
+              {/* chosen SKU: an existing pick (with live figures) or a brand-new code */}
               {picked && (
-                <div className="po-form">
-                  <div className="po-current">
+                <>
+                  <div className="po-current" style={{ marginTop: 8 }}>
                     <span className="ff-code">{picked.item_code}</span>
                     <span className="ff-name">{picked.name}</span>
                     <button className="btn-link po-detach" onClick={() => { setPicked(null); setPickedStock(null); }}>change</button>
@@ -443,49 +386,57 @@ export default function ToBuyBoard({
                       ? <>warehouse <b>{pickedStock.available}</b> · in forwarder <b>{pickedStock.with_forwarder}</b> · shipped <b>{pickedStock.on_the_way}</b></>
                       : 'loading stock figures…'}
                   </div>
+                </>
+              )}
+              {isNewSku && (
+                <div className="validation ok" style={{ margin: '8px 0' }}>New SKU: it will be added to the catalog.</div>
+              )}
 
-                  <div className="po-field">
-                    <label>Qty</label>
-                    <span className="qty-step">
-                      <button type="button" onClick={() => setQty((q) => Math.max(0, q - 1))} disabled={qty <= 0} aria-label="decrease">−</button>
-                      <input type="number" inputMode="numeric" min={0} value={qty} onChange={(e) => setQty(Math.max(0, parseInt(e.target.value, 10) || 0))} />
-                      <button type="button" onClick={() => setQty((q) => q + 1)} aria-label="increase">+</button>
-                    </span>
-                  </div>
+              {/* item fields — always shown, qty defaults to 1 */}
+              <div className="po-form" style={{ marginTop: 4 }}>
+                <div className="po-field">
+                  <label>Qty</label>
+                  <span className="qty-step">
+                    <button type="button" onClick={() => setQty((q) => Math.max(0, q - 1))} disabled={qty <= 0} aria-label="decrease">−</button>
+                    <input type="number" inputMode="numeric" min={0} value={qty} onChange={(e) => setQty(Math.max(0, parseInt(e.target.value, 10) || 0))} />
+                    <button type="button" onClick={() => setQty((q) => q + 1)} aria-label="increase">+</button>
+                  </span>
+                </div>
 
-                  <div className="po-field">
-                    <label>Product link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                    <input type="text" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} />
-                  </div>
+                <div className="po-field">
+                  <label>Product link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <input type="text" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} />
+                </div>
 
-                  <div className="po-field">
-                    <label>Short note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                    <input type="text" placeholder="e.g. confirm colour" value={note} onChange={(e) => setNote(e.target.value)} />
-                  </div>
+                <div className="po-field">
+                  <label>Short note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <input type="text" placeholder="e.g. confirm colour" value={note} onChange={(e) => setNote(e.target.value)} />
+                </div>
 
-                  <div className="po-field">
-                    <label>Urgency</label>
-                    <div className="urg-toggle" role="group" aria-label="Urgency">
-                      {URGENCY_OPTS.map((u) => (
-                        <button
-                          key={u.key}
-                          type="button"
-                          className={`urg-btn urg-${u.key} ${addUrgency === u.key ? 'active' : ''}`}
-                          aria-pressed={addUrgency === u.key}
-                          onClick={() => setAddUrgency(addUrgency === u.key ? null : u.key)}
-                        >
-                          {u.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="fd-commit">
-                    <div className="fd-commit-info">Adds to the Manual buy-list.</div>
-                    <button className="btn-primary" onClick={submitPlanned} disabled={busy}>{busy ? 'Adding…' : 'Add to manual'}</button>
+                <div className="po-field">
+                  <label>Urgency</label>
+                  <div className="urg-toggle" role="group" aria-label="Urgency">
+                    {URGENCY_OPTS.map((u) => (
+                      <button
+                        key={u.key}
+                        type="button"
+                        className={`urg-btn urg-${u.key} ${addUrgency === u.key ? 'active' : ''}`}
+                        aria-pressed={addUrgency === u.key}
+                        onClick={() => setAddUrgency(addUrgency === u.key ? null : u.key)}
+                      >
+                        {u.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
+
+                <div className="fd-commit">
+                  <div className="fd-commit-info">
+                    {canAdd ? 'Adds to the Manual buy-list.' : 'Search a SKU, or type a new SKU code and search.'}
+                  </div>
+                  <button className="btn-primary" onClick={submitPlanned} disabled={busy || !canAdd}>{busy ? 'Adding…' : 'Add to manual'}</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
