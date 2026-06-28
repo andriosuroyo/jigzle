@@ -417,16 +417,15 @@ export async function createPlannedItem(input: PlannedItemInput): Promise<{ po_i
   return { po_id: (data as { po_id: number }).po_id };
 }
 
-// ── PR74: stub a brand-new SKU as a draft catalogue row (the add-item "first step"). It's a real
-// catalogue row so a PO can FK to it, but is_draft = true marks it as not-yet-completed (the Catalog
-// screen will enrich it later). Idempotent on the code. region is required + CHECK-constrained, so a
-// draft lands in 'Rest of World' until Catalog sets the real one. ──
-export async function createDraftSku(input: { item_code: string; name: string }): Promise<{ item_code: string; name: string }> {
+// ── PR75: stub a brand-new SKU as a draft catalogue row (the add-item flow). It's a real catalogue row
+// so a PO can FK to it; is_draft + needs_review mark it as a not-yet-completed stub (the Catalog screen
+// enriches it later). The SKU code is the identifier — a name is optional. Idempotent on the code.
+// (region was dropped in 0010, so the only required column is item_code.) ──
+export async function createDraftSku(input: { item_code: string; name?: string | null }): Promise<{ item_code: string; name: string }> {
   const supabase = createSupabaseServerClient();
   const item_code = input.item_code?.trim();
-  const name = input.name?.trim();
+  const name = input.name?.trim() || null;
   if (!item_code) throw new Error('createDraftSku: an item code is required');
-  if (!name) throw new Error('createDraftSku: a name is required');
 
   const { data: existing } = await supabase
     .from('catalogue')
@@ -437,9 +436,9 @@ export async function createDraftSku(input: { item_code: string; name: string })
 
   const { error } = await supabase
     .from('catalogue')
-    .insert({ item_code, region: 'Rest of World', translate_name: name, is_draft: true });
+    .insert({ item_code, translate_name: name, is_draft: true, needs_review: true });
   if (error) throw new Error(`createDraftSku: ${error.message}`);
-  return { item_code, name };
+  return { item_code, name: name ?? item_code };
 }
 
 // ── PR73: set the qty of a manual (Planned) buy-list item — the card's editable ± stepper. Reuses the
