@@ -172,10 +172,22 @@ export async function getSuppliers(): Promise<Supplier[]> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from('suppliers')
-    .select('supplier_id,name,country,flag,type,created_at')
+    .select('supplier_id,name,country,flag,type,sort_order,created_at')
+    .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (error || !data) return [];
   return data as Supplier[];
+}
+
+// ── Settings → Suppliers: persist a manual order (sort_order = array index) ──
+export async function reorderSuppliers(orderedIds: number[]): Promise<void> {
+  if (!orderedIds.length) return;
+  const supabase = createSupabaseServerClient();
+  const results = await Promise.all(
+    orderedIds.map((id, i) => supabase.from('suppliers').update({ sort_order: i }).eq('supplier_id', id))
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error(`reorderSuppliers: ${failed.error.message}`);
 }
 
 export async function getForwarders(): Promise<Forwarder[]> {
@@ -675,6 +687,10 @@ export async function addSupplier(input: NewSupplierInput): Promise<Supplier> {
   const { data: existing } = await supabase.from('suppliers').select('*').eq('name', name).maybeSingle();
   if (existing) return existing as Supplier;
 
+  // append to the end of the manual order
+  const { data: top } = await supabase.from('suppliers').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
+  const nextOrder = ((top?.sort_order as number | null) ?? -1) + 1;
+
   const { data, error } = await supabase
     .from('suppliers')
     .insert({
@@ -682,6 +698,7 @@ export async function addSupplier(input: NewSupplierInput): Promise<Supplier> {
       country: input.country?.trim() || null,
       flag: input.flag?.trim() || null,
       type: input.type ?? null,
+      sort_order: nextOrder,
     })
     .select('*')
     .single();

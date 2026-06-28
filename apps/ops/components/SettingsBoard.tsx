@@ -63,7 +63,7 @@ const SECTIONS: SectionDef[] = [
   },
   {
     kind: 'box',
-    title: 'Box presets',
+    title: 'Box Sizes',
     sub: '',
     cols: [
       { key: 'code', label: 'Code', type: 'text', grow: true },
