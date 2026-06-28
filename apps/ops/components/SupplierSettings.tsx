@@ -11,7 +11,7 @@ import type { Supplier, SupplierType } from '@jigzle/db/types';
 
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
 
-export default function SupplierSettings({ initial }: { initial: Supplier[] }) {
+export default function SupplierSettings({ initial, embedded = false }: { initial: Supplier[]; embedded?: boolean }) {
   const [rows, setRows] = useState<Supplier[]>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,9 +57,10 @@ export default function SupplierSettings({ initial }: { initial: Supplier[] }) {
     setRows((prev) => prev.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })));
   }
 
+  const Wrap = embedded ? 'div' : 'section';
   return (
-    <section className="set-sec">
-      <div className="set-sec-title">Suppliers</div>
+    <Wrap className={embedded ? '' : 'set-sec'}>
+      {!embedded && <div className="set-sec-title">Suppliers</div>}
       <div className="set-sec-sub">Where you buy from. Shown (flag + name) in the Purchasing → To-forwarder supplier picker. Country sets the unit-cost currency and the Taobao field (use “China”, “Japan”, …).</div>
 
       {error && <div className="validation err" style={{ margin: '8px 0' }}>{error}</div>}
@@ -94,7 +95,7 @@ export default function SupplierSettings({ initial }: { initial: Supplier[] }) {
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}
-    </section>
+    </Wrap>
   );
 }
 
