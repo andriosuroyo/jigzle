@@ -867,6 +867,25 @@ img.sku-img { background: #e8e8e8; }
 .set-colhead .set-fields { gap: 5px; }
 .set-colhead .set-f { flex: 1 1 0; min-width: 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); text-align: center; }
 .set-colhead-ctl { width: 100px; flex-shrink: 0; }
+
+/* suppliers: flag picker (left, icon-sized) + name (most space) + ▲▼✕; name caption left-aligned */
+.sup-flag-cell { flex-shrink: 0; width: 46px; }
+.set-colhead-sup .sup-flag-cell { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.set-colhead-sup .set-f { text-align: left; }
+
+/* FlagSelect — compact flag button + searchable country dropdown */
+.flag-select { position: relative; }
+.flag-select-btn { width: 100%; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; padding: 0; }
+.flag-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.flag-select-flag { font-size: 18px; line-height: 1; }
+.flag-select-ph { display: block; width: 18px; height: 18px; border-radius: 3px; border: 1px dashed var(--line); }
+.flag-select-pop { position: absolute; z-index: 60; top: calc(100% + 4px); left: 0; width: 250px; max-width: 72vw; background: white; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); padding: 6px; }
+.flag-select-search { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); margin-bottom: 6px; }
+.flag-select-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+.flag-select-opt { width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px 9px; border: none; border-radius: 6px; background: none; font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; }
+.flag-select-opt:active, .flag-select-opt.active { background: var(--paper); }
+.flag-select-opt .flag-select-flag { font-size: 18px; flex-shrink: 0; }
+.flag-select-empty { padding: 8px 9px; font-size: 13px; color: var(--muted); }
 /* per-row icon cell (emoji or uploaded image) + its picker modal */
 .set-ico { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; padding: 0; }
 .set-ico:disabled { opacity: 0.5; cursor: not-allowed; }

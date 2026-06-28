@@ -504,9 +504,10 @@ export type PurchaseOrder = {
 export type Supplier = {
   supplier_id: number;
   name: string;                      // unique
-  country: string | null;
+  country: string | null;            // derived from the chosen flag (Settings → Suppliers)
   flag: string | null;               // leading flag emoji
   type: SupplierType | null;
+  sort_order: number;                // manual order in Settings → Suppliers (0042)
   created_at: string;
 };
 
