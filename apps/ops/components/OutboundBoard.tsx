@@ -8,6 +8,7 @@ import { getShipQueue, getOrderForShip, recordShipment, returnToFulfill } from '
 import type { ShipDetail, ShipResult } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
+import IconSelect from '@/components/IconSelect';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
@@ -421,10 +422,16 @@ export default function OutboundBoard({
                         <span className="box-idx">{i + 1}</span>
                         <div className="box-sum-main">
                           <div className="box-dim-row">
-                            <select className="box-preset" value={b.preset} onChange={(e) => setBox(b.key, { preset: e.target.value })}>
-                              {boxPresets.map((p) => <option key={p.code} value={p.code}>{p.code}</option>)}
-                              <option value={CUSTOM}>Custom</option>
-                            </select>
+                            <IconSelect
+                              className="box-preset"
+                              ariaLabel="Box preset"
+                              value={b.preset}
+                              options={[
+                                ...boxPresets.map((p) => ({ value: p.code, label: p.code, icon: p.icon })),
+                                { value: CUSTOM, label: 'Custom' },
+                              ]}
+                              onChange={(code) => setBox(b.key, { preset: code })}
+                            />
                             {custom ? (
                               <>
                                 <input className="box-dim" type="number" inputMode="numeric" min={0} placeholder="L" value={b.p} onChange={(e) => setBox(b.key, { p: e.target.value })} />

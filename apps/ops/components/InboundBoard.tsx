@@ -26,6 +26,7 @@ import type {
 } from '@/app/inbound/types';
 import type { InboundLabel } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
+import IconSelect from '@/components/IconSelect';
 import BarcodePicker from '@/components/BarcodePicker';
 import ReceiveConfirm from '@/components/ReceiveConfirm';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -858,10 +859,15 @@ export default function InboundBoard({
         )}
         <label className="rcv-ctl">
           <span>label</span>
-          <select value={line.label ?? ''} onChange={(e) => setField(line.item_code, { label: e.target.value || null })}>
-            <option value="">—</option>
-            {inboundLabels.map((l) => <option key={l.id} value={l.label}>{l.label}</option>)}
-          </select>
+          <IconSelect
+            ariaLabel="Inbound label"
+            value={line.label ?? ''}
+            options={[
+              { value: '', label: '—' },
+              ...inboundLabels.map((l) => ({ value: l.label, label: l.label, icon: l.icon })),
+            ]}
+            onChange={(v) => setField(line.item_code, { label: v || null })}
+          />
         </label>
         <input
           type="text"

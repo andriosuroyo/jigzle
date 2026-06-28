@@ -906,6 +906,31 @@ img.sku-img { background: #e8e8e8; }
 .box-preset { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
 .box-dims-ro { font-size: 12px; color: var(--muted); white-space: nowrap; }
 
+/* ── PR85 — IconSelect: a custom dropdown that shows an emoji/image icon left of each option
+   (native <select> can't). Mirrors the look of the inputs it replaces. ── */
+.icon-select { position: relative; width: 100%; }
+.icon-select-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; }
+.icon-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.icon-select-val { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.icon-select-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-select-ph { color: var(--muted); }
+.icon-select-caret { flex-shrink: 0; color: var(--muted); font-size: 11px; }
+.icon-select.open .icon-select-caret { transform: rotate(180deg); }
+.icon-select-ico { width: 20px; height: 20px; flex-shrink: 0; border-radius: 4px; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; }
+.icon-select-ico.emoji { font-size: 16px; border-radius: 0; }
+.icon-select-list { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content; max-width: 280px; margin: 0; padding: 4px; list-style: none; background: white; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); max-height: 260px; overflow-y: auto; }
+.icon-select-opt { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 9px; border: none; border-radius: 6px; background: none; font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; white-space: nowrap; }
+.icon-select-opt:active, .icon-select-opt.active { background: var(--paper); }
+.icon-select-opt.active { font-weight: 600; }
+/* compact box-preset variant: fixed width to match the dim row; neutralise the legacy .box-preset box */
+.icon-select.box-preset { width: 96px; flex-shrink: 0; padding: 0; border: none; background: none; }
+.icon-select.box-preset .icon-select-btn { padding: 6px 8px; font-size: 13px; background: white; }
+.icon-select.box-preset .icon-select-ico { width: 18px; height: 18px; }
+/* compact inbound label variant (inside a .rcv-ctl row) */
+.rcv-ctl .icon-select { width: auto; min-width: 84px; }
+.rcv-ctl .icon-select-btn { padding: 6px 8px; font-size: 13px; background: white; }
+.rcv-ctl .icon-select-ico { width: 18px; height: 18px; }
+
 /* ── PR27 — Orders board (state badges, payment panel, complete summary) ── */
 .ord-state { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.02em; }
 .ord-state.need_payment  { background: var(--red-tint);    color: #993525; }
