@@ -16,6 +16,7 @@ import {
 import type { CustomerHit, LoyaltyReadout, SkuHit, Urgency } from '@/app/sales/types';
 import type { PaymentMethod } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
+import IconSelect from '@/components/IconSelect';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
@@ -541,9 +542,12 @@ export default function OrderEntry({
                 paymentMethods.length === 0 ? (
                   <div className="hint">No payment methods — add them in Settings.</div>
                 ) : (
-                  <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                    {paymentMethods.map((m) => <option key={m.id} value={m.label}>{m.label}</option>)}
-                  </select>
+                  <IconSelect
+                    ariaLabel="Payment method"
+                    value={payMethod}
+                    options={paymentMethods.map((m) => ({ value: m.label, label: m.label, icon: m.icon }))}
+                    onChange={setPayMethod}
+                  />
                 )
               )}
             </div>

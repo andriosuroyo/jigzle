@@ -6,6 +6,7 @@ import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending }
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
 import type { CourierService, CommonNote } from '@/app/settings/types';
 import NoteEditor from '@/components/NoteEditor';
+import IconSelect from '@/components/IconSelect';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -271,9 +272,12 @@ export default function FulfillBoard({
                   {courierServices.length === 0 ? (
                     <div className="hint">No couriers configured — add them in Settings.</div>
                   ) : (
-                    <select value={courierId ?? ''} onChange={(e) => setCourierId(e.target.value ? Number(e.target.value) : null)}>
-                      {courierServices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                    </select>
+                    <IconSelect
+                      ariaLabel="Courier"
+                      value={courierId}
+                      options={courierServices.map((c) => ({ value: c.id, label: c.label, icon: c.icon }))}
+                      onChange={setCourierId}
+                    />
                   )}
                 </div>
                 <div>
