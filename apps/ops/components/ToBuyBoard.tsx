@@ -302,10 +302,10 @@ export default function ToBuyBoard({
                     <div className="po-card-actions">
                       <button className="btn-secondary" onClick={() => openBuy({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link })}>Buy</button>
                       <button className="btn-primary" onClick={() => done({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link })} disabled={busy}>Done →</button>
-                      <button className="po-del" onClick={() => delItem(p.po_id)} disabled={busy} aria-label="Delete">×</button>
                     </div>
                   </div>
                 </div>
+                <button className="po-del-side" onClick={() => delItem(p.po_id)} disabled={busy} aria-label="Delete">×</button>
               </li>
             ))}
           </ul>
@@ -377,10 +377,10 @@ export default function ToBuyBoard({
                     <div className="po-card-actions">
                       <button className="btn-secondary" onClick={() => openBuy({ kind: 'oos', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link })}>Buy</button>
                       <button className="btn-primary" onClick={() => done({ kind: 'oos', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link })} disabled={busy}>Done →</button>
-                      <button className="po-del" onClick={() => delItem(p.po_id)} disabled={busy} aria-label="Delete">×</button>
                     </div>
                   </div>
                 </div>
+                <button className="po-del-side" onClick={() => delItem(p.po_id)} disabled={busy} aria-label="Delete">×</button>
               </li>
             ))}
           </ul>
