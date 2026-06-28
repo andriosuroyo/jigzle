@@ -718,6 +718,10 @@ img.sku-img { background: #e8e8e8; }
 .sc-modal-backdrop { position: fixed; inset: 0; background: rgba(40, 30, 18, 0.5); display: flex; align-items: center; justify-content: center; padding: 18px; z-index: 100; }
 .sc-modal { background: white; border-radius: 14px; width: 100%; max-width: 580px; max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3); }
 .sc-modal-head { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+/* header variant with a close (×) button on the right (To-buy add-item / buy modals) */
+.sc-modal-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sc-modal-x { background: var(--paper); border: none; color: var(--brown-dark); width: 32px; height: 32px; border-radius: 8px; font-size: 20px; line-height: 1; cursor: pointer; flex-shrink: 0; }
+.sc-modal-x:active { background: var(--line); }
 .sc-modal-title { font-size: 16px; font-weight: 700; color: var(--brown-dark); }
 .sc-modal-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .sc-modal-body { padding: 14px 18px; overflow: auto; }
