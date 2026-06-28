@@ -77,6 +77,14 @@ input, textarea, select, button { font-family: inherit; }
 .po-card-l2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .po-card-l3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
 .po-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+/* one compact control height across qty / Buy / Done so the row aligns with the image's bottom edge */
+.po-card-l3 .btn-primary, .po-card-l3 .btn-secondary { height: 34px; padding: 0 14px; display: inline-flex; align-items: center; }
+.po-card-l3 .qty-step button, .po-card-l3 .qty-step input { height: 32px; }
+.po-card-l3 .qty-ro { height: 34px; }
+/* delete (×) — red, square, same height as the action buttons */
+.po-del { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--red); border-radius: 8px; background: var(--red-tint); color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; }
+.po-del:active { background: #f3c9bf; }
+.po-del:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* qty: editable ± stepper (Manual) and a read-only field (From Sales / Out of Stock) */
 .qty-step { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: white; }
@@ -99,9 +107,11 @@ input, textarea, select, button { font-family: inherit; }
 
 /* Buy overlay link list + mark-out-of-stock fallback */
 .buy-links { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 16px; }
-.buy-link { display: block; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; font-size: 14px; font-weight: 600; color: var(--brown-dark); text-decoration: none; }
+.buy-link { display: flex; align-items: center; gap: 10px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; font-size: 14px; font-weight: 600; color: var(--brown-dark); text-decoration: none; }
 .buy-link.primary { background: var(--orange-tint); border-color: var(--orange); }
 .buy-link:active { background: var(--paper); }
+.buy-fav { flex-shrink: 0; width: 18px; height: 18px; border-radius: 4px; }
+.buy-link-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .buy-oos { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; flex-wrap: wrap; }
 .po-nosku { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; align-items: flex-start; }
 
