@@ -238,24 +238,21 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
     for (const b of (bn ?? []) as { prefix: string; name: string | null }[]) if (b.name) brandName.set(b.prefix, b.name);
   }
 
-  const { data: stock } = await supabase
-    .from('stock_check')
-    .select('item_code,available,pending,on_the_way')
-    .in('item_code', codes);
-  const sm = new Map(
-    ((stock ?? []) as { item_code: string; available: number; pending: number; on_the_way: number }[]).map((s) => [s.item_code, s])
-  );
+  // the three pipeline figures per code (warehouse / at-forwarder / shipped) — same source the
+  // selected-item view and the cards use, so the search result reads identically (a quick-view).
+  const pipe = await pipelineFor(supabase, codes);
 
   return codes.map((item_code) => {
-    const s = sm.get(item_code);
+    const e = pipe.get(item_code) ?? { available: 0, pending: 0, on_the_way: 0, with_forwarder: 0 };
     const prefix = brandByCode.get(item_code) ?? null;
     return {
       item_code,
       name: named.get(item_code)!,
       brand: prefix ? brandName.get(prefix) ?? prefix : null,
-      available: s?.available ?? 0,
-      pending: s?.pending ?? 0,
-      on_the_way: s?.on_the_way ?? 0,
+      available: e.available,
+      pending: e.pending,
+      with_forwarder: e.with_forwarder,
+      on_the_way: e.on_the_way,
     };
   });
 }
@@ -510,10 +507,12 @@ export async function setSoldOut(poId: number, soldOut: boolean, note?: string |
   if (error) throw new Error(`setSoldOut: ${error.message}`);
 }
 
-// pipeline figures per SKU: live warehouse availability + incoming PO qty split by status.
-async function pipelineFor(supabase: ReturnType<typeof createSupabaseServerClient>, codes: string[]): Promise<Map<string, { available: number; on_the_way: number; with_forwarder: number }>> {
-  const m = new Map<string, { available: number; on_the_way: number; with_forwarder: number }>();
-  for (const c of codes) m.set(c, { available: 0, on_the_way: 0, with_forwarder: 0 });
+// pipeline figures per SKU: live warehouse availability + incoming PO qty split by status
+// (pending = Σ Processing, with_forwarder = Σ 'With Forwarder', on_the_way = Σ 'On the way').
+type PipeFig = { available: number; pending: number; on_the_way: number; with_forwarder: number };
+async function pipelineFor(supabase: ReturnType<typeof createSupabaseServerClient>, codes: string[]): Promise<Map<string, PipeFig>> {
+  const m = new Map<string, PipeFig>();
+  for (const c of codes) m.set(c, { available: 0, pending: 0, on_the_way: 0, with_forwarder: 0 });
   if (!codes.length) return m;
   await Promise.all([
     (async () => {
@@ -523,11 +522,12 @@ async function pipelineFor(supabase: ReturnType<typeof createSupabaseServerClien
       }
     })(),
     (async () => {
-      const { data } = await supabase.from('purchase_orders').select('item_code,qty,status').in('item_code', codes).in('status', ['On the way', 'With Forwarder']);
+      const { data } = await supabase.from('purchase_orders').select('item_code,qty,status').in('item_code', codes).in('status', ['Processing', 'On the way', 'With Forwarder']);
       for (const p of (data ?? []) as { item_code: string | null; qty: number | null; status: string | null }[]) {
         if (!p.item_code) continue;
         const e = m.get(p.item_code); if (!e) continue;
-        if (p.status === 'On the way') e.on_the_way += Number(p.qty) || 0;
+        if (p.status === 'Processing') e.pending += Number(p.qty) || 0;
+        else if (p.status === 'On the way') e.on_the_way += Number(p.qty) || 0;
         else if (p.status === 'With Forwarder') e.with_forwarder += Number(p.qty) || 0;
       }
     })(),

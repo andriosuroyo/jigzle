@@ -733,7 +733,7 @@ export default function OrderBoard({
                     <li key={h.item_code}>
                       <button className="result-item po-sku-hit" onClick={() => pickSku(h)}>
                         <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} /> {h.item_code} · {h.name}</span>
-                        <span className="po-sku-meta">avail <b>{h.available}</b> · pending <b>{h.pending}</b> · on the way <b>{h.on_the_way}</b></span>
+                        <span className="po-sku-meta">avail <b>{h.available}</b> · pending <b>{h.pending}</b> · on the way <b>{h.with_forwarder + h.on_the_way}</b></span>
                       </button>
                     </li>
                   ))}

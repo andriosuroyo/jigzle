@@ -134,8 +134,9 @@ export default function ToBuyBoard({
 
   async function pick(hit: SkuHit) {
     setPicked({ item_code: hit.item_code, name: hit.name });
-    setSkuHits([]); setSkuQuery(''); setSearched(false);
-    setPickedStock(null);
+    setSkuHits([]); setSearched(false);
+    // seed the figures from the hit (no flash), then refine in the background
+    setPickedStock({ item_code: hit.item_code, available: hit.available, on_the_way: hit.on_the_way, with_forwarder: hit.with_forwarder });
     try { setPickedStock(await getSkuStock(hit.item_code)); } catch { /* figures are best-effort */ }
   }
 
@@ -360,33 +361,37 @@ export default function ToBuyBoard({
                 />
                 <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
               </div>
+              {/* search results — quick-view rows (small picture, code + name, availability line) */}
               {!picked && skuHits.length > 0 && (
                 <ul className="result-list" style={{ marginTop: 6 }}>
                   {skuHits.map((h) => (
                     <li key={h.item_code}>
-                      <button className="result-item po-sku-hit" onClick={() => pick(h)}>
-                        <span className="ri-name"><SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} /> {h.item_code} · {h.name}{h.brand ? ` · ${h.brand}` : ''}</span>
-                        <span className="po-sku-meta">avail <b>{h.available}</b> · on the way <b>{h.on_the_way}</b></span>
+                      <button className="po-pick po-pick-btn" onClick={() => pick(h)}>
+                        <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
+                        <div className="po-pick-main">
+                          <div className="po-pick-l1"><span className="ff-code">{h.item_code}</span><span className="ff-name">{h.name}{h.brand ? ` · ${h.brand}` : ''}</span></div>
+                          <div className="po-pick-l2">at forwarder {h.with_forwarder} · shipped {h.on_the_way} · warehouse {h.available}</div>
+                        </div>
                       </button>
                     </li>
                   ))}
                 </ul>
               )}
 
-              {/* chosen SKU: an existing pick (with live figures) or a brand-new code */}
+              {/* chosen SKU — same quick-view row, with a red × to remove */}
               {picked && (
-                <>
-                  <div className="po-current" style={{ marginTop: 8 }}>
-                    <span className="ff-code">{picked.item_code}</span>
-                    <span className="ff-name">{picked.name}</span>
-                    <button className="btn-link po-detach" onClick={() => { setPicked(null); setPickedStock(null); }}>change</button>
+                <div className="po-pick" style={{ marginTop: 8 }}>
+                  <SkuImage status={imgMap[picked.item_code]?.status} displayUrl={imgMap[picked.item_code]?.displayUrl} name={picked.name} size={SKU_IMG.sm} />
+                  <div className="po-pick-main">
+                    <div className="po-pick-l1"><span className="ff-code">{picked.item_code}</span><span className="ff-name">{picked.name}</span></div>
+                    <div className="po-pick-l2">
+                      {pickedStock
+                        ? `at forwarder ${pickedStock.with_forwarder} · shipped ${pickedStock.on_the_way} · warehouse ${pickedStock.available}`
+                        : 'loading…'}
+                    </div>
                   </div>
-                  <div className="hint" style={{ margin: '6px 0' }}>
-                    {pickedStock
-                      ? <>warehouse <b>{pickedStock.available}</b> · in forwarder <b>{pickedStock.with_forwarder}</b> · shipped <b>{pickedStock.on_the_way}</b></>
-                      : 'loading stock figures…'}
-                  </div>
-                </>
+                  <button className="po-pick-x" onClick={() => { setPicked(null); setPickedStock(null); }} aria-label="Remove">×</button>
+                </div>
               )}
               {isNewSku && (
                 <div className="validation ok" style={{ margin: '8px 0' }}>New SKU: it will be added to the catalog.</div>
@@ -430,11 +435,9 @@ export default function ToBuyBoard({
                   </div>
                 </div>
 
-                <div className="fd-commit">
-                  <div className="fd-commit-info">
-                    {canAdd ? 'Adds to the Manual buy-list.' : 'Search a SKU, or type a new SKU code and search.'}
-                  </div>
-                  <button className="btn-primary" onClick={submitPlanned} disabled={busy || !canAdd}>{busy ? 'Adding…' : 'Add to manual'}</button>
+                <div className="po-commit">
+                  <button className="btn-primary" onClick={submitPlanned} disabled={busy || !canAdd}>{busy ? 'Adding…' : 'Add item'}</button>
+                  {!canAdd && <span className="fd-commit-info">Search a SKU, or type a new SKU code and search.</span>}
                 </div>
               </div>
             </div>

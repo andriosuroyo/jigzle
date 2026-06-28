@@ -9,17 +9,18 @@ import type { SupplierType } from '@jigzle/db/types';
 // purchase_orders.urgency (manual items) and orders.urgency (sales orders, surfaced on From-Sales cards).
 export type Urgency = 'low' | 'mid' | 'high';
 
-// SKU search hit for the PO form — live stock_check.available plus the incoming columns
-// (D3: pending = Σ Processing POs, on_the_way = Σ 'On the way' / 'With Forwarder' POs). This is
-// where incoming stock is surfaced (apps/ops has no standalone Stock Check screen yet). PR73 adds the
-// brand name (matched via brands.name → brand_prefix) so the add-item search can find by brand too.
+// SKU search hit for the PO form — the same three pipeline figures the cards/selected view show, so
+// a search result reads as a quick-view: warehouse (stock_check.available), at-forwarder ('With
+// Forwarder' PO qty) and shipped ('On the way' PO qty). PR73 adds the brand name (matched via
+// brands.name → brand_prefix) so the add-item search can find by brand too.
 export interface SkuHit {
   item_code: string;
   name: string;
   brand: string | null;
-  available: number;
-  pending: number;
-  on_the_way: number;
+  available: number;       // warehouse
+  pending: number;         // Σ Processing POs (used by the To-forwarder OrderBoard search)
+  with_forwarder: number;  // at forwarder
+  on_the_way: number;      // shipped (en route)
 }
 
 // PR73: the purchase links shown in the To-buy "Buy" overlay for one SKU — the buy-list item's own
