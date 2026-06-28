@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
@@ -213,6 +213,45 @@ export default function OrderBoard({
   // embedded tabs mount fresh on each switch — refetch so a confirm/group done in a sibling tab shows.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (embedded) refreshQueue(); }, []);
+
+  // ── To ship: country sub-tabs (Sales-Pending style). A PO's country comes from its supplier (set in
+  // To forwarder), falling back to its shipment's origin country; anything without one lands in "Other".
+  // Lets you consolidate same-origin items into a forwarder shipment. ──
+  const ALL_COUNTRIES = '__all__';
+  const OTHER_COUNTRY = '__other__';
+  const supplierById = useMemo(() => new Map(suppliers.map((s) => [s.supplier_id, s])), [suppliers]);
+  const shipmentById = useMemo(() => new Map(shipments.map((s) => [s.ship_id, s])), [shipments]);
+  const countryOf = useCallback((po: OpenPORow): string | null => {
+    const sup = po.supplier_id != null ? supplierById.get(po.supplier_id) : undefined;
+    const c = sup?.country?.trim();
+    if (c) return c;
+    const sh = po.ship_id ? shipmentById.get(po.ship_id) : undefined;
+    return sh?.origin_country?.trim() || null;
+  }, [supplierById, shipmentById]);
+
+  const [shipCountry, setShipCountry] = useState<string>(ALL_COUNTRIES);
+  // the country tabs present in the ship bucket, with counts (+ an "Other" bucket for unattributed rows)
+  const shipCountryTabs = useMemo(() => {
+    if (bucket !== 'ship') return [];
+    const counts = new Map<string, number>();
+    let other = 0;
+    for (const po of shown) {
+      const c = countryOf(po);
+      if (c) counts.set(c, (counts.get(c) ?? 0) + 1);
+      else other += 1;
+    }
+    const tabs: { key: string; label: string; count: number }[] = [{ key: ALL_COUNTRIES, label: 'All', count: shown.length }];
+    for (const [key, count] of [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]))) tabs.push({ key, label: key, count });
+    if (other) tabs.push({ key: OTHER_COUNTRY, label: 'Other', count: other });
+    return tabs;
+  }, [bucket, shown, countryOf]);
+
+  // the rows actually listed: the ship bucket narrows by the active country tab; other buckets pass through
+  const shownFiltered = useMemo(() => {
+    if (bucket !== 'ship' || shipCountry === ALL_COUNTRIES) return shown;
+    if (shipCountry === OTHER_COUNTRY) return shown.filter((p) => !countryOf(p));
+    return shown.filter((p) => countryOf(p) === shipCountry);
+  }, [bucket, shipCountry, shown, countryOf]);
 
   // SKU thumbnails for the PO queue rows + the SKU search picker
   const imgCodes = useMemo(() => {
@@ -648,13 +687,30 @@ export default function OrderBoard({
             </div>
           )}
 
-          {shown.length === 0 && <div className="hint fq-empty">{bucket ? 'Nothing here yet.' : 'No open POs.'}</div>}
+          {/* To ship: country sub-tabs (by supplier origin) so same-origin items group together */}
+          {bucket === 'ship' && shipCountryTabs.some((t) => t.key !== ALL_COUNTRIES && t.key !== OTHER_COUNTRY) && (
+            <div className="fq-filters" role="tablist" aria-label="Country">
+              {shipCountryTabs.map((t) => (
+                <button
+                  key={t.key}
+                  role="tab"
+                  aria-selected={shipCountry === t.key}
+                  className={`fq-filter ${shipCountry === t.key ? 'active' : ''}`}
+                  onClick={() => { setShipCountry(t.key); setSelectedPoIds(new Set()); }}
+                >
+                  {t.label}<span className="fq-filter-count">{t.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {shownFiltered.length === 0 && <div className="hint fq-empty">{bucket ? 'Nothing here yet.' : 'No open POs.'}</div>}
 
           {/* To forwarder: compact two-line quick-view cards (small image; line 1 SKU + PO#,
               line 2 name + qty), no checkbox — tap a card to open its detail editor. */}
           {bucket === 'forwarder' ? (
             <ul className="po-cards po-cards-compact" style={{ padding: 8 }}>
-              {shown.map((po) => (
+              {shownFiltered.map((po) => (
                 <li key={po.po_id}>
                   <button className={`po-card po-card-btn ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
                     <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
@@ -674,7 +730,7 @@ export default function OrderBoard({
             </ul>
           ) : (
             <ul className="fq-list">
-              {shown.map((po) => (
+              {shownFiltered.map((po) => (
                 <li key={po.po_id}>
                   <div className="po-row-wrap">
                     <input
