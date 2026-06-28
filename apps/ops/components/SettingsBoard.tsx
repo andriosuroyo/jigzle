@@ -38,6 +38,7 @@ type SectionDef = {
   sortKey: string; // the field the A–Z button orders by
   autoLabel?: { from: string[]; target: string }; // courier: label follows "{courier} {speed}" while unset
   blank: SettingPayload; // payload for "+ add" (NOT NULL text cols seeded as '')
+  rowClass?: string; // extra class on each .set-row (e.g. box presets pack all dims on one line)
 };
 
 const SECTIONS: SectionDef[] = [
@@ -52,28 +53,25 @@ const SECTIONS: SectionDef[] = [
   {
     kind: 'courier',
     title: 'Couriers',
-    sub: 'Stored as courier + speed; shown as one dropdown of labels. Label auto-fills from courier + speed until you edit it.',
-    cols: [
-      { key: 'courier', label: 'Courier', type: 'text', grow: true },
-      { key: 'speed', label: 'Speed', type: 'text', nullable: true },
-      { key: 'label', label: 'Label', type: 'text', grow: true },
-    ],
+    sub: 'Shown in the Fulfill courier picker.',
+    // a single free-text label (courier + speed kept in the row but no longer edited here)
+    cols: [{ key: 'label', label: 'Label', type: 'text', grow: true }],
     sortKey: 'label',
-    autoLabel: { from: ['courier', 'speed'], target: 'label' },
     blank: { courier: '', label: '' },
   },
   {
     kind: 'box',
     title: 'Box presets',
-    sub: 'Volumetric box sizes (cm). Filler 1s are placeholders — drop in real dims.',
+    sub: 'Volumetric box sizes (cm). Code + P/L/T fit on one line — each is at most two digits.',
     cols: [
       { key: 'code', label: 'Code', type: 'text', grow: true },
-      { key: 'dim_p', label: 'P (cm)', type: 'number', nullable: true },
-      { key: 'dim_l', label: 'L (cm)', type: 'number', nullable: true },
-      { key: 'dim_t', label: 'T (cm)', type: 'number', nullable: true },
+      { key: 'dim_p', label: 'P', type: 'number', nullable: true },
+      { key: 'dim_l', label: 'L', type: 'number', nullable: true },
+      { key: 'dim_t', label: 'T', type: 'number', nullable: true },
     ],
     sortKey: 'code',
     blank: { code: '' },
+    rowClass: 'set-row-box',
   },
   {
     kind: 'inbound_labels',
@@ -137,8 +135,8 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     common_note: initial.commonNotes,
   });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  // notice tone follows the action: ok (green) = additive, err (red) = removed/failed, warn (yellow) = neutral edit.
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'err' | 'warn'; text: string } | null>(null);
 
   // navigation: which category is open (null = the category landing), and the active tab within it.
   const [catKey, setCatKey] = useState<string | null>(null);
@@ -149,16 +147,16 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
   function setRows(kind: SettingsKind, updater: (rows: SettingRow[]) => SettingRow[]) {
     setLists((prev) => ({ ...prev, [kind]: updater(prev[kind]) }));
   }
-  const fail = (e: unknown) => setError(e instanceof Error ? e.message : 'Something went wrong.');
-  const ok = (msg: string) => { setError(null); setSuccess(msg); };
+  const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
+  const note = (tone: 'ok' | 'err' | 'warn', text: string) => setNotice({ tone, text });
 
   function openCategory(c: Category) {
-    setError(null); setSuccess(null);
+    setNotice(null);
     setCatKey(c.key);
     setTab(tabKey(c.tabs[0]));
   }
   function backToCategories() {
-    setError(null); setSuccess(null);
+    setNotice(null);
     setCatKey(null);
   }
 
@@ -176,11 +174,11 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
 
   async function saveRow(kind: SettingsKind, id: number, patch: SettingPatch) {
     setBusy(true);
-    setError(null);
+    setNotice(null);
     try {
       const updated = await updateSetting(kind, id, patch);
       setRows(kind, (rows) => rows.map((r) => (r.id === id ? updated : r)));
-      ok('Saved.');
+      note('warn', 'Saved.');
     } catch (e) {
       fail(e);
     } finally {
@@ -190,10 +188,10 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
 
   async function persistOrder(kind: SettingsKind, rows: SettingRow[]) {
     setBusy(true);
-    setError(null);
+    setNotice(null);
     try {
       await reorderSetting(kind, rows.map((r) => r.id));
-      ok('Order saved.');
+      note('warn', 'Order saved.');
     } catch (e) {
       fail(e);
     } finally {
@@ -223,11 +221,11 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
 
   async function add(kind: SettingsKind, blank: SettingPayload) {
     setBusy(true);
-    setError(null);
+    setNotice(null);
     try {
       const row = await addSetting(kind, blank);
       setRows(kind, (rows) => [...rows, row]);
-      ok('Added a row.');
+      note('ok', 'Added.');
     } catch (e) {
       fail(e);
     } finally {
@@ -238,7 +236,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
   // upload an icon image and return its public URL (caller stores it on the row via saveRow).
   async function uploadIcon(file: File): Promise<string> {
     setBusy(true);
-    setError(null);
+    setNotice(null);
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -254,11 +252,11 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
 
   async function remove(kind: SettingsKind, id: number) {
     setBusy(true);
-    setError(null);
+    setNotice(null);
     try {
       await deleteSetting(kind, id);
       setRows(kind, (rows) => rows.filter((r) => r.id !== id));
-      ok('Removed.');
+      note('err', 'Removed.');
     } catch (e) {
       fail(e);
     } finally {
@@ -314,8 +312,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
           )}
         </nav>
 
-        {error && <div className="validation err">{error}</div>}
-        {success && <div className="validation ok">{success}</div>}
+        {notice && <div className={`validation ${notice.tone}`}>{notice.text}</div>}
 
         {/* ── landing: category cards ── */}
         {!category && (
@@ -479,7 +476,7 @@ function SettingRowEditor({
   }
 
   return (
-    <div className="set-row">
+    <div className={`set-row ${sec.rowClass ?? ''}`}>
       {/* icon cell — tap to set an emoji or upload an image */}
       <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">
         {icon ? (
