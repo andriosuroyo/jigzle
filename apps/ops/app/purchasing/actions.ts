@@ -57,6 +57,14 @@ function nameOf(c: CatNameRow | null, fallback: string): string {
   return c.translate_name || c.original_name || c.self_code || fallback;
 }
 
+// the catalogue's real display name, or null when it has none (a draft / uncatalogued stub). Lets the
+// UI show an em dash instead of repeating the code as the "name". (PR77)
+function realNameOf(c: CatNameRow | null): string | null {
+  if (!c) return null;
+  return c.translate_name || c.original_name || c.self_code || null;
+}
+const DASH = '—';
+
 // today as a YYYY-MM-DD string in Asia/Jakarta (UTC+7, no DST) — matches the legacy date
 // convention; the server runs in UTC on Vercel. (The grouping RPC uses current_date server-side.)
 function todayJakarta(): string {
@@ -197,7 +205,7 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
   const { data: brandRows } = await supabase.from('brands').select('prefix').ilike('name', `%${raw}%`).limit(20);
   const brandPrefixes = [...new Set((brandRows ?? []).map((b) => b.prefix as string))];
 
-  const named = new Map<string, string>();
+  const named = new Map<string, string | null>();
   const [catRes, bcRes, brandCatRes] = await Promise.all([
     supabase
       .from('catalogue')
@@ -213,7 +221,7 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
   type CatRow = CatNameRow & { brand_prefix: string | null };
   const brandByCode = new Map<string, string | null>();
   const absorb = (rows: CatRow[]) => {
-    for (const c of rows) { named.set(c.item_code, nameOf(c, c.item_code)); brandByCode.set(c.item_code, c.brand_prefix); }
+    for (const c of rows) { named.set(c.item_code, realNameOf(c)); brandByCode.set(c.item_code, c.brand_prefix); }
   };
   absorb((catRes.data ?? []) as CatRow[]);
   absorb((brandCatRes.data ?? []) as CatRow[]);
@@ -247,7 +255,7 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
     const prefix = brandByCode.get(item_code) ?? null;
     return {
       item_code,
-      name: named.get(item_code)!,
+      name: named.get(item_code) ?? DASH,
       brand: prefix ? brandName.get(prefix) ?? prefix : null,
       available: e.available,
       pending: e.pending,
@@ -560,7 +568,7 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
   const nameByCode = new Map<string, string>();
   if (codes.length) {
     const { data: cat } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
-    for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+    for (const c of (cat ?? []) as CatNameRow[]) { const n = realNameOf(c); if (n) nameByCode.set(c.item_code, n); }
   }
   const pipe = await pipelineFor(supabase, codes);
 
@@ -569,7 +577,7 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
     return {
       po_id: r.po_id,
       item_code: r.item_code,
-      name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : '(unnamed)',
+      name: r.item_code ? nameByCode.get(r.item_code) ?? DASH : DASH,
       qty: r.qty,
       product_link: r.product_link,
       item_note: r.item_note,
@@ -598,12 +606,12 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
   const nameByCode = new Map<string, string>();
   if (codes.length) {
     const { data: cat } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
-    for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+    for (const c of (cat ?? []) as CatNameRow[]) { const n = realNameOf(c); if (n) nameByCode.set(c.item_code, n); }
   }
   return rows.map((r) => ({
     po_id: r.po_id,
     item_code: r.item_code,
-    name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : '(unnamed)',
+    name: r.item_code ? nameByCode.get(r.item_code) ?? DASH : DASH,
     qty: r.qty,
     product_link: r.product_link,
     urgency: r.urgency,
