@@ -71,20 +71,22 @@ input, textarea, select, button { font-family: inherit; }
 /* ── To-buy cards (PR73): one 3-line layout for Manual / From Sales / Out of Stock ── */
 .po-cards { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .po-card { display: flex; align-items: stretch; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
-.po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; justify-content: center; }
+.po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .po-card-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-card-l1 .ff-name { flex: 1; }
 .po-card-l2 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.po-card-l3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
-.po-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
-/* one compact control height across qty / Buy / Done so the row aligns with the image's bottom edge */
-.po-card-l3 .btn-primary, .po-card-l3 .btn-secondary { height: 34px; padding: 0 14px; display: inline-flex; align-items: center; }
-.po-card-l3 .qty-step button, .po-card-l3 .qty-step input { height: 32px; }
-.po-card-l3 .qty-ro { height: 34px; }
-/* delete (×) — red, square, same height as the action buttons */
-.po-del { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--red); border-radius: 8px; background: var(--red-tint); color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; }
-.po-del:active { background: #f3c9bf; }
-.po-del:disabled { opacity: 0.5; cursor: not-allowed; }
+/* the controls pin to the bottom of the main column so their row lines up with the image's bottom edge */
+.po-card-l3 { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+.po-card-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+/* compact, uniform control height across qty / Buy / Done — kept short enough to fit one row */
+.po-card-l3 .btn-primary, .po-card-l3 .btn-secondary { height: 30px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; }
+.po-card-l3 .qty-step button { width: 26px; height: 28px; font-size: 16px; }
+.po-card-l3 .qty-step input { width: 36px; height: 28px; }
+.po-card-l3 .qty-ro { height: 30px; min-width: 38px; }
+/* delete (×) — its own top-right column, beside the SKU / name / availability lines */
+.po-del-side { align-self: flex-start; flex-shrink: 0; width: 30px; height: 30px; border: 1px solid var(--red); border-radius: 8px; background: var(--red-tint); color: var(--red); font-size: 17px; line-height: 1; cursor: pointer; }
+.po-del-side:active { background: #f3c9bf; }
+.po-del-side:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* qty: editable ± stepper (Manual) and a read-only field (From Sales / Out of Stock) */
 .qty-step { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: white; }
