@@ -822,6 +822,22 @@ img.sku-img { background: #e8e8e8; }
 /* ── PR25 — SETTINGS module (three sortable pick-lists) ── */
 .set-wrap { max-width: 820px; margin: 0 auto; padding: 16px; }
 .set-wrap > .validation { margin-bottom: 12px; }
+
+/* Settings landing — tappable category cards */
+.set-cats { display: flex; flex-direction: column; gap: 10px; }
+.set-cat { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: white; border: 1px solid var(--line); border-radius: 12px; padding: 16px; cursor: pointer; }
+.set-cat:active { background: var(--paper); }
+.set-cat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.set-cat-title { font-size: 16px; font-weight: 700; color: var(--brown-dark); }
+.set-cat-sub { font-size: 12px; color: var(--muted); }
+.set-cat-count { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--brown-dark); background: var(--paper); border-radius: 20px; padding: 2px 10px; }
+.set-cat-chev { flex-shrink: 0; font-size: 22px; line-height: 1; color: var(--muted); }
+/* Settings category header — back + title; the tab bar reuses the .fq-filters style */
+.set-cat-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.set-back { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown-dark); font-size: 20px; line-height: 1; cursor: pointer; }
+.set-back:active { background: var(--paper); }
+.set-cat-headtitle { font-size: 18px; font-weight: 700; color: var(--brown-dark); }
+.set-wrap .fq-filters { margin-bottom: 14px; }
 .set-sec { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
 .set-sec-title { font-size: 14px; font-weight: 700; color: var(--ink); }
 .set-sec-sub { font-size: 12px; color: var(--muted); margin: 2px 0 12px; }

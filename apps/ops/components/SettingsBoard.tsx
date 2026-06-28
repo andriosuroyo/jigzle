@@ -1,6 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+// Settings (PR82): a two-level shell. Landing shows CATEGORY cards (Sales / Shipping / Inbound /
+// Purchasing); entering a category shows TABS (Sales-Pending style, with counts), one per list; each
+// tab body is an add / sort (▲▼) / remove editor. There is no "active" flag in the UI — removing a row
+// IS the way to retire it (deleteSetting is a soft delete server-side, so it just drops out of every
+// picker). Single-field lists drop the redundant per-row field caption.
+
+import { useMemo, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import SupplierSettings from '@/components/SupplierSettings';
 import type { Supplier } from '@jigzle/db/types';
@@ -28,7 +34,7 @@ type SectionDef = {
   cols: Col[];
   sortKey: string; // the field the A–Z button orders by
   autoLabel?: { from: string[]; target: string }; // courier: label follows "{courier} {speed}" while unset
-  blank: SettingPayload; // payload for "Add row" (NOT NULL text cols seeded as '')
+  blank: SettingPayload; // payload for "+ add" (NOT NULL text cols seeded as '')
 };
 
 const SECTIONS: SectionDef[] = [
@@ -42,7 +48,7 @@ const SECTIONS: SectionDef[] = [
   },
   {
     kind: 'courier',
-    title: 'Courier services',
+    title: 'Couriers',
     sub: 'Stored as courier + speed; shown as one dropdown of labels. Label auto-fills from courier + speed until you edit it.',
     cols: [
       { key: 'courier', label: 'Courier', type: 'text', grow: true },
@@ -83,6 +89,20 @@ const SECTIONS: SectionDef[] = [
     blank: { label: '' },
   },
 ];
+const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SECTIONS.map((s) => [s.kind, s])) as Record<SettingsKind, SectionDef>;
+
+// ── categories: the landing grouping. A tab is either a generic settings list (kind) or the bespoke
+//    Suppliers editor (custom). ──
+type CatTab = { kind: SettingsKind } | { custom: 'suppliers' };
+type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
+
+const CATEGORIES: Category[] = [
+  { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
+  { key: 'shipping', title: 'Shipping', sub: 'Couriers and box presets used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }] },
+  { key: 'inbound', title: 'Inbound', sub: 'Labels for the Inbound receiving flow.', tabs: [{ kind: 'inbound_labels' }] },
+  { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers for the To-forwarder buying pipeline.', tabs: [{ custom: 'suppliers' }] },
+];
+const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
 
 const val = (row: SettingRow, key: string): unknown => (row as unknown as Record<string, unknown>)[key];
 
@@ -117,11 +137,39 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // navigation: which category is open (null = the category landing), and the active tab within it.
+  const [catKey, setCatKey] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>('');
+
+  const category = useMemo(() => CATEGORIES.find((c) => c.key === catKey) ?? null, [catKey]);
+
   function setRows(kind: SettingsKind, updater: (rows: SettingRow[]) => SettingRow[]) {
     setLists((prev) => ({ ...prev, [kind]: updater(prev[kind]) }));
   }
   const fail = (e: unknown) => setError(e instanceof Error ? e.message : 'Something went wrong.');
   const ok = (msg: string) => { setError(null); setSuccess(msg); };
+
+  function openCategory(c: Category) {
+    setError(null); setSuccess(null);
+    setCatKey(c.key);
+    setTab(tabKey(c.tabs[0]));
+  }
+  function backToCategories() {
+    setError(null); setSuccess(null);
+    setCatKey(null);
+  }
+
+  // tab badge counts (live for generic lists; suppliers uses its initial count)
+  function tabCount(t: CatTab): number {
+    return 'kind' in t ? lists[t.kind].length : suppliers.length;
+  }
+  function tabLabel(t: CatTab): string {
+    return 'kind' in t ? SECTION_BY_KIND[t.kind].title : 'Suppliers';
+  }
+  // total settings in a category, for the landing card badge
+  function catCount(c: Category): number {
+    return c.tabs.reduce((n, t) => n + tabCount(t), 0);
+  }
 
   async function saveRow(kind: SettingsKind, id: number, patch: SettingPatch) {
     setBusy(true);
@@ -198,6 +246,33 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     }
   }
 
+  // one generic list's editor (rows + "+ add" / Sort A–Z at the bottom)
+  function renderKindList(sec: SectionDef) {
+    const rows = lists[sec.kind];
+    return (
+      <div className="set-list">
+        {rows.length === 0 && <div className="hint">No rows yet — add one below.</div>}
+        {rows.map((row, i) => (
+          <SettingRowEditor
+            key={row.id}
+            sec={sec}
+            row={row}
+            first={i === 0}
+            last={i === rows.length - 1}
+            busy={busy}
+            onSave={(patch) => saveRow(sec.kind, row.id, patch)}
+            onMove={(dir) => move(sec.kind, i, dir)}
+            onRemove={() => remove(sec.kind, row.id)}
+          />
+        ))}
+        <div className="set-toolbar">
+          <button className="btn-secondary" onClick={() => add(sec.kind, sec.blank)} disabled={busy}>+ add</button>
+          <button className="btn-secondary" onClick={() => sortAZ(sec.kind, sec.sortKey)} disabled={busy || rows.length < 2}>Sort A–Z</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="ops">
       <AppHeader active="settings" userEmail={userEmail} />
@@ -206,50 +281,72 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
         {error && <div className="validation err">{error}</div>}
         {success && <div className="validation ok">{success}</div>}
 
-        {SECTIONS.map((sec) => {
-          const rows = lists[sec.kind];
-          return (
-            <section className="set-sec" key={sec.kind}>
-              <div className="set-sec-title">{sec.title}</div>
-              <div className="set-sec-sub">{sec.sub}</div>
+        {/* ── landing: category cards ── */}
+        {!category && (
+          <div className="set-cats">
+            {CATEGORIES.map((c) => (
+              <button key={c.key} className="set-cat" onClick={() => openCategory(c)}>
+                <span className="set-cat-main">
+                  <span className="set-cat-title">{c.title}</span>
+                  <span className="set-cat-sub">{c.sub}</span>
+                </span>
+                <span className="set-cat-count">{catCount(c)}</span>
+                <span className="set-cat-chev" aria-hidden>›</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-              <div className="set-list">
-                {rows.length === 0 && <div className="hint">No rows yet — add one below.</div>}
-                {rows.map((row, i) => (
-                  <SettingRowEditor
-                    key={row.id}
-                    sec={sec}
-                    row={row}
-                    first={i === 0}
-                    last={i === rows.length - 1}
-                    busy={busy}
-                    onSave={(patch) => saveRow(sec.kind, row.id, patch)}
-                    onToggleActive={(active) => saveRow(sec.kind, row.id, { is_active: active })}
-                    onMove={(dir) => move(sec.kind, i, dir)}
-                    onRemove={() => remove(sec.kind, row.id)}
-                  />
-                ))}
-              </div>
+        {/* ── a category: back + title, tabs (with counts), then the active tab body ── */}
+        {category && (
+          <>
+            <div className="set-cat-head">
+              <button className="set-back" onClick={backToCategories} aria-label="Back to settings">‹</button>
+              <div className="set-cat-headtitle">{category.title}</div>
+            </div>
 
-              <div className="set-toolbar">
-                <button className="btn-secondary" onClick={() => add(sec.kind, sec.blank)} disabled={busy}>
-                  + Add row
-                </button>
-                <button className="btn-secondary" onClick={() => sortAZ(sec.kind, sec.sortKey)} disabled={busy || rows.length < 2}>
-                  Sort A–Z
-                </button>
-              </div>
-            </section>
-          );
-        })}
+            <div className="fq-filters" role="tablist" aria-label={category.title}>
+              {category.tabs.map((t) => {
+                const k = tabKey(t);
+                return (
+                  <button
+                    key={k}
+                    role="tab"
+                    aria-selected={tab === k}
+                    className={`fq-filter ${tab === k ? 'active' : ''}`}
+                    onClick={() => setTab(k)}
+                  >
+                    {tabLabel(t)}<span className="fq-filter-count">{tabCount(t)}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-        <SupplierSettings initial={suppliers} />
+            {category.tabs.map((t) => {
+              const k = tabKey(t);
+              if (k !== tab) return null;
+              return (
+                <section className="set-sec" key={k}>
+                  {'kind' in t ? (
+                    <>
+                      <div className="set-sec-sub">{SECTION_BY_KIND[t.kind].sub}</div>
+                      {renderKindList(SECTION_BY_KIND[t.kind])}
+                    </>
+                  ) : (
+                    <SupplierSettings initial={suppliers} embedded />
+                  )}
+                </section>
+              );
+            })}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-// ── one editable row: text/number fields (saved on blur), active toggle, up/down, remove ──
+// ── one editable row: text/number fields (saved on blur), up/down sort, remove. No active toggle —
+//    removing a row is how you retire it. ──
 function SettingRowEditor({
   sec,
   row,
@@ -257,7 +354,6 @@ function SettingRowEditor({
   last,
   busy,
   onSave,
-  onToggleActive,
   onMove,
   onRemove,
 }: {
@@ -267,7 +363,6 @@ function SettingRowEditor({
   last: boolean;
   busy: boolean;
   onSave: (patch: SettingPatch) => void;
-  onToggleActive: (active: boolean) => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
 }) {
@@ -285,6 +380,8 @@ function SettingRowEditor({
   const [labelAuto, setLabelAuto] = useState<boolean>(
     () => !sec.autoLabel || draft[sec.autoLabel.target] === suggestLabel(draft)
   );
+  // single-field lists drop the redundant per-row caption (the tab title already names the list).
+  const showCaptions = sec.cols.length > 1;
 
   function onChange(key: string, value: string) {
     setDraft((prev) => {
@@ -316,13 +413,12 @@ function SettingRowEditor({
     if (Object.keys(patch).length) onSave(patch);
   }
 
-  const active = row.is_active;
   return (
-    <div className={`set-row${active ? '' : ' inactive'}`}>
+    <div className="set-row">
       <div className="set-fields">
         {sec.cols.map((c) => (
           <div className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}`} key={c.key}>
-            <label>{c.label}</label>
+            {showCaptions && <label>{c.label}</label>}
             <input
               type={c.type === 'number' ? 'number' : 'text'}
               inputMode={c.type === 'number' ? 'decimal' : undefined}
@@ -342,10 +438,6 @@ function SettingRowEditor({
           <button className="set-arrow" aria-label="Move up" onClick={() => onMove(-1)} disabled={busy || first}>▲</button>
           <button className="set-arrow" aria-label="Move down" onClick={() => onMove(1)} disabled={busy || last}>▼</button>
         </div>
-        <label className="set-active">
-          <input type="checkbox" checked={active} onChange={(e) => onToggleActive(e.target.checked)} disabled={busy} />
-          Active
-        </label>
         <button className="btn-link" onClick={onRemove} disabled={busy}>Remove</button>
       </div>
     </div>
