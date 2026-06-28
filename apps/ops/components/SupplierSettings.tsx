@@ -14,42 +14,42 @@ const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace'
 export default function SupplierSettings({ initial, embedded = false }: { initial: Supplier[]; embedded?: boolean }) {
   const [rows, setRows] = useState<Supplier[]>(initial);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  // notice tone: ok (green) = additive, err (red) = removed/failed, warn (yellow) = neutral edit.
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'err' | 'warn'; text: string } | null>(null);
   // inline add form
   const [adding, setAdding] = useState<{ name: string; flag: string; country: string; type: SupplierType } | null>(null);
 
-  const fail = (e: unknown) => setError(e instanceof Error ? e.message : 'Something went wrong.');
-  const ok = (msg: string) => { setError(null); setSuccess(msg); };
+  const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
+  const note = (tone: 'ok' | 'err' | 'warn', text: string) => setNotice({ tone, text });
 
   async function save(id: number, patch: Partial<Pick<Supplier, 'name' | 'flag' | 'country' | 'type'>>) {
-    setBusy(true); setError(null);
+    setBusy(true); setNotice(null);
     try {
       const updated = await updateSupplier(id, patch);
       setRows((prev) => prev.map((r) => (r.supplier_id === id ? updated : r)));
-      ok('Saved.');
+      note('warn', 'Saved.');
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
   async function submitAdd() {
     if (!adding) return;
     const name = adding.name.trim();
-    if (!name) { setError('Supplier name is required.'); return; }
-    setBusy(true); setError(null);
+    if (!name) { note('err', 'Supplier name is required.'); return; }
+    setBusy(true); setNotice(null);
     try {
       const sup = await addSupplier({ name, flag: adding.flag.trim() || null, country: adding.country.trim() || null, type: adding.type });
       setRows((prev) => (prev.some((r) => r.supplier_id === sup.supplier_id) ? prev : [...prev, sup]).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
       setAdding(null);
-      ok('Added a supplier.');
+      note('ok', 'Added a supplier.');
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
   async function remove(id: number) {
-    setBusy(true); setError(null);
+    setBusy(true); setNotice(null);
     try {
       await deleteSupplier(id);
       setRows((prev) => prev.filter((r) => r.supplier_id !== id));
-      ok('Removed.');
+      note('err', 'Removed.');
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
@@ -63,8 +63,7 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
       {!embedded && <div className="set-sec-title">Suppliers</div>}
       <div className="set-sec-sub">Where you buy from. Shown (flag + name) in the Purchasing → To-forwarder supplier picker. Country sets the unit-cost currency and the Taobao field (use “China”, “Japan”, …).</div>
 
-      {error && <div className="validation err" style={{ margin: '8px 0' }}>{error}</div>}
-      {success && <div className="validation ok" style={{ margin: '8px 0' }}>{success}</div>}
+      {notice && <div className={`validation ${notice.tone}`} style={{ margin: '8px 0' }}>{notice.text}</div>}
 
       <div className="set-list">
         {rows.length === 0 && <div className="hint">No suppliers yet — add one below.</div>}
