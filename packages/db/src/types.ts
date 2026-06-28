@@ -537,6 +537,7 @@ export type OpenPORow = {
   customer_id: number | null;
   customer_name: string | null;
   item_note: string | null;
+  tracking_to_forwarder: string | null; // domestic tracking number to the forwarder (To-forwarder stage)
   shipment_note: string | null;      // (0023) carries the "shorted from <ship_id> on <date>" breadcrumb
 };
 
