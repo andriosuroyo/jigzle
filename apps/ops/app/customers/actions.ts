@@ -67,21 +67,20 @@ export async function getCustomerDetail(customerId: number): Promise<CustomerDet
     .filter((ch): ch is CustomerChannel => !!ch && typeof ch === 'object')
     .map((ch) => ({ platform: String(ch.platform ?? ''), handle: String(ch.handle ?? '') }));
 
-  // the customer's orders → joined (first) + last purchase date, and the sales_ids to sum payments over
-  const { data: ords } = await supabase.from('orders').select('sales_id,order_date').eq('customer_id', customerId);
-  const orders = (ords ?? []) as { sales_id: string; order_date: string | null }[];
-  const dates = orders.map((o) => o.order_date).filter((d): d is string => !!d).sort();
+  // the customer's orders → joined (first) + last purchase date + lifetime spend. Spend is Σ orders.paid_idr
+  // over non-cancelled orders — the SAME source as the customer_lifetime view (0037) that drives the
+  // list tier. (The payments table is empty for legacy orders, where paid_idr is the only paid record,
+  // so summing payments here used to show Rp 0 for long-time customers like Aarde — quickview/detail drift.)
+  const { data: ords } = await supabase
+    .from('orders')
+    .select('order_date,paid_idr,status')
+    .eq('customer_id', customerId);
+  const orders = (ords ?? []) as { order_date: string | null; paid_idr: number | null; status: string | null }[];
+  const active = orders.filter((o) => o.status !== 'Cancelled');
+  const dates = active.map((o) => o.order_date).filter((d): d is string => !!d).sort();
   const joined = dates[0] ?? null;
   const last = dates.length ? dates[dates.length - 1] : null;
-
-  // lifetime spend = Σ payments.amount_idr over the customer's sales_ids (chunked to stay under URL limits)
-  let lifetime = 0;
-  const salesIds = orders.map((o) => o.sales_id);
-  const CHUNK = 300;
-  for (let i = 0; i < salesIds.length; i += CHUNK) {
-    const { data: pays } = await supabase.from('payments').select('amount_idr').in('sales_id', salesIds.slice(i, i + CHUNK));
-    for (const p of (pays ?? []) as { amount_idr: number | null }[]) lifetime += p.amount_idr ?? 0;
-  }
+  const lifetime = active.reduce((sum, o) => sum + (o.paid_idr ?? 0), 0);
 
   const { data: addrs } = await supabase
     .from('customer_addresses')
@@ -101,7 +100,7 @@ export async function getCustomerDetail(customerId: number): Promise<CustomerDet
     channels,
     joined_date: joined,
     last_purchase: last,
-    order_count: orders.length,
+    order_count: active.length,
     lifetime_spend: lifetime,
     tier: tierFor(lifetime).tier,
     to_next_tier: toNextTier(lifetime),
