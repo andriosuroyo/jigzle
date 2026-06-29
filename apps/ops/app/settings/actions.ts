@@ -8,6 +8,7 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type {
   BoxPreset,
+  ChannelOption,
   CommonNote,
   CourierService,
   InboundLabel,
@@ -26,6 +27,7 @@ const TABLE: Record<SettingsKind, string> = {
   box: 'settings_box_presets',
   inbound_labels: 'settings_inbound_labels',
   common_note: 'settings_common_notes',
+  channel: 'settings_customer_channels',
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -37,6 +39,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   box: ['code', 'dim_p', 'dim_l', 'dim_t', 'icon', 'is_active'],
   inbound_labels: ['label', 'icon', 'is_active'],
   common_note: ['label', 'icon', 'is_active'],
+  channel: ['label', 'icon', 'is_active'],
 };
 
 // uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
@@ -64,14 +67,30 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
     list<InboundLabel>(TABLE.inbound_labels),
     list<CommonNote>(TABLE.common_note),
+    list<ChannelOption>(TABLE.channel),
   ]);
-  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes };
+  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels };
+}
+
+// the Customer detail's Channels picker reads this (mirrors how Fulfill reads courier services). Degrades
+// to [] if the table isn't present yet (0046 not applied), so the picker just shows no platform icons.
+export async function getChannelOptions(): Promise<ChannelOption[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.channel)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as ChannelOption[];
 }
 
 // ── lighter single-list reads (PR26: Fulfill needs couriers, Outbound box presets; PR27: Orders

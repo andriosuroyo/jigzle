@@ -9,8 +9,9 @@ import { useEffect, useRef, useState } from 'react';
 
 export type IconOption<V extends string | number> = { value: V; label: string; icon?: string | null };
 
-// an icon string is an uploaded image when it's a URL; otherwise it's a short emoji/text.
-const isIconUrl = (icon: string | null | undefined): boolean => !!icon && /^https?:\/\//.test(icon);
+// an icon string is an image when it's a URL or a local '/'-rooted path (e.g. a bundled brand SVG);
+// otherwise it's a short emoji/text.
+const isIconUrl = (icon: string | null | undefined): boolean => !!icon && /^(https?:\/\/|\/)/.test(icon);
 
 function OptionIcon({ icon }: { icon?: string | null }) {
   if (!icon) return null;
