@@ -508,6 +508,7 @@ export type Supplier = {
   flag: string | null;               // leading flag emoji
   type: SupplierType | null;
   sort_order: number;                // manual order in Settings → Suppliers (0042)
+  is_active: boolean;                // soft-delete flag (0043) — hidden from pickers, kept for PO history
   created_at: string;
 };
 
