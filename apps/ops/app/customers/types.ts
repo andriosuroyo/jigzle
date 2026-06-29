@@ -2,7 +2,10 @@
 // export only async functions (the linux SWC build rejects non-async exports from a 'use server' module).
 
 import type { Tier, NextTier } from '@jigzle/lib';
-import type { CustomerAddress } from '@jigzle/db/types';
+import type { CustomerAddress, CustomerChannel } from '@jigzle/db/types';
+
+// one contact channel in the detail panel (platform + handle); re-exported from the db type
+export type ChannelEntry = CustomerChannel;
 
 // one row in the A–Z directory list (lightweight — tier/spend are loaded per customer in the detail)
 export interface CustomerListRow {
@@ -21,6 +24,7 @@ export interface CustomerDetail {
   phone3_raw: string | null;
   channel: string | null;
   ig_handle: string | null;
+  channels: ChannelEntry[];     // 0045 — up to three { platform, handle } contact channels
   joined_date: string | null;   // first purchase (min orders.order_date)
   last_purchase: string | null; // last purchase (max orders.order_date)
   order_count: number;
@@ -36,6 +40,7 @@ export interface CustomerPatch {
   phone?: string | null;  // raw input; stored normalized + raw. phone = primary (dedup/search key)
   phone2?: string | null;
   phone3?: string | null;
+  channels?: ChannelEntry[]; // 0045 — replaces the whole channels array when present
 }
 
 // editable address fields (add / edit) — structured, big-to-small. The free-text `street` holds only

@@ -73,6 +73,10 @@ export type OrderStatus = 'Need payment' | 'Need send' | 'Complete' | 'Cancelled
 export type PaymentStatus = 'Paid' | 'Unpaid' | 'Partial' | 'Cancel';
 export type PaymentType = 'DP' | 'Full' | 'Settlement';
 
+// One contact channel on a customer (0045): a platform (WhatsApp / Instagram / Shopee / …) + the
+// customer's handle / username / number there. Up to three, stored as a small jsonb array.
+export type CustomerChannel = { platform: string; handle: string };
+
 export type Customer = {
   customer_id: number;
   name: string | null;
@@ -85,6 +89,7 @@ export type Customer = {
   channel: string | null;
   channel_raw: string | null;
   ig_handle: string | null;
+  channels: CustomerChannel[] | null; // 0045 — up to three { platform, handle } entries
   created_at: string;
 };
 
