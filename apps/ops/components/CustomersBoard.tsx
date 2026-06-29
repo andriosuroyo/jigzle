@@ -19,10 +19,33 @@ import {
   updateCustomer,
   updateCustomerAddress,
 } from '@/app/customers/actions';
-import type { AddressInput, CustomerDetail, CustomerListRow, CustomerPatch } from '@/app/customers/types';
+import type { AddressInput, ChannelEntry, CustomerDetail, CustomerListRow, CustomerPatch } from '@/app/customers/types';
 import type { CustomerAddress } from '@jigzle/db/types';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+// channel platforms for the picker, grouped Social media / Marketplace (a small-text separator between
+// the two in the dropdown). Each carries an emoji icon; the stored value is the bare platform name.
+const CHANNEL_GROUPS: { label: string; options: { value: string; icon: string }[] }[] = [
+  { label: 'Social media', options: [
+    { value: 'WhatsApp', icon: '💬' },
+    { value: 'Instagram', icon: '📷' },
+    { value: 'LINE', icon: '💚' },
+    { value: 'Facebook', icon: '📘' },
+    { value: 'TikTok', icon: '🎵' },
+    { value: 'Telegram', icon: '✈️' },
+  ] },
+  { label: 'Marketplace', options: [
+    { value: 'Shopee', icon: '🛒' },
+    { value: 'Tokopedia', icon: '🟢' },
+    { value: 'Lazada', icon: '🔵' },
+    { value: 'Blibli', icon: '🔷' },
+    { value: 'TikTok Shop', icon: '🛍️' },
+    { value: 'Bukalapak', icon: '🟥' },
+  ] },
+];
+const CHANNEL_SLOTS = 3;
+const blankChannels = (): ChannelEntry[] => Array.from({ length: CHANNEL_SLOTS }, () => ({ platform: '', handle: '' }));
 const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 function daysSince(s: string | null): number | null {
   if (!s) return null;
@@ -67,6 +90,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, userEma
   const [phoneDraft, setPhoneDraft] = useState('');
   const [phone2Draft, setPhone2Draft] = useState('');
   const [phone3Draft, setPhone3Draft] = useState('');
+  const [channelDrafts, setChannelDrafts] = useState<ChannelEntry[]>(blankChannels());
 
   // live search (name or phone) over the full loaded list
   const [query, setQuery] = useState('');
@@ -124,6 +148,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, userEma
       setPhoneDraft(d?.phone_raw ?? d?.phone ?? '');
       setPhone2Draft(d?.phone2_raw ?? '');
       setPhone3Draft(d?.phone3_raw ?? '');
+      // seed channels into three fixed slots; if none yet but there's a legacy IG handle, prefill slot 1
+      const ch = d?.channels ?? [];
+      const seeded = blankChannels().map((slot, i) => (ch[i] ? { platform: ch[i].platform, handle: ch[i].handle } : slot));
+      if (!ch.length && d?.ig_handle) seeded[0] = { platform: 'Instagram', handle: d.ig_handle };
+      setChannelDrafts(seeded);
     } catch (e) {
       fail(e);
     } finally {
@@ -153,6 +182,27 @@ export default function CustomersBoard({ initialCustomers, initialTiers, userEma
       setBusy(false);
     }
   }
+
+  // save the channels array (strips empty rows — a row counts only once it has a platform)
+  async function saveChannels(next: ChannelEntry[]) {
+    if (!detail) return;
+    const clean = next
+      .map((c) => ({ platform: (c.platform || '').trim(), handle: (c.handle || '').trim() }))
+      .filter((c) => c.platform);
+    setBusy(true);
+    setNotice(null);
+    try {
+      await updateCustomer(detail.id, { channels: clean });
+      setDetail((d) => (d ? { ...d, channels: clean } : d));
+      note('warn', 'Saved.');
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const setChannelRow = (i: number, patch: Partial<ChannelEntry>) =>
+    setChannelDrafts((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   function openAddr(address: CustomerAddress | null) {
     setAddrEdit({ address });
@@ -369,12 +419,42 @@ export default function CustomersBoard({ initialCustomers, initialTiers, userEma
                       disabled={busy}
                     />
                   </div>
-                  {(detail.channel || detail.ig_handle) && (
-                    <div className="po-field">
-                      <label>From <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(read-only)</em></label>
-                      <div className="hint">{[detail.channel, detail.ig_handle ? `IG @${detail.ig_handle}` : null].filter(Boolean).join(' · ')}</div>
-                    </div>
-                  )}
+                  <div className="po-field">
+                    <label>Channels</label>
+                    {channelDrafts.map((row, i) => (
+                      <div className="cust-channel" key={i} style={i > 0 ? { marginTop: 6 } : undefined}>
+                        <select
+                          className="cust-channel-platform"
+                          value={row.platform}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            const next = channelDrafts.map((r, idx) => (idx === i ? { ...r, platform: v } : r));
+                            setChannelDrafts(next);
+                            saveChannels(next);
+                          }}
+                          disabled={busy}
+                        >
+                          <option value="">—</option>
+                          {CHANNEL_GROUPS.map((g) => (
+                            <optgroup key={g.label} label={g.label}>
+                              {g.options.map((o) => (
+                                <option key={o.value} value={o.value}>{o.icon} {o.value}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        <input
+                          className="cust-channel-handle"
+                          type="text"
+                          value={row.handle}
+                          placeholder="username / number"
+                          onChange={(e) => setChannelRow(i, { handle: e.target.value })}
+                          onBlur={() => saveChannels(channelDrafts)}
+                          disabled={busy}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </section>
 

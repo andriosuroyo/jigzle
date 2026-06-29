@@ -908,6 +908,10 @@ img.sku-img { background: #e8e8e8; }
 .cust-addr-edit { flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown-dark); font-size: 14px; line-height: 1; cursor: pointer; }
 .cust-addr-edit:active { background: var(--paper); }
 .cust-addr-edit:disabled { opacity: 0.5; cursor: not-allowed; }
+/* channels — a narrow platform <select> (emoji + Social/Marketplace optgroups) + a handle field */
+.cust-channel { display: flex; gap: 6px; align-items: stretch; }
+.cust-channel-platform { flex: 0 0 auto; width: 9.5em; }
+.cust-channel-handle { flex: 1 1 auto; min-width: 0; }
 /* CountrySelect — flag + country name button (reuses the .flag-select dropdown styles) */
 .country-select-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; }
 .country-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }

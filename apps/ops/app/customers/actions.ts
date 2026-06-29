@@ -6,7 +6,7 @@
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import { normalizePhone, tierFor, toNextTier, type Tier } from '@jigzle/lib';
-import type { Customer, CustomerAddress } from '@jigzle/db/types';
+import type { Customer, CustomerAddress, CustomerChannel } from '@jigzle/db/types';
 import type { AddressInput, CustomerDetail, CustomerListRow, CustomerPatch } from './types';
 
 // ── the A–Z directory: every customer, lightweight (id / name / phone), name-sorted ──
@@ -62,6 +62,10 @@ export async function getCustomerDetail(customerId: number): Promise<CustomerDet
   const { data: c } = await supabase.from('customers').select('*').eq('customer_id', customerId).maybeSingle();
   if (!c) return null;
   const cust = c as Customer & { ig_handle: string | null };
+  // channels (0045): jsonb array of { platform, handle }; tolerate legacy null / malformed rows
+  const channels = (Array.isArray(cust.channels) ? cust.channels : [])
+    .filter((ch): ch is CustomerChannel => !!ch && typeof ch === 'object')
+    .map((ch) => ({ platform: String(ch.platform ?? ''), handle: String(ch.handle ?? '') }));
 
   // the customer's orders → joined (first) + last purchase date, and the sales_ids to sum payments over
   const { data: ords } = await supabase.from('orders').select('sales_id,order_date').eq('customer_id', customerId);
@@ -94,6 +98,7 @@ export async function getCustomerDetail(customerId: number): Promise<CustomerDet
     phone3_raw: cust.phone3_raw,
     channel: cust.channel,
     ig_handle: cust.ig_handle ?? null,
+    channels,
     joined_date: joined,
     last_purchase: last,
     order_count: orders.length,
@@ -123,6 +128,12 @@ export async function updateCustomer(customerId: number, patch: CustomerPatch): 
     const raw = patch.phone3?.trim() || null;
     upd.phone3_raw = raw;
     upd.phone3 = raw ? normalizePhone(raw) : null;
+  }
+  if (patch.channels !== undefined) {
+    // keep only rows that carry a platform; trim handles. Stored as the whole jsonb array.
+    upd.channels = patch.channels
+      .map((ch) => ({ platform: (ch.platform || '').trim(), handle: (ch.handle || '').trim() }))
+      .filter((ch) => ch.platform);
   }
   if (Object.keys(upd).length === 0) return;
   const { error } = await supabase.from('customers').update(upd).eq('customer_id', customerId);
