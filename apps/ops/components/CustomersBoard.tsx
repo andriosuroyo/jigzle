@@ -18,7 +18,7 @@ import {
   updateCustomer,
   updateCustomerAddress,
 } from '@/app/customers/actions';
-import type { AddressInput, CustomerDetail, CustomerListRow } from '@/app/customers/types';
+import type { AddressInput, CustomerDetail, CustomerListRow, CustomerPatch } from '@/app/customers/types';
 import type { CustomerAddress } from '@jigzle/db/types';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -56,6 +56,8 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
   // editable personal-details drafts (seeded when a customer loads)
   const [nameDraft, setNameDraft] = useState('');
   const [phoneDraft, setPhoneDraft] = useState('');
+  const [phone2Draft, setPhone2Draft] = useState('');
+  const [phone3Draft, setPhone3Draft] = useState('');
 
   // live search (name or phone) over the full loaded list
   const [query, setQuery] = useState('');
@@ -109,6 +111,8 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
       setDetail(d);
       setNameDraft(d?.name ?? '');
       setPhoneDraft(d?.phone_raw ?? d?.phone ?? '');
+      setPhone2Draft(d?.phone2_raw ?? '');
+      setPhone3Draft(d?.phone3_raw ?? '');
     } catch (e) {
       fail(e);
     } finally {
@@ -116,14 +120,20 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
     }
   }
 
-  // save a personal-details field (name / phone) if it changed
-  async function savePersonal(patch: { name?: string | null; phone?: string | null }) {
+  // save a personal-details field (name / any of the three phones) if it changed
+  async function savePersonal(patch: CustomerPatch) {
     if (!detail) return;
     setBusy(true);
     setNotice(null);
     try {
       await updateCustomer(detail.id, patch);
-      setDetail((d) => (d ? { ...d, ...('name' in patch ? { name: patch.name ?? null } : {}), ...('phone' in patch ? { phone_raw: patch.phone ?? null } : {}) } : d));
+      setDetail((d) => (d ? {
+        ...d,
+        ...('name' in patch ? { name: patch.name ?? null } : {}),
+        ...('phone' in patch ? { phone_raw: patch.phone ?? null } : {}),
+        ...('phone2' in patch ? { phone2_raw: patch.phone2 ?? null } : {}),
+        ...('phone3' in patch ? { phone3_raw: patch.phone3 ?? null } : {}),
+      } : d));
       if ('name' in patch) setCustomers((prev) => prev.map((c) => (c.id === detail.id ? { ...c, name: patch.name ?? null } : c)));
       note('warn', 'Saved.');
     } catch (e) {
@@ -298,14 +308,34 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
                     />
                   </div>
                   <div className="po-field">
-                    <label>WhatsApp / phone</label>
+                    <label>WhatsApp / phone <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(up to 3)</em></label>
                     <input
                       type="text"
                       inputMode="tel"
                       value={phoneDraft}
-                      placeholder="08…"
+                      placeholder="08… (primary)"
                       onChange={(e) => setPhoneDraft(e.target.value)}
                       onBlur={() => { if (phoneDraft.trim() !== (detail.phone_raw ?? detail.phone ?? '')) savePersonal({ phone: phoneDraft.trim() || null }); }}
+                      disabled={busy}
+                    />
+                    <input
+                      type="text"
+                      inputMode="tel"
+                      value={phone2Draft}
+                      placeholder="08… (second, optional)"
+                      style={{ marginTop: 6 }}
+                      onChange={(e) => setPhone2Draft(e.target.value)}
+                      onBlur={() => { if (phone2Draft.trim() !== (detail.phone2_raw ?? '')) savePersonal({ phone2: phone2Draft.trim() || null }); }}
+                      disabled={busy}
+                    />
+                    <input
+                      type="text"
+                      inputMode="tel"
+                      value={phone3Draft}
+                      placeholder="08… (third, optional)"
+                      style={{ marginTop: 6 }}
+                      onChange={(e) => setPhone3Draft(e.target.value)}
+                      onBlur={() => { if (phone3Draft.trim() !== (detail.phone3_raw ?? '')) savePersonal({ phone3: phone3Draft.trim() || null }); }}
                       disabled={busy}
                     />
                   </div>

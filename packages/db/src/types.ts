@@ -76,8 +76,12 @@ export type PaymentType = 'DP' | 'Full' | 'Settlement';
 export type Customer = {
   customer_id: number;
   name: string | null;
-  phone: string | null;        // normalized (62… form)
+  phone: string | null;        // normalized (62… form) — the dedup/search key
   phone_raw: string | null;
+  phone2: string | null;       // 0044 — secondary numbers (normalized + raw)
+  phone2_raw: string | null;
+  phone3: string | null;
+  phone3_raw: string | null;
   channel: string | null;
   channel_raw: string | null;
   ig_handle: string | null;

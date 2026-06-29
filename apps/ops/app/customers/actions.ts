@@ -67,6 +67,8 @@ export async function getCustomerDetail(customerId: number): Promise<CustomerDet
     name: cust.name,
     phone: cust.phone,
     phone_raw: cust.phone_raw,
+    phone2_raw: cust.phone2_raw,
+    phone3_raw: cust.phone3_raw,
     channel: cust.channel,
     ig_handle: cust.ig_handle ?? null,
     joined_date: joined,
@@ -88,6 +90,16 @@ export async function updateCustomer(customerId: number, patch: CustomerPatch): 
     const raw = patch.phone?.trim() || null;
     upd.phone_raw = raw;
     upd.phone = raw ? normalizePhone(raw) : null;
+  }
+  if (patch.phone2 !== undefined) {
+    const raw = patch.phone2?.trim() || null;
+    upd.phone2_raw = raw;
+    upd.phone2 = raw ? normalizePhone(raw) : null;
+  }
+  if (patch.phone3 !== undefined) {
+    const raw = patch.phone3?.trim() || null;
+    upd.phone3_raw = raw;
+    upd.phone3 = raw ? normalizePhone(raw) : null;
   }
   if (Object.keys(upd).length === 0) return;
   const { error } = await supabase.from('customers').update(upd).eq('customer_id', customerId);
