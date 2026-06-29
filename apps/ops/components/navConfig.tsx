@@ -101,6 +101,21 @@ const iconSettings = svg(
   </>
 );
 
+// Calculator — a calculator grid (the import pricing tool)
+const iconCalculator = svg(
+  <>
+    <rect x="4" y="2" width="16" height="20" rx="2" />
+    <line x1="8" y1="6" x2="16" y2="6" />
+    <line x1="8" y1="10" x2="8" y2="10" />
+    <line x1="12" y1="10" x2="12" y2="10" />
+    <line x1="16" y1="10" x2="16" y2="10" />
+    <line x1="8" y1="14" x2="8" y2="14" />
+    <line x1="12" y1="14" x2="12" y2="14" />
+    <line x1="16" y1="14" x2="16" y2="18" />
+    <line x1="8" y1="18" x2="12" y2="18" />
+  </>
+);
+
 // Customer — people (the customer directory)
 const iconCustomer = svg(
   <>
@@ -135,6 +150,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'System',
     items: [
       { key: 'customers', href: '/customers', label: 'Customer', icon: iconCustomer, sub: 'Browse customers A–Z; spend, tier, contact details & addresses.' },
+      { key: 'calculator', href: '/calculator', label: 'Calculator', icon: iconCalculator, sub: 'Import landed-cost & recommended sale price; FX rates, saved calcs.' },
       { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog, sub: 'Edit SKUs & barcodes; needs-review & shared-barcode cleanup.' },
       { key: 'stock-check', href: '/stock-check', label: 'Stock Check', icon: iconStockCheck, sub: 'Count the shelf (presence / scan) & true stock up with adjustments.' },
       { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings, sub: 'Configurable lists — payment, courier, box, inbound labels.' },
