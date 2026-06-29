@@ -38,11 +38,17 @@ export interface CustomerPatch {
   phone3?: string | null;
 }
 
-// editable address fields (add / edit)
+// editable address fields (add / edit) — structured, big-to-small. The free-text `street` holds only
+// street / alley (gang); country/province/city/subdistrict/ward/postcode are their own fields. A
+// readable raw_address is composed from them server-side for the legacy display consumers.
 export interface AddressInput {
   recipient_name?: string | null;
   contact_phone?: string | null;
-  raw_address?: string | null;
-  kota?: string | null;
-  kode_pos?: string | null;
+  negara?: string | null;     // country
+  provinsi?: string | null;   // province
+  kota?: string | null;       // city / district
+  kecamatan?: string | null;  // subdistrict (Indonesia)
+  kelurahan?: string | null;  // ward (Indonesia)
+  kode_pos?: string | null;   // postcode
+  street?: string | null;     // street / alley — the "address" main field
 }

@@ -905,7 +905,15 @@ img.sku-img { background: #e8e8e8; }
 .cust-addr-main { flex: 1; min-width: 0; }
 .cust-addr-name { font-weight: 600; color: var(--ink); }
 .cust-addr-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cust-addr .btn-link { flex-shrink: 0; }
+.cust-addr-edit { flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown-dark); font-size: 14px; line-height: 1; cursor: pointer; }
+.cust-addr-edit:active { background: var(--paper); }
+.cust-addr-edit:disabled { opacity: 0.5; cursor: not-allowed; }
+/* CountrySelect — flag + country name button (reuses the .flag-select dropdown styles) */
+.country-select-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; }
+.country-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.country-select-val { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.country-select-val .flag-select-flag { font-size: 18px; flex-shrink: 0; }
+.flag-select-ph-text { color: var(--muted); }
 
 /* ── Pricing Calculator (PR93) — jigzle-styled ── */
 .calc-wrap { max-width: 640px; margin: 0 auto; padding: 12px 16px 32px; }

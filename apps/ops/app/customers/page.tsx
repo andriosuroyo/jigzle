@@ -1,11 +1,11 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import CustomersBoard from '@/components/CustomersBoard';
-import { getCustomers } from '@/app/customers/actions';
+import { getCustomers, getCustomerTiers } from '@/app/customers/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Server shell: load the A–Z directory (lightweight) + the signed-in user, render the board.
+// Server shell: load the A–Z directory (lightweight) + per-customer tiers + the user, render the board.
 export default async function CustomersPage() {
   const supabase = createSupabaseServerClient();
   const [
@@ -13,7 +13,8 @@ export default async function CustomersPage() {
       data: { user },
     },
     customers,
-  ] = await Promise.all([supabase.auth.getUser(), getCustomers()]);
+    tiers,
+  ] = await Promise.all([supabase.auth.getUser(), getCustomers(), getCustomerTiers()]);
 
-  return <CustomersBoard initialCustomers={customers} userEmail={user?.email || ''} />;
+  return <CustomersBoard initialCustomers={customers} initialTiers={tiers} userEmail={user?.email || ''} />;
 }

@@ -9,7 +9,8 @@
 import { useMemo, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
-import { fmtRp } from '@jigzle/lib';
+import CountrySelect from '@/components/CountrySelect';
+import { fmtRp, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
   addCustomerAddress,
@@ -35,17 +36,25 @@ function bucketOf(name: string | null): string {
   return ch >= 'A' && ch <= 'Z' ? ch : '#';
 }
 
-type AddrDraft = { recipient_name: string; contact_phone: string; raw_address: string; kota: string; kode_pos: string };
+type AddrDraft = { recipient_name: string; contact_phone: string; negara: string; provinsi: string; kota: string; kecamatan: string; kelurahan: string; kode_pos: string; street: string };
 const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
   recipient_name: a?.recipient_name ?? '',
   contact_phone: a?.contact_phone ?? '',
-  raw_address: a?.raw_address ?? '',
+  negara: a?.negara ?? (a ? '' : 'Indonesia'), // new addresses default to Indonesia
+  provinsi: a?.provinsi ?? '',
   kota: a?.kota ?? '',
+  kecamatan: a?.kecamatan ?? '',
+  kelurahan: a?.kelurahan ?? '',
   kode_pos: a?.kode_pos ?? '',
+  // seed the street field from `street`; for legacy rows (street empty) fall back to the raw blob so
+  // the existing address is visible and can be re-structured.
+  street: a?.street || a?.raw_address || '',
 });
+const isIndonesia = (c: string) => c.trim().toLowerCase() === 'indonesia';
 
-export default function CustomersBoard({ initialCustomers, userEmail }: { initialCustomers: CustomerListRow[]; userEmail: string }) {
+export default function CustomersBoard({ initialCustomers, initialTiers, userEmail }: { initialCustomers: CustomerListRow[]; initialTiers: Record<number, Tier>; userEmail: string }) {
   const [customers, setCustomers] = useState<CustomerListRow[]>(initialCustomers);
+  const tiers = initialTiers;
   const [letter, setLetter] = useState<string>('A');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
@@ -65,6 +74,8 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
   // address overlay
   const [addrEdit, setAddrEdit] = useState<{ address: CustomerAddress | null } | null>(null);
   const [addrDraft, setAddrDraft] = useState<AddrDraft>(draftFrom(null));
+  // dup detection: terms that the street field repeats from the structured fields (shown as a confirm)
+  const [dupWarn, setDupWarn] = useState<string[] | null>(null);
 
   const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
   const note = (tone: 'ok' | 'err' | 'warn', text: string) => setNotice({ tone, text });
@@ -146,11 +157,26 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
   function openAddr(address: CustomerAddress | null) {
     setAddrEdit({ address });
     setAddrDraft(draftFrom(address));
+    setDupWarn(null);
     setNotice(null);
+  }
+
+  // terms the street field repeats from the structured fields (so they aren't entered twice)
+  function streetDupes(d: AddrDraft): string[] {
+    const street = d.street.toLowerCase();
+    if (!street.trim()) return [];
+    return [d.kelurahan, d.kecamatan, d.kota, d.provinsi, d.negara]
+      .map((v) => v.trim())
+      .filter((v) => v.length >= 3 && street.includes(v.toLowerCase()));
   }
 
   async function saveAddr() {
     if (!detail || !addrEdit) return;
+    // first, warn if the street field repeats a structured field — confirm before saving
+    if (!dupWarn) {
+      const dupes = streetDupes(addrDraft);
+      if (dupes.length) { setDupWarn(dupes); return; }
+    }
     setBusy(true);
     setNotice(null);
     const input: AddressInput = { ...addrDraft };
@@ -238,16 +264,20 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
             <div className="hint fq-empty">{results ? `No matches for “${query.trim()}”.` : `No customers under “${letter}”.`}</div>
           )}
           <ul className="fq-list">
-            {capped.map((c) => (
-              <li key={c.id}>
-                <button className={`fq-row ${selectedId === c.id ? 'active' : ''}`} onClick={() => openCustomer(c.id)}>
-                  <div className="fq-row-top">
-                    <span className="fq-headline">{c.name || '(no name)'}</span>
-                  </div>
-                  <div className="fq-row-bot"><span>{c.phone || '—'}</span></div>
-                </button>
-              </li>
-            ))}
+            {capped.map((c) => {
+              const tier = tiers[c.id];
+              return (
+                <li key={c.id}>
+                  <button className={`fq-row ${selectedId === c.id ? 'active' : ''}`} onClick={() => openCustomer(c.id)}>
+                    <div className="fq-row-top">
+                      <span className="fq-headline">{c.name || '(no name)'}</span>
+                      {tier && <span className={`tier tier-${tier.toLowerCase()}`}>{tier}</span>}
+                    </div>
+                    <div className="fq-row-bot"><span>{c.phone || '—'}</span></div>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
           {shown.length > RESULT_CAP && (
             <div className="hint" style={{ padding: '6px 8px' }}>Showing first {RESULT_CAP} of {shown.length} — refine your search.</div>
@@ -274,7 +304,7 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
               {/* three read-only stat cards */}
               <div className="cust-stats">
                 <div className="cust-stat">
-                  <div className="cust-stat-label">Total spending</div>
+                  <div className="cust-stat-label">Total spend</div>
                   <div className="cust-stat-value">{fmtRp(detail.lifetime_spend)}</div>
                   <div className="cust-stat-sub">{detail.order_count} order{detail.order_count === 1 ? '' : 's'}</div>
                 </div>
@@ -308,12 +338,12 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
                     />
                   </div>
                   <div className="po-field">
-                    <label>WhatsApp / phone <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(up to 3)</em></label>
+                    <label>WhatsApp / phone number</label>
                     <input
                       type="text"
                       inputMode="tel"
                       value={phoneDraft}
-                      placeholder="08… (primary)"
+                      placeholder="Number #1"
                       onChange={(e) => setPhoneDraft(e.target.value)}
                       onBlur={() => { if (phoneDraft.trim() !== (detail.phone_raw ?? detail.phone ?? '')) savePersonal({ phone: phoneDraft.trim() || null }); }}
                       disabled={busy}
@@ -322,7 +352,7 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
                       type="text"
                       inputMode="tel"
                       value={phone2Draft}
-                      placeholder="08… (second, optional)"
+                      placeholder="Number #2"
                       style={{ marginTop: 6 }}
                       onChange={(e) => setPhone2Draft(e.target.value)}
                       onBlur={() => { if (phone2Draft.trim() !== (detail.phone2_raw ?? '')) savePersonal({ phone2: phone2Draft.trim() || null }); }}
@@ -332,7 +362,7 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
                       type="text"
                       inputMode="tel"
                       value={phone3Draft}
-                      placeholder="08… (third, optional)"
+                      placeholder="Number #3"
                       style={{ marginTop: 6 }}
                       onChange={(e) => setPhone3Draft(e.target.value)}
                       onBlur={() => { if (phone3Draft.trim() !== (detail.phone3_raw ?? '')) savePersonal({ phone3: phone3Draft.trim() || null }); }}
@@ -359,12 +389,10 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
                   {detail.addresses.map((a) => (
                     <li key={a.address_id} className="cust-addr">
                       <div className="cust-addr-main">
-                        <div className="cust-addr-name">{addressLine(a)}</div>
-                        <div className="cust-addr-line hint">
-                          {[a.contact_phone, a.raw_address, a.kota, a.kode_pos].filter(Boolean).join(' · ') || '—'}
-                        </div>
+                        <div className="cust-addr-name">{a.recipient_name || addressLine(a)}</div>
+                        <div className="cust-addr-line hint">{a.raw_address || [a.street, a.kota].filter(Boolean).join(', ') || '—'}</div>
                       </div>
-                      <button className="btn-link" onClick={() => openAddr(a)} disabled={busy}>Edit</button>
+                      <button className="cust-addr-edit" onClick={() => openAddr(a)} disabled={busy} aria-label="Edit address">✎</button>
                     </li>
                   ))}
                 </ul>
@@ -384,33 +412,64 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
             </div>
             <div className="sc-modal-body">
               <div className="po-form">
-                <div className="po-field">
-                  <label>Recipient name</label>
-                  <input type="text" value={addrDraft.recipient_name} onChange={(e) => setAddrDraft({ ...addrDraft, recipient_name: e.target.value })} />
+                <div className="po-inline">
+                  <div className="po-field">
+                    <label>Recipient name</label>
+                    <input type="text" value={addrDraft.recipient_name} onChange={(e) => setAddrDraft({ ...addrDraft, recipient_name: e.target.value })} />
+                  </div>
+                  <div className="po-field">
+                    <label>Contact phone</label>
+                    <input type="text" inputMode="tel" value={addrDraft.contact_phone} onChange={(e) => setAddrDraft({ ...addrDraft, contact_phone: e.target.value })} />
+                  </div>
                 </div>
+
+                {/* big → small */}
                 <div className="po-field">
-                  <label>Contact phone</label>
-                  <input type="text" inputMode="tel" value={addrDraft.contact_phone} onChange={(e) => setAddrDraft({ ...addrDraft, contact_phone: e.target.value })} />
-                </div>
-                <div className="po-field">
-                  <label>Address</label>
-                  <textarea value={addrDraft.raw_address} onChange={(e) => setAddrDraft({ ...addrDraft, raw_address: e.target.value })} />
+                  <label>Country</label>
+                  <CountrySelect value={addrDraft.negara || null} onChange={(country) => setAddrDraft((d) => ({ ...d, negara: country }))} disabled={busy} />
                 </div>
                 <div className="po-inline">
                   <div className="po-field">
-                    <label>City (kota)</label>
-                    <input type="text" value={addrDraft.kota} onChange={(e) => setAddrDraft({ ...addrDraft, kota: e.target.value })} />
+                    <label>Province</label>
+                    <input type="text" value={addrDraft.provinsi} onChange={(e) => setAddrDraft({ ...addrDraft, provinsi: e.target.value })} />
                   </div>
                   <div className="po-field">
-                    <label>Postcode</label>
-                    <input type="text" inputMode="numeric" value={addrDraft.kode_pos} onChange={(e) => setAddrDraft({ ...addrDraft, kode_pos: e.target.value })} />
+                    <label>City / district</label>
+                    <input type="text" value={addrDraft.kota} onChange={(e) => setAddrDraft({ ...addrDraft, kota: e.target.value })} />
                   </div>
                 </div>
+                {isIndonesia(addrDraft.negara) && (
+                  <div className="po-inline">
+                    <div className="po-field">
+                      <label>Subdistrict (kecamatan)</label>
+                      <input type="text" value={addrDraft.kecamatan} onChange={(e) => setAddrDraft({ ...addrDraft, kecamatan: e.target.value })} />
+                    </div>
+                    <div className="po-field">
+                      <label>Ward (kelurahan)</label>
+                      <input type="text" value={addrDraft.kelurahan} onChange={(e) => setAddrDraft({ ...addrDraft, kelurahan: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+                <div className="po-field">
+                  <label>Postcode</label>
+                  <input type="text" inputMode="numeric" value={addrDraft.kode_pos} onChange={(e) => setAddrDraft({ ...addrDraft, kode_pos: e.target.value })} />
+                </div>
+                <div className="po-field">
+                  <label>Address <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(street, alley/gang, no. — not the city/province above)</em></label>
+                  <textarea value={addrDraft.street} onChange={(e) => { setAddrDraft({ ...addrDraft, street: e.target.value }); if (dupWarn) setDupWarn(null); }} />
+                </div>
+
+                {dupWarn && (
+                  <div className="validation warn">
+                    The address field repeats {dupWarn.map((d) => `“${d}”`).join(', ')}, already entered as separate field{dupWarn.length === 1 ? '' : 's'} above. Save anyway?
+                  </div>
+                )}
+
                 <div className="fd-commit">
                   {addrEdit.address ? (
                     <button className="btn-link danger" onClick={() => removeAddr(addrEdit.address!.address_id)} disabled={busy}>Delete</button>
                   ) : <span />}
-                  <button className="btn-primary" onClick={saveAddr} disabled={busy}>{busy ? 'Saving…' : addrEdit.address ? 'Save' : 'Add'}</button>
+                  <button className="btn-primary" onClick={saveAddr} disabled={busy}>{busy ? 'Saving…' : dupWarn ? 'Save anyway' : addrEdit.address ? 'Save' : 'Add'}</button>
                 </div>
               </div>
             </div>
