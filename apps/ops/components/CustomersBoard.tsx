@@ -11,6 +11,8 @@ import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import CountrySelect from '@/components/CountrySelect';
 import PostcodeAutofill from '@/components/PostcodeAutofill';
+import IconSelect, { type IconOption } from '@/components/IconSelect';
+import type { ChannelOption } from '@/app/settings/types';
 import { fmtRp, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
@@ -25,26 +27,6 @@ import type { CustomerAddress } from '@jigzle/db/types';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
-// channel platforms for the picker, grouped Social media / Marketplace (a small-text separator between
-// the two in the dropdown). Each carries an emoji icon; the stored value is the bare platform name.
-const CHANNEL_GROUPS: { label: string; options: { value: string; icon: string }[] }[] = [
-  { label: 'Social media', options: [
-    { value: 'WhatsApp', icon: '💬' },
-    { value: 'Instagram', icon: '📷' },
-    { value: 'LINE', icon: '💚' },
-    { value: 'Facebook', icon: '📘' },
-    { value: 'TikTok', icon: '🎵' },
-    { value: 'Telegram', icon: '✈️' },
-  ] },
-  { label: 'Marketplace', options: [
-    { value: 'Shopee', icon: '🛒' },
-    { value: 'Tokopedia', icon: '🟢' },
-    { value: 'Lazada', icon: '🔵' },
-    { value: 'Blibli', icon: '🔷' },
-    { value: 'TikTok Shop', icon: '🛍️' },
-    { value: 'Bukalapak', icon: '🟥' },
-  ] },
-];
 const CHANNEL_SLOTS = 3;
 const blankChannels = (): ChannelEntry[] => Array.from({ length: CHANNEL_SLOTS }, () => ({ platform: '', handle: '' }));
 const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '—');
@@ -76,7 +58,9 @@ const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
 });
 const isIndonesia = (c: string) => c.trim().toLowerCase() === 'indonesia';
 
-export default function CustomersBoard({ initialCustomers, initialTiers, userEmail }: { initialCustomers: CustomerListRow[]; initialTiers: Record<number, Tier>; userEmail: string }) {
+export default function CustomersBoard({ initialCustomers, initialTiers, channelOptions, userEmail }: { initialCustomers: CustomerListRow[]; initialTiers: Record<number, Tier>; channelOptions: ChannelOption[]; userEmail: string }) {
+  // platform options for the Channels picker (icon + label), from Settings → Customer → Channel
+  const channelSelectOptions: IconOption<string>[] = channelOptions.map((c) => ({ value: c.label, label: c.label, icon: c.icon }));
   const [customers, setCustomers] = useState<CustomerListRow[]>(initialCustomers);
   const tiers = initialTiers;
   const [letter, setLetter] = useState<string>('A');
@@ -424,26 +408,19 @@ export default function CustomersBoard({ initialCustomers, initialTiers, userEma
                     <label>Channels</label>
                     {channelDrafts.map((row, i) => (
                       <div className="cust-channel" key={i} style={i > 0 ? { marginTop: 6 } : undefined}>
-                        <select
+                        <IconSelect
                           className="cust-channel-platform"
-                          value={row.platform}
-                          onChange={(e) => {
-                            const v = e.target.value;
+                          value={row.platform || null}
+                          options={channelSelectOptions}
+                          placeholder="— pick —"
+                          ariaLabel="Channel platform"
+                          disabled={busy}
+                          onChange={(v) => {
                             const next = channelDrafts.map((r, idx) => (idx === i ? { ...r, platform: v } : r));
                             setChannelDrafts(next);
                             saveChannels(next);
                           }}
-                          disabled={busy}
-                        >
-                          <option value="">—</option>
-                          {CHANNEL_GROUPS.map((g) => (
-                            <optgroup key={g.label} label={g.label}>
-                              {g.options.map((o) => (
-                                <option key={o.value} value={o.value}>{o.icon} {o.value}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
+                        />
                         <input
                           className="cust-channel-handle"
                           type="text"

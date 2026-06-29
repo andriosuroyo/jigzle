@@ -93,6 +93,14 @@ const SECTIONS: SectionDef[] = [
     sortKey: 'label',
     blank: { label: '' },
   },
+  {
+    kind: 'channel',
+    title: 'Channels',
+    sub: 'Contact channels (WhatsApp, Instagram, Shopee, …) shown in the customer Channels picker. Tap the icon to change a brand logo.',
+    cols: [{ key: 'label', label: 'Channel', type: 'text', grow: true }],
+    sortKey: 'label',
+    blank: { label: '' },
+  },
 ];
 const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SECTIONS.map((s) => [s.kind, s])) as Record<SettingsKind, SectionDef>;
 
@@ -106,6 +114,7 @@ const CATEGORIES: Category[] = [
   { key: 'shipping', title: 'Shipping', sub: 'Couriers and box presets used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }] },
   { key: 'inbound', title: 'Inbound', sub: 'Labels for the Inbound receiving flow.', tabs: [{ kind: 'inbound_labels' }] },
   { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers for the To-forwarder buying pipeline.', tabs: [{ custom: 'suppliers' }] },
+  { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
 ];
 const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
 
@@ -137,6 +146,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     box: initial.boxPresets,
     inbound_labels: initial.inboundLabels,
     common_note: initial.commonNotes,
+    channel: initial.channels,
   });
   const [busy, setBusy] = useState(false);
   // notice tone follows the action: ok (green) = additive, err (red) = removed/failed, warn (yellow) = neutral edit.
@@ -382,8 +392,9 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
   );
 }
 
-// an icon value is an uploaded image when it's a URL; otherwise it's a short emoji/text.
-const isIconUrl = (icon: string | null | undefined): boolean => !!icon && /^https?:\/\//.test(icon);
+// an icon value is an image when it's a URL or a local '/'-rooted path (e.g. a bundled brand SVG);
+// otherwise it's a short emoji/text.
+const isIconUrl = (icon: string | null | undefined): boolean => !!icon && /^(https?:\/\/|\/)/.test(icon);
 
 // ── one editable row: an optional icon (emoji or uploaded image), text/number fields (saved on blur),
 //    up/down sort, remove. No active toggle — removing a row is how you retire it. ──
