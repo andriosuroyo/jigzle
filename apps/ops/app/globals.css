@@ -886,6 +886,24 @@ img.sku-img { background: #e8e8e8; }
 .flag-select-opt:active, .flag-select-opt.active { background: var(--paper); }
 .flag-select-opt .flag-select-flag { font-size: 18px; flex-shrink: 0; }
 .flag-select-empty { padding: 8px 9px; font-size: 13px; color: var(--muted); }
+
+/* ── Customer directory (PR92) ── */
+.cust-az { gap: 1px; }
+.cust-az .fq-filter { padding: 9px 7px; font-size: 13px; }
+/* three read-only stat cards (spend / tier / last purchase), side by side */
+.cust-stats { display: flex; gap: 8px; margin: 12px 0 6px; }
+.cust-stat { flex: 1 1 0; min-width: 0; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px 8px; text-align: center; }
+.cust-stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.cust-stat-value { font-size: 15px; font-weight: 800; color: var(--brown-dark); margin: 5px 0; min-height: 22px; line-height: 1.2; word-break: break-word; }
+.cust-stat-value .tier { font-size: 12px; }
+.cust-stat-sub { font-size: 11px; color: var(--muted); }
+/* address list rows */
+.cust-addrs { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cust-addr { display: flex; align-items: center; gap: 10px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.cust-addr-main { flex: 1; min-width: 0; }
+.cust-addr-name { font-weight: 600; color: var(--ink); }
+.cust-addr-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cust-addr .btn-link { flex-shrink: 0; }
 /* per-row icon cell (emoji or uploaded image) + its picker modal */
 .set-ico { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; padding: 0; }
 .set-ico:disabled { opacity: 0.5; cursor: not-allowed; }
