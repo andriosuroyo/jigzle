@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import PresenceSession from '@/components/PresenceSession';
 import CountSession from '@/components/CountSession';
 import SnapshotView from '@/components/SnapshotView';
@@ -101,6 +102,7 @@ export default function StockCheckBoard({
       return (
         <div className="ops">
           <AppHeader active="stock-check" userEmail={userEmail} />
+          <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: 'Presence count' }]} />
           <PresenceSession session={detail} onExit={exitDetail} onClosed={() => onClosed(detail.stock_check_id)} />
         </div>
       );
@@ -109,6 +111,7 @@ export default function StockCheckBoard({
       return (
         <div className="ops">
           <AppHeader active="stock-check" userEmail={userEmail} />
+          <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: 'Count' }]} />
           <CountSession session={detail} onExit={exitDetail} onClosed={() => onClosed(detail.stock_check_id)} />
         </div>
       );
@@ -116,6 +119,7 @@ export default function StockCheckBoard({
     return (
       <div className="ops">
         <AppHeader active="stock-check" userEmail={userEmail} />
+        <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: 'Snapshot' }]} />
         <SnapshotView session={detail} onExit={exitDetail} />
       </div>
     );
@@ -124,6 +128,7 @@ export default function StockCheckBoard({
   return (
     <div className="ops">
       <AppHeader active="stock-check" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: tab === 'adjustments' ? 'Adjustments' : 'Counts' }]} />
 
       <div className="sc-wrap">
         <div className="sc-tabs">
