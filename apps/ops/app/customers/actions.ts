@@ -5,7 +5,7 @@
 // and writes. Reads draw from customers / orders / payments / customer_addresses (no new tables).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { normalizePhone, tierFor, toNextTier } from '@jigzle/lib';
+import { normalizePhone, tierFor, toNextTier, type Tier } from '@jigzle/lib';
 import type { Customer, CustomerAddress } from '@jigzle/db/types';
 import type { AddressInput, CustomerDetail, CustomerListRow, CustomerPatch } from './types';
 
@@ -27,6 +27,29 @@ export async function getCustomers(): Promise<CustomerListRow[]> {
     if (error || !data || data.length === 0) break;
     for (const c of data as { customer_id: number; name: string | null; phone: string | null }[]) {
       out.push({ id: c.customer_id, name: c.name, phone: c.phone });
+    }
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
+// ── member tier per customer (for the directory quickview), from the customer_lifetime view (0037).
+// One paged read of {customer_id, lifetime_paid_idr} → only Bronze+ customers are returned to keep the
+// map small. Degrades to {} if the view isn't present, so the list just shows no tiers. ──
+export async function getCustomerTiers(): Promise<Record<number, Tier>> {
+  const supabase = createSupabaseServerClient();
+  const out: Record<number, Tier> = {};
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('customer_lifetime')
+      .select('customer_id,lifetime_paid_idr')
+      .order('customer_id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    for (const r of data as { customer_id: number; lifetime_paid_idr: number | null }[]) {
+      const tier = tierFor(Number(r.lifetime_paid_idr) || 0).tier;
+      if (tier) out[r.customer_id] = tier;
     }
     if (data.length < PAGE) break;
   }
@@ -111,12 +134,19 @@ export async function updateCustomer(customerId: number, patch: CustomerPatch): 
 
 // ── addresses: add / edit / delete (overlay) ──
 function addrFields(input: AddressInput): Record<string, unknown> {
+  const street = input.street?.trim() || null;
+  const kelurahan = input.kelurahan?.trim() || null;
+  const kecamatan = input.kecamatan?.trim() || null;
+  const kota = input.kota?.trim() || null;
+  const provinsi = input.provinsi?.trim() || null;
+  const negara = input.negara?.trim() || null;
+  const kode_pos = input.kode_pos?.trim() || null;
+  // compose a readable full address for the legacy display consumers (addressLine / Fulfill)
+  const raw_address = [street, kelurahan, kecamatan, kota, provinsi, negara, kode_pos].filter(Boolean).join(', ') || null;
   return {
     recipient_name: input.recipient_name?.trim() || null,
     contact_phone: input.contact_phone?.trim() || null,
-    raw_address: input.raw_address?.trim() || null,
-    kota: input.kota?.trim() || null,
-    kode_pos: input.kode_pos?.trim() || null,
+    street, kelurahan, kecamatan, kota, provinsi, negara, kode_pos, raw_address,
   };
 }
 
