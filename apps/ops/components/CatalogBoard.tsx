@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import {
   addBarcode,
@@ -332,6 +333,7 @@ export default function CatalogBoard({
   return (
     <div className="ops">
       <AppHeader active="catalog" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: tab === 'needs' ? 'Needs review' : tab === 'shared' ? 'Shared barcodes' : 'All' }]} />
 
       <div className="fulfill-layout">
         {/* ── Left: tabs + list ── */}

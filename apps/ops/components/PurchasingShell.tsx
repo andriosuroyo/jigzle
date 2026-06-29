@@ -7,6 +7,7 @@
 
 import { useMemo, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import OrderBoard from '@/components/OrderBoard';
 import ToBuyBoard from '@/components/ToBuyBoard';
 import PurchasingHistoryBoard from '@/components/PurchasingHistoryBoard';
@@ -14,6 +15,7 @@ import type { Forwarder, OpenPORow, POOpenStatus, Supplier } from '@jigzle/db/ty
 import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ReceivedItemRow, ShipmentHistoryRow, SoldOutRow } from '@/app/purchasing/types';
 
 type PurchasingTab = 'tobuy' | 'forwarder' | 'ship' | 'history';
+const TAB_LABELS: Record<PurchasingTab, string> = { tobuy: 'To buy', forwarder: 'To forwarder', ship: 'To ship', history: 'History' };
 
 const FORWARDER_STATUSES: POOpenStatus[] = ['Processing', 'On the way'];
 
@@ -49,6 +51,7 @@ export default function PurchasingShell({
   return (
     <div className="ops">
       <AppHeader active="purchasing" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Purchasing', href: '/purchasing' }, { label: TAB_LABELS[tab] }]} />
 
       <div className="orders-bar">
         <nav className="orders-tabs" role="tablist" aria-label="Purchasing">

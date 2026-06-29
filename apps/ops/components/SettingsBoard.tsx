@@ -8,8 +8,8 @@
 
 import { useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import Link from 'next/link';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import SupplierSettings from '@/components/SupplierSettings';
 import type { Supplier } from '@jigzle/db/types';
 import {
@@ -311,22 +311,16 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     <div className="ops">
       <AppHeader active="settings" userEmail={userEmail} />
 
-      <div className="set-wrap">
-        {/* breadcrumbs — Home and Settings both navigate back (Home → hub, Settings → category list) */}
-        <nav className="set-crumbs" aria-label="Breadcrumb">
-          <Link href="/" className="crumb-link">Home</Link>
-          <span className="crumb-sep" aria-hidden>›</span>
-          {category ? (
-            <>
-              <button className="crumb-link" onClick={backToCategories}>Settings</button>
-              <span className="crumb-sep" aria-hidden>›</span>
-              <span className="crumb-current">{category.title}</span>
-            </>
-          ) : (
-            <span className="crumb-current">Settings</span>
-          )}
-        </nav>
+      {/* Home → hub; Settings → the category list (the page's own client state) */}
+      <Breadcrumbs
+        items={[
+          { label: 'Home', href: '/' },
+          category ? { label: 'Settings', onClick: backToCategories } : { label: 'Settings' },
+          ...(category ? [{ label: category.title }] : []),
+        ]}
+      />
 
+      <div className="set-wrap">
         {notice && <div className={`validation ${notice.tone}`}>{notice.text}</div>}
 
         {/* ── landing: category cards ── */}

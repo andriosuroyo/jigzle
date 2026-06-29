@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import type { InventoryFilter, InventorySortColumn, InventoryState, StockRow } from '@jigzle/db/types';
 import { getInventory, refreshSnapshot } from '@/app/inventory/actions';
 import SkuImage from '@/components/SkuImage';
@@ -122,6 +123,7 @@ export default function InventoryBoard({
   return (
     <div className="ops">
       <AppHeader active="inventory" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: STATES.find((s) => s.key === state)?.label ?? 'all active' }]} />
 
       <div className="inv-wrap">
         <div className="inv-bar">

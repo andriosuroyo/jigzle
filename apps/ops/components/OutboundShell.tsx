@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import OutboundBoard from '@/components/OutboundBoard';
 import OutboundHistoryBoard from '@/components/OutboundHistoryBoard';
 import { getMonthlyShipmentsXlsx, getShipmentMonthRange } from '@/app/outbound/actions';
@@ -14,6 +15,7 @@ import type { ShipmentHistoryRow } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 
 type OutboundTab = 'ready' | 'history';
+const TAB_LABELS: Record<OutboundTab, string> = { ready: 'Ready to ship', history: 'History' };
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function OutboundShell({
@@ -109,6 +111,7 @@ export default function OutboundShell({
   return (
     <div className="ops">
       <AppHeader active="outbound" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Outbound', href: '/outbound' }, { label: TAB_LABELS[tab] }]} />
 
       <div className="orders-bar">
         <nav className="orders-tabs" role="tablist" aria-label="Outbound">

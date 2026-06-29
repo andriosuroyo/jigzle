@@ -6,6 +6,7 @@
 
 import { useCallback, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import InboundBoard from '@/components/InboundBoard';
 import InboundHistoryBoard from '@/components/InboundHistoryBoard';
 import type { ReceiveQueueRow } from '@jigzle/db/types';
@@ -13,6 +14,7 @@ import type { InboundHistoryRow } from '@/app/inbound/types';
 import type { InboundLabel } from '@/app/settings/types';
 
 type InboundTab = 'arrivals' | 'history';
+const TAB_LABELS: Record<InboundTab, string> = { arrivals: 'Shipments', history: 'History' };
 
 export default function InboundShell({
   initialQueue,
@@ -32,6 +34,7 @@ export default function InboundShell({
   return (
     <div className="ops">
       <AppHeader active="inbound" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inbound', href: '/inbound' }, { label: TAB_LABELS[tab] }]} />
 
       <div className="orders-bar">
         <nav className="orders-tabs" role="tablist" aria-label="Inbound">

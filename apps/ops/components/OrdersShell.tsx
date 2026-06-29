@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import PendingBoard from '@/components/PendingBoard';
 import FulfillBoard from '@/components/FulfillBoard';
 import HistoryBoard from '@/components/HistoryBoard';
@@ -92,6 +93,7 @@ export default function OrdersShell({
   return (
     <div className="ops">
       <AppHeader active="orders" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Sales', href: '/sales' }, { label: TABS.find((t) => t.key === tab)?.label ?? 'Sales' }]} />
 
       {/* Pipeline bar — tabs (Pending/Fulfill carry a live count badge) on the left, the persistent
           "+ New order" on the right. New is a button, not a tab: it's a creation form, not a queue. */}

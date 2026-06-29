@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { fmtRp } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import AppHeader from '@/components/AppHeader';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import {
   searchCustomers,
   createCustomer,
@@ -316,6 +317,7 @@ export default function OrderEntry({
     return (
       <div className="ops">
         <AppHeader active="orders" userEmail={userEmail} />
+        <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Sales', href: '/sales' }, { label: 'New order' }]} />
         {successBody}
       </div>
     );
@@ -604,6 +606,7 @@ export default function OrderEntry({
   return (
     <div className="ops">
       <AppHeader active="orders" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Sales', href: '/sales' }, { label: 'New order' }]} />
       {body}
     </div>
   );
