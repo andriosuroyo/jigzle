@@ -68,6 +68,15 @@ export default function AdjustmentsTab() {
   function applyFilters() {
     void load({ search, source, from: from || undefined, to: to || undefined });
   }
+  // live filtering: debounce the text query and the date/source controls (empty query = show all).
+  // Skip the very first run — the initial load already happened in the mount effect above.
+  const firstFilter = useRef(true);
+  useEffect(() => {
+    if (firstFilter.current) { firstFilter.current = false; return; }
+    const t = setTimeout(() => { applyFilters(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, source, from, to]);
 
   function startEdit(r: AdjustmentRow) {
     setEditId(r.adjustment_id);
@@ -116,7 +125,6 @@ export default function AdjustmentsTab() {
         </select>
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} title="from" />
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} title="to" />
-        <button className="btn-secondary" onClick={applyFilters} disabled={loading}>{loading ? '…' : 'filter'}</button>
         <button className="btn-primary" onClick={() => setShowNew((v) => !v)}>+ Manual adjustment</button>
       </div>
 
@@ -186,6 +194,13 @@ function NewManual({
       if (searchReq.current === myReq) setSearching(false);
     }
   }
+  // live SKU search: debounce the query and search as you type; clear below the 2-char floor
+  useEffect(() => {
+    if (q.trim().length < 2) { setHits([]); setSearching(false); return; }
+    const t = setTimeout(() => { void doSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
 
   async function save() {
     if (!picked) return onError('Pick a SKU first.');
@@ -223,7 +238,6 @@ function NewManual({
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void doSearch(); } }}
             />
-            <button className="btn-secondary" onClick={() => void doSearch()} disabled={searching}>{searching ? '…' : 'search'}</button>
           </div>
           {hits.length > 0 && (
             <div className="sc-hits">

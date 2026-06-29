@@ -51,6 +51,8 @@ export default function HistoryBoard({
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const sumReqRef = useRef(0);
+  const searchSeq = useRef(0);   // stale-response guard for the live search
+  const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
   const selId = selRow?.sales_id ?? null;
 
   // Reverse-map a shipped box's stored dims → a SETTINGS preset code (XS/M2/…); 'Custom' if no exact
@@ -68,13 +70,16 @@ export default function HistoryBoard({
   const imgMap = useSkuImages(imgCodes);
 
   async function runSearch() {
+    const _id = ++searchSeq.current;
     setSearching(true);
     try {
-      setOrders(await getHistory(query.trim()));
+      const rows = await getHistory(query.trim());
+      if (searchSeq.current !== _id) return; // a newer search superseded this one
+      setOrders(rows);
     } catch {
       /* keep current on transient error */
     } finally {
-      setSearching(false);
+      if (searchSeq.current === _id) setSearching(false);
     }
   }
 
@@ -82,6 +87,14 @@ export default function HistoryBoard({
   useEffect(() => { onCountChange?.(orders.length); }, [orders, onCountChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
+  // live search: re-query as you type (empty query = recent orders), debounced. Skip the mount run —
+  // initialOrders is already loaded — so we only refetch once the user actually types.
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const t = setTimeout(() => { runSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   function startEditNote() {
     setNoteDraft(summary?.order_note ?? '');
@@ -132,9 +145,7 @@ export default function HistoryBoard({
               placeholder="Name, order id, or date (YYYY-MM-DD)…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
             />
-            <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'Search'}</button>
           </div>
           {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No orders.'}</div>}
           <ul className="fq-list">

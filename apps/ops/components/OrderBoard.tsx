@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
@@ -184,10 +184,12 @@ export default function OrderBoard({
   const [skuQuery, setSkuQuery] = useState('');
   const [skuHits, setSkuHits] = useState<SkuHit[]>([]);
   const [skuSearching, setSkuSearching] = useState(false);
+  const skuSeq = useRef(0); // stale-response guard (PR99): ignore out-of-order auto-search results
   // customer search
   const [custQuery, setCustQuery] = useState('');
   const [custHits, setCustHits] = useState<CustomerHit[]>([]);
   const [custSearching, setCustSearching] = useState(false);
+  const custSeq = useRef(0);
 
   // inline + add supplier
   const [supForm, setSupForm] = useState<{ name: string; country: string; flag: string; type: SupplierType } | null>(null);
@@ -405,8 +407,10 @@ export default function OrderBoard({
     setGrpDate(todayStr());
   }
 
-  // ── SKU search ──
+  // ── SKU search (live, debounced — PR99). The seq guard drops out-of-order responses so a slow
+  // earlier query can't overwrite a newer one or flip searching off after the latest is in flight. ──
   async function runSkuSearch() {
+    const _id = ++skuSeq.current;
     const q = skuQuery.trim();
     if (q.length < 2) {
       setSkuHits([]);
@@ -414,21 +418,32 @@ export default function OrderBoard({
     }
     setSkuSearching(true);
     try {
-      setSkuHits(await searchSkus(q));
+      const hits = await searchSkus(q);
+      if (skuSeq.current !== _id) return; // a newer search superseded this one
+      setSkuHits(hits);
     } catch {
+      if (skuSeq.current !== _id) return;
       setSkuHits([]);
     } finally {
-      setSkuSearching(false);
+      if (skuSeq.current === _id) setSkuSearching(false);
     }
   }
+  useEffect(() => {
+    const q = skuQuery.trim();
+    if (q.length < 2) { setSkuHits([]); setSkuSearching(false); return; }
+    const t = setTimeout(() => { runSkuSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skuQuery]);
   function pickSku(hit: SkuHit) {
     setForm((f) => ({ ...f, item_code: hit.item_code, item_name: hit.name }));
     setSkuHits([]);
     setSkuQuery('');
   }
 
-  // ── customer search ──
+  // ── customer search (live, debounced — PR99; same stale-response guard as the SKU picker) ──
   async function runCustSearch() {
+    const _id = ++custSeq.current;
     const q = custQuery.trim();
     if (q.length < 2) {
       setCustHits([]);
@@ -436,13 +451,23 @@ export default function OrderBoard({
     }
     setCustSearching(true);
     try {
-      setCustHits(await searchCustomers(q));
+      const hits = await searchCustomers(q);
+      if (custSeq.current !== _id) return; // a newer search superseded this one
+      setCustHits(hits);
     } catch {
+      if (custSeq.current !== _id) return;
       setCustHits([]);
     } finally {
-      setCustSearching(false);
+      if (custSeq.current === _id) setCustSearching(false);
     }
   }
+  useEffect(() => {
+    const q = custQuery.trim();
+    if (q.length < 2) { setCustHits([]); setCustSearching(false); return; }
+    const t = setTimeout(() => { runCustSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [custQuery]);
   function pickCustomer(hit: CustomerHit) {
     setForm((f) => ({ ...f, customer_id: hit.customer_id, customer_label: hit.name || hit.phone || `#${hit.customer_id}` }));
     setCustHits([]);
@@ -1002,10 +1027,11 @@ export default function OrderBoard({
                   placeholder="search SKU by code / name"
                   value={skuQuery}
                   onChange={(e) => setSkuQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSkuSearch(); } }}
                 />
-                <button className="btn-secondary" onClick={runSkuSearch} disabled={skuSearching}>{skuSearching ? '…' : 'search'}</button>
               </div>
+              {skuQuery.trim().length >= 2 && !skuSearching && skuHits.length === 0 && (
+                <div className="hint" style={{ marginTop: 6 }}>No matching SKUs.</div>
+              )}
               {skuHits.length > 0 && (
                 <ul className="result-list" style={{ marginTop: 6 }}>
                   {skuHits.map((h) => (
@@ -1063,10 +1089,11 @@ export default function OrderBoard({
                   placeholder="search customer by name / phone"
                   value={custQuery}
                   onChange={(e) => setCustQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runCustSearch(); } }}
                 />
-                <button className="btn-secondary" onClick={runCustSearch} disabled={custSearching}>{custSearching ? '…' : 'search'}</button>
               </div>
+              {custQuery.trim().length >= 2 && !custSearching && custHits.length === 0 && (
+                <div className="hint" style={{ marginTop: 6 }}>No matching customers.</div>
+              )}
               {custHits.length > 0 && (
                 <ul className="result-list" style={{ marginTop: 6 }}>
                   {custHits.map((h) => (

@@ -32,6 +32,7 @@ export default function OutboundHistoryBoard({
   const [searching, setSearching] = useState(false);
   const [selKey, setSelKey] = useState<string | null>(null);
   const reqRef = useRef(0);
+  const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
 
   const sel = useMemo(() => orders.find((o) => o.key === selKey) ?? null, [orders, selKey]);
 
@@ -64,6 +65,14 @@ export default function OutboundHistoryBoard({
   useEffect(() => { onCountChange?.(orders.length); }, [orders, onCountChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
+  // live search: re-query as you type (empty = recent), debounced. Skip the mount run — initialOrders
+  // is already loaded — so we only refetch once the user types.
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const t = setTimeout(() => { runSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   const courierLine = sel?.courier || null;
 
@@ -78,9 +87,7 @@ export default function OutboundHistoryBoard({
             placeholder="Search name, SKU, or courier…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
           />
-          <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'Search'}</button>
         </div>
         {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No shipped orders.'}</div>}
         <ul className="fq-list">

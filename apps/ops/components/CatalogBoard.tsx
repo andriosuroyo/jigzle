@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
@@ -152,6 +152,7 @@ export default function CatalogBoard({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const reqRef = useRef(0);
+  const searchSeq = useRef(0); // stale-response guard for the debounced catalogue search
 
   function resetMsg() {
     setError(null);
@@ -174,6 +175,7 @@ export default function CatalogBoard({
   }
 
   async function runSearch() {
+    const _id = ++searchSeq.current;
     const q = search.trim();
     if (q.length < 2) {
       setResults([]);
@@ -181,15 +183,26 @@ export default function CatalogBoard({
       return;
     }
     setSearching(true);
+    let rows: CatalogueListRow[] = [];
     try {
-      setResults(await searchCatalogue(q));
+      rows = await searchCatalogue(q);
     } catch {
-      setResults([]);
-    } finally {
-      setSearching(false);
-      setCatSearched(true);
+      rows = [];
     }
+    if (searchSeq.current !== _id) return; // a newer search superseded this one
+    setResults(rows);
+    setSearching(false);
+    setCatSearched(true);
   }
+
+  // live search — debounce keystrokes; clear below the 2-char floor (no stale results / spinner)
+  useEffect(() => {
+    const q = search.trim();
+    if (q.length < 2) { setResults([]); setCatSearched(false); setSearching(false); return; }
+    const t = setTimeout(() => { runSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   // C1: tab switch resets the "searched" flag so the empty hint reverts to the prompt, not "No results".
   function switchTab(t: Tab) {
@@ -352,9 +365,7 @@ export default function CatalogBoard({
                   placeholder="search SKU code / name / barcode"
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setCatSearched(false); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
                 />
-                <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
               </div>
             </div>
           )}

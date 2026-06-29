@@ -93,6 +93,7 @@ export default function InboundBoard({
   const [skuHits, setSkuHits] = useState<SkuHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [skuSearched, setSkuSearched] = useState(false); // true after a real search → drives "No results"
+  const searchSeq = useRef(0); // stale-response guard for the debounced SKU search
   const skuInputRef = useRef<HTMLInputElement>(null);
   const [manualAdd, setManualAdd] = useState(false); // the "manual add" search overlay
 
@@ -351,6 +352,7 @@ export default function InboundBoard({
   }
 
   async function runSearch() {
+    const _id = ++searchSeq.current;
     const q = skuQuery.trim();
     if (q.length < 3) {
       // <3 chars can't use the shared RPC's pg_trgm index — clear, and don't claim "No results".
@@ -359,15 +361,26 @@ export default function InboundBoard({
       return;
     }
     setSearching(true);
+    let hits: SkuHit[] = [];
     try {
-      setSkuHits(await searchSkus(q));
+      hits = await searchSkus(q);
     } catch {
-      setSkuHits([]);
-    } finally {
-      setSearching(false);
-      setSkuSearched(true);
+      hits = [];
     }
+    if (searchSeq.current !== _id) return; // a newer search superseded this one
+    setSkuHits(hits);
+    setSearching(false);
+    setSkuSearched(true);
   }
+
+  // live search — debounce keystrokes; clear below the 3-char floor (no stale results / spinner)
+  useEffect(() => {
+    const q = skuQuery.trim();
+    if (q.length < 3) { setSkuHits([]); setSkuSearched(false); setSearching(false); return; }
+    const t = setTimeout(() => { runSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skuQuery]);
 
   // clear the manual-search field + results and refocus it (W3). Used by the Clear link and after add.
   function clearSearch() {
@@ -725,9 +738,7 @@ export default function InboundBoard({
                 placeholder="Code, name, or piece count…"
                 value={skuQuery}
                 onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
               />
-              <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
               {(skuQuery || skuHits.length > 0) && <button className="btn-link" onClick={clearSearch}>Clear</button>}
             </div>
             {searching && <div className="hint">Searching…</div>}
