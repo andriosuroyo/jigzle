@@ -17,6 +17,8 @@ export interface CustomerDetail {
   name: string | null;
   phone: string | null;
   phone_raw: string | null;
+  phone2_raw: string | null;
+  phone3_raw: string | null;
   channel: string | null;
   ig_handle: string | null;
   joined_date: string | null;   // first purchase (min orders.order_date)
@@ -28,10 +30,12 @@ export interface CustomerDetail {
   addresses: CustomerAddress[];
 }
 
-// editable personal details (name + whatsapp/phone)
+// editable personal details (name + up to three whatsapp/phone numbers)
 export interface CustomerPatch {
   name?: string | null;
-  phone?: string | null; // raw input; stored normalized + raw
+  phone?: string | null;  // raw input; stored normalized + raw. phone = primary (dedup/search key)
+  phone2?: string | null;
+  phone3?: string | null;
 }
 
 // editable address fields (add / edit)
