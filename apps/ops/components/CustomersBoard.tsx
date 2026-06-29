@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import CountrySelect from '@/components/CountrySelect';
+import PostcodeAutofill from '@/components/PostcodeAutofill';
 import { fmtRp, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
@@ -508,6 +509,15 @@ export default function CustomersBoard({ initialCustomers, initialTiers, userEma
                   <label>Country</label>
                   <CountrySelect value={addrDraft.negara || null} onChange={(country) => setAddrDraft((d) => ({ ...d, negara: country }))} disabled={busy} />
                 </div>
+                {isIndonesia(addrDraft.negara) && (
+                  <div className="po-field">
+                    <label>Autofill <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(province / city / kecamatan / kelurahan / postcode)</em></label>
+                    <PostcodeAutofill
+                      disabled={busy}
+                      onPick={(h) => setAddrDraft((d) => ({ ...d, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal }))}
+                    />
+                  </div>
+                )}
                 <div className="po-inline">
                   <div className="po-field">
                     <label>Province</label>

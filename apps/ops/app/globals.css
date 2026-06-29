@@ -912,6 +912,17 @@ img.sku-img { background: #e8e8e8; }
 .cust-channel { display: flex; gap: 6px; align-items: stretch; }
 .cust-channel-platform { flex: 0 0 auto; width: 9.5em; }
 .cust-channel-handle { flex: 1 1 auto; min-width: 0; }
+/* Indonesia postcode autofill (PR98) — type-ahead over the local kelurahan dataset */
+.pc-autofill { position: relative; }
+.pc-autofill-input { width: 100%; }
+.pc-results { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); max-height: 280px; overflow-y: auto; background: white; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+.pc-hint { padding: 10px 12px; color: var(--muted); font-size: 13px; }
+.pc-hit { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--line); background: white; text-align: left; cursor: pointer; }
+.pc-hit:last-child { border-bottom: 0; }
+.pc-hit:hover { background: var(--paper); }
+.pc-hit-main { display: flex; flex-direction: column; min-width: 0; color: var(--ink); font-weight: 600; }
+.pc-hit-sub { font-weight: 400; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-hit-post { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--brown-dark); font-weight: 600; }
 /* CountrySelect — flag + country name button (reuses the .flag-select dropdown styles) */
 .country-select-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; }
 .country-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
