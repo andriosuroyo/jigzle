@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fmtRp } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import AppHeader from '@/components/AppHeader';
@@ -128,6 +128,11 @@ export default function OrderEntry({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ sales_id: string; total: number; routed: 'fulfill' | 'pending'; pay: string } | null>(null);
 
+  // Stale-response guards: each search bumps its seq at the start; a settled response only commits if it's
+  // still the latest (debounced typing can fire several overlapping requests).
+  const custSeq = useRef(0);
+  const skuSeq = useRef(0);
+
   // ── derived totals ──
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.qty * l.unit_price_idr, 0), [lines]);
   const dpRaw = Math.max(0, parseInt(payAmount, 10) || 0);
@@ -142,26 +147,55 @@ export default function OrderEntry({
   const imgCodes = useMemo(() => [...skuResults.map((s) => s.item_code), ...lines.map((l) => l.item_code)], [skuResults, lines]);
   const imgMap = useSkuImages(imgCodes);
 
-  // ── on-demand searches (Enter or the search button) ──
+  // ── live searches (debounced as you type — see the effects below) ──
   async function runCustSearch() {
+    const _id = ++custSeq.current;
     const q = custQuery.trim();
     if (q.length < 2) { setCustResults([]); setCustSearched(false); return; }
     setCustSearching(true);
-    try { setCustResults(await searchCustomers(q)); }
-    catch { setCustResults([]); }
-    finally { setCustSearching(false); setCustSearched(true); }
+    try {
+      const hits = await searchCustomers(q);
+      if (custSeq.current !== _id) return; // a newer keystroke superseded this request
+      setCustResults(hits); setCustSearching(false); setCustSearched(true);
+    } catch {
+      if (custSeq.current !== _id) return;
+      setCustResults([]); setCustSearching(false); setCustSearched(true);
+    }
   }
 
   async function runSkuSearch() {
+    const _id = ++skuSeq.current;
     const q = skuQuery.trim();
     // <3 matches searchSkus' real floor (the 0025 pg_trgm index needs ≥3) — short-circuit here
     // instead of round-tripping to a guaranteed [] and falsely showing "No results".
     if (q.length < 3) { setSkuResults([]); setSkuSearched(false); return; }
     setSkuSearching(true);
-    try { setSkuResults(await searchSkus(q)); }
-    catch { setSkuResults([]); }
-    finally { setSkuSearching(false); setSkuSearched(true); }
+    try {
+      const hits = await searchSkus(q);
+      if (skuSeq.current !== _id) return; // a newer keystroke superseded this request
+      setSkuResults(hits); setSkuSearching(false); setSkuSearched(true);
+    } catch {
+      if (skuSeq.current !== _id) return;
+      setSkuResults([]); setSkuSearching(false); setSkuSearched(true);
+    }
   }
+
+  // Debounced auto-search: fire 220ms after typing stops, clearing below the floor.
+  useEffect(() => {
+    const q = custQuery.trim();
+    if (q.length < 2) { setCustResults([]); setCustSearching(false); return; }
+    const t = setTimeout(() => { runCustSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [custQuery]);
+
+  useEffect(() => {
+    const q = skuQuery.trim();
+    if (q.length < 3) { setSkuResults([]); setSkuSearching(false); return; }
+    const t = setTimeout(() => { runSkuSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skuQuery]);
 
   function clearSkuSearch() {
     setSkuResults([]); setSkuQuery(''); setSkuSearched(false);
@@ -344,7 +378,6 @@ export default function OrderEntry({
                       onChange={(e) => { setCustQuery(e.target.value); setCustSearched(false); if (!e.target.value.trim()) setCustResults([]); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runCustSearch(); } }}
                     />
-                    <button className="btn-secondary" onClick={runCustSearch} disabled={custSearching}>{custSearching ? '…' : 'Search'}</button>
                   </div>
                   {custSearching && <div className="hint">Searching…</div>}
                   {!custSearching && custSearched && custResults.length === 0 && (
@@ -467,7 +500,6 @@ export default function OrderEntry({
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSkuSearch(); } }}
                   disabled={!customer}
                 />
-                <button className="btn-secondary" onClick={runSkuSearch} disabled={!customer || skuSearching}>{skuSearching ? '…' : 'Search'}</button>
                 {(skuQuery || skuResults.length > 0) && (
                   <button className="btn-link sku-clear" onClick={clearSkuSearch}>Clear</button>
                 )}

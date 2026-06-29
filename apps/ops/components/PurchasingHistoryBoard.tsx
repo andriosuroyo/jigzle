@@ -27,6 +27,7 @@ export default function PurchasingHistoryBoard({
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const reqRef = useRef(0);
+  const firstRun = useRef(true); // skip the debounced refetch on mount (initial data already loaded)
 
   const imgCodes = useMemo(
     () => (sub === 'item' ? items.map((i) => i.item_code).filter((c): c is string => !!c) : []),
@@ -54,6 +55,13 @@ export default function PurchasingHistoryBoard({
 
   // clear the field when flipping sub-lists (their result sets are independent)
   useEffect(() => { setQuery(''); }, [sub]);
+  // live search: re-query as you type, debounced. Skip the mount run — initial data already loaded.
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const t = setTimeout(() => { runSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, sub]);
 
   return (
     <div className="purch-history">
@@ -69,9 +77,7 @@ export default function PurchasingHistoryBoard({
           placeholder={sub === 'item' ? 'Search SKU, name, or ship id…' : 'Search ship id…'}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
         />
-        <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'Search'}</button>
       </div>
 
       {sub === 'shipment' ? (

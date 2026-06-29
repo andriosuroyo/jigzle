@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import type { InventoryFilter, InventorySortColumn, InventoryState, StockRow } from '@jigzle/db/types';
@@ -50,6 +50,7 @@ export default function InventoryBoard({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reqRef = useRef(0);
+  const firstRun = useRef(true); // skip the debounced refetch on mount (initialRows already loaded)
 
   async function runLoad(f: InventoryFilter) {
     const myReq = ++reqRef.current;
@@ -71,6 +72,15 @@ export default function InventoryBoard({
   function submitSearch() {
     runLoad({ search, state, sort });
   }
+  // live search: debounce the text query (empty = show all). The `state` dropdown auto-applies
+  // via pickState; sort via clickSort — so only `search` drives this effect. Skip the mount run —
+  // initialRows is already loaded — so we only refetch once the user types.
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    const t = setTimeout(() => { submitSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
   function pickState(s: InventoryState) {
     setState(s);
     runLoad({ search, state: s, sort });
@@ -135,7 +145,6 @@ export default function InventoryBoard({
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSearch(); } }}
             />
-            <button className="btn-secondary" onClick={submitSearch} disabled={loading}>{loading ? '…' : 'search'}</button>
           </div>
           <div className="inv-asof">
             <span>as of {fmtAsOf(refreshedAt)}</span>

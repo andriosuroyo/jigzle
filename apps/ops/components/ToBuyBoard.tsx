@@ -13,7 +13,7 @@
 // supplier sources, with a "Mark as Out of Stock" fallback. "Done" sends the item to To Forwarder
 // (a Processing PO).
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buyPreorder,
   createDraftSku,
@@ -111,6 +111,7 @@ export default function ToBuyBoard({
   const [skuHits, setSkuHits] = useState<SkuHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const searchSeq = useRef(0); // stale-response guard for the debounced SKU search
   const [picked, setPicked] = useState<{ item_code: string; name: string } | null>(null);
   const [pickedStock, setPickedStock] = useState<SkuStockInfo | null>(null);
   const [qty, setQty] = useState(1);
@@ -156,11 +157,24 @@ export default function ToBuyBoard({
   const canAdd = !!picked || isNewSku;
 
   async function runSearch() {
+    const _id = ++searchSeq.current;
     const q = skuQuery.trim();
     if (q.length < 2) { setSkuHits([]); setSearched(false); return; }
     setSearching(true);
-    try { setSkuHits(await searchSkus(q)); } catch { setSkuHits([]); } finally { setSearching(false); setSearched(true); }
+    let hits: SkuHit[] = [];
+    try { hits = await searchSkus(q); } catch { hits = []; }
+    if (searchSeq.current !== _id) return; // a newer search superseded this one
+    setSkuHits(hits); setSearching(false); setSearched(true);
   }
+
+  // live search — debounce keystrokes; clear below the 2-char floor (no stale results / spinner)
+  useEffect(() => {
+    const q = skuQuery.trim();
+    if (q.length < 2) { setSkuHits([]); setSearched(false); setSearching(false); return; }
+    const t = setTimeout(() => { runSearch(); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skuQuery]);
 
   async function pick(hit: SkuHit) {
     setPicked({ item_code: hit.item_code, name: hit.name });
@@ -410,9 +424,7 @@ export default function ToBuyBoard({
                   placeholder="search SKU by code / name / piece count / brand"
                   value={skuQuery}
                   onChange={(e) => { setSkuQuery(e.target.value); setSearched(false); setSkuHits([]); if (picked) { setPicked(null); setPickedStock(null); } }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } }}
                 />
-                <button className="btn-secondary" onClick={runSearch} disabled={searching}>{searching ? '…' : 'search'}</button>
               </div>
               {/* search results — quick-view rows (small picture, code + name, availability line) */}
               {!picked && skuHits.length > 0 && (
