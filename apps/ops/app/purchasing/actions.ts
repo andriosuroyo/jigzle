@@ -172,7 +172,8 @@ export async function getSuppliers(): Promise<Supplier[]> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from('suppliers')
-    .select('supplier_id,name,country,flag,type,sort_order,created_at')
+    .select('supplier_id,name,country,flag,type,sort_order,is_active,created_at')
+    .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
   if (error || !data) return [];
@@ -684,8 +685,16 @@ export async function addSupplier(input: NewSupplierInput): Promise<Supplier> {
   const name = input.name?.trim();
   if (!name) throw new Error('addSupplier: a name is required');
 
+  // re-adding a name that exists: return it (reactivating it first if it was soft-deleted), so a
+  // removed supplier can be brought back without a duplicate-name collision.
   const { data: existing } = await supabase.from('suppliers').select('*').eq('name', name).maybeSingle();
-  if (existing) return existing as Supplier;
+  if (existing) {
+    if ((existing as Supplier).is_active === false) {
+      const { data: re } = await supabase.from('suppliers').update({ is_active: true }).eq('supplier_id', (existing as Supplier).supplier_id).select('*').single();
+      return (re ?? existing) as Supplier;
+    }
+    return existing as Supplier;
+  }
 
   // append to the end of the manual order
   const { data: top } = await supabase.from('suppliers').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
@@ -733,15 +742,12 @@ export async function updateSupplier(supplierId: number, patch: UpdateSupplierPa
   return data as Supplier;
 }
 
-// ── delete a supplier (Settings → Suppliers). Blocked by the FK if any PO still references it. ──
+// ── delete a supplier (Settings → Suppliers): a SOFT delete (is_active = false). Historical POs keep
+// their supplier_id and still resolve the supplier's name from this table, so removing one never
+// touches past orders — it just drops out of the picker + the settings list. ──
 export async function deleteSupplier(supplierId: number): Promise<void> {
   const supabase = createSupabaseServerClient();
-  const { count } = await supabase
-    .from('purchase_orders')
-    .select('po_id', { count: 'exact', head: true })
-    .eq('supplier_id', supplierId);
-  if ((count ?? 0) > 0) throw new Error(`deleteSupplier: in use by ${count} order(s) — reassign them first`);
-  const { error } = await supabase.from('suppliers').delete().eq('supplier_id', supplierId);
+  const { error } = await supabase.from('suppliers').update({ is_active: false }).eq('supplier_id', supplierId);
   if (error) throw new Error(`deleteSupplier: ${error.message}`);
 }
 
