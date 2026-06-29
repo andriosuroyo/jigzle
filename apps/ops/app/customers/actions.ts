@@ -10,19 +10,27 @@ import type { Customer, CustomerAddress } from '@jigzle/db/types';
 import type { AddressInput, CustomerDetail, CustomerListRow, CustomerPatch } from './types';
 
 // ── the A–Z directory: every customer, lightweight (id / name / phone), name-sorted ──
+// PostgREST caps a single response at ~1000 rows regardless of .limit(), so we PAGE through with
+// .range() until a short page comes back. Order by (name, customer_id) for a stable paging key — same
+// name across a page boundary must not duplicate or skip a row.
 export async function getCustomers(): Promise<CustomerListRow[]> {
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('customers')
-    .select('customer_id,name,phone')
-    .order('name', { ascending: true })
-    .limit(20000);
-  if (error || !data) return [];
-  return (data as { customer_id: number; name: string | null; phone: string | null }[]).map((c) => ({
-    id: c.customer_id,
-    name: c.name,
-    phone: c.phone,
-  }));
+  const PAGE = 1000;
+  const out: CustomerListRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('customer_id,name,phone')
+      .order('name', { ascending: true })
+      .order('customer_id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    for (const c of data as { customer_id: number; name: string | null; phone: string | null }[]) {
+      out.push({ id: c.customer_id, name: c.name, phone: c.phone });
+    }
+    if (data.length < PAGE) break;
+  }
+  return out;
 }
 
 // ── full detail for one customer: contact + first/last purchase + lifetime spend/tier + addresses ──

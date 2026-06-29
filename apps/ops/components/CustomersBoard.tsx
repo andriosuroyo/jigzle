@@ -57,6 +57,9 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
   const [nameDraft, setNameDraft] = useState('');
   const [phoneDraft, setPhoneDraft] = useState('');
 
+  // live search (name or phone) over the full loaded list
+  const [query, setQuery] = useState('');
+
   // address overlay
   const [addrEdit, setAddrEdit] = useState<{ address: CustomerAddress | null } | null>(null);
   const [addrDraft, setAddrDraft] = useState<AddrDraft>(draftFrom(null));
@@ -77,7 +80,24 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
   }, [customers]);
   const hasHash = (buckets.get('#')?.length ?? 0) > 0;
   const tabs = hasHash ? [...LETTERS, '#'] : LETTERS;
-  const shown = buckets.get(letter) ?? [];
+
+  // when searching, the list spans all letters (match name OR phone digits); else it's the active letter
+  const RESULT_CAP = 300;
+  const results = useMemo(() => {
+    const s = query.trim().toLowerCase();
+    if (!s) return null;
+    const digits = s.replace(/\D/g, '');
+    return customers
+      .filter((c) => {
+        const byName = (c.name ?? '').toLowerCase().includes(s);
+        const byPhone = digits.length >= 2 && (c.phone ?? '').includes(digits);
+        return byName || byPhone;
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  }, [query, customers]);
+
+  const shown = results ?? buckets.get(letter) ?? [];
+  const capped = shown.slice(0, RESULT_CAP);
 
   async function openCustomer(id: number) {
     setSelectedId(id);
@@ -174,25 +194,41 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
       <div className="fulfill-layout cust-layout">
         {/* ── left: A–Z tabs + list ── */}
         <aside className="fq-pane">
-          <div className="fq-filters cust-az" role="tablist" aria-label="A–Z">
-            {tabs.map((l) => {
-              const n = buckets.get(l)?.length ?? 0;
-              return (
-                <button
-                  key={l}
-                  role="tab"
-                  aria-selected={letter === l}
-                  className={`fq-filter ${letter === l ? 'active' : ''}`}
-                  onClick={() => setLetter(l)}
-                >
-                  {l}<span className="fq-filter-count">{n}</span>
-                </button>
-              );
-            })}
+          <div className="cust-search-wrap">
+            <input
+              className="cust-search"
+              type="search"
+              placeholder="Search name or phone…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
           </div>
-          {shown.length === 0 && <div className="hint fq-empty">No customers under “{letter}”.</div>}
+
+          {/* A–Z tabs hide while searching (results span every letter) */}
+          {!results && (
+            <div className="fq-filters cust-az" role="tablist" aria-label="A–Z">
+              {tabs.map((l) => {
+                const n = buckets.get(l)?.length ?? 0;
+                return (
+                  <button
+                    key={l}
+                    role="tab"
+                    aria-selected={letter === l}
+                    className={`fq-filter ${letter === l ? 'active' : ''}`}
+                    onClick={() => setLetter(l)}
+                  >
+                    {l}<span className="fq-filter-count">{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {shown.length === 0 && (
+            <div className="hint fq-empty">{results ? `No matches for “${query.trim()}”.` : `No customers under “${letter}”.`}</div>
+          )}
           <ul className="fq-list">
-            {shown.map((c) => (
+            {capped.map((c) => (
               <li key={c.id}>
                 <button className={`fq-row ${selectedId === c.id ? 'active' : ''}`} onClick={() => openCustomer(c.id)}>
                   <div className="fq-row-top">
@@ -203,6 +239,9 @@ export default function CustomersBoard({ initialCustomers, userEmail }: { initia
               </li>
             ))}
           </ul>
+          {shown.length > RESULT_CAP && (
+            <div className="hint" style={{ padding: '6px 8px' }}>Showing first {RESULT_CAP} of {shown.length} — refine your search.</div>
+          )}
         </aside>
 
         {/* ── right: detail ── */}
