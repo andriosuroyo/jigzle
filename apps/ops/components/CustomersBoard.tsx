@@ -13,7 +13,7 @@ import CountrySelect from '@/components/CountrySelect';
 import PostcodeAutofill from '@/components/PostcodeAutofill';
 import IconSelect, { type IconOption } from '@/components/IconSelect';
 import type { ChannelOption } from '@/app/settings/types';
-import { fmtRp, type Tier } from '@jigzle/lib';
+import { fmtRpCompact, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
   addCustomerAddress,
@@ -340,7 +340,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               <div className="cust-stats">
                 <div className="cust-stat">
                   <div className="cust-stat-label">Total spend</div>
-                  <div className="cust-stat-value">{fmtRp(detail.lifetime_spend)}</div>
+                  <div className="cust-stat-value">{fmtRpCompact(detail.lifetime_spend)}</div>
                   <div className="cust-stat-sub">{detail.order_count} order{detail.order_count === 1 ? '' : 's'}</div>
                 </div>
                 <div className="cust-stat">
@@ -348,7 +348,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   <div className="cust-stat-value">
                     {detail.tier ? <span className={`tier tier-${detail.tier.toLowerCase()}`}>{detail.tier}</span> : <span className="tier tier-none">No tier</span>}
                   </div>
-                  <div className="cust-stat-sub">{detail.to_next_tier ? `${fmtRp(detail.to_next_tier.remaining)} → ${detail.to_next_tier.tier}` : 'Top tier'}</div>
+                  <div className="cust-stat-sub">{detail.to_next_tier ? `${fmtRpCompact(detail.to_next_tier.remaining)} → ${detail.to_next_tier.tier}` : 'Top tier'}</div>
                 </div>
                 <div className="cust-stat">
                   <div className="cust-stat-label">Last purchase</div>
