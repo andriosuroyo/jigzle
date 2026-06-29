@@ -12,6 +12,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import CountrySelect from '@/components/CountrySelect';
 import PostcodeAutofill from '@/components/PostcodeAutofill';
 import IconSelect, { type IconOption } from '@/components/IconSelect';
+import MergeDuplicates from '@/components/MergeDuplicates';
 import type { ChannelOption } from '@/app/settings/types';
 import { fmtRpCompact, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
@@ -79,6 +80,16 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
 
   // live search (name or phone) over the full loaded list
   const [query, setQuery] = useState('');
+
+  // duplicate-cleanup modal
+  const [showDup, setShowDup] = useState(false);
+  // a merge removed stray records — drop them from the directory + clear any open detail that was deleted
+  function onMerged(removedIds: number[]) {
+    if (removedIds.length === 0) return;
+    const gone = new Set(removedIds);
+    setCustomers((prev) => prev.filter((c) => !gone.has(c.id)));
+    if (selectedId != null && gone.has(selectedId)) { setSelectedId(null); setDetail(null); }
+  }
 
   // address overlay
   const [addrEdit, setAddrEdit] = useState<{ address: CustomerAddress | null } | null>(null);
@@ -274,6 +285,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
+          <button className="btn-link cust-dup-link" onClick={() => setShowDup(true)}>Find duplicates</button>
 
           {/* A–Z tabs hide while searching (results span every letter) */}
           {!results && (
@@ -543,6 +555,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
           </div>
         </div>
       )}
+
+      {showDup && <MergeDuplicates onClose={() => setShowDup(false)} onMerged={onMerged} />}
     </div>
   );
 }
