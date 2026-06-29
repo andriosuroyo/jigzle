@@ -197,7 +197,7 @@ export async function deleteCustomerAddress(addressId: number): Promise<void> {
   if (error) throw new Error(`deleteCustomerAddress: ${error.message}`);
 }
 
-// ── duplicate cleanup: find likely-duplicate customers and merge strays into the real record ──
+// ── duplicate cleanup (PR102): find likely-duplicate customers and merge strays into the real record ──
 //
 // The same person sometimes lands in several rows — a real account with the orders, plus one or more
 // stray fragments that only hold a phone or an address (Henny Y had four). We surface name-collision

@@ -43,7 +43,7 @@ export interface CustomerPatch {
   channels?: ChannelEntry[]; // 0045 — replaces the whole channels array when present
 }
 
-// ── duplicate-merge (customer cleanup) ──
+// ── duplicate-merge (customer cleanup, PR102) ──
 // One customer inside a possible-duplicate group, with the signals that tell a real record
 // (orders / last purchase) apart from a stray contact fragment (no orders).
 export interface DuplicateMember {

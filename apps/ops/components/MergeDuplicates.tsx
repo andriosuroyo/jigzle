@@ -1,6 +1,6 @@
 'use client';
 
-// Duplicate-customer cleanup (customer-cleanup branch). A review modal that surfaces same-name groups
+// Duplicate-customer cleanup (PR102). A review modal that surfaces same-name groups
 // containing a likely stray (a record with no orders) — the "Henny Y split across four rows" pattern —
 // and lets the operator pick the keeper and pull the strays' phones + addresses into it. Merging
 // re-points every order/shipment at the keeper and DELETES the selected stray rows, so a record that
