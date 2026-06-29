@@ -355,10 +355,12 @@ export default function OrderEntry({
                       {custResults.map((c) => (
                         <li key={c.id}>
                           <button className="result-item" onClick={() => selectCustomer(c)}>
-                            <span className="ri-name">{c.name || '(no name)'}</span>
+                            <span className="ri-name">
+                              {c.name || '(no name)'}
+                              {c.tier && <span className={`tier tier-${c.tier.toLowerCase()}`} style={{ marginLeft: 6 }}>{c.tier}</span>}
+                            </span>
                             <span className="ri-meta">
                               {c.phone || '—'}
-                              {c.tier ? ` · ${c.tier}` : ''}
                               {c.lifetime_spend > 0 ? ` · ${fmtRp(c.lifetime_spend)}` : ''}
                             </span>
                           </button>

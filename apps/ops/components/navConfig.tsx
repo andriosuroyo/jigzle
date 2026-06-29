@@ -101,6 +101,16 @@ const iconSettings = svg(
   </>
 );
 
+// Customer — people (the customer directory)
+const iconCustomer = svg(
+  <>
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </>
+);
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Sales & Purchasing',
@@ -124,6 +134,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'System',
     items: [
+      { key: 'customers', href: '/customers', label: 'Customer', icon: iconCustomer, sub: 'Browse customers A–Z; spend, tier, contact details & addresses.' },
       { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog, sub: 'Edit SKUs & barcodes; needs-review & shared-barcode cleanup.' },
       { key: 'stock-check', href: '/stock-check', label: 'Stock Check', icon: iconStockCheck, sub: 'Count the shelf (presence / scan) & true stock up with adjustments.' },
       { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings, sub: 'Configurable lists — payment, courier, box, inbound labels.' },
