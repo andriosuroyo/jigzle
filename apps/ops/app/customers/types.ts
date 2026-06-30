@@ -59,6 +59,7 @@ export interface EmptyStray {
 export interface DataHealth {
   totalCustomers: number;
   noName: number;                 // customers with a blank name
+  missingCode: number;            // named customers (with a number) whose name lacks the "(last4)" code
   sharedPhoneGroupCount: number;  // groups of customers sharing a number
   overThreeCount: number;         // of those, how many would overflow the 3 phone slots on merge
   groups: DataHealthGroup[];      // capped list, most-numbers first

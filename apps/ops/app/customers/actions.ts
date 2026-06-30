@@ -5,7 +5,7 @@
 // and writes. Reads draw from customers / orders / payments / customer_addresses (no new tables).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { normalizePhone, tierFor, toNextTier, type Tier } from '@jigzle/lib';
+import { normalizePhone, phoneCode, tierFor, toNextTier, type Tier } from '@jigzle/lib';
 import type { Customer, CustomerAddress, CustomerChannel } from '@jigzle/db/types';
 import type {
   AddressDupGroup,
@@ -236,6 +236,13 @@ function sanitizeSearch(q: string): string {
   return q.replace(/[,()*\\]/g, ' ').trim();
 }
 
+// a name already carries a "(1234)" style code at the end
+const HAS_CODE = /\(\d{2,5}\)\s*$/;
+// a named customer with a primary number but no trailing code → eligible for the (last4) backfill
+function needsNameCode(name: string | null, phone: string | null): boolean {
+  return !!phoneCode(phone) && !!(name ?? '').trim() && !HAS_CODE.test(name ?? '');
+}
+
 // Annotate a set of customer rows with the signals the merge UI shows — order count, last purchase,
 // lifetime spend, address count. Shared by the database scan and the by-ID search.
 async function annotateMembers(supabase: ServerDB, rows: CustPhoneRow[]): Promise<DuplicateMember[]> {
@@ -355,6 +362,8 @@ export async function getDataHealth(): Promise<DataHealth> {
   }
 
   const noName = rows.filter((r) => !(r.name ?? '').trim()).length;
+  // names that are missing the legacy "(last4)" code (have a primary number + a name, no trailing code)
+  const missingCode = rows.filter((r) => needsNameCode(r.name, r.phone)).length;
 
   // union-find over customer ids, joined whenever two rows share a normalized number
   const parent = new Map<number, number>();
@@ -470,6 +479,7 @@ export async function getDataHealth(): Promise<DataHealth> {
   return {
     totalCustomers: rows.length,
     noName,
+    missingCode,
     sharedPhoneGroupCount: groups.length,
     overThreeCount: groups.filter((g) => g.numberCount > 3).length,
     groups: groups.slice(0, 200),
@@ -478,6 +488,26 @@ export async function getDataHealth(): Promise<DataHealth> {
     emptyStrayCount: emptyStrays.length,
     emptyStrays: emptyStrays.slice(0, 200),
   };
+}
+
+// Backfill the legacy "(last4)" code into customers.name (e.g. "Henny Y" → "Henny Y (1299)"), one page
+// of `customer_id` at a time so the UI can loop it to completion. Idempotent: names that already carry a
+// code, or have no primary number / no name, are skipped. The new name flows to all sales history live.
+export async function addNameCodes(afterId = 0): Promise<{ updated: number; lastId: number; done: boolean }> {
+  const supabase = createSupabaseServerClient();
+  const PAGE = 500;
+  const { data } = await supabase.from('customers').select('customer_id,name,phone')
+    .gt('customer_id', afterId).order('customer_id', { ascending: true }).limit(PAGE);
+  const rows = (data ?? []) as { customer_id: number; name: string | null; phone: string | null }[];
+  const todo = rows.filter((r) => needsNameCode(r.name, r.phone));
+  let updated = 0;
+  for (let i = 0; i < todo.length; i += 25) {
+    await Promise.all(todo.slice(i, i + 25).map(async (r) => {
+      const { error } = await supabase.from('customers').update({ name: `${(r.name ?? '').trim()} (${phoneCode(r.phone)})` }).eq('customer_id', r.customer_id);
+      if (!error) updated += 1;
+    }));
+  }
+  return { updated, lastId: rows.length ? rows[rows.length - 1].customer_id : afterId, done: rows.length < PAGE };
 }
 
 // Load specific customers as merge candidates (Data health deep-links a group's exact member ids into

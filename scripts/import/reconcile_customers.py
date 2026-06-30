@@ -249,7 +249,9 @@ def apply_plan(client: Client, plan: Plan, customers_by_id: dict[int, dict]):
     #    holds those numbers anymore, so the unique phone index can't collide)
     if plan.absorb:
         client._req("DELETE", f"customers?customer_id=in.({','.join(map(str, plan.absorb))})", prefer="return=minimal")
-    body = {"name": plan.cc.name, "channels": chans}
+    # store the FULL label as the name (the legacy CUSTOMER ID, e.g. "Henny Y (1299)") — the app shows
+    # customers.name verbatim now, with the "(last4)" code baked in rather than appended at display time.
+    body = {"name": plan.cc.label, "channels": chans}
     cols = ["phone", "phone2", "phone3"]
     for i, col in enumerate(cols):
         norm = plan.final_phones[i][0] if i < len(plan.final_phones) else None

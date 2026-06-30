@@ -927,6 +927,8 @@ img.sku-img { background: #e8e8e8; }
 .dh-sep { margin-right: 6px; color: var(--muted); }
 .dh-group-sub { margin-top: 2px; }
 .dh-group .btn-secondary { flex-shrink: 0; }
+.dh-maint { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; background: var(--yellow-tint); border-radius: 10px; font-size: 13px; color: #7a5a14; }
+.dh-maint .btn-secondary { flex-shrink: 0; }
 .dh-confirm { display: flex; align-items: center; gap: 12px; }
 .dh-stray-list { margin-top: 8px; line-height: 1.6; word-break: break-word; }
 .dh-foot { margin-top: 16px; line-height: 1.5; }
