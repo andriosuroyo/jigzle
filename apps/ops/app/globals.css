@@ -927,6 +927,8 @@ img.sku-img { background: #e8e8e8; }
 .dh-sep { margin-right: 6px; color: var(--muted); }
 .dh-group-sub { margin-top: 2px; }
 .dh-group .btn-secondary { flex-shrink: 0; }
+.dh-confirm { display: flex; align-items: center; gap: 12px; }
+.dh-stray-list { margin-top: 8px; line-height: 1.6; word-break: break-word; }
 .dh-foot { margin-top: 16px; line-height: 1.5; }
 /* ── duplicate-merge modal ── */
 .dup-group { padding: 12px 0; border-top: 1px solid var(--line); }
