@@ -9,7 +9,7 @@ import { useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import MergeDuplicates from '@/components/MergeDuplicates';
-import { deleteEmptyStrays, getDataHealth } from '@/app/customers/actions';
+import { addNameCodes, deleteEmptyStrays, getDataHealth } from '@/app/customers/actions';
 import { customerLabel } from '@jigzle/lib';
 import type { DataHealth } from '@/app/customers/types';
 
@@ -20,6 +20,33 @@ export default function DataHealthBoard({ initial, userEmail }: { initial: DataH
   const [busy, setBusy] = useState(false);
   const [confirmStrays, setConfirmStrays] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const [coding, setCoding] = useState(false);
+  const [codeProgress, setCodeProgress] = useState(0);
+
+  // backfill the "(last4)" code into every name that lacks it — loop the paged action to completion
+  async function runAddCodes() {
+    setCoding(true);
+    setCodeProgress(0);
+    setNotice(null);
+    try {
+      let afterId = 0;
+      let total = 0;
+      let done = false;
+      while (!done) {
+        const res = await addNameCodes(afterId);
+        afterId = res.lastId;
+        total += res.updated;
+        done = res.done;
+        setCodeProgress(total);
+      }
+      setNotice({ tone: 'ok', text: `Added the (code) to ${total} customer name${total === 1 ? '' : 's'}.` });
+      await refresh();
+    } catch (e) {
+      setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Backfill failed.' });
+    } finally {
+      setCoding(false);
+    }
+  }
 
   async function refresh() {
     setRefreshing(true);
@@ -75,6 +102,15 @@ export default function DataHealthBoard({ initial, userEmail }: { initial: DataH
             <div className="cust-stat-sub">no data attached</div>
           </div>
         </div>
+
+        {health.missingCode > 0 && (
+          <div className="dh-maint">
+            <span><b>{health.missingCode.toLocaleString('en-US')}</b> customer name{health.missingCode === 1 ? '' : 's'} are missing the <code>(last4)</code> code (e.g. “Henny Y” → “Henny Y (1299)”).</span>
+            <button className="btn-secondary" onClick={runAddCodes} disabled={coding || refreshing || busy}>
+              {coding ? `Adding… ${codeProgress.toLocaleString('en-US')}` : 'Add (code) to names'}
+            </button>
+          </div>
+        )}
 
         <div className="po-tobuy-head" style={{ marginTop: 8 }}>
           <div className="hint">Customers that share a <b>number</b> or an <b>address</b> are almost always one person split by the import — review to fold them into one keeper.</div>

@@ -33,12 +33,10 @@ export function phoneCode(phone: string | null | undefined): string | null {
   return d.length >= 4 ? d.slice(-4) : null;
 }
 
-// The legacy customer label: the editable alias (stored as customers.name) plus the phone's last four
-// digits in parentheses — "Cynthia (0860)". Distinct same-name people stay told apart by their number.
-// Falls back to the bare alias when there's no usable phone.
-export function customerLabel(name: string | null | undefined, phone: string | null | undefined): string {
-  const base = (name ?? '').trim();
-  const code = phoneCode(phone);
-  if (!base) return code ? `(${code})` : '(no name)';
-  return code ? `${base} (${code})` : base;
+// The customer's display name. The "(last4)" code now lives INSIDE customers.name (the legacy
+// CUSTOMER ID, e.g. "Cynthia (0860)") — backfilled by addNameCodes / set on merge — so the label is
+// just the stored name verbatim, never appended to (quickview === the Personal-details Name field).
+// `phone` is kept in the signature for the existing call sites but no longer used.
+export function customerLabel(name: string | null | undefined, phone?: string | null | undefined): string {
+  return (name ?? '').trim() || '(no name)';
 }
