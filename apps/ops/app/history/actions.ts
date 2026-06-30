@@ -6,6 +6,7 @@
 // the one write (Mark paid) are reused from the Pending module (getOrderSummary / markOrderPaid).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
+import { customerLabel } from '@jigzle/lib';
 import type { HistoryRow, HistoryState } from './types';
 
 // Keep History light: load only the most recent orders by default. Search still queries the full
@@ -52,7 +53,7 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
 
   let q = supabase
     .from('orders')
-    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customer_id,customers(name),order_lines(line_id,fulfilled_at,shipped_at,is_cancelled)')
+    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customer_id,customers(name,phone),order_lines(line_id,fulfilled_at,shipped_at,is_cancelled)')
     .order('order_date', { ascending: false, nullsFirst: false })
     .limit(LIMIT);
 
@@ -77,12 +78,12 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
   return data.map((o) => {
     const lines = (o.order_lines ?? []) as LineLite[];
     const active = lines.filter((l) => !l.is_cancelled);
-    const cust = one<{ name: string | null }>(o.customers as never);
+    const cust = one<{ name: string | null; phone: string | null }>(o.customers as never);
     const total = (o.sales_total_idr as number | null) ?? null;
     const paid = (o.paid_idr as number | null) ?? 0;
     return {
       sales_id: o.sales_id as string,
-      customer_name: cust?.name ?? null,
+      customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
       order_date: (o.order_date as string | null) ?? null,
       status: (o.status as string | null) ?? null,
       payment_status: (o.payment_status as string | null) ?? null,

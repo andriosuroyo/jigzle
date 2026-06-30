@@ -5,6 +5,7 @@
 // (is_allowed_user()) gates every read and write. The service-role key is never used here.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
+import { customerLabel } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import type {
   FulfillCutLine,
@@ -112,7 +113,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
   return {
     sales_id: order.sales_id as string,
     order_date: (order.order_date as string | null) ?? null,
-    customer_name: cust?.name ?? null,
+    customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
     customer_phone: cust?.phone ?? null,
     default_address_id: addressId,
     needs_address: addressId == null,
@@ -133,7 +134,7 @@ export async function getToSendQueue(): Promise<ToSendQueueRow[]> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,customer_id,customers(name),order_lines!inner(line_id,item_code)')
+    .select('sales_id,order_date,customer_id,customers(name,phone),order_lines!inner(line_id,item_code)')
     .not('order_lines.fulfilled_at', 'is', null)
     .is('order_lines.courier', null)
     .is('order_lines.shipped_at', null)
@@ -144,11 +145,11 @@ export async function getToSendQueue(): Promise<ToSendQueueRow[]> {
 
   return data.map((o) => {
     const lines = (o.order_lines ?? []) as { line_id: string; item_code: string | null }[];
-    const cust = one<{ name: string | null }>(o.customers as never);
+    const cust = one<{ name: string | null; phone: string | null }>(o.customers as never);
     return {
       sales_id: o.sales_id as string,
       order_date: (o.order_date as string | null) ?? null,
-      customer_name: cust?.name ?? null,
+      customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
       item_count: lines.length,
       sku_codes: lines.map((l) => l.item_code).filter((c): c is string => !!c),
     };
