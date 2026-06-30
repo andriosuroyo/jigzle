@@ -24,3 +24,21 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   if (n.length < 9 || n.length > 15) return null;
   return n;
 }
+
+// The last four digits of a phone — the disambiguator in the legacy customer identifier
+// "<alias> (<last4>)" (e.g. 082113880860 → "0860"). Null when there aren't enough digits.
+export function phoneCode(phone: string | null | undefined): string | null {
+  if (phone == null) return null;
+  const d = String(phone).replace(/\D/g, '');
+  return d.length >= 4 ? d.slice(-4) : null;
+}
+
+// The legacy customer label: the editable alias (stored as customers.name) plus the phone's last four
+// digits in parentheses — "Cynthia (0860)". Distinct same-name people stay told apart by their number.
+// Falls back to the bare alias when there's no usable phone.
+export function customerLabel(name: string | null | undefined, phone: string | null | undefined): string {
+  const base = (name ?? '').trim();
+  const code = phoneCode(phone);
+  if (!base) return code ? `(${code})` : '(no name)';
+  return code ? `${base} (${code})` : base;
+}

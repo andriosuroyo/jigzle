@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fmtRp, fmtRpCompact } from '@jigzle/lib';
+import { customerLabel, fmtRp, fmtRpCompact } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
@@ -389,7 +389,7 @@ export default function OrderEntry({
                         <li key={c.id}>
                           <button className="result-item" onClick={() => selectCustomer(c)}>
                             <span className="ri-name">
-                              {c.name || '(no name)'}
+                              {customerLabel(c.name, c.phone)}
                               {c.tier && <span className={`tier tier-${c.tier.toLowerCase()}`} style={{ marginLeft: 6 }}>{c.tier}</span>}
                             </span>
                             <span className="ri-meta">
@@ -428,7 +428,7 @@ export default function OrderEntry({
               {customer && (
                 <div className="selected-customer">
                   <div className="sc-main">
-                    <b>{customer.name || '(no name)'}</b>
+                    <b>{customerLabel(customer.name, customer.phone)}</b>
                     <span>{customer.phone || '—'}</span>
                   </div>
                   <div className="loyalty-chip">

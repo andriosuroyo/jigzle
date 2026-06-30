@@ -7,7 +7,7 @@
 // still carries orders is flagged and needs a second confirm before it goes.
 
 import { useEffect, useMemo, useState } from 'react';
-import { fmtRpCompact } from '@jigzle/lib';
+import { customerLabel, fmtRpCompact } from '@jigzle/lib';
 import { getDuplicateGroups, mergeCustomers } from '@/app/customers/actions';
 import type { DuplicateGroup, MergeResult } from '@/app/customers/types';
 
@@ -139,7 +139,7 @@ export default function MergeDuplicates({ onClose, onMerged }: { onClose: () => 
                         </label>
                         <div className="dup-info">
                           <div className="dup-name">
-                            {m.name || '(no name)'} <span className="hint">#{m.id}</span>
+                            {customerLabel(m.name, m.phones[0])} <span className="hint">#{m.id}</span>
                             {m.order_count === 0
                               ? <span className="dup-tag dup-tag-stray">no orders</span>
                               : <span className="dup-tag dup-tag-real">{m.order_count} order{m.order_count === 1 ? '' : 's'}</span>}
