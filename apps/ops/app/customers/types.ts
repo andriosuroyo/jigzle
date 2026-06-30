@@ -43,6 +43,38 @@ export interface CustomerPatch {
   channels?: ChannelEntry[]; // 0045 — replaces the whole channels array when present
 }
 
+// ── duplicate-merge (customer cleanup, PR102) ──
+// One customer inside a possible-duplicate group, with the signals that tell a real record
+// (orders / last purchase) apart from a stray contact fragment (no orders).
+export interface DuplicateMember {
+  id: number;
+  name: string | null;
+  phones: string[];          // up to three contact numbers (raw, display form), already de-duplicated
+  order_count: number;
+  last_purchase: string | null;
+  lifetime_spend: number;
+  address_count: number;
+}
+
+// A set of customers that share a normalized name and look like the same person split across rows
+// (at least one member carries no orders — a likely stray fragment).
+export interface DuplicateGroup {
+  key: string;               // normalized name (grouping key)
+  name: string;              // display name (first non-blank member name)
+  members: DuplicateMember[];
+}
+
+// Outcome of merging strays into a primary record — a short receipt for the UI notice.
+export interface MergeResult {
+  primaryId: number;
+  removedIds: number[];      // the stray records that were deleted
+  phonesAdded: number;       // distinct numbers ported into the primary's free slots
+  droppedPhones: number;     // numbers that didn't fit (primary already had three)
+  addressesMoved: number;
+  addressesSkipped: number;  // dropped as duplicates of an address the primary already had
+  recordsReassigned: number; // orders / shipments / etc. re-pointed at the primary
+}
+
 // editable address fields (add / edit) — structured, big-to-small. The free-text `street` holds only
 // street / alley (gang); country/province/city/subdistrict/ward/postcode are their own fields. A
 // readable raw_address is composed from them server-side for the legacy display consumers.

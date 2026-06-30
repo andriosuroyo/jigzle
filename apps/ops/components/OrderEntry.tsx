@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fmtRp } from '@jigzle/lib';
+import { fmtRp, fmtRpCompact } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
@@ -394,7 +394,7 @@ export default function OrderEntry({
                             </span>
                             <span className="ri-meta">
                               {c.phone || '—'}
-                              {c.lifetime_spend > 0 ? ` · ${fmtRp(c.lifetime_spend)}` : ''}
+                              {c.lifetime_spend > 0 ? ` · ${fmtRpCompact(c.lifetime_spend)}` : ''}
                             </span>
                           </button>
                         </li>
@@ -433,9 +433,9 @@ export default function OrderEntry({
                   </div>
                   <div className="loyalty-chip">
                     {customer.tier ? <span className={`tier tier-${customer.tier.toLowerCase()}`}>{customer.tier}</span> : <span className="tier tier-none">No tier</span>}
-                    <span className="ls">{fmtRp(customer.lifetime_spend)}</span>
+                    <span className="ls">{fmtRpCompact(customer.lifetime_spend)}</span>
                     {loyalty?.to_next_tier && (
-                      <span className="next">{fmtRp(loyalty.to_next_tier.remaining)} → {loyalty.to_next_tier.tier}</span>
+                      <span className="next">{fmtRpCompact(loyalty.to_next_tier.remaining)} → {loyalty.to_next_tier.tier}</span>
                     )}
                   </div>
                   <button className="btn-link" onClick={() => { setCustomer(null); setLoyalty(null); setAddresses([]); setAddressId(null); setConfirmLater(false); }}>Change</button>

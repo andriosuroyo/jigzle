@@ -12,8 +12,9 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import CountrySelect from '@/components/CountrySelect';
 import PostcodeAutofill from '@/components/PostcodeAutofill';
 import IconSelect, { type IconOption } from '@/components/IconSelect';
+import MergeDuplicates from '@/components/MergeDuplicates';
 import type { ChannelOption } from '@/app/settings/types';
-import { fmtRp, type Tier } from '@jigzle/lib';
+import { fmtRpCompact, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
   addCustomerAddress,
@@ -79,6 +80,16 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
 
   // live search (name or phone) over the full loaded list
   const [query, setQuery] = useState('');
+
+  // duplicate-cleanup modal
+  const [showDup, setShowDup] = useState(false);
+  // a merge removed stray records — drop them from the directory + clear any open detail that was deleted
+  function onMerged(removedIds: number[]) {
+    if (removedIds.length === 0) return;
+    const gone = new Set(removedIds);
+    setCustomers((prev) => prev.filter((c) => !gone.has(c.id)));
+    if (selectedId != null && gone.has(selectedId)) { setSelectedId(null); setDetail(null); }
+  }
 
   // address overlay
   const [addrEdit, setAddrEdit] = useState<{ address: CustomerAddress | null } | null>(null);
@@ -274,6 +285,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
+          <button className="btn-link cust-dup-link" onClick={() => setShowDup(true)}>Find duplicates</button>
 
           {/* A–Z tabs hide while searching (results span every letter) */}
           {!results && (
@@ -340,7 +352,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               <div className="cust-stats">
                 <div className="cust-stat">
                   <div className="cust-stat-label">Total spend</div>
-                  <div className="cust-stat-value">{fmtRp(detail.lifetime_spend)}</div>
+                  <div className="cust-stat-value">{fmtRpCompact(detail.lifetime_spend)}</div>
                   <div className="cust-stat-sub">{detail.order_count} order{detail.order_count === 1 ? '' : 's'}</div>
                 </div>
                 <div className="cust-stat">
@@ -348,7 +360,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   <div className="cust-stat-value">
                     {detail.tier ? <span className={`tier tier-${detail.tier.toLowerCase()}`}>{detail.tier}</span> : <span className="tier tier-none">No tier</span>}
                   </div>
-                  <div className="cust-stat-sub">{detail.to_next_tier ? `${fmtRp(detail.to_next_tier.remaining)} → ${detail.to_next_tier.tier}` : 'Top tier'}</div>
+                  <div className="cust-stat-sub">{detail.to_next_tier ? `${fmtRpCompact(detail.to_next_tier.remaining)} → ${detail.to_next_tier.tier}` : 'Top tier'}</div>
                 </div>
                 <div className="cust-stat">
                   <div className="cust-stat-label">Last purchase</div>
@@ -543,6 +555,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
           </div>
         </div>
       )}
+
+      {showDup && <MergeDuplicates onClose={() => setShowDup(false)} onMerged={onMerged} />}
     </div>
   );
 }
