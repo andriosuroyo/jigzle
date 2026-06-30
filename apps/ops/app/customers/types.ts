@@ -70,6 +70,7 @@ export interface MergeResult {
   removedIds: number[];      // the stray records that were deleted
   phonesAdded: number;       // distinct numbers ported into the primary's free slots
   droppedPhones: number;     // numbers that didn't fit (primary already had three)
+  channelsAdded: number;     // distinct channels (platform+handle) ported into the primary
   addressesMoved: number;
   addressesSkipped: number;  // dropped as duplicates of an address the primary already had
   recordsReassigned: number; // orders / shipments / etc. re-pointed at the primary

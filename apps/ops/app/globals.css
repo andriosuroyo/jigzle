@@ -911,8 +911,12 @@ img.sku-img { background: #e8e8e8; }
 .cust-addr-edit { flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown-dark); font-size: 14px; line-height: 1; cursor: pointer; }
 .cust-addr-edit:active { background: var(--paper); }
 .cust-addr-edit:disabled { opacity: 0.5; cursor: not-allowed; }
-/* "Find duplicates" link under the search box */
-.cust-dup-link { display: block; margin: 0 8px 4px; }
+/* "Find duplicates" link at the bottom of the customer list pane */
+.cust-dup-link { display: block; margin: 10px 8px 4px; text-align: center; }
+/* detail danger zone — "Delete customer ID" */
+.cust-danger { border-top: 1px solid var(--line); padding-top: 12px; }
+.cust-danger-confirm { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cust-danger-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 /* ── duplicate-merge modal ── */
 .dup-group { padding: 12px 0; border-top: 1px solid var(--line); }
 .dup-group:first-child { border-top: none; padding-top: 2px; }
@@ -928,6 +932,13 @@ img.sku-img { background: #e8e8e8; }
 .dup-tag-stray { background: var(--yellow-tint); color: #9C6F1C; }
 .dup-tag-real { background: var(--green-tint); color: #3D6B26; }
 .dup-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+/* mode toggle (Scan database / By customer ID) + the by-ID search row */
+.dup-modes { display: flex; gap: 6px; margin-bottom: 12px; }
+.dup-mode { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown-dark); font-size: 13px; font-weight: 600; cursor: pointer; }
+.dup-mode.active { background: var(--brown); border-color: var(--brown); color: white; }
+.dup-search { display: flex; gap: 6px; margin-bottom: 6px; }
+.dup-search .cust-search { flex: 1; }
+.dup-search .btn-secondary { flex-shrink: 0; white-space: nowrap; }
 /* channels — a brand-icon platform picker (IconSelect) on the left + a handle field on the right */
 .cust-channel { display: flex; gap: 6px; align-items: stretch; }
 /* two-class selector to beat `.icon-select { width: 100% }` (defined later) — keep the picker narrow */

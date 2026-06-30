@@ -18,6 +18,7 @@ import { customerLabel, fmtRpCompact, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
   addCustomerAddress,
+  deleteCustomer,
   deleteCustomerAddress,
   getCustomerDetail,
   updateCustomer,
@@ -83,12 +84,35 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
 
   // duplicate-cleanup modal
   const [showDup, setShowDup] = useState(false);
+  // "Delete customer ID" two-step confirm (detail danger zone)
+  const [confirmDel, setConfirmDel] = useState(false);
   // a merge removed stray records — drop them from the directory + clear any open detail that was deleted
   function onMerged(removedIds: number[]) {
     if (removedIds.length === 0) return;
     const gone = new Set(removedIds);
     setCustomers((prev) => prev.filter((c) => !gone.has(c.id)));
     if (selectedId != null && gone.has(selectedId)) { setSelectedId(null); setDetail(null); }
+  }
+
+  // delete the open customer outright (server refuses if it still has sales/operational rows)
+  async function handleDeleteCustomer() {
+    if (!detail) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await deleteCustomer(detail.id);
+      const goneId = detail.id;
+      setCustomers((prev) => prev.filter((c) => c.id !== goneId));
+      setConfirmDel(false);
+      setSelectedId(null);
+      setDetail(null);
+      note('err', 'Customer deleted.');
+    } catch (e) {
+      setConfirmDel(false);
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
   }
 
   // address overlay
@@ -137,6 +161,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     setDetail(null);
     setDetailLoading(true);
     setNotice(null);
+    setConfirmDel(false);
     try {
       const d = await getCustomerDetail(id);
       setDetail(d);
@@ -285,7 +310,6 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <button className="btn-link cust-dup-link" onClick={() => setShowDup(true)}>Find duplicates</button>
 
           {/* A–Z tabs hide while searching (results span every letter) */}
           {!results && (
@@ -329,6 +353,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
           {shown.length > RESULT_CAP && (
             <div className="hint" style={{ padding: '6px 8px' }}>Showing first {RESULT_CAP} of {shown.length} — refine your search.</div>
           )}
+          <button className="btn-link cust-dup-link" onClick={() => setShowDup(true)}>Find duplicates</button>
         </aside>
 
         {/* ── right: detail ── */}
@@ -466,6 +491,21 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     </li>
                   ))}
                 </ul>
+              </section>
+
+              {/* danger zone — delete this customer record outright (blocked server-side if it has sales) */}
+              <section className="fd-section cust-danger">
+                {confirmDel ? (
+                  <div className="cust-danger-confirm">
+                    <span className="hint">Permanently delete {customerLabel(detail.name, detail.phone)}? This can’t be undone.</span>
+                    <div className="cust-danger-actions">
+                      <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
+                      <button className="btn-link danger" onClick={handleDeleteCustomer} disabled={busy}>{busy ? 'Deleting…' : 'Delete'}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="btn-link danger" onClick={() => { setNotice(null); setConfirmDel(true); }} disabled={busy}>Delete customer ID</button>
+                )}
               </section>
             </>
           )}

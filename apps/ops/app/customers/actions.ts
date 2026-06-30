@@ -223,6 +223,54 @@ async function chunked<T>(ids: number[], size: number, run: (slice: number[]) =>
   return out;
 }
 
+type ServerDB = ReturnType<typeof createSupabaseServerClient>;
+type CustPhoneRow = { customer_id: number; name: string | null; phone_raw: string | null; phone: string | null; phone2_raw: string | null; phone2: string | null; phone3_raw: string | null; phone3: string | null };
+const PHONE_COLS = 'customer_id,name,phone_raw,phone,phone2_raw,phone2,phone3_raw,phone3';
+
+// strip the characters that would break a PostgREST .or() filter (mirrors purchasing/sanitize)
+function sanitizeSearch(q: string): string {
+  return q.replace(/[,()*\\]/g, ' ').trim();
+}
+
+// Annotate a set of customer rows with the signals the merge UI shows — order count, last purchase,
+// lifetime spend, address count. Shared by the database scan and the by-ID search.
+async function annotateMembers(supabase: ServerDB, rows: CustPhoneRow[]): Promise<DuplicateMember[]> {
+  const ids = rows.map((r) => r.customer_id);
+  if (!ids.length) return [];
+  const ords = await chunked(ids, 200, async (slice) => {
+    const { data } = await supabase.from('orders').select('customer_id,order_date,paid_idr,status').in('customer_id', slice);
+    return (data ?? []) as { customer_id: number; order_date: string | null; paid_idr: number | null; status: string | null }[];
+  });
+  const orderStat = new Map<number, { count: number; last: string | null; spend: number }>();
+  for (const o of ords) {
+    if (o.status === 'Cancelled') continue;
+    const s = orderStat.get(o.customer_id) ?? { count: 0, last: null, spend: 0 };
+    s.count += 1;
+    s.spend += o.paid_idr ?? 0;
+    if (o.order_date && (!s.last || o.order_date > s.last)) s.last = o.order_date;
+    orderStat.set(o.customer_id, s);
+  }
+  const addrs = await chunked(ids, 200, async (slice) => {
+    const { data } = await supabase.from('customer_addresses').select('customer_id').in('customer_id', slice);
+    return (data ?? []) as { customer_id: number }[];
+  });
+  const addrCount = new Map<number, number>();
+  for (const a of addrs) addrCount.set(a.customer_id, (addrCount.get(a.customer_id) ?? 0) + 1);
+  return rows.map((r) => {
+    const st = orderStat.get(r.customer_id);
+    const phones = [r.phone_raw ?? r.phone, r.phone2_raw ?? r.phone2, r.phone3_raw ?? r.phone3].filter((p): p is string => !!p);
+    return {
+      id: r.customer_id,
+      name: r.name,
+      phones,
+      order_count: st?.count ?? 0,
+      last_purchase: st?.last ?? null,
+      lifetime_spend: st?.spend ?? 0,
+      address_count: addrCount.get(r.customer_id) ?? 0,
+    };
+  });
+}
+
 // All same-name groups that contain a likely stray (≥2 members, at least one with no orders), each
 // member annotated with the order / spend / address signals the UI uses to tell keeper from fragment.
 export async function getDuplicateGroups(): Promise<DuplicateGroup[]> {
@@ -252,46 +300,12 @@ export async function getDuplicateGroups(): Promise<DuplicateGroup[]> {
   const candidateGroups = [...byName.entries()].filter(([, rs]) => rs.length >= 2);
   if (candidateGroups.length === 0) return [];
 
-  // 2) per-customer order signals (count / last purchase / lifetime spend) for the candidates only
-  const candidateIds = candidateGroups.flatMap(([, rs]) => rs.map((r) => r.customer_id));
-  const ords = await chunked(candidateIds, 200, async (slice) => {
-    const { data } = await supabase.from('orders').select('customer_id,order_date,paid_idr,status').in('customer_id', slice);
-    return (data ?? []) as { customer_id: number; order_date: string | null; paid_idr: number | null; status: string | null }[];
-  });
-  const orderStat = new Map<number, { count: number; last: string | null; spend: number }>();
-  for (const o of ords) {
-    if (o.status === 'Cancelled') continue;
-    const s = orderStat.get(o.customer_id) ?? { count: 0, last: null, spend: 0 };
-    s.count += 1;
-    s.spend += o.paid_idr ?? 0;
-    if (o.order_date && (!s.last || o.order_date > s.last)) s.last = o.order_date;
-    orderStat.set(o.customer_id, s);
-  }
-
-  // 3) address counts for the candidates
-  const addrs = await chunked(candidateIds, 200, async (slice) => {
-    const { data } = await supabase.from('customer_addresses').select('customer_id').in('customer_id', slice);
-    return (data ?? []) as { customer_id: number }[];
-  });
-  const addrCount = new Map<number, number>();
-  for (const a of addrs) addrCount.set(a.customer_id, (addrCount.get(a.customer_id) ?? 0) + 1);
-
-  // 4) build the groups, keeping only those with a likely stray (a member with zero orders)
+  // 2) annotate every candidate, then keep only groups that still hold a likely stray (no-orders member)
+  const annotated = await annotateMembers(supabase, candidateGroups.flatMap(([, rs]) => rs));
+  const memberById = new Map(annotated.map((m) => [m.id, m]));
   const groups: DuplicateGroup[] = [];
   for (const [key, rs] of candidateGroups) {
-    const members: DuplicateMember[] = rs.map((r) => {
-      const st = orderStat.get(r.customer_id);
-      const phones = [r.phone_raw ?? r.phone, r.phone2_raw ?? r.phone2, r.phone3_raw ?? r.phone3].filter((p): p is string => !!p);
-      return {
-        id: r.customer_id,
-        name: r.name,
-        phones,
-        order_count: st?.count ?? 0,
-        last_purchase: st?.last ?? null,
-        lifetime_spend: st?.spend ?? 0,
-        address_count: addrCount.get(r.customer_id) ?? 0,
-      };
-    });
+    const members = rs.map((r) => memberById.get(r.customer_id)).filter((m): m is DuplicateMember => !!m);
     if (!members.some((m) => m.order_count === 0)) continue; // both real & distinct → not a split
     // keeper-first ordering (most orders, then most spend) so the UI's default primary is the real one
     members.sort((a, b) => b.order_count - a.order_count || b.lifetime_spend - a.lifetime_spend);
@@ -300,6 +314,24 @@ export async function getDuplicateGroups(): Promise<DuplicateGroup[]> {
   // most-fragmented first, then alphabetical
   groups.sort((a, b) => b.members.length - a.members.length || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   return groups;
+}
+
+// By-ID search (merge mode 2): find customers by customer_id / name / phone digits, annotated like the
+// scan — so the operator can hand-pick a keeper + the records to absorb even when the names don't match
+// (the import split one person across several phone-keyed rows, e.g. Henny Y 1299 / 7970 / 6638).
+export async function findCustomersForMerge(query: string): Promise<DuplicateMember[]> {
+  const supabase = createSupabaseServerClient();
+  const raw = sanitizeSearch(query);
+  if (raw.length < 2) return [];
+  const digits = raw.replace(/\D/g, '');
+  const filters = [`name.ilike.%${raw}%`, `phone_raw.ilike.%${raw}%`];
+  if (digits.length >= 2) filters.push(`phone.ilike.%${digits}%`, `phone2.ilike.%${digits}%`, `phone3.ilike.%${digits}%`);
+  const asId = Number(raw);
+  if (Number.isInteger(asId) && asId > 0) filters.push(`customer_id.eq.${asId}`);
+  const { data } = await supabase.from('customers').select(PHONE_COLS).or(filters.join(',')).limit(40);
+  const members = await annotateMembers(supabase, (data ?? []) as CustPhoneRow[]);
+  members.sort((a, b) => b.order_count - a.order_count || b.lifetime_spend - a.lifetime_spend);
+  return members;
 }
 
 // Merge `duplicateIds` into `primaryId`: pull each stray's phones into the primary's free slots (de-duped,
@@ -362,8 +394,24 @@ export async function mergeCustomers(primaryId: number, duplicateIds: number[]):
   const phonesAdded = slots.filter((s) => !before.has(s.norm)).length;
   const droppedPhones = Math.max(0, seenPhone.size - slots.length);
 
-  // 4) delete the strays, THEN write the merged phones onto the primary (no row holds them anymore,
-  //    so the unique `phone` index can't collide)
+  // 3b) collect channels (primary first), de-duped by platform+handle, into ≤3 slots (the editor's cap)
+  const chanKey = (c: CustomerChannel) => `${(c.platform || '').toLowerCase().trim()}|${(c.handle || '').toLowerCase().trim()}`;
+  const channelsOut: CustomerChannel[] = [];
+  const seenChan = new Set<string>();
+  for (const c of [primary, ...dups]) {
+    for (const ch of Array.isArray(c.channels) ? c.channels : []) {
+      if (!ch || !ch.platform) continue;
+      const k = chanKey(ch);
+      if (seenChan.has(k)) continue;
+      seenChan.add(k);
+      if (channelsOut.length < 3) channelsOut.push({ platform: String(ch.platform), handle: String(ch.handle ?? '') });
+    }
+  }
+  const channelsBefore = (Array.isArray(primary.channels) ? primary.channels : []).filter((c) => c && c.platform).length;
+  const channelsAdded = Math.max(0, channelsOut.length - channelsBefore);
+
+  // 4) delete the strays, THEN write the merged phones + channels onto the primary (no row holds the
+  //    phones anymore, so the unique `phone` index can't collide)
   const { error: delErr } = await supabase.from('customers').delete().in('customer_id', dupIds);
   if (delErr) throw new Error(`mergeCustomers (delete): ${delErr.message}`);
 
@@ -373,9 +421,33 @@ export async function mergeCustomers(primaryId: number, duplicateIds: number[]):
       phone: slots[0]?.norm ?? null, phone_raw: slots[0]?.raw ?? null,
       phone2: slots[1]?.norm ?? null, phone2_raw: slots[1]?.raw ?? null,
       phone3: slots[2]?.norm ?? null, phone3_raw: slots[2]?.raw ?? null,
+      channels: channelsOut,
     })
     .eq('customer_id', primaryId);
   if (updErr) throw new Error(`mergeCustomers (phones): ${updErr.message}`);
 
-  return { primaryId, removedIds: dupIds, phonesAdded, droppedPhones, addressesMoved, addressesSkipped, recordsReassigned };
+  return { primaryId, removedIds: dupIds, phonesAdded, droppedPhones, channelsAdded, addressesMoved, addressesSkipped, recordsReassigned };
+}
+
+// Delete a customer outright (the detail "Delete customer ID" button). Refuses when the record is
+// still referenced by any sales/operational row — those must be merged into another customer, never
+// orphaned. Addresses fall away via the customer_addresses ON DELETE CASCADE (0004).
+export async function deleteCustomer(customerId: number): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const guards: { table: 'orders' | 'holds' | 'outbound_shipments' | 'purchase_orders' | 'missing_pieces'; label: string }[] = [
+    { table: 'orders', label: 'order' },
+    { table: 'holds', label: 'hold' },
+    { table: 'outbound_shipments', label: 'shipment' },
+    { table: 'purchase_orders', label: 'purchase order' },
+    { table: 'missing_pieces', label: 'missing-piece report' },
+  ];
+  for (const g of guards) {
+    const { count, error } = await supabase.from(g.table).select('customer_id', { count: 'exact', head: true }).eq('customer_id', customerId);
+    if (error) throw new Error(`deleteCustomer (${g.table}): ${error.message}`);
+    if ((count ?? 0) > 0) {
+      throw new Error(`This customer is on ${count} ${g.label}${count === 1 ? '' : 's'} — merge it into another record instead of deleting.`);
+    }
+  }
+  const { error } = await supabase.from('customers').delete().eq('customer_id', customerId);
+  if (error) throw new Error(`deleteCustomer: ${error.message}`);
 }
