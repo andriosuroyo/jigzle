@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
+import { customerLabel } from '@jigzle/lib';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
   addForwarder,
@@ -469,7 +470,7 @@ export default function OrderBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [custQuery]);
   function pickCustomer(hit: CustomerHit) {
-    setForm((f) => ({ ...f, customer_id: hit.customer_id, customer_label: hit.name || hit.phone || `#${hit.customer_id}` }));
+    setForm((f) => ({ ...f, customer_id: hit.customer_id, customer_label: customerLabel(hit.name, hit.phone) }));
     setCustHits([]);
     setCustQuery('');
   }
@@ -1099,7 +1100,7 @@ export default function OrderBoard({
                   {custHits.map((h) => (
                     <li key={h.customer_id}>
                       <button className="result-item" onClick={() => pickCustomer(h)}>
-                        <span className="ri-name">{h.name || '(no name)'}</span>
+                        <span className="ri-name">{customerLabel(h.name, h.phone)}</span>
                         <span className="ri-meta">{h.phone || '—'}</span>
                       </button>
                     </li>

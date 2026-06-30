@@ -9,6 +9,7 @@
 // grouping (multi-row + the shipments upsert) goes through the group_pos_into_shipment RPC (0018).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
+import { customerLabel } from '@jigzle/lib';
 import type {
   Forwarder,
   GroupShipmentInput,
@@ -138,8 +139,8 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
     })(),
     (async () => {
       if (!customerIds.length) return;
-      const { data: cus } = await supabase.from('customers').select('customer_id,name').in('customer_id', customerIds);
-      for (const c of (cus ?? []) as { customer_id: number; name: string | null }[]) customerById.set(c.customer_id, c.name);
+      const { data: cus } = await supabase.from('customers').select('customer_id,name,phone').in('customer_id', customerIds);
+      for (const c of (cus ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) customerById.set(c.customer_id, customerLabel(c.name, c.phone));
     })(),
   ]);
 
@@ -650,8 +651,8 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
     })(),
     (async () => {
       if (!customerIds.length) return;
-      const { data: cus } = await supabase.from('customers').select('customer_id,name').in('customer_id', customerIds);
-      for (const c of (cus ?? []) as { customer_id: number; name: string | null }[]) customerById.set(c.customer_id, c.name);
+      const { data: cus } = await supabase.from('customers').select('customer_id,name,phone').in('customer_id', customerIds);
+      for (const c of (cus ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) customerById.set(c.customer_id, customerLabel(c.name, c.phone));
     })(),
   ]);
 
@@ -839,8 +840,8 @@ export async function getPreorders(): Promise<PreorderRow[]> {
 
   const customerIds = [...new Set([...orderById.values()].map((o) => o.customer_id).filter((c): c is number => c != null))];
   if (customerIds.length) {
-    const { data } = await supabase.from('customers').select('customer_id,name').in('customer_id', customerIds);
-    for (const c of (data ?? []) as { customer_id: number; name: string | null }[]) customerById.set(c.customer_id, c.name);
+    const { data } = await supabase.from('customers').select('customer_id,name,phone').in('customer_id', customerIds);
+    for (const c of (data ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) customerById.set(c.customer_id, customerLabel(c.name, c.phone));
   }
 
   // a preorder drops once an OPEN PO for the same SKU + customer covers it (decision #2). Key by

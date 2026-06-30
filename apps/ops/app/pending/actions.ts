@@ -8,6 +8,7 @@
 //   itself reads getPending + sendReadyItems + deletePendingOrder.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
+import { customerLabel } from '@jigzle/lib';
 import type {
   BoxSummary,
   LineStatus,
@@ -51,7 +52,7 @@ export async function getPending(): Promise<PendingOrder[]> {
   // order's uncut lines only (a partial order's already-cut lines live in Fulfill/Outbound, not here).
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customers(name),order_lines!inner(line_id,item_code,qty,line_note,catalogue(original_name,translate_name,self_code))')
+    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customers(name,phone),order_lines!inner(line_id,item_code,qty,line_note,catalogue(original_name,translate_name,self_code))')
     .neq('status', 'Cancelled')
     .is('order_lines.fulfilled_at', null)
     .is('order_lines.shipped_at', null)
@@ -106,12 +107,12 @@ export async function getPending(): Promise<PendingOrder[]> {
       : lines.some((l) => l.status === 'on_the_way')
         ? 'yellow'
         : 'green';
-    const cust = one<{ name: string | null }>(o.customers as never);
+    const cust = one<{ name: string | null; phone: string | null }>(o.customers as never);
     const total = (o.sales_total_idr as number | null) ?? null;
     const paid = (o.paid_idr as number | null) ?? 0;
     return {
       sales_id: o.sales_id as string,
-      customer_name: cust?.name ?? null,
+      customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
       order_date: (o.order_date as string | null) ?? null,
       payment_status: (o.payment_status as string | null) ?? null,
       sales_total_idr: total,
@@ -239,7 +240,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
   const cust = one<{ name: string | null; phone: string | null }>(order.customers as never);
   return {
     sales_id: order.sales_id as string,
-    customer_name: cust?.name ?? null,
+    customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
     customer_phone: cust?.phone ?? null,
     status: (order.status as string | null) ?? null,
     payment_status: (order.payment_status as string | null) ?? null,

@@ -6,6 +6,7 @@
 
 import ExcelJS from 'exceljs';
 import { createSupabaseServerClient } from '@jigzle/db/server';
+import { customerLabel } from '@jigzle/lib';
 import type { ShipLine, ShipQueueRow } from '@jigzle/db/types';
 import type {
   ShipDetail,
@@ -59,7 +60,7 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
     return {
       sales_id: o.sales_id as string,
       order_date: (o.order_date as string | null) ?? null,
-      customer_name: cust?.name ?? null,
+      customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
       customer_phone: cust?.phone ?? null,
       ready_count: lines.length,
       planned_courier: planned,
@@ -299,7 +300,7 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
   return {
     sales_id: order.sales_id as string,
     customer_id: (order.customer_id as number | null) ?? null,
-    customer_name: cust?.name ?? null,
+    customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
     customer_phone: cust?.phone ?? null,
     status: (order.status as string | null) ?? null,
     address_id: addressId,
