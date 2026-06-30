@@ -18,15 +18,15 @@ import type { DuplicateGroup, DuplicateMember, MergeResult } from '@/app/custome
 const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 const SEARCH_KEY = 'search';
 
-export default function MergeDuplicates({ onClose, onMerged }: { onClose: () => void; onMerged: (removedIds: number[]) => void }) {
-  const [mode, setMode] = useState<'scan' | 'search'>('scan');
+export default function MergeDuplicates({ onClose, onMerged, initialQuery }: { onClose: () => void; onMerged: (removedIds: number[]) => void; initialQuery?: string }) {
+  const [mode, setMode] = useState<'scan' | 'search'>(initialQuery ? 'search' : 'scan');
 
   // scan mode
   const [groups, setGroups] = useState<DuplicateGroup[] | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   // search mode
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [searching, setSearching] = useState(false);
   const [searchGroup, setSearchGroup] = useState<DuplicateGroup | null>(null);
   const [searchErr, setSearchErr] = useState<string | null>(null);
@@ -62,6 +62,9 @@ export default function MergeDuplicates({ onClose, onMerged }: { onClose: () => 
     })();
     return () => { live = false; };
   }, []);
+
+  // deep-link from Data health: auto-run the by-ID search for the seed query
+  useEffect(() => { if (initialQuery) runSearch(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   async function runSearch() {
     const q = query.trim();

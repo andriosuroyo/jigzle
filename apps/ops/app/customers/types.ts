@@ -34,6 +34,23 @@ export interface CustomerDetail {
   addresses: CustomerAddress[];
 }
 
+// ── data health (PR107): read-only customer-integrity scan ──
+// A set of customers joined by a shared phone number (the import's phone-split signature).
+export interface DataHealthGroup {
+  memberIds: number[];
+  members: { id: number; name: string | null; phones: string[] }[];
+  sharedPhones: string[];   // the number(s) that tie the group together (search seed for the merge tool)
+  numberCount: number;      // distinct numbers across the group — > 3 means a merge needs a manual choice
+}
+
+export interface DataHealth {
+  totalCustomers: number;
+  noName: number;                 // customers with a blank name
+  sharedPhoneGroupCount: number;  // groups of customers sharing a number
+  overThreeCount: number;         // of those, how many would overflow the 3 phone slots on merge
+  groups: DataHealthGroup[];      // capped list, most-numbers first
+}
+
 // editable personal details (name + up to three whatsapp/phone numbers)
 export interface CustomerPatch {
   name?: string | null;
