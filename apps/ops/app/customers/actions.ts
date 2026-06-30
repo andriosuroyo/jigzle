@@ -12,6 +12,8 @@ import type {
   CustomerDetail,
   CustomerListRow,
   CustomerPatch,
+  DataHealth,
+  DataHealthGroup,
   DuplicateGroup,
   DuplicateMember,
   MergeResult,
@@ -332,6 +334,74 @@ export async function findCustomersForMerge(query: string): Promise<DuplicateMem
   const members = await annotateMembers(supabase, (data ?? []) as CustPhoneRow[]);
   members.sort((a, b) => b.order_count - a.order_count || b.lifetime_spend - a.lifetime_spend);
   return members;
+}
+
+// ── Data health (PR107): read-only integrity scan over the customer table ──
+// The signature of the import's phone-split is one normalized number sitting on more than one
+// customer row — names alone miss it. We union customers that share any number into groups, and flag
+// the ones where consolidating would overflow the three phone slots (a manual number choice).
+export async function getDataHealth(): Promise<DataHealth> {
+  const supabase = createSupabaseServerClient();
+  const rows: CustPhoneRow[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from('customers').select(PHONE_COLS).order('customer_id', { ascending: true }).range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    rows.push(...(data as CustPhoneRow[]));
+    if (data.length < PAGE) break;
+  }
+
+  const noName = rows.filter((r) => !(r.name ?? '').trim()).length;
+
+  // union-find over customer ids, joined whenever two rows share a normalized number
+  const parent = new Map<number, number>();
+  const find = (x: number): number => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    while (parent.get(x) !== r) { const n = parent.get(x)!; parent.set(x, r); x = n; }
+    return r;
+  };
+  const union = (a: number, b: number) => { parent.set(find(a), find(b)); };
+  for (const r of rows) parent.set(r.customer_id, r.customer_id);
+  const phoneToFirst = new Map<string, number>();
+  const rowPhones = (r: CustPhoneRow) => [r.phone, r.phone2, r.phone3].filter((p): p is string => !!p);
+  for (const r of rows) {
+    for (const p of rowPhones(r)) {
+      const first = phoneToFirst.get(p);
+      if (first == null) phoneToFirst.set(p, r.customer_id);
+      else union(first, r.customer_id);
+    }
+  }
+
+  const byRoot = new Map<number, CustPhoneRow[]>();
+  for (const r of rows) {
+    if (rowPhones(r).length === 0) continue; // only group records that carry a number
+    const root = find(r.customer_id);
+    (byRoot.get(root) ?? byRoot.set(root, []).get(root)!).push(r);
+  }
+
+  const groups: DataHealthGroup[] = [];
+  for (const members of byRoot.values()) {
+    if (members.length < 2) continue;
+    const allPhones = new Set<string>();
+    for (const m of members) for (const p of rowPhones(m)) allPhones.add(p);
+    const shared = [...allPhones].filter((p) => members.filter((m) => rowPhones(m).includes(p)).length > 1);
+    groups.push({
+      memberIds: members.map((m) => m.customer_id),
+      members: members.map((m) => ({ id: m.customer_id, name: m.name, phones: [m.phone_raw ?? m.phone, m.phone2_raw ?? m.phone2, m.phone3_raw ?? m.phone3].filter((p): p is string => !!p) })),
+      sharedPhones: shared.length ? shared : [...allPhones].slice(0, 1),
+      numberCount: allPhones.size,
+    });
+  }
+  groups.sort((a, b) => b.numberCount - a.numberCount || b.memberIds.length - a.memberIds.length);
+
+  return {
+    totalCustomers: rows.length,
+    noName,
+    sharedPhoneGroupCount: groups.length,
+    overThreeCount: groups.filter((g) => g.numberCount > 3).length,
+    groups: groups.slice(0, 200),
+  };
 }
 
 // Merge `duplicateIds` into `primaryId`: pull each stray's phones into the primary's free slots (de-duped,

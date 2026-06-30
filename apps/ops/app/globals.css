@@ -917,6 +917,17 @@ img.sku-img { background: #e8e8e8; }
 .cust-danger { border-top: 1px solid var(--line); padding-top: 12px; }
 .cust-danger-confirm { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .cust-danger-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+/* ── Data health page ── */
+.dh-intro { margin: 12px 0 4px; line-height: 1.5; }
+.dh-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.dh-group { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.dh-group-main { flex: 1; min-width: 0; }
+.dh-group-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-weight: 600; color: var(--ink); }
+.dh-member { white-space: nowrap; }
+.dh-sep { margin-right: 6px; color: var(--muted); }
+.dh-group-sub { margin-top: 2px; }
+.dh-group .btn-secondary { flex-shrink: 0; }
+.dh-foot { margin-top: 16px; line-height: 1.5; }
 /* ── duplicate-merge modal ── */
 .dup-group { padding: 12px 0; border-top: 1px solid var(--line); }
 .dup-group:first-child { border-top: none; padding-top: 2px; }
