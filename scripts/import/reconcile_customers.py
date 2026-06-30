@@ -39,6 +39,7 @@ USAGE:
 from __future__ import annotations
 import argparse
 import csv
+import os
 import re
 import sys
 from collections import defaultdict
@@ -309,11 +310,12 @@ def main():
         print("\n[--csv-report] No DB access used. Re-run without it for the live plan.")
         return
 
+    # creds from .env.local OR real environment variables (cloud sessions inject them as env vars)
     env = load_env()
-    url = env.get("NEXT_PUBLIC_SUPABASE_URL")
-    key = env.get("SUPABASE_SERVICE_ROLE_KEY")
+    url = env.get("NEXT_PUBLIC_SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+    key = env.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not url or not key:
-        sys.exit("Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in .env.local")
+        sys.exit("Missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (.env.local or environment)")
     client = Client(url, key)
     client.ping()
 
