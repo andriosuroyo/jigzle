@@ -349,7 +349,8 @@ def main():
                  "Apply migration 0047_address_parse.sql first (Supabase CLI or Dashboard SQL editor).")
 
     print("\nAPPLYING…")
-    done = 0
+    done = skipped = 0
+    norm = lambda v: v if (v is not None and v != "") else None
     for r, p in parsed:
         patch = {
             "street": p.street,
@@ -365,12 +366,16 @@ def main():
         # capture the original once (migration backfills this, but belt-and-suspenders for new rows)
         if not r.get("source_blob") and r.get("raw_address"):
             patch["source_blob"] = r["raw_address"]
+        # skip rows already in the target state — makes the run idempotent + cheap to resume
+        if all(norm(r.get(k)) == norm(v) for k, v in patch.items()):
+            skipped += 1
+            continue
         client._req("PATCH", f"customer_addresses?address_id=eq.{r['address_id']}",
                     body=patch, prefer="return=minimal")
         done += 1
-        if done % 500 == 0:
-            print(f"  …{done}/{len(parsed)}")
-    print(f"Done. Parsed + wrote {done} addresses.")
+        if done % 250 == 0:
+            print(f"  …wrote {done} (skipped {skipped} unchanged)")
+    print(f"Done. Wrote {done}, skipped {skipped} already-current of {len(parsed)} addresses.")
 
 
 if __name__ == "__main__":
