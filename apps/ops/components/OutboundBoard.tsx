@@ -91,13 +91,28 @@ export default function OutboundBoard({
   );
   const imgMap = useSkuImages(imgCodes);
 
-  // O3 copyable address block — name/phone fall back to the customer; raw_address verbatim; a blank
-  // line then the courier label + #tracking. The order-code title row is NOT part of the copy text.
+  // O3 copyable address block — composed from the structured fields (PR113): recipient, street,
+  // ward/subdistrict, city/province/postcode, phone, then the delivery note. name/phone fall back to
+  // the customer; a blank line then courier label + #tracking. The order-code title row is excluded.
   const addressBlock = useMemo(() => {
     if (!detail) return '';
-    // The saved address is one combined field (name + full address + contact) — print it verbatim, no
-    // rebuilding from columns (that double-printed the name + phone). Then a blank line + courier/tracking.
-    const head = detail.raw_address || detail.ship_address || detail.customer_name || '';
+    const recipient = detail.recipient_name || detail.customer_name;
+    const phone = detail.contact_phone || detail.customer_phone;
+    const cityProvince = [detail.kota, detail.provinsi].filter(Boolean).join(', ');
+    const cityLine = [cityProvince, detail.kode_pos].filter(Boolean).join(' ');
+    const lines = [
+      recipient,
+      detail.street,
+      [detail.kelurahan, detail.kecamatan].filter(Boolean).join(', '),
+      cityLine,
+      detail.negara && detail.negara !== 'Indonesia' ? detail.negara : null, // domestic default omitted
+      phone,
+      detail.delivery_note,
+    ].filter((l) => l && l.trim());
+    // fallback for rows not yet parsed into columns: the verbatim blob + name/phone
+    const head = lines.length > 1
+      ? lines.join('\n')
+      : (detail.raw_address || detail.ship_address || recipient || '');
     const tail: string[] = [];
     if (detail.courier_label) tail.push(detail.courier_label);
     if (detail.courier_tracking) tail.push('#' + detail.courier_tracking);

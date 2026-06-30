@@ -124,4 +124,5 @@ export interface AddressInput {
   kelurahan?: string | null;  // ward (Indonesia)
   kode_pos?: string | null;   // postcode
   street?: string | null;     // street / alley — the "address" main field
+  delivery_note?: string | null; // courier instructions / sender block (not part of raw_address)
 }

@@ -261,13 +261,14 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
   let contactPhone: string | null = null;
   let rawAddress: string | null = null;
   let shipAddress: string | null = null; // legacy single-line fallback (kept for compatibility)
+  const addr = { street: null, kelurahan: null, kecamatan: null, kota: null, provinsi: null, negara: null, kode_pos: null, delivery_note: null } as Record<string, string | null>;
   // PR-B: the address Fulfill confirmed is stamped on the LINE by set_fulfillment (orders.address_id
   // may be null when SA-1 deferred it). Prefer the line's address; fall back to the order's.
   const addressId = (rows.find((r) => r.address_id != null)?.address_id ?? (order.address_id as number | null)) ?? null;
   if (addressId != null) {
     const { data: a } = await supabase
       .from('customer_addresses')
-      .select('raw_address,recipient_name,contact_phone,kota')
+      .select('raw_address,recipient_name,contact_phone,street,kelurahan,kecamatan,kota,provinsi,negara,kode_pos,delivery_note')
       .eq('address_id', addressId)
       .maybeSingle();
     if (a) {
@@ -275,6 +276,7 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
       recipientName = a.recipient_name ?? null;
       contactPhone = a.contact_phone ?? null;
       shipAddress = a.raw_address || [a.recipient_name, a.kota].filter(Boolean).join(', ') || null;
+      for (const k of Object.keys(addr)) addr[k] = (a as Record<string, string | null>)[k] ?? null;
     }
   }
   const courierLabel = rows.find((r) => r.courier_label)?.courier_label ?? null;
@@ -308,6 +310,14 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
     recipient_name: recipientName,
     contact_phone: contactPhone,
     raw_address: rawAddress,
+    street: addr.street,
+    kelurahan: addr.kelurahan,
+    kecamatan: addr.kecamatan,
+    kota: addr.kota,
+    provinsi: addr.provinsi,
+    negara: addr.negara,
+    kode_pos: addr.kode_pos,
+    delivery_note: addr.delivery_note,
     planned_courier: lines.find((l) => l.courier)?.courier ?? null,
     courier_label: courierLabel,
     courier_tracking: courierTracking,

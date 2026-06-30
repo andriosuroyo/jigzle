@@ -97,7 +97,8 @@ export type CustomerAddress = {
   address_id: number;
   customer_id: number;
   address_label: string | null;
-  raw_address: string | null;
+  raw_address: string | null;       // composed display string (derived from the structured fields)
+  source_blob: string | null;       // original import blob, captured once (0047); never rewritten
   recipient_name: string | null;
   contact_phone: string | null;
   street: string | null;
@@ -107,6 +108,7 @@ export type CustomerAddress = {
   provinsi: string | null;
   negara: string | null;
   kode_pos: string | null;
+  delivery_note: string | null;     // courier instructions / sender block, kept out of raw_address
   created_at: string;
 };
 

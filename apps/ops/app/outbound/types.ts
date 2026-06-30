@@ -14,10 +14,19 @@ export interface ShipDetail {
   status: string | null;
   address_id: number | null;
   ship_address: string | null;          // legacy single-line fallback (kept; O3 uses the fields below)
-  // O3 copyable address block (verbatim raw_address; name/phone fall back to the customer):
+  // O3 copyable address block — composed from the structured fields (PR113); name/phone fall back to
+  // the customer. raw_address is kept as a fallback for rows not yet parsed into the columns below.
   recipient_name: string | null;        // from the chosen address
   contact_phone: string | null;         // from the chosen address
-  raw_address: string | null;           // VERBATIM — printed as-is, never rebuilt from columns
+  raw_address: string | null;           // composed display string; fallback when the fields are empty
+  street: string | null;
+  kelurahan: string | null;
+  kecamatan: string | null;
+  kota: string | null;
+  provinsi: string | null;
+  negara: string | null;
+  kode_pos: string | null;
+  delivery_note: string | null;         // courier instructions / sender block (printed after phone)
   planned_courier: string | null;       // base courier from fulfill (e.g. 'TIKI')
   courier_label: string | null;         // denormalized label from the line (e.g. 'TIKI ONS')
   courier_tracking: string | null;      // tracking entered at fulfill

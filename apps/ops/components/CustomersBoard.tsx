@@ -44,7 +44,7 @@ function bucketOf(name: string | null): string {
   return ch >= 'A' && ch <= 'Z' ? ch : '#';
 }
 
-type AddrDraft = { recipient_name: string; contact_phone: string; negara: string; provinsi: string; kota: string; kecamatan: string; kelurahan: string; kode_pos: string; street: string };
+type AddrDraft = { recipient_name: string; contact_phone: string; negara: string; provinsi: string; kota: string; kecamatan: string; kelurahan: string; kode_pos: string; street: string; delivery_note: string };
 const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
   recipient_name: a?.recipient_name ?? '',
   contact_phone: a?.contact_phone ?? '',
@@ -57,6 +57,7 @@ const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
   // seed the street field from `street`; for legacy rows (street empty) fall back to the raw blob so
   // the existing address is visible and can be re-structured.
   street: a?.street || a?.raw_address || '',
+  delivery_note: a?.delivery_note ?? '',
 });
 const isIndonesia = (c: string) => c.trim().toLowerCase() === 'indonesia';
 
@@ -576,6 +577,10 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 <div className="po-field">
                   <label>Address <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(street, alley/gang, no. — not the city/province above)</em></label>
                   <textarea value={addrDraft.street} onChange={(e) => { setAddrDraft({ ...addrDraft, street: e.target.value }); if (dupWarn) setDupWarn(null); }} />
+                </div>
+                <div className="po-field">
+                  <label>Delivery note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(courier instructions / sender — not printed in the address)</em></label>
+                  <textarea value={addrDraft.delivery_note} onChange={(e) => setAddrDraft({ ...addrDraft, delivery_note: e.target.value })} />
                 </div>
 
                 {dupWarn && (

@@ -163,12 +163,15 @@ function addrFields(input: AddressInput): Record<string, unknown> {
   const provinsi = input.provinsi?.trim() || null;
   const negara = input.negara?.trim() || null;
   const kode_pos = input.kode_pos?.trim() || null;
-  // compose a readable full address for the legacy display consumers (addressLine / Fulfill)
+  const delivery_note = input.delivery_note?.trim() || null;
+  // compose a readable full address for the legacy display consumers (addressLine / Fulfill). The
+  // delivery_note is deliberately excluded — it's courier guidance, not part of the address itself.
+  // source_blob is never written here, so the original import blob (0047) stays immutable.
   const raw_address = [street, kelurahan, kecamatan, kota, provinsi, negara, kode_pos].filter(Boolean).join(', ') || null;
   return {
     recipient_name: input.recipient_name?.trim() || null,
     contact_phone: input.contact_phone?.trim() || null,
-    street, kelurahan, kecamatan, kota, provinsi, negara, kode_pos, raw_address,
+    street, kelurahan, kecamatan, kota, provinsi, negara, kode_pos, delivery_note, raw_address,
   };
 }
 
