@@ -267,6 +267,7 @@ def main():
     ap.add_argument("--backup", required=True, help="Backup Sales CSV (legacy)")
     ap.add_argument("--label", help="scope to a single CUSTOMER ID label (e.g. 'Henny Y (1299)')")
     ap.add_argument("--csv-report", action="store_true", help="parse CSVs only; never touch the DB")
+    ap.add_argument("--preview", metavar="OUT.csv", help="write the post-cleanup customer table (from the CSVs) to a CSV; no DB")
     ap.add_argument("--execute", action="store_true", help="APPLY the plan (writes via service-role key)")
     args = ap.parse_args()
 
@@ -287,6 +288,20 @@ def main():
         print(f"\n--label {args.label!r}:", "found" if cc else "NOT in Customer Data")
         if cc:
             print(f"  name={cc.name!r} code={cc.code} phones={cc.ordered_phones()} addresses={cc.address_count}")
+
+    if args.preview:
+        with open(args.preview, "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["CUSTOMER ID", "NAME", "NUMBER 1", "NUMBER 2", "NUMBER 3",
+                        "EXTRA NUMBERS (won't fit)", "# ADDRESSES", "CHANNELS"])
+            for label in sorted(canon):
+                cc = canon[label]
+                ph = cc.ordered_phones()
+                w.writerow([label, cc.name, ph[0] if len(ph) > 0 else "",
+                            ph[1] if len(ph) > 1 else "", ph[2] if len(ph) > 2 else "",
+                            " / ".join(ph[MAX_PHONES:]), cc.address_count, " / ".join(cc.channels)])
+        print(f"\n[--preview] Wrote post-cleanup customer table → {args.preview} ({len(canon)} customers). No DB used.")
+        return
 
     if args.csv_report:
         print("\n[--csv-report] No DB access used. Re-run without it for the live plan.")
