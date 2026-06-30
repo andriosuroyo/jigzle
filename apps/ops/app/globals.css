@@ -897,6 +897,9 @@ img.sku-img { background: #e8e8e8; }
 .cust-stat { flex: 1 1 0; min-width: 0; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px 8px; text-align: center; }
 .cust-stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
 .cust-stat-value { font-size: 15px; font-weight: 800; color: var(--brown-dark); margin: 5px 0; min-height: 22px; line-height: 1.2; word-break: break-word; }
+/* Total spend / Last purchase carry long figures (e.g. Rp 2018.14M, 2026-03-30) — a hair smaller and
+   non-breaking so they sit on one line instead of wrapping the card. Member level keeps the 15px badge. */
+.cust-stat-value.cust-stat-figure { font-size: 12.5px; white-space: nowrap; }
 .cust-stat-value .tier { font-size: 12px; }
 .cust-stat-sub { font-size: 11px; color: var(--muted); }
 /* address list rows */

@@ -14,7 +14,7 @@ import PostcodeAutofill from '@/components/PostcodeAutofill';
 import IconSelect, { type IconOption } from '@/components/IconSelect';
 import MergeDuplicates from '@/components/MergeDuplicates';
 import type { ChannelOption } from '@/app/settings/types';
-import { fmtRpCompact, type Tier } from '@jigzle/lib';
+import { customerLabel, fmtRpCompact, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
   addCustomerAddress,
@@ -269,7 +269,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
         items={[
           { label: 'Home', href: '/' },
           detail ? { label: 'Customer', onClick: () => { setSelectedId(null); setDetail(null); } } : { label: 'Customer' },
-          ...(detail ? [{ label: detail.name || `#${detail.id}` }] : []),
+          ...(detail ? [{ label: customerLabel(detail.name, detail.phone) }] : []),
         ]}
       />
 
@@ -317,7 +317,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 <li key={c.id}>
                   <button className={`fq-row ${selectedId === c.id ? 'active' : ''}`} onClick={() => openCustomer(c.id)}>
                     <div className="fq-row-top">
-                      <span className="fq-headline">{c.name || '(no name)'}</span>
+                      <span className="fq-headline">{customerLabel(c.name, c.phone)}</span>
                       {tier && <span className={`tier tier-${tier.toLowerCase()}`}>{tier}</span>}
                     </div>
                     <div className="fq-row-bot"><span>{c.phone || '—'}</span></div>
@@ -341,7 +341,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
           {detail && (
             <>
               <div className="fd-head">
-                <div className="fd-title">{detail.name || '(no name)'}</div>
+                <div className="fd-title">{customerLabel(detail.name, detail.phone)}</div>
                 <div className="fd-sub">
                   #{detail.id}
                   {detail.joined_date ? ` · joined ${fmtDay(detail.joined_date)}` : ''}
@@ -352,7 +352,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               <div className="cust-stats">
                 <div className="cust-stat">
                   <div className="cust-stat-label">Total spend</div>
-                  <div className="cust-stat-value">{fmtRpCompact(detail.lifetime_spend)}</div>
+                  <div className="cust-stat-value cust-stat-figure">{fmtRpCompact(detail.lifetime_spend)}</div>
                   <div className="cust-stat-sub">{detail.order_count} order{detail.order_count === 1 ? '' : 's'}</div>
                 </div>
                 <div className="cust-stat">
@@ -364,7 +364,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 </div>
                 <div className="cust-stat">
                   <div className="cust-stat-label">Last purchase</div>
-                  <div className="cust-stat-value">{fmtDay(detail.last_purchase)}</div>
+                  <div className="cust-stat-value cust-stat-figure">{fmtDay(detail.last_purchase)}</div>
                   <div className="cust-stat-sub">{since == null ? '—' : since === 0 ? 'today' : `${since} day${since === 1 ? '' : 's'} ago`}</div>
                 </div>
               </div>
