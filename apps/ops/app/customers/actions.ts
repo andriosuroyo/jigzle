@@ -515,7 +515,7 @@ export async function deleteEmptyStrays(ids: number[]): Promise<{ deleted: numbe
 // Merge `duplicateIds` into `primaryId`: pull each stray's phones into the primary's free slots (de-duped,
 // max three), move its addresses across (skipping ones the primary already has), re-point every FK row
 // (orders / shipments / holds / POs / missing-pieces) at the primary, then delete the stray rows.
-export async function mergeCustomers(primaryId: number, duplicateIds: number[]): Promise<MergeResult> {
+export async function mergeCustomers(primaryId: number, duplicateIds: number[], keepName?: string): Promise<MergeResult> {
   const supabase = createSupabaseServerClient();
   const dupIds = duplicateIds.filter((id) => id !== primaryId);
   if (dupIds.length === 0) throw new Error('mergeCustomers: nothing to merge.');
@@ -593,15 +593,16 @@ export async function mergeCustomers(primaryId: number, duplicateIds: number[]):
   const { error: delErr } = await supabase.from('customers').delete().in('customer_id', dupIds);
   if (delErr) throw new Error(`mergeCustomers (delete): ${delErr.message}`);
 
-  const { error: updErr } = await supabase
-    .from('customers')
-    .update({
-      phone: slots[0]?.norm ?? null, phone_raw: slots[0]?.raw ?? null,
-      phone2: slots[1]?.norm ?? null, phone2_raw: slots[1]?.raw ?? null,
-      phone3: slots[2]?.norm ?? null, phone3_raw: slots[2]?.raw ?? null,
-      channels: channelsOut,
-    })
-    .eq('customer_id', primaryId);
+  const update: Record<string, unknown> = {
+    phone: slots[0]?.norm ?? null, phone_raw: slots[0]?.raw ?? null,
+    phone2: slots[1]?.norm ?? null, phone2_raw: slots[1]?.raw ?? null,
+    phone3: slots[2]?.norm ?? null, phone3_raw: slots[2]?.raw ?? null,
+    channels: channelsOut,
+  };
+  // optional: rename the keeper as part of the merge (e.g. "Lina Wong / Ita" so it's searchable by
+  // either name). The new name flows to all sales history live, since every list resolves it by id.
+  if (keepName !== undefined) update.name = keepName.trim() || null;
+  const { error: updErr } = await supabase.from('customers').update(update).eq('customer_id', primaryId);
   if (updErr) throw new Error(`mergeCustomers (phones): ${updErr.message}`);
 
   return { primaryId, removedIds: dupIds, phonesAdded, droppedPhones, channelsAdded, addressesMoved, addressesSkipped, recordsReassigned };

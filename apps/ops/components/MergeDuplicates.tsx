@@ -39,6 +39,21 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery, initi
   const [confirmKey, setConfirmKey] = useState<string | null>(null);   // group awaiting "merge anyway"
   const [doneOf, setDoneOf] = useState<Record<string, MergeResult>>({});
   const [errOf, setErrOf] = useState<Record<string, string>>({});
+  // "keep as name" override per group; until edited we suggest the combined names (keeper + ticked)
+  const [nameOf, setNameOf] = useState<Record<string, string>>({});
+  const [nameDirty, setNameDirty] = useState<Set<string>>(new Set());
+
+  // distinct names of keeper + ticked rows, joined — "Lina Wong / Ita". Falls back to the keeper alone.
+  function suggestedName(group: DuplicateGroup, primaryId: number, selected: Set<number>): string {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const add = (n: string | null) => { const t = (n ?? '').trim(); if (t && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); out.push(t); } };
+    add(group.members.find((m) => m.id === primaryId)?.name ?? null);
+    for (const m of group.members) if (selected.has(m.id)) add(m.name);
+    return out.join(' / ');
+  }
+  const keepNameFor = (group: DuplicateGroup): string =>
+    nameDirty.has(group.key) ? (nameOf[group.key] ?? '') : suggestedName(group, primaryOf[group.key], selectedOf[group.key] ?? new Set());
 
   useEffect(() => {
     let live = true;
@@ -131,7 +146,7 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery, initi
     setBusyKey(key);
     setErrOf((e) => { const rest = { ...e }; delete rest[key]; return rest; });
     try {
-      const res = await mergeCustomers(primaryId, ids);
+      const res = await mergeCustomers(primaryId, ids, keepNameFor(group));
       setDoneOf((d) => ({ ...d, [key]: res }));
       setConfirmKey(null);
       // drop the folded-in records from this group's draft so the UI doesn't offer them again
@@ -211,6 +226,16 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery, initi
             );
           })}
         </ul>
+        <label className="dup-keepname">
+          <span>Keep this record’s name as</span>
+          <input
+            type="text"
+            value={keepNameFor(group)}
+            placeholder="customer name"
+            onChange={(e) => { setNameOf((n) => ({ ...n, [group.key]: e.target.value })); setNameDirty((s) => new Set(s).add(group.key)); }}
+            disabled={busy}
+          />
+        </label>
         {errOf[group.key] && <div className="validation err" style={{ marginTop: 8 }}>{errOf[group.key]}</div>}
         {awaiting && (
           <div className="validation warn" style={{ marginTop: 8 }}>
