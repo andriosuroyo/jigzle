@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from '@jigzle/db/server';
 import { normalizePhone, tierFor, toNextTier, type Tier } from '@jigzle/lib';
 import type { Customer, CustomerAddress, CustomerChannel } from '@jigzle/db/types';
 import type {
+  AddressDupGroup,
   AddressInput,
   CustomerDetail,
   CustomerListRow,
@@ -16,6 +17,7 @@ import type {
   DataHealthGroup,
   DuplicateGroup,
   DuplicateMember,
+  EmptyStray,
   MergeResult,
 } from './types';
 
@@ -342,12 +344,13 @@ export async function findCustomersForMerge(query: string): Promise<DuplicateMem
 // the ones where consolidating would overflow the three phone slots (a manual number choice).
 export async function getDataHealth(): Promise<DataHealth> {
   const supabase = createSupabaseServerClient();
-  const rows: CustPhoneRow[] = [];
+  type HealthRow = CustPhoneRow & { channels: unknown };
+  const rows: HealthRow[] = [];
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase.from('customers').select(PHONE_COLS).order('customer_id', { ascending: true }).range(from, from + PAGE - 1);
+    const { data, error } = await supabase.from('customers').select(`${PHONE_COLS},channels`).order('customer_id', { ascending: true }).range(from, from + PAGE - 1);
     if (error || !data || data.length === 0) break;
-    rows.push(...(data as CustPhoneRow[]));
+    rows.push(...(data as HealthRow[]));
     if (data.length < PAGE) break;
   }
 
@@ -394,6 +397,75 @@ export async function getDataHealth(): Promise<DataHealth> {
     });
   }
   groups.sort((a, b) => b.numberCount - a.numberCount || b.memberIds.length - a.memberIds.length);
+  const rowById = new Map(rows.map((r) => [r.customer_id, r]));
+  const phonesOf = (id: number): string[] => {
+    const r = rowById.get(id);
+    return r ? [r.phone_raw ?? r.phone, r.phone2_raw ?? r.phone2, r.phone3_raw ?? r.phone3].filter((p): p is string => !!p) : [];
+  };
+
+  // ── shared-address groups: union customers that share a normalized address (name/number-independent)
+  const addrRows: { customer_id: number; raw_address: string | null; street: string | null; kelurahan: string | null; kecamatan: string | null; kota: string | null; provinsi: string | null; negara: string | null; kode_pos: string | null }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from('customer_addresses')
+      .select('customer_id,raw_address,street,kelurahan,kecamatan,kota,provinsi,negara,kode_pos')
+      .order('address_id', { ascending: true }).range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    addrRows.push(...(data as typeof addrRows));
+    if (data.length < PAGE) break;
+  }
+  const addrCount = new Map<number, number>();
+  for (const a of addrRows) addrCount.set(a.customer_id, (addrCount.get(a.customer_id) ?? 0) + 1);
+
+  const aparent = new Map<number, number>();
+  const afind = (x: number): number => { let r = x; while (aparent.get(r) !== r) r = aparent.get(r)!; while (aparent.get(x) !== r) { const n = aparent.get(x)!; aparent.set(x, r); x = n; } return r; };
+  const aunion = (a: number, b: number) => { aparent.set(afind(a), afind(b)); };
+  for (const r of rows) aparent.set(r.customer_id, r.customer_id);
+  const keyFirst = new Map<string, number>();
+  const keyText = new Map<string, string>();
+  const custKeys = new Map<number, Set<string>>();
+  for (const a of addrRows) {
+    if (!aparent.has(a.customer_id)) continue;
+    const k = addressKey(a);
+    if (!k.replace(/\|/g, '').trim()) continue;           // skip blank addresses
+    keyText.set(k, a.raw_address || k);
+    (custKeys.get(a.customer_id) ?? custKeys.set(a.customer_id, new Set()).get(a.customer_id)!).add(k);
+    const first = keyFirst.get(k);
+    if (first == null) keyFirst.set(k, a.customer_id);
+    else if (first !== a.customer_id) aunion(first, a.customer_id);
+  }
+  const aByRoot = new Map<number, number[]>();
+  for (const cid of custKeys.keys()) (aByRoot.get(afind(cid)) ?? aByRoot.set(afind(cid), []).get(afind(cid))!).push(cid);
+  const phoneGroupKeys = new Set(groups.map((g) => g.memberIds.slice().sort((a, b) => a - b).join(',')));
+  const addressGroups: AddressDupGroup[] = [];
+  for (const ids of aByRoot.values()) {
+    if (ids.length < 2) continue;
+    if (phoneGroupKeys.has(ids.slice().sort((a, b) => a - b).join(','))) continue; // already a shared-number group
+    const keyCount = new Map<string, number>();
+    for (const id of ids) for (const k of custKeys.get(id) ?? []) keyCount.set(k, (keyCount.get(k) ?? 0) + 1);
+    let sharedAddress = '';
+    for (const [k, c] of keyCount) if (c > 1) { sharedAddress = keyText.get(k) ?? k; break; }
+    addressGroups.push({
+      memberIds: ids,
+      members: ids.map((id) => ({ id, name: rowById.get(id)?.name ?? null, phones: phonesOf(id) })),
+      sharedAddress: sharedAddress || '(shared address)',
+    });
+  }
+  addressGroups.sort((a, b) => b.memberIds.length - a.memberIds.length);
+
+  // ── empty strays: no number, no address, no channels, and (verified) no orders/operational refs
+  const candidates = rows.filter((r) => rowPhones(r).length === 0
+    && (addrCount.get(r.customer_id) ?? 0) === 0
+    && !(Array.isArray(r.channels) ? r.channels : []).some((c) => c && typeof c === 'object' && (c as { platform?: unknown }).platform));
+  const candIds = candidates.map((r) => r.customer_id);
+  const referenced = new Set<number>();
+  for (const table of ['orders', 'holds', 'outbound_shipments', 'purchase_orders', 'missing_pieces'] as const) {
+    const found = await chunked(candIds, 200, async (slice) => {
+      const { data } = await supabase.from(table).select('customer_id').in('customer_id', slice);
+      return (data ?? []) as { customer_id: number }[];
+    });
+    for (const f of found) referenced.add(f.customer_id);
+  }
+  const emptyStrays: EmptyStray[] = candidates.filter((r) => !referenced.has(r.customer_id)).map((r) => ({ id: r.customer_id, name: r.name }));
 
   return {
     totalCustomers: rows.length,
@@ -401,7 +473,43 @@ export async function getDataHealth(): Promise<DataHealth> {
     sharedPhoneGroupCount: groups.length,
     overThreeCount: groups.filter((g) => g.numberCount > 3).length,
     groups: groups.slice(0, 200),
+    sharedAddressGroupCount: addressGroups.length,
+    addressGroups: addressGroups.slice(0, 200),
+    emptyStrayCount: emptyStrays.length,
+    emptyStrays: emptyStrays.slice(0, 200),
   };
+}
+
+// Load specific customers as merge candidates (Data health deep-links a group's exact member ids into
+// the merge tool, instead of a fuzzy search).
+export async function getMergeCandidatesByIds(ids: number[]): Promise<DuplicateMember[]> {
+  if (!ids.length) return [];
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase.from('customers').select(PHONE_COLS).in('customer_id', ids);
+  const members = await annotateMembers(supabase, (data ?? []) as CustPhoneRow[]);
+  members.sort((a, b) => b.order_count - a.order_count || b.lifetime_spend - a.lifetime_spend);
+  return members;
+}
+
+// Bulk-delete empty stray customers (Data health). Re-verifies each id has no orders/addresses/
+// operational rows server-side and skips any that do, so nothing with attached data is ever removed.
+export async function deleteEmptyStrays(ids: number[]): Promise<{ deleted: number; skipped: number }> {
+  if (!ids.length) return { deleted: 0, skipped: 0 };
+  const supabase = createSupabaseServerClient();
+  const referenced = new Set<number>();
+  for (const table of ['orders', 'holds', 'outbound_shipments', 'purchase_orders', 'missing_pieces', 'customer_addresses'] as const) {
+    const found = await chunked(ids, 200, async (slice) => {
+      const { data } = await supabase.from(table).select('customer_id').in('customer_id', slice);
+      return (data ?? []) as { customer_id: number }[];
+    });
+    for (const f of found) referenced.add(f.customer_id);
+  }
+  const deletable = ids.filter((id) => !referenced.has(id));
+  if (deletable.length) {
+    const { error } = await supabase.from('customers').delete().in('customer_id', deletable);
+    if (error) throw new Error(`deleteEmptyStrays: ${error.message}`);
+  }
+  return { deleted: deletable.length, skipped: ids.length - deletable.length };
 }
 
 // Merge `duplicateIds` into `primaryId`: pull each stray's phones into the primary's free slots (de-duped,

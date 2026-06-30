@@ -12,14 +12,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { customerLabel, fmtRpCompact } from '@jigzle/lib';
-import { findCustomersForMerge, getDuplicateGroups, mergeCustomers } from '@/app/customers/actions';
+import { findCustomersForMerge, getDuplicateGroups, getMergeCandidatesByIds, mergeCustomers } from '@/app/customers/actions';
 import type { DuplicateGroup, DuplicateMember, MergeResult } from '@/app/customers/types';
 
 const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 const SEARCH_KEY = 'search';
 
-export default function MergeDuplicates({ onClose, onMerged, initialQuery }: { onClose: () => void; onMerged: (removedIds: number[]) => void; initialQuery?: string }) {
-  const [mode, setMode] = useState<'scan' | 'search'>(initialQuery ? 'search' : 'scan');
+export default function MergeDuplicates({ onClose, onMerged, initialQuery, initialIds }: { onClose: () => void; onMerged: (removedIds: number[]) => void; initialQuery?: string; initialIds?: number[] }) {
+  const [mode, setMode] = useState<'scan' | 'search'>(initialQuery || initialIds?.length ? 'search' : 'scan');
 
   // scan mode
   const [groups, setGroups] = useState<DuplicateGroup[] | null>(null);
@@ -63,8 +63,28 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery }: { o
     return () => { live = false; };
   }, []);
 
-  // deep-link from Data health: auto-run the by-ID search for the seed query
-  useEffect(() => { if (initialQuery) runSearch(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // deep-link from Data health: load an exact group by ids, else auto-run the seed query
+  useEffect(() => {
+    if (initialIds?.length) {
+      (async () => {
+        setSearching(true);
+        setSearched(true);
+        try {
+          const members = await getMergeCandidatesByIds(initialIds);
+          setPrimaryOf((p) => ({ ...p, [SEARCH_KEY]: members[0]?.id ?? 0 }));
+          setSelectedOf((s) => ({ ...s, [SEARCH_KEY]: new Set<number>() }));
+          setSearchGroup(members.length ? { key: SEARCH_KEY, name: 'Selected records', members } : null);
+        } catch (e) {
+          setSearchErr(e instanceof Error ? e.message : 'Failed to load records.');
+        } finally {
+          setSearching(false);
+        }
+      })();
+    } else if (initialQuery) {
+      runSearch();
+    }
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, []);
 
   async function runSearch() {
     const q = query.trim();
