@@ -528,7 +528,10 @@ export type Supplier = {
 export type Forwarder = {
   prefix: string;                    // ship_id prefix (PK): CBL, MTE, SUB, LGB, ...
   name: string | null;
-  country: string | null;
+  country: string | null;            // derived from the chosen flag (Settings → Forwarders)
+  flag: string | null;               // leading flag emoji (0048)
+  sort_order: number;                // manual order in Settings → Forwarders (0048)
+  is_active: boolean;                // soft-delete flag (0048) — hidden from pickers, kept for history
   created_at: string;
 };
 

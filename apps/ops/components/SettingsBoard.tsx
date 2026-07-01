@@ -11,7 +11,8 @@ import type { ChangeEvent } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import SupplierSettings from '@/components/SupplierSettings';
-import type { Supplier } from '@jigzle/db/types';
+import ForwarderSettings from '@/components/ForwarderSettings';
+import type { Supplier, Forwarder } from '@jigzle/db/types';
 import {
   addSetting,
   deleteSetting,
@@ -106,14 +107,14 @@ const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SEC
 
 // ── categories: the landing grouping. A tab is either a generic settings list (kind) or the bespoke
 //    Suppliers editor (custom). ──
-type CatTab = { kind: SettingsKind } | { custom: 'suppliers' };
+type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'forwarders' };
 type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
 
 const CATEGORIES: Category[] = [
   { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
   { key: 'shipping', title: 'Shipping', sub: 'Couriers and box presets used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }] },
   { key: 'inbound', title: 'Inbound', sub: 'Labels for the Inbound receiving flow.', tabs: [{ kind: 'inbound_labels' }] },
-  { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers for the To-forwarder buying pipeline.', tabs: [{ custom: 'suppliers' }] },
+  { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers and forwarders for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
 ];
 const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
@@ -139,7 +140,7 @@ function suggestLabel(d: Record<string, string>): string {
   return `${(d.courier ?? '').trim()} ${(d.speed ?? '').trim()}`.replace(/\s+/g, ' ').trim();
 }
 
-export default function SettingsBoard({ initial, suppliers, userEmail }: { initial: SettingsData; suppliers: Supplier[]; userEmail: string }) {
+export default function SettingsBoard({ initial, suppliers, forwarders, userEmail }: { initial: SettingsData; suppliers: Supplier[]; forwarders: Forwarder[]; userEmail: string }) {
   const [lists, setLists] = useState<Record<SettingsKind, SettingRow[]>>({
     payment: initial.paymentMethods,
     courier: initial.courierServices,
@@ -176,10 +177,12 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
 
   // tab badge counts (live for generic lists; suppliers uses its initial count)
   function tabCount(t: CatTab): number {
-    return 'kind' in t ? lists[t.kind].length : suppliers.length;
+    if ('kind' in t) return lists[t.kind].length;
+    return t.custom === 'forwarders' ? forwarders.length : suppliers.length;
   }
   function tabLabel(t: CatTab): string {
-    return 'kind' in t ? SECTION_BY_KIND[t.kind].title : 'Suppliers';
+    if ('kind' in t) return SECTION_BY_KIND[t.kind].title;
+    return t.custom === 'forwarders' ? 'Forwarders' : 'Suppliers';
   }
   // total settings in a category, for the landing card badge
   function catCount(c: Category): number {
@@ -379,6 +382,8 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
                       {SECTION_BY_KIND[t.kind].sub && <div className="set-sec-sub">{SECTION_BY_KIND[t.kind].sub}</div>}
                       {renderKindList(SECTION_BY_KIND[t.kind])}
                     </>
+                  ) : t.custom === 'forwarders' ? (
+                    <ForwarderSettings initial={forwarders} embedded />
                   ) : (
                     <SupplierSettings initial={suppliers} embedded />
                   )}
