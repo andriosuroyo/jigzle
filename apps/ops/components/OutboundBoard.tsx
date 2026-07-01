@@ -43,22 +43,10 @@ export default function OutboundBoard({
   reloadKey?: number;
 }) {
   const [queue, setQueue] = useState<ShipQueueRow[]>(initialQueue);
-  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<ShipDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const reqIdRef = useRef(0);
-
-  // filter the Ready-to-ship queue by customer name OR SKU code (client-side over the loaded worklist)
-  const shown = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return queue;
-    return queue.filter(
-      (r) =>
-        (r.customer_name ?? '').toLowerCase().includes(q) ||
-        r.sku_codes.some((c) => c.toLowerCase().includes(q))
-    );
-  }, [queue, search]);
 
   // verification state: presence in `verified` = the line is confirmed (manual tick or full scan);
   // scanCounts drives the {n}/{qty} counter. (O1/O2)
@@ -114,7 +102,10 @@ export default function OutboundBoard({
       ? lines.join('\n')
       : (detail.raw_address || detail.ship_address || recipient || '');
     const tail: string[] = [];
-    if (detail.courier_label) tail.push(detail.courier_label);
+    // the list shows planned_courier while the detail historically read courier_label only — fall back
+    // so an imported line that has `courier` but no denormalized `courier_label` still shows its courier.
+    const courierLabel = detail.courier_label || detail.planned_courier;
+    if (courierLabel) tail.push(courierLabel);
     if (detail.courier_tracking) tail.push('#' + detail.courier_tracking);
     return tail.length ? `${head}\n\n${tail.join('\n')}` : head;
   }, [detail]);
@@ -324,13 +315,10 @@ export default function OutboundBoard({
       <div className="fulfill-layout">
         {/* ── Queue ── */}
         <aside className="fq-pane">
-          {/* No queue header — the tab badge shows the count. Search by customer or SKU. */}
-          <div className="search-row" style={{ padding: '8px' }}>
-            <input type="text" inputMode="search" placeholder="Search customer or SKU…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          {shown.length === 0 && <div className="hint fq-empty">{queue.length === 0 ? 'Nothing fulfilled and waiting to ship.' : 'No match.'}</div>}
+          {/* No queue header — the tab badge shows the count. */}
+          {queue.length === 0 && <div className="hint fq-empty">Nothing fulfilled and waiting to ship.</div>}
           <ul className="fq-list">
-            {shown.map((q) => (
+            {queue.map((q) => (
               <li key={q.sales_id}>
                 <button className={`fq-row ${selected === q.sales_id ? 'active' : ''}`} onClick={() => openOrder(q.sales_id)}>
                   {/* Styled like Sales: customer name headline, sales id demoted. */}
@@ -364,7 +352,7 @@ export default function OutboundBoard({
                     {copied ? '✓ Copied' : '⧉ Copy'}
                   </button>
                   <pre className="ob-addr-block">{addressBlock}</pre>
-                  {!detail.courier_label && <div className="hint ob-addr-hint">Courier not set — set it in Fulfill.</div>}
+                  {!(detail.courier_label || detail.planned_courier) && <div className="hint ob-addr-hint">Courier not set — set it in Fulfill.</div>}
                 </div>
               </div>
 
