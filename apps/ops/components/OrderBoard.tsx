@@ -8,7 +8,7 @@ import {
   addSupplier,
   createPO,
   deletePO,
-  getNextShipId,
+  getLastShipId,
   getOpenPOs,
   getOpenShipments,
   groupIntoShipment,
@@ -49,6 +49,15 @@ function currencyForCountry(country: string | null | undefined): { label: string
 const isChina = (country: string | null | undefined): boolean => (country ?? '').trim().toLowerCase() === 'china';
 
 const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '');
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// 'YYYY-MM-DD' → 'Jul 1, 2026' (display only; avoids Date() tz surprises)
+function fmtNiceDate(s: string | null): string {
+  if (!s) return '';
+  const [y, m, d] = s.slice(0, 10).split('-');
+  const mi = parseInt(m, 10) - 1;
+  return `${MONTHS[mi] ?? m} ${parseInt(d, 10)}, ${y}`;
+}
 
 function todayStr(): string {
   const d = new Date();
@@ -201,10 +210,14 @@ export default function OrderBoard({
   const [grpShipId, setGrpShipId] = useState('');
   const [grpOrigin, setGrpOrigin] = useState(''); // kept internally (from an existing shipment) — no UI field
   const [grpDate, setGrpDate] = useState(todayStr());
-  const [shipIdBusy, setShipIdBusy] = useState(false); // auto-fetching the next ship id for a forwarder
+  const [grpLastId, setGrpLastId] = useState<string | null>(null); // "last ID:" hint for the picked forwarder
+  const [grpQty, setGrpQty] = useState<Record<number, number>>({}); // per-PO ship qty override (partial split)
 
   const selectedCount = selectedPoIds.size;
   const selectedPOs = useMemo(() => queue.filter((p) => selectedPoIds.has(p.po_id)), [queue, selectedPoIds]);
+  // effective ship qty for a selected PO (defaults to its full qty; clamped 1..qty)
+  const sendQty = (po: OpenPORow) => Math.max(1, Math.min(po.qty, grpQty[po.po_id] ?? po.qty));
+  const totalItems = useMemo(() => selectedPOs.reduce((n, po) => n + sendQty(po), 0), [selectedPOs, grpQty]);
 
   // constrain the displayed queue to the tab's bucket (client-side over the loaded open queue)
   const shown = useMemo(() => {
@@ -414,6 +427,8 @@ export default function OrderBoard({
         setGrpShipId('');
         setGrpOrigin('');
         setGrpDate(todayStr());
+        setGrpLastId(null);
+        setGrpQty({});
       } else if (next.size === 0 && mode === 'group') {
         setMode(null);
       }
@@ -421,27 +436,26 @@ export default function OrderBoard({
     });
   }
 
-  // pick a forwarder in the group panel → auto-fill the next ship id for its prefix (unless the user
-  // already chose an existing open shipment). Forwarder's country seeds the (hidden) origin.
+  // pick a forwarder in the group panel → show its "last ID:" hint (we do NOT auto-fill the ship id,
+  // because a shipment can gain more items later, so the operator may reuse an existing id or start the
+  // next number themselves). Forwarder's country seeds the (hidden) origin.
   async function pickForwarder(prefix: string) {
     setGrpForwarder(prefix);
+    setGrpLastId(null);
     const fwd = forwarders.find((f) => f.prefix === prefix);
     if (fwd?.country) setGrpOrigin(fwd.country);
     if (!prefix) return;
-    if (shipments.some((s) => s.ship_id === grpShipId)) return; // keep an explicitly-picked existing id
-    setShipIdBusy(true);
     try {
-      setGrpShipId(await getNextShipId(prefix));
+      setGrpLastId(await getLastShipId(prefix));
     } catch {
-      /* leave ship id for manual entry on failure */
-    } finally {
-      setShipIdBusy(false);
+      /* hint is best-effort */
     }
   }
 
   function clearSelection() {
     setSelectedPoIds(new Set());
     setSearch('');
+    setGrpQty({});
     if (mode === 'group') setMode(null);
   }
 
@@ -663,13 +677,14 @@ export default function OrderBoard({
     try {
       const { affected } = await groupIntoShipment({
         ship_id: grpShipId.trim(),
-        po_ids: [...selectedPoIds],
+        items: selectedPOs.map((po) => ({ po_id: po.po_id, qty: sendQty(po) })),
         forwarder_prefix: grpForwarder.trim(),
         origin_country: grpOrigin.trim() || null,
         ship_date: grpDate || null,
       });
-      setSuccess(`Grouped ${affected.length} PO${affected.length === 1 ? '' : 's'} into ${grpShipId.trim()} → With Forwarder.`);
+      setSuccess(`Grouped ${totalItems} item${totalItems === 1 ? '' : 's'} into ${grpShipId.trim()} → With Forwarder.`);
       setSelectedPoIds(new Set());
+      setGrpQty({});
       setMode(null);
       await refreshQueue();
       try {
@@ -768,9 +783,9 @@ export default function OrderBoard({
               ))}
             </ul>
           ) : bucket === 'ship' ? (
-            /* To ship: quick-view card in the usual format — checkbox + image, name headline, SKU tail,
-               then ×qty · PO date. No forwarder badge or supplier detail (all rows are With Forwarder). */
-            <ul className="fq-list">
+            /* To ship: same compact card as To forwarder (SKU + PO date on line 1, name + ×qty on
+               line 2), with a checkbox to select for grouping. No forwarder badge or supplier detail. */
+            <ul className="po-cards po-cards-compact" style={{ padding: 8 }}>
               {shownFiltered.map((po) => (
                 <li key={po.po_id}>
                   <div className="po-row-wrap">
@@ -781,19 +796,21 @@ export default function OrderBoard({
                       onChange={() => toggleSelect(po.po_id)}
                       aria-label={`select PO ${po.po_id}`}
                     />
-                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                    <button className={`fq-row ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
-                      <div className="fq-row-top">
-                        <span className="fq-headline">{po.name}</span>
-                        <span className="fq-id-sub">{po.item_code || '—'}</span>
+                    <button className={`po-card po-card-btn ${editPo?.po_id === po.po_id ? 'active' : ''}`} style={{ flex: 1, minWidth: 0 }} onClick={() => openEdit(po)}>
+                      <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                      <div className="po-card-main">
+                        <div className="po-card-l1">
+                          <span className="ff-code">{po.item_code || '—'}</span>
+                          <span className="po-card-poid">{po.ship_id || fmtDay(po.input_date)}</span>
+                        </div>
+                        <div className="po-card-l2">
+                          <span className="ff-name">{po.name}</span>
+                          <span className="po-card-qty">×{po.qty}</span>
+                        </div>
+                        {shortFromShip(po) && (
+                          <div className="po-card-l2"><span className="badge short">Short · from {shortFromShip(po)}</span></div>
+                        )}
                       </div>
-                      <div className="fq-row-bot">
-                        <span>×{po.qty}{fmtDay(po.input_date) ? ` · ${fmtDay(po.input_date)}` : ''}</span>
-                        {po.ship_id && <span className="fq-id-sub">{po.ship_id}</span>}
-                      </div>
-                      {shortFromShip(po) && (
-                        <div className="fq-row-bot"><span className="badge short">Short · from {shortFromShip(po)}</span></div>
-                      )}
                     </button>
                   </div>
                 </li>
@@ -874,10 +891,7 @@ export default function OrderBoard({
             <>
               <div className="fd-head">
                 <div className="fd-title">Group into shipment</div>
-                <div className="fd-sub fd-sub-ship">
-                  <label htmlFor="grp-ship-date">Ship date</label>
-                  <input id="grp-ship-date" type="date" value={grpDate} onChange={(e) => setGrpDate(e.target.value)} />
-                </div>
+                <div className="fd-sub">Ship date: {fmtNiceDate(grpDate)}</div>
               </div>
               {renderGroupForm()}
             </>
@@ -1213,10 +1227,16 @@ export default function OrderBoard({
 
   // ── the group-into-shipment form ──
   function renderGroupForm() {
+    const setSend = (po: OpenPORow, n: number) => {
+      const v = Math.max(1, Math.min(po.qty, Math.floor(n) || 1));
+      setGrpQty((prev) => ({ ...prev, [po.po_id]: v }));
+    };
     return (
       <div className="po-form">
+        {/* Selected POs — two-line cards; a PO with qty>1 gets a stepper to ship fewer than all (the
+            rest stays in To ship). Header shows the total item count being shipped. */}
         <div className="po-field">
-          <label>Selected POs</label>
+          <label>Selected POs <em style={{ fontStyle: 'normal', opacity: 0.7 }}>({totalItems} item{totalItems === 1 ? '' : 's'})</em></label>
           <ul className="po-cards po-cards-compact">
             {selectedPOs.map((po) => (
               <li key={po.po_id}>
@@ -1224,7 +1244,28 @@ export default function OrderBoard({
                   <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
                     <div className="po-card-l1"><span className="ff-code">{po.item_code || '—'}</span></div>
-                    <div className="po-card-l2"><span className="ff-name">{po.name}</span><span className="po-card-qty">×{po.qty}</span></div>
+                    <div className="po-card-l2">
+                      <span className="ff-name">{po.name}</span>
+                      {po.qty > 1 ? (
+                        <span className="grp-qty">
+                          <span className="qty-step">
+                            <button type="button" aria-label="one fewer" onClick={() => setSend(po, sendQty(po) - 1)} disabled={sendQty(po) <= 1}>−</button>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min={1}
+                              max={po.qty}
+                              value={sendQty(po)}
+                              onChange={(e) => setSend(po, Number(e.target.value))}
+                            />
+                            <button type="button" aria-label="one more" onClick={() => setSend(po, sendQty(po) + 1)} disabled={sendQty(po) >= po.qty}>+</button>
+                          </span>
+                          <span className="grp-qty-of">/ {po.qty}</span>
+                        </span>
+                      ) : (
+                        <span className="po-card-qty">×1</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </li>
@@ -1232,34 +1273,39 @@ export default function OrderBoard({
           </ul>
         </div>
 
-        {/* Forwarder — managed in Settings → Forwarders (no inline add). Flag + prefix + name. Picking
-            one auto-fills the next ship id for its prefix. */}
-        <div className="po-field">
-          <label>Forwarder</label>
-          <select value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
-            <option value="">— pick a forwarder —</option>
-            {forwarders.map((f) => (
-              <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}{f.name ? ` — ${f.name}` : ''}</option>
-            ))}
-          </select>
+        {/* Forwarder + Ship id on one row. Forwarders are managed in Settings → Forwarders (no inline
+            add). Ship id is manual (a shipment can gain items later); the "last ID" hint shows the
+            highest number used for the picked forwarder so you can start the next one or reuse. */}
+        <div className="po-inline">
+          <div className="po-field">
+            <label>Forwarder</label>
+            <select value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
+              <option value="">— pick —</option>
+              {forwarders.map((f) => (
+                <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}{f.name ? ` — ${f.name}` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div className="po-field">
+            <label>Ship id</label>
+            <input
+              type="text"
+              list="po-shipids"
+              className="rcv-shipid"
+              placeholder="PREFIX n"
+              value={grpShipId}
+              onChange={(e) => pickExistingShipment(e.target.value)}
+            />
+            <datalist id="po-shipids">{shipments.map((s) => <option key={s.ship_id} value={s.ship_id} />)}</datalist>
+          </div>
         </div>
-
-        <div className="po-field">
-          <label>Ship id <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(auto from forwarder — edit or pick existing)</em></label>
-          <input
-            type="text"
-            list="po-shipids"
-            className="rcv-shipid"
-            placeholder={shipIdBusy ? 'finding next number…' : 'PREFIX n'}
-            value={grpShipId}
-            onChange={(e) => pickExistingShipment(e.target.value)}
-          />
-          <datalist id="po-shipids">{shipments.map((s) => <option key={s.ship_id} value={s.ship_id} />)}</datalist>
-        </div>
+        {grpForwarder && (
+          <div className="hint" style={{ margin: '-4px 0 8px' }}>last ID: {grpLastId ? grpLastId : 'none yet'}</div>
+        )}
 
         <div className="fd-commit">
           <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
-            <button className="btn-secondary" onClick={() => { setSelectedPoIds(new Set()); setMode(null); }}>Cancel</button>
+            <button className="btn-secondary" onClick={() => { setSelectedPoIds(new Set()); setGrpQty({}); setMode(null); }}>Cancel</button>
             <button className="btn-primary" onClick={submitGroup} disabled={busy || selectedCount === 0}>{busy ? 'Grouping…' : 'Group shipment'}</button>
           </div>
         </div>
