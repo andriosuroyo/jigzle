@@ -43,6 +43,13 @@ function fmtAsOf(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+// compact time-only label for the inline refresh control (full date lives in the button title)
+function fmtAsOfShort(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
 
 export default function InventoryBoard({
   initialRows,
@@ -140,13 +147,8 @@ export default function InventoryBoard({
       <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: STATES.find((s) => s.key === state)?.label ?? 'All' }]} />
 
       <div className="inv-wrap">
-        {/* as-of + refresh, on one line under the header */}
-        <div className="inv-asof">
-          <span>as of {fmtAsOf(refreshedAt)}</span>
-          <button className="btn-link" onClick={refresh} disabled={refreshing}>{refreshing ? 'refreshing…' : 'refresh'}</button>
-        </div>
-
-        {/* autocomplete-style search bar */}
+        {/* autocomplete-style search bar; the refresh + "as of" timestamp fold into its right edge to
+            reclaim the row they used to occupy. */}
         <div className="search-row inv-search-row">
           <input
             type="text"
@@ -156,6 +158,12 @@ export default function InventoryBoard({
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSearch(); } }}
           />
           {search && <button className="btn-link" onClick={() => setSearch('')}>Clear</button>}
+          <span className="inv-asof-inline" title={`Stock as of ${fmtAsOf(refreshedAt)}`}>{fmtAsOfShort(refreshedAt)}</span>
+          <button className={`inv-refresh ${refreshing ? 'spin' : ''}`} onClick={refresh} disabled={refreshing} aria-label="Refresh stock" title={`Stock as of ${fmtAsOf(refreshedAt)} — tap to refresh`}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+          </button>
         </div>
 
         {/* underline tabs with live counts (mirrors the Pending queue filter) */}

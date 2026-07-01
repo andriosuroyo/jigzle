@@ -135,7 +135,7 @@ const iconCustomer = svg(
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: 'Sales & Purchasing',
+    label: 'Sales',
     items: [
       // JZ-001: the sell-side stages collapse into a single Sales pipeline window — Pending → Fulfill,
       // plus a History tab. New is a button inside that window. The Sales team's job stops at Fulfill;
@@ -154,12 +154,17 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'System',
+    label: 'Database',
     items: [
       { key: 'customers', href: '/customers', label: 'Customer', icon: iconCustomer, sub: 'Browse customers A–Z; spend, tier, contact details & addresses.' },
+      { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog, sub: 'Edit SKUs & barcodes; needs-review & shared-barcode cleanup.' },
+    ],
+  },
+  {
+    label: 'Tools & Settings',
+    items: [
       { key: 'data-health', href: '/data-health', label: 'Data Health', icon: iconDataHealth, sub: 'Spot duplicate / split customer records — shared numbers, blank names.' },
       { key: 'calculator', href: '/calculator', label: 'Calculator', icon: iconCalculator, sub: 'Import landed-cost & recommended sale price; FX rates, saved calcs.' },
-      { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog, sub: 'Edit SKUs & barcodes; needs-review & shared-barcode cleanup.' },
       { key: 'stock-check', href: '/stock-check', label: 'Stock Check', icon: iconStockCheck, sub: 'Count the shelf (presence / scan) & true stock up with adjustments.' },
       { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings, sub: 'Configurable lists — payment, courier, box, inbound labels.' },
     ],
