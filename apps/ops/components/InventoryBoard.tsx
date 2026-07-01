@@ -43,11 +43,17 @@ function fmtAsOf(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-// compact time-only label for the inline refresh control (full date lives in the button title)
-function fmtAsOfShort(iso: string | null): string {
+// compact two-line label for the inline refresh control: date over time (full date in the title)
+function fmtAsOfDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+function fmtAsOfTime(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
@@ -158,7 +164,10 @@ export default function InventoryBoard({
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSearch(); } }}
           />
           {search && <button className="btn-link" onClick={() => setSearch('')}>Clear</button>}
-          <span className="inv-asof-inline" title={`Stock as of ${fmtAsOf(refreshedAt)}`}>{fmtAsOfShort(refreshedAt)}</span>
+          <span className="inv-asof-inline" title={`Stock as of ${fmtAsOf(refreshedAt)}`}>
+            <span>{fmtAsOfDate(refreshedAt)}</span>
+            <span>{fmtAsOfTime(refreshedAt)}</span>
+          </span>
           <button className={`inv-refresh ${refreshing ? 'spin' : ''}`} onClick={refresh} disabled={refreshing} aria-label="Refresh stock" title={`Stock as of ${fmtAsOf(refreshedAt)} — tap to refresh`}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
