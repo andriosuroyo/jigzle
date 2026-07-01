@@ -76,11 +76,19 @@ export interface UpdateSupplierPatch {
   type?: SupplierType | null;
 }
 
-// inline "+ add forwarder" input (prefix required; forwarders.prefix is the PK)
+// "+ add forwarder" input (prefix required; forwarders.prefix is the PK)
 export interface NewForwarderInput {
   prefix: string;
   name?: string | null;
   country?: string | null;
+  flag?: string | null;
+}
+
+// Settings → Forwarders edit patch (all fields optional on update; prefix is the immutable PK)
+export interface UpdateForwarderPatch {
+  name?: string | null;
+  country?: string | null;
+  flag?: string | null;
 }
 
 // one existing open shipment, for the "group into an existing ship_id" datalist

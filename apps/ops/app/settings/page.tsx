@@ -1,12 +1,12 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import SettingsBoard from '@/components/SettingsBoard';
 import { getSettings } from '@/app/settings/actions';
-import { getSuppliers } from '@/app/purchasing/actions';
+import { getSuppliers, getForwarders } from '@/app/purchasing/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Server shell: load the settings lists + suppliers + the signed-in user, render the editor board.
+// Server shell: load the settings lists + suppliers + forwarders + the signed-in user, render the board.
 export default async function SettingsPage() {
   const supabase = createSupabaseServerClient();
   const [
@@ -15,7 +15,8 @@ export default async function SettingsPage() {
     },
     settings,
     suppliers,
-  ] = await Promise.all([supabase.auth.getUser(), getSettings(), getSuppliers()]);
+    forwarders,
+  ] = await Promise.all([supabase.auth.getUser(), getSettings(), getSuppliers(), getForwarders()]);
 
-  return <SettingsBoard initial={settings} suppliers={suppliers} userEmail={user?.email || ''} />;
+  return <SettingsBoard initial={settings} suppliers={suppliers} forwarders={forwarders} userEmail={user?.email || ''} />;
 }

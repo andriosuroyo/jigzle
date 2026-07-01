@@ -21,6 +21,7 @@ import type {
 import type {
   CustomerHit,
   NewForwarderInput,
+  UpdateForwarderPatch,
   NewSupplierInput,
   UpdateSupplierPatch,
   OpenPOFilter,
@@ -194,12 +195,40 @@ export async function reorderSuppliers(orderedIds: number[]): Promise<void> {
 
 export async function getForwarders(): Promise<Forwarder[]> {
   const supabase = createSupabaseServerClient();
+  // active forwarders only (soft-deleted ones stay resolvable for history but drop from the pickers),
+  // in the manual Settings order (sort_order, then prefix as a stable tiebreak).
   const { data, error } = await supabase
     .from('forwarders')
-    .select('prefix,name,country,created_at')
+    .select('prefix,name,country,flag,sort_order,is_active,created_at')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
     .order('prefix', { ascending: true });
   if (error || !data) return [];
   return data as Forwarder[];
+}
+
+// ── the next ship_id for a forwarder prefix: highest numeric suffix seen on that prefix + 1 ──
+// Powers the To-ship group panel's auto-fill: pick a forwarder → its next running number appears.
+// Ship_ids are messy (spaces, occasional embedded "\n#tracking"), so we scan by prefix and parse the
+// first number after it in JS rather than trusting a single format. Zero-pads to the prefix's observed
+// width (e.g. MTE → "005", SUB → "193") so new ids match the existing sequence.
+export async function getNextShipId(prefix: string): Promise<string> {
+  const p = prefix.trim().toUpperCase();
+  if (!p) return '';
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase.from('shipments').select('ship_id').ilike('ship_id', `${p}%`);
+  let max = 0;
+  let width = 3; // sensible default pad
+  for (const row of (data ?? []) as { ship_id: string }[]) {
+    const m = new RegExp(`^${p}\\s*0*(\\d+)`, 'i').exec((row.ship_id ?? '').trim());
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (Number.isFinite(n)) {
+      if (n > max) max = n;
+      width = Math.max(width, m[1].length);
+    }
+  }
+  return `${p} ${String(max + 1).padStart(width, '0')}`;
 }
 
 export async function getOpenShipments(): Promise<OpenShipmentRow[]> {
@@ -752,18 +781,35 @@ export async function deleteSupplier(supplierId: number): Promise<void> {
   if (error) throw new Error(`deleteSupplier: ${error.message}`);
 }
 
-// ── inline "+ add" forwarder (idempotent on the prefix PK) ──
+// ── add a forwarder (Settings → Forwarders; idempotent on the prefix PK). Reactivates a soft-deleted
+// prefix rather than colliding on it. New rows append to the end of the manual order. ──
 export async function addForwarder(input: NewForwarderInput): Promise<Forwarder> {
   const supabase = createSupabaseServerClient();
   const prefix = input.prefix?.trim();
   if (!prefix) throw new Error('addForwarder: a prefix is required');
 
   const { data: existing } = await supabase.from('forwarders').select('*').eq('prefix', prefix).maybeSingle();
-  if (existing) return existing as Forwarder;
+  if (existing) {
+    const ex = existing as Forwarder;
+    if (!ex.is_active) {
+      const { data: re } = await supabase.from('forwarders').update({ is_active: true }).eq('prefix', prefix).select('*').single();
+      if (re) return re as Forwarder;
+    }
+    return ex;
+  }
+
+  const { data: top } = await supabase.from('forwarders').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
+  const nextOrder = ((top?.sort_order as number | null) ?? -1) + 1;
 
   const { data, error } = await supabase
     .from('forwarders')
-    .insert({ prefix, name: input.name?.trim() || null, country: input.country?.trim() || null })
+    .insert({
+      prefix,
+      name: input.name?.trim() || null,
+      country: input.country?.trim() || null,
+      flag: input.flag?.trim() || null,
+      sort_order: nextOrder,
+    })
     .select('*')
     .single();
   if (error) {
@@ -774,6 +820,34 @@ export async function addForwarder(input: NewForwarderInput): Promise<Forwarder>
     throw new Error(`addForwarder: ${error.message}`);
   }
   return data as Forwarder;
+}
+
+// ── edit a forwarder (Settings → Forwarders). Whitelisted fields; prefix (PK) is immutable. ──
+export async function updateForwarder(prefix: string, patch: UpdateForwarderPatch): Promise<Forwarder> {
+  const supabase = createSupabaseServerClient();
+  const upd: Record<string, unknown> = {};
+  if (patch.name !== undefined) upd.name = patch.name?.trim() || null;
+  if (patch.country !== undefined) upd.country = patch.country?.trim() || null;
+  if (patch.flag !== undefined) upd.flag = patch.flag?.trim() || null;
+  const { data, error } = await supabase.from('forwarders').update(upd).eq('prefix', prefix).select('*').single();
+  if (error) throw new Error(`updateForwarder: ${error.message}`);
+  return data as Forwarder;
+}
+
+// ── reorder forwarders (Settings → Forwarders): persist the manual order (index → sort_order). ──
+export async function reorderForwarders(prefixes: string[]): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  await Promise.all(
+    prefixes.map((prefix, i) => supabase.from('forwarders').update({ sort_order: i }).eq('prefix', prefix))
+  );
+}
+
+// ── delete a forwarder (Settings → Forwarders): SOFT delete (is_active = false). Historical shipments
+// keep their forwarder_prefix and still resolve; the forwarder just drops from the pickers + settings. ──
+export async function deleteForwarder(prefix: string): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('forwarders').update({ is_active: false }).eq('prefix', prefix);
+  if (error) throw new Error(`deleteForwarder: ${error.message}`);
 }
 
 // ── group selected POs into a forwarder shipment (atomic, via the RPC) → updated po_ids ──

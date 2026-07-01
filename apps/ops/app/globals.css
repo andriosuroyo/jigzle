@@ -494,6 +494,13 @@ button.po-pick-btn:active { background: var(--paper); }
 /* ── Procurement: queue filters, group bar, PO form ── */
 .po-filters { display: flex; gap: 6px; padding: 8px 8px 0; }
 .po-filters select { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; background: var(--cream); }
+/* To ship: search bar + Clear (replaces the supplier filter) */
+.po-searchbar { display: flex; gap: 6px; padding: 8px 8px 0; align-items: center; }
+.po-search { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
+.po-searchbar .btn-secondary { flex-shrink: 0; }
+/* Ship date shown inline in the group panel's header subtext */
+.fd-sub-ship label { font-size: 13px; color: var(--muted); }
+.fd-sub-ship input { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
 .po-newbtn { padding: 8px; }
 .po-row-wrap { display: flex; align-items: center; gap: 8px; }
 .po-row-wrap .po-check { flex-shrink: 0; width: 16px; height: 16px; }
@@ -909,6 +916,9 @@ img.sku-img { background: #e8e8e8; }
 .sup-flag-cell { flex-shrink: 0; width: 46px; }
 .set-colhead-sup .sup-flag-cell { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
 .set-colhead-sup .set-f { text-align: left; }
+/* Forwarders: fixed-width mono prefix cell (the immutable ship-id series), name takes the rest */
+.fwd-prefix-cell { flex: 0 0 84px; }
+.fwd-prefix { font-family: var(--mono, ui-monospace, monospace); font-weight: 700; letter-spacing: 0.02em; }
 
 /* FlagSelect — compact flag button + searchable country dropdown */
 .flag-select { position: relative; }
