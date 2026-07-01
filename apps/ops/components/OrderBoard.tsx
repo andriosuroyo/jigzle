@@ -763,7 +763,7 @@ export default function OrderBoard({
           {/* To forwarder: compact two-line quick-view cards (small image; line 1 SKU + PO#,
               line 2 name + qty), no checkbox — tap a card to open its detail editor. */}
           {bucket === 'forwarder' ? (
-            <ul className="po-cards po-cards-compact" style={{ padding: 8 }}>
+            <ul className="po-cards po-cards-compact po-list-scroll" style={{ padding: 8 }}>
               {shownFiltered.map((po) => (
                 <li key={po.po_id}>
                   <button className={`po-card po-card-btn ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
@@ -771,7 +771,7 @@ export default function OrderBoard({
                     <div className="po-card-main">
                       <div className="po-card-l1">
                         <span className="ff-code">{po.item_code || '—'}</span>
-                        <span className="po-card-poid">#{po.po_id}</span>
+                        <span className="po-card-poid">{fmtDay(po.status_since)}</span>
                       </div>
                       <div className="po-card-l2">
                         <span className="ff-name">{po.name}</span>
@@ -785,7 +785,7 @@ export default function OrderBoard({
           ) : bucket === 'ship' ? (
             /* To ship: same compact card as To forwarder (SKU + PO date on line 1, name + ×qty on
                line 2), with a checkbox to select for grouping. No forwarder badge or supplier detail. */
-            <ul className="po-cards po-cards-compact" style={{ padding: 8 }}>
+            <ul className="po-cards po-cards-compact po-list-scroll" style={{ padding: 8 }}>
               {shownFiltered.map((po) => (
                 <li key={po.po_id}>
                   <div className="po-row-wrap">
@@ -801,7 +801,7 @@ export default function OrderBoard({
                       <div className="po-card-main">
                         <div className="po-card-l1">
                           <span className="ff-code">{po.item_code || '—'}</span>
-                          <span className="po-card-poid">{po.ship_id || fmtDay(po.input_date)}</span>
+                          <span className="po-card-poid">{fmtDay(po.status_since)}</span>
                         </div>
                         <div className="po-card-l2">
                           <span className="ff-name">{po.name}</span>

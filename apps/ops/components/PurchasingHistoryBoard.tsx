@@ -87,7 +87,8 @@ export default function PurchasingHistoryBoard({
             <li key={s.ship_id} className="ff-line">
               <div className="fq-row-top">
                 <span className="fq-id">{s.ship_id}</span>
-                <span className="fq-id-sub">received {fmtDate(s.received_date)}</span>
+                {/* shipped date until the ship_id is received in Inbound (received_date set) → then received */}
+                <span className="fq-id-sub">{s.received_date ? `received ${fmtDate(s.received_date)}` : `shipped ${fmtDate(s.ship_date)}`}</span>
               </div>
               <div className="fq-row-bot">
                 <span className="ff-items-skus">
