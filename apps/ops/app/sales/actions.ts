@@ -173,15 +173,27 @@ export async function createAddress(
   input: NewAddressInput
 ): Promise<CustomerAddress> {
   const supabase = createSupabaseServerClient();
+  const street = input.street?.trim() || null;
+  const kelurahan = input.kelurahan?.trim() || null;
+  const kecamatan = input.kecamatan?.trim() || null;
+  const kota = input.kota?.trim() || null;
+  const provinsi = input.provinsi?.trim() || null;
+  const negara = input.negara?.trim() || null;
+  const kode_pos = input.kode_pos?.trim() || null;
+  // compose the display string from the structured fields (same rule as the customer-detail form),
+  // never including name / phone / delivery note.
+  const raw_address = [street, kelurahan, kecamatan, kota, provinsi, negara, kode_pos].filter(Boolean).join(', ') || null;
   const { data, error } = await supabase
     .from('customer_addresses')
     .insert({
       customer_id: customerId,
       recipient_name: input.recipient_name?.trim() || null,
       contact_phone: input.contact_phone?.trim() || null,
-      raw_address: input.raw_address?.trim() || null,
-      kota: input.kota?.trim() || null,
-      kode_pos: input.kode_pos?.trim() || null,
+      street, kelurahan, kecamatan, kota, provinsi, negara, kode_pos,
+      delivery_note: input.delivery_note?.trim() || null,
+      raw_address,
+      // preserve the operator's original paste as the immutable audit blob
+      source_blob: input.source_blob?.trim() || null,
     })
     .select('*')
     .single();

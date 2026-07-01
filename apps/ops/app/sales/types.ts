@@ -27,12 +27,21 @@ export interface NewCustomerInput {
   channel?: string;
 }
 
+// Structured address (PR115): the tidy-overlay produces these; createAddress composes raw_address
+// from them (consistent with the customer-detail address model). All optional but for street/blob.
 export interface NewAddressInput {
   recipient_name?: string;
   contact_phone?: string;
-  raw_address: string;
+  street?: string;
+  kelurahan?: string;
+  kecamatan?: string;
   kota?: string;
+  provinsi?: string;
+  negara?: string;
   kode_pos?: string;
+  delivery_note?: string;
+  // the operator's original paste, preserved verbatim as the immutable source_blob
+  source_blob?: string;
 }
 
 // ── Panel 2: SKU search via the shared search_skus RPC (PR23) — word-split over item_code +

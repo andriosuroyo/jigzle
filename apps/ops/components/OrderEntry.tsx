@@ -21,6 +21,9 @@ import IconSelect from '@/components/IconSelect';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
+import PostcodeAutofill from '@/components/PostcodeAutofill';
+import { loadPostal } from '@/lib/idPostal';
+import { tidyAddress, type TidyResult } from '@/lib/tidyAddress';
 
 const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEBSITE', 'LINE', 'OTHER'];
 
@@ -90,9 +93,6 @@ export default function OrderEntry({
   const [ncName, setNcName] = useState('');
   const [ncPhone, setNcPhone] = useState('');
   const [ncChannel, setNcChannel] = useState(CHANNELS[0]);
-  const [ncRecipient, setNcRecipient] = useState('');
-  const [ncContact, setNcContact] = useState('');
-  const [ncAddr, setNcAddr] = useState('');
   const [savingCust, setSavingCust] = useState(false);
 
   // Panel 2 — address
@@ -104,6 +104,8 @@ export default function OrderEntry({
   const [naContact, setNaContact] = useState('');
   const [naAddr, setNaAddr] = useState('');
   const [savingAddr, setSavingAddr] = useState(false);
+  const [tidying, setTidying] = useState(false);
+  const [tidy, setTidy] = useState<TidyResult | null>(null); // non-null → confirm overlay is open
 
   // Panel 3 — items
   const [skuQuery, setSkuQuery] = useState('');
@@ -219,16 +221,11 @@ export default function OrderEntry({
 
   async function handleCreateCustomer() {
     if (!ncName.trim() && !ncPhone.trim()) { setError('New customer needs a name or phone.'); return; }
-    if (!ncAddr.trim()) { setError('New customer needs one address.'); return; }
     setSavingCust(true);
     setError(null);
     try {
+      // step 1 creates the customer only — the address is added in step 2 (below).
       const { customer: cust } = await createCustomer({ name: ncName, phone: ncPhone, channel: ncChannel });
-      await createAddress(cust.customer_id, {
-        recipient_name: ncRecipient || ncName,
-        contact_phone: ncContact || ncPhone,
-        raw_address: ncAddr,
-      });
       const [loy, addrs] = await Promise.all([
         getLoyalty(cust.customer_id),
         getCustomerAddresses(cust.customer_id),
@@ -239,7 +236,7 @@ export default function OrderEntry({
       setAddressId(addrs[0]?.address_id ?? null);
       setConfirmLater(false);
       setShowNewCust(false);
-      setNcName(''); setNcPhone(''); setNcRecipient(''); setNcContact(''); setNcAddr('');
+      setNcName(''); setNcPhone('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create customer.');
     } finally {
@@ -247,22 +244,45 @@ export default function OrderEntry({
     }
   }
 
-  // ── address ──
-  async function handleCreateAddress() {
+  // ── address: paste a free-text blob → tidy into structured fields → confirm overlay → save ──
+  async function handleTidyAddress() {
     if (!customer) return;
     if (!naAddr.trim()) { setError('Address text is required.'); return; }
+    setTidying(true);
+    setError(null);
+    try {
+      const postal = await loadPostal();
+      setTidy(tidyAddress(naAddr, { recipient: naRecipient || customer.name, phone: naContact || customer.phone }, postal));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to read the address.');
+    } finally {
+      setTidying(false);
+    }
+  }
+
+  async function handleConfirmAddress() {
+    if (!customer || !tidy) return;
     setSavingAddr(true);
     setError(null);
     try {
       const addr = await createAddress(customer.id, {
-        recipient_name: naRecipient || customer.name || undefined,
-        contact_phone: naContact || customer.phone || undefined,
-        raw_address: naAddr,
+        recipient_name: tidy.recipient_name || customer.name || undefined,
+        contact_phone: tidy.contact_phone || customer.phone || undefined,
+        street: tidy.street || undefined,
+        kelurahan: tidy.kelurahan || undefined,
+        kecamatan: tidy.kecamatan || undefined,
+        kota: tidy.kota || undefined,
+        provinsi: tidy.provinsi || undefined,
+        negara: tidy.negara || undefined,
+        kode_pos: tidy.kode_pos || undefined,
+        delivery_note: tidy.delivery_note || undefined,
+        source_blob: naAddr, // preserve the operator's original paste
       });
       setAddresses((prev) => [addr, ...prev]);
       setAddressId(addr.address_id);
       setConfirmLater(false);
       setShowNewAddr(false);
+      setTidy(null);
       setNaRecipient(''); setNaContact(''); setNaAddr('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add address.');
@@ -320,9 +340,9 @@ export default function OrderEntry({
 
   function resetAll() {
     setCustomer(null); setLoyalty(null); setCustQuery(''); setCustResults([]); setCustSearched(false); setShowNewCust(false);
-    setNcName(''); setNcPhone(''); setNcChannel(CHANNELS[0]); setNcRecipient(''); setNcContact(''); setNcAddr('');
+    setNcName(''); setNcPhone(''); setNcChannel(CHANNELS[0]);
     setAddresses([]); setAddressId(null); setConfirmLater(false); setShowNewAddr(false);
-    setNaRecipient(''); setNaContact(''); setNaAddr('');
+    setNaRecipient(''); setNaContact(''); setNaAddr(''); setTidy(null);
     setSkuQuery(''); setSkuResults([]); setSkuSearched(false); setDraftQty({}); setDraftPrice({}); setLines([]);
     setPayMode('none'); setPayAmount(''); setPayMethod(paymentMethods[0]?.label ?? '');
     setUrgency(null);
@@ -411,10 +431,6 @@ export default function OrderEntry({
                       <select value={ncChannel} onChange={(e) => setNcChannel(e.target.value)}>
                         {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
-                      <div className="subform-label">First address</div>
-                      <input type="text" placeholder="Recipient name (leave blank if same as customer)" value={ncRecipient} onChange={(e) => setNcRecipient(e.target.value)} />
-                      <input type="text" placeholder="Contact phone (leave blank if same as customer)" value={ncContact} onChange={(e) => setNcContact(e.target.value)} />
-                      <textarea placeholder="Address" value={ncAddr} onChange={(e) => setNcAddr(e.target.value)} />
                       <div className="subform-actions">
                         <button className="btn-secondary" onClick={() => setShowNewCust(false)} disabled={savingCust}>Cancel</button>
                         <button className="btn-primary" onClick={handleCreateCustomer} disabled={savingCust}>
@@ -473,10 +489,10 @@ export default function OrderEntry({
                     <div className="subform">
                       <input type="text" placeholder="Recipient name (leave blank if same as customer)" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />
                       <input type="text" placeholder="Contact phone (leave blank if same as customer)" value={naContact} onChange={(e) => setNaContact(e.target.value)} />
-                      <textarea placeholder="Address" value={naAddr} onChange={(e) => setNaAddr(e.target.value)} />
+                      <textarea placeholder="Address — paste it in any format; we'll tidy it up" value={naAddr} onChange={(e) => setNaAddr(e.target.value)} />
                       <div className="subform-actions">
-                        <button className="btn-secondary" onClick={() => setShowNewAddr(false)} disabled={savingAddr}>Cancel</button>
-                        <button className="btn-primary" onClick={handleCreateAddress} disabled={savingAddr}>{savingAddr ? 'Saving…' : 'Add address'}</button>
+                        <button className="btn-secondary" onClick={() => setShowNewAddr(false)} disabled={tidying}>Cancel</button>
+                        <button className="btn-primary" onClick={handleTidyAddress} disabled={tidying}>{tidying ? 'Tidying…' : 'Add address'}</button>
                       </div>
                     </div>
                   )}
@@ -484,6 +500,44 @@ export default function OrderEntry({
               )}
             </div>
           </section>
+
+          {/* Tidy-address confirm overlay — the parsed fields, editable, before saving. */}
+          {tidy && (
+            <div className="ta-overlay" role="dialog" aria-modal="true" aria-label="Confirm tidied address">
+              <div className="ta-modal">
+                <div className="ta-head">
+                  <b>Confirm address</b>
+                  <button className="ta-x" onClick={() => setTidy(null)} aria-label="Close">×</button>
+                </div>
+                <div className="ta-body">
+                  <div className="ta-tier">Auto-tidied ({tidy.tier.toLowerCase()}) — check the fields, edit if needed.</div>
+                  <div className="ta-grid">
+                    <label>Recipient name<input type="text" value={tidy.recipient_name ?? ''} onChange={(e) => setTidy({ ...tidy, recipient_name: e.target.value })} /></label>
+                    <label>Contact phone<input type="text" inputMode="tel" value={tidy.contact_phone ?? ''} onChange={(e) => setTidy({ ...tidy, contact_phone: e.target.value })} /></label>
+                  </div>
+                  <div className="ta-autofill">
+                    <PostcodeAutofill
+                      onPick={(h) => setTidy({ ...tidy, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })}
+                    />
+                  </div>
+                  <div className="ta-grid">
+                    <label>Province<input type="text" value={tidy.provinsi ?? ''} onChange={(e) => setTidy({ ...tidy, provinsi: e.target.value })} /></label>
+                    <label>City / district<input type="text" value={tidy.kota ?? ''} onChange={(e) => setTidy({ ...tidy, kota: e.target.value })} /></label>
+                    <label>Subdistrict (kecamatan)<input type="text" value={tidy.kecamatan ?? ''} onChange={(e) => setTidy({ ...tidy, kecamatan: e.target.value })} /></label>
+                    <label>Ward (kelurahan)<input type="text" value={tidy.kelurahan ?? ''} onChange={(e) => setTidy({ ...tidy, kelurahan: e.target.value })} /></label>
+                    <label>Postcode<input type="text" inputMode="numeric" value={tidy.kode_pos ?? ''} onChange={(e) => setTidy({ ...tidy, kode_pos: e.target.value })} /></label>
+                    <label>Country<input type="text" value={tidy.negara ?? ''} onChange={(e) => setTidy({ ...tidy, negara: e.target.value })} /></label>
+                  </div>
+                  <label className="ta-full">Address <em>(street, alley/gang, no.)</em><textarea value={tidy.street ?? ''} onChange={(e) => setTidy({ ...tidy, street: e.target.value })} /></label>
+                  <label className="ta-full">Delivery note <em>(not printed in the address)</em><textarea value={tidy.delivery_note ?? ''} onChange={(e) => setTidy({ ...tidy, delivery_note: e.target.value })} /></label>
+                </div>
+                <div className="ta-actions">
+                  <button className="btn-secondary" onClick={() => setTidy(null)} disabled={savingAddr}>Back</button>
+                  <button className="btn-primary" onClick={handleConfirmAddress} disabled={savingAddr}>{savingAddr ? 'Saving…' : 'Save address'}</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Panel 3 — Items */}
           <section className={`panel ${!customer ? 'panel-locked' : ''}`}>
