@@ -549,6 +549,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .ta-body textarea { min-height: 56px; resize: vertical; }
 .ta-full { margin-bottom: 10px; }
 .ta-autofill { margin-bottom: 10px; }
+.ta-autofill > label { display: block; font-size: 12px; font-weight: 600; color: var(--brown-dark); margin-bottom: 4px; }
+.ta-autofill > label em { font-style: normal; font-weight: 400; opacity: 0.7; }
+.ta-warn { background: #FDF3E7; border: 1px solid var(--orange); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; font-size: 12px; color: #8A5A1A; display: flex; flex-direction: column; gap: 4px; }
 .ta-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); }
 @media (max-width: 560px) { .ta-grid { grid-template-columns: 1fr; } }
 

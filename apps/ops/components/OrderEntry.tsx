@@ -22,8 +22,8 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
 import PostcodeAutofill from '@/components/PostcodeAutofill';
-import { loadPostal } from '@/lib/idPostal';
-import { tidyAddress, type TidyResult } from '@/lib/tidyAddress';
+import { loadPostal, type PostalData } from '@/lib/idPostal';
+import { tidyAddress, validateAddress, type TidyResult } from '@/lib/tidyAddress';
 
 const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEBSITE', 'LINE', 'OTHER'];
 
@@ -106,6 +106,8 @@ export default function OrderEntry({
   const [savingAddr, setSavingAddr] = useState(false);
   const [tidying, setTidying] = useState(false);
   const [tidy, setTidy] = useState<TidyResult | null>(null); // non-null → confirm overlay is open
+  const [postal, setPostal] = useState<PostalData | null>(null); // for live re-validation on edit
+  const [tidyInfo, setTidyInfo] = useState<string[]>([]); // one-time notes (e.g. postcode override)
 
   // Panel 3 — items
   const [skuQuery, setSkuQuery] = useState('');
@@ -251,8 +253,13 @@ export default function OrderEntry({
     setTidying(true);
     setError(null);
     try {
-      const postal = await loadPostal();
-      setTidy(tidyAddress(naAddr, { recipient: naRecipient || customer.name, phone: naContact || customer.phone }, postal));
+      const data = await loadPostal();
+      const result = tidyAddress(naAddr, { recipient: naRecipient || customer.name, phone: naContact || customer.phone }, data);
+      // separate one-time info (e.g. "used ward postcode …") from live chain-validation warnings
+      const chain = validateAddress(result, data);
+      setTidyInfo(result.warnings.filter((wm) => !chain.includes(wm)));
+      setPostal(data);
+      setTidy(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to read the address.');
     } finally {
@@ -511,11 +518,20 @@ export default function OrderEntry({
                 </div>
                 <div className="ta-body">
                   <div className="ta-tier">Auto-tidied ({tidy.tier.toLowerCase()}) — check the fields, edit if needed.</div>
+                  {(() => {
+                    const warns = [...tidyInfo, ...(postal ? validateAddress(tidy, postal) : [])];
+                    return warns.length > 0 ? (
+                      <div className="ta-warn">
+                        {warns.map((wm, i) => <div key={i}>⚠ {wm}</div>)}
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="ta-grid">
                     <label>Recipient name<input type="text" value={tidy.recipient_name ?? ''} onChange={(e) => setTidy({ ...tidy, recipient_name: e.target.value })} /></label>
                     <label>Contact phone<input type="text" inputMode="tel" value={tidy.contact_phone ?? ''} onChange={(e) => setTidy({ ...tidy, contact_phone: e.target.value })} /></label>
                   </div>
                   <div className="ta-autofill">
+                    <label>Autofill <em>(province / city / kecamatan / kelurahan / postcode)</em></label>
                     <PostcodeAutofill
                       onPick={(h) => setTidy({ ...tidy, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })}
                     />
@@ -529,7 +545,7 @@ export default function OrderEntry({
                     <label>Country<input type="text" value={tidy.negara ?? ''} onChange={(e) => setTidy({ ...tidy, negara: e.target.value })} /></label>
                   </div>
                   <label className="ta-full">Address <em>(street, alley/gang, no.)</em><textarea value={tidy.street ?? ''} onChange={(e) => setTidy({ ...tidy, street: e.target.value })} /></label>
-                  <label className="ta-full">Delivery note <em>(not printed in the address)</em><textarea value={tidy.delivery_note ?? ''} onChange={(e) => setTidy({ ...tidy, delivery_note: e.target.value })} /></label>
+                  <label className="ta-full">Delivery note <em>(printed below the courier line)</em><textarea value={tidy.delivery_note ?? ''} onChange={(e) => setTidy({ ...tidy, delivery_note: e.target.value })} /></label>
                 </div>
                 <div className="ta-actions">
                   <button className="btn-secondary" onClick={() => setTidy(null)} disabled={savingAddr}>Back</button>

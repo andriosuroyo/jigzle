@@ -85,6 +85,7 @@ export default function OutboundBoard({
   //   <phone>
   //   <blank>
   //   <courier>: <#tracking>  — courier + tracking on ONE line
+  //   <delivery note>         — printed below the courier line
   // name/phone fall back to the customer; the one-line address falls back to the raw blob if unparsed.
   const addressBlock = useMemo(() => {
     if (!detail) return '';
@@ -92,7 +93,6 @@ export default function OutboundBoard({
     const phone = detail.contact_phone || detail.customer_phone;
     const addrLine = [
       detail.street,
-      detail.delivery_note ? `(${detail.delivery_note})` : null,
       detail.kelurahan,
       detail.kecamatan,
       detail.kota,
@@ -107,7 +107,9 @@ export default function OutboundBoard({
     const courier = detail.courier_label || detail.planned_courier;
     const tracking = detail.courier_tracking ? '#' + detail.courier_tracking : null;
     const courierLine = [courier, tracking].filter(Boolean).join(': ');
-    return courierLine ? `${head}\n\n${courierLine}` : head;
+    // courier line, then the delivery note beneath it
+    const footer = [courierLine, detail.delivery_note].filter((x) => x && String(x).trim()).join('\n');
+    return footer ? `${head}\n\n${footer}` : head;
   }, [detail]);
 
   function applyDetail(d: ShipDetail | null) {
