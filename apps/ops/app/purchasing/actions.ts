@@ -611,11 +611,11 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,qty,product_link,item_note,urgency,status,status_since')
+    .select('po_id,item_code,qty,product_link,item_note,urgency,status,status_since,input_date')
     .eq('status', 'Planned')
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
-  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null }[];
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null; input_date: string | null }[];
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -636,6 +636,7 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
       product_link: r.product_link,
       item_note: r.item_note,
       urgency: r.urgency,
+      input_date: r.input_date,
       available: p.available,
       on_the_way: p.on_the_way,
       with_forwarder: p.with_forwarder,
@@ -648,14 +649,14 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,qty,product_link,urgency,sold_out_date,sold_out_note,customer_id,marketplace_order_id,status')
+    .select('po_id,item_code,qty,product_link,urgency,sold_out_date,sold_out_note,customer_id,marketplace_order_id,status,input_date')
     .eq('status', 'Sold out')
     .order('sold_out_date', { ascending: false, nullsFirst: false })
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
   const rows = (data ?? []) as {
     po_id: number; item_code: string | null; qty: number; product_link: string | null; urgency: Urgency | null;
-    sold_out_date: string | null; sold_out_note: string | null; customer_id: number | null; marketplace_order_id: string | null;
+    sold_out_date: string | null; sold_out_note: string | null; customer_id: number | null; marketplace_order_id: string | null; input_date: string | null;
   }[];
   if (!rows.length) return [];
 
@@ -702,6 +703,7 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
       sales_id: r.marketplace_order_id,
       customer_name: r.customer_id != null ? customerById.get(r.customer_id) ?? null : null,
       order_date: r.marketplace_order_id ? orderDateById.get(r.marketplace_order_id) ?? null : null,
+      input_date: r.input_date,
       available: p.available,
       with_forwarder: p.with_forwarder,
       on_the_way: p.on_the_way,

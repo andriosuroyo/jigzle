@@ -110,6 +110,10 @@ input, textarea, select, button { font-family: inherit; }
 .po-card .ff-name { color: var(--ink); }
 .po-card-poid { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--muted); }
 .po-card-qty { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--brown-dark); }
+/* a muted date at the top-right of a To-buy card's first line (create / order date) */
+.po-card-date { flex-shrink: 0; margin-left: 8px; font-size: 11px; font-weight: 700; color: var(--muted); }
+/* quickview list: cap at ~6 cards then scroll (the rest of the page stays put) */
+.po-list-scroll { max-height: 25rem; overflow-y: auto; }
 
 /* unit-cost row with a leading currency symbol (To forwarder) */
 .po-cost-row { display: flex; align-items: center; gap: 8px; }

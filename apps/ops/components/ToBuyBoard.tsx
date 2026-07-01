@@ -302,6 +302,7 @@ export default function ToBuyBoard({
                     <span className="ff-code">{p.item_code || '—'}</span>
                     <span className="ff-name">{p.name}</span>
                     <UrgencyChip urgency={p.urgency} />
+                    <span className="po-card-date">{fmtDate(p.input_date)}</span>
                   </div>
                   <div className="po-card-l2 hint">
                     <StockFigs wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />
@@ -343,8 +344,9 @@ export default function ToBuyBoard({
                     <span className="ff-code">{p.item_code || '—'}</span>
                     <span className="ff-name">{p.name}</span>
                     <UrgencyChip urgency={p.urgency} />
+                    <span className="po-card-date">{fmtDate(p.order_date)}</span>
                   </div>
-                  <div className="po-card-l2 hint">{p.sales_id} · {p.customer_name || 'no customer'} · {fmtDate(p.order_date)}</div>
+                  <div className="po-card-l2 hint">{p.sales_id} · {p.customer_name || 'no customer'}</div>
                   <div className="po-card-l3">
                     <span className="qty-ro" aria-label="quantity">{p.qty}</span>
                     <div className="po-card-actions">
@@ -372,10 +374,11 @@ export default function ToBuyBoard({
                     <span className="ff-code">{p.item_code || '—'}</span>
                     <span className="ff-name">{p.name}</span>
                     <UrgencyChip urgency={p.urgency} />
+                    <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
                   </div>
                   <div className="po-card-l2 hint">
                     {p.origin === 'sales'
-                      ? <>{p.sales_id} · {p.customer_name || 'no customer'} · {fmtDate(p.order_date)}</>
+                      ? <>{p.sales_id} · {p.customer_name || 'no customer'}</>
                       : <StockFigs wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />}
                   </div>
                   <div className="po-card-l3">
