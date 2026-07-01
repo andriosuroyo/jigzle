@@ -79,35 +79,35 @@ export default function OutboundBoard({
   );
   const imgMap = useSkuImages(imgCodes);
 
-  // O3 copyable address block — composed from the structured fields (PR113): recipient, street,
-  // ward/subdistrict, city/province/postcode, phone, then the delivery note. name/phone fall back to
-  // the customer; a blank line then courier label + #tracking. The order-code title row is excluded.
+  // O3 copyable address block (PR119). Layout:
+  //   <recipient>
+  //   <address on ONE line>   — street, (notes), ward, subdistrict, city/district, province, country, postcode
+  //   <phone>
+  //   <blank>
+  //   <courier>, <#tracking>  — courier + tracking on ONE line
+  // name/phone fall back to the customer; the one-line address falls back to the raw blob if unparsed.
   const addressBlock = useMemo(() => {
     if (!detail) return '';
     const recipient = detail.recipient_name || detail.customer_name;
     const phone = detail.contact_phone || detail.customer_phone;
-    const cityProvince = [detail.kota, detail.provinsi].filter(Boolean).join(', ');
-    const cityLine = [cityProvince, detail.kode_pos].filter(Boolean).join(' ');
-    const lines = [
-      recipient,
+    const addrLine = [
       detail.street,
-      [detail.kelurahan, detail.kecamatan].filter(Boolean).join(', '),
-      cityLine,
-      detail.negara && detail.negara !== 'Indonesia' ? detail.negara : null, // domestic default omitted
-      phone,
-      detail.delivery_note,
-    ].filter((l) => l && l.trim());
-    // fallback for rows not yet parsed into columns: the verbatim blob + name/phone
-    const head = lines.length > 1
-      ? lines.join('\n')
-      : (detail.raw_address || detail.ship_address || recipient || '');
-    const tail: string[] = [];
-    // the list shows planned_courier while the detail historically read courier_label only — fall back
-    // so an imported line that has `courier` but no denormalized `courier_label` still shows its courier.
-    const courierLabel = detail.courier_label || detail.planned_courier;
-    if (courierLabel) tail.push(courierLabel);
-    if (detail.courier_tracking) tail.push('#' + detail.courier_tracking);
-    return tail.length ? `${head}\n\n${tail.join('\n')}` : head;
+      detail.delivery_note ? `(${detail.delivery_note})` : null,
+      detail.kelurahan,
+      detail.kecamatan,
+      detail.kota,
+      detail.provinsi,
+      detail.negara,
+      detail.kode_pos,
+    ].filter((x) => x && String(x).trim()).join(', ');
+    const address = addrLine || detail.raw_address || detail.ship_address || '';
+    const head = [recipient, address, phone].filter((x) => x && String(x).trim()).join('\n');
+    // courier + tracking on one line. The list shows planned_courier while the detail historically read
+    // courier_label only — fall back so an imported line with `courier` but no `courier_label` still shows.
+    const courier = detail.courier_label || detail.planned_courier;
+    const tracking = detail.courier_tracking ? '#' + detail.courier_tracking : null;
+    const courierLine = [courier, tracking].filter(Boolean).join(', ');
+    return courierLine ? `${head}\n\n${courierLine}` : head;
   }, [detail]);
 
   function applyDetail(d: ShipDetail | null) {
