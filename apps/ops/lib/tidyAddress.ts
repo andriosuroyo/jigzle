@@ -86,11 +86,10 @@ function resolveGeo(text: string, d: PostalData, customerPc: string | null): { h
   const idx = indexes(d);
   const low = text.toLowerCase();
 
-  // 1) WARD (kelurahan) name present → canonical row. Disambiguate by kecamatan/city in the text, and —
-  //    crucially — by the typed postcode: a ward whose postcode matches what the customer wrote is almost
-  //    certainly the right one (resolves street-vs-ward name collisions, e.g. "Jl. Raya Legok" vs kel Legok).
+  // Score every ward-name occurrence by how well its kecamatan / city / postcode ALSO appear in the text.
+  //   kec = +2, city = +1, postcode-match = +4. A bare ward-name coincidence scores 0.
   let best: Tuple | null = null;
-  let bestScore = -1;
+  let bestScore = 0;
   for (const [kel, rows] of idx.byKel) {
     if (kel.length < 4 || !low.includes(kel) || !bounded(low, kel)) continue;
     for (const t of rows) {
@@ -98,22 +97,29 @@ function resolveGeo(text: string, d: PostalData, customerPc: string | null): { h
       if (score > bestScore) { bestScore = score; best = t; }
     }
   }
-  if (best) return { hit: best, source: 'ward' };
+  // STRONG ward (kec+city both present, or its postcode matches) OVERRIDES the postcode — this is how we
+  // stop conforming to a wrong customer postcode (e.g. "Telaga Asih, Cikarang Barat, Bekasi 17520" → 17530).
+  if (best && bestScore >= 3) return { hit: best, source: 'ward' };
 
-  // 2) KECAMATAN (subdistrict) name present → city/province (ward unknown; postcode not derivable).
-  for (const [kec, rows] of idx.byKec) {
-    if (kec.length < 4 || !low.includes(kec) || !bounded(low, kec)) continue;
-    const t = rows.find((r) => low.includes(L(r[2]))) ?? rows[0];
-    return { hit: ['', t[1], t[2], t[3], ''], source: 'kec' };
-  }
-
-  // 3) POSTCODE anchor (last resort) — trust the customer postcode only when no name matched.
+  // Otherwise the POSTCODE is the primary anchor (reliable when present). Prefer the candidate whose
+  // ward/kecamatan/city appears in the text so a street-word collision (e.g. "Taman Aries", "Kelapa
+  // Gading") can't hijack it to a same-named ward elsewhere.
   const pcs = (text.match(POSTCODE_RE) || []).filter((pc) => idx.byPc.has(pc));
   if (pcs.length) {
     const cands = idx.byPc.get(pcs[pcs.length - 1])!;
-    if (cands.length === 1) return { hit: cands[0], source: 'pc' };
+    for (const t of cands) if (low.includes(L(t[0])) || low.includes(L(t[1]))) return { hit: t, source: 'pc' }; // ward/kec confirmed
+    if (cands.length === 1) return { hit: cands[0], source: 'pc' };                                             // unique postcode → trust its ward
+    for (const t of cands) if (low.includes(L(t[2]))) return { hit: ['', '', t[2], t[3], t[4]], source: 'pc' }; // multi + city → keep city/prov, drop ward
     const t = cands[0];
-    return { hit: ['', '', t[2], t[3], t[4]], source: 'pc' };
+    return { hit: ['', '', t[2], t[3], t[4]], source: 'pc' };                                                  // multi, unresolved → city/prov only
+  }
+
+  // No postcode: accept a kecamatan-confirmed ward (score ≥ 2), else a city-confirmed kecamatan.
+  if (best && bestScore >= 2) return { hit: best, source: 'ward' };
+  for (const [kec, rows] of idx.byKec) {
+    if (kec.length < 4 || !low.includes(kec) || !bounded(low, kec)) continue;
+    const t = rows.find((r) => low.includes(L(r[2])));
+    if (t) return { hit: ['', t[1], t[2], t[3], ''], source: 'kec' };
   }
   return { hit: null, source: 'none' };
 }
