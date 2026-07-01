@@ -106,6 +106,8 @@ input, textarea, select, button { font-family: inherit; }
 .po-cards-compact .po-card-l1 .ff-code { flex: 1; min-width: 0; }
 .po-cards-compact .po-card-l2 { display: flex; align-items: center; gap: 8px; overflow: visible; }
 .po-cards-compact .po-card-l2 .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the card is a <button>; force the name to ink so iOS doesn't paint it the default button-tint (blue) */
+.po-card .ff-name { color: var(--ink); }
 .po-card-poid { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--muted); }
 .po-card-qty { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--brown-dark); }
 
@@ -498,9 +500,12 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-searchbar { display: flex; gap: 6px; padding: 8px 8px 0; align-items: center; }
 .po-search { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
 .po-searchbar .btn-secondary { flex-shrink: 0; }
-/* Ship date shown inline in the group panel's header subtext */
-.fd-sub-ship label { font-size: 13px; color: var(--muted); }
-.fd-sub-ship input { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
+/* Group panel: per-PO ship-qty stepper (partial split) sits at the end of the name line */
+.grp-qty { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.grp-qty .qty-step { display: inline-flex; align-items: center; }
+.grp-qty .qty-step button { width: 26px; height: 28px; font-size: 16px; }
+.grp-qty .qty-step input { width: 40px; height: 28px; text-align: center; border: 1px solid var(--line); border-radius: 6px; margin: 0 2px; }
+.grp-qty-of { font-size: 12px; color: var(--muted); font-weight: 700; }
 .po-newbtn { padding: 8px; }
 .po-row-wrap { display: flex; align-items: center; gap: 8px; }
 .po-row-wrap .po-check { flex-shrink: 0; width: 16px; height: 16px; }

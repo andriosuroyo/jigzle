@@ -577,7 +577,9 @@ export type NewPOInput = {
 // the '<PREFIX> <n>' form (no allocator — forwarder ship-ids are externally assigned).
 export type GroupShipmentInput = {
   ship_id: string;
-  po_ids: number[];
+  // per-line ship quantity: qty omitted / >= the PO's qty attaches the whole line; a smaller qty
+  // splits it (new attached row = shipped portion, original keeps the remainder in To ship).
+  items: { po_id: number; qty?: number }[];
   forwarder_prefix: string;
   origin_country?: string | null;
   ship_date?: string | null;         // 'YYYY-MM-DD'

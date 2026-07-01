@@ -207,17 +207,17 @@ export async function getForwarders(): Promise<Forwarder[]> {
   return data as Forwarder[];
 }
 
-// ── the next ship_id for a forwarder prefix: highest numeric suffix seen on that prefix + 1 ──
-// Powers the To-ship group panel's auto-fill: pick a forwarder → its next running number appears.
-// Ship_ids are messy (spaces, occasional embedded "\n#tracking"), so we scan by prefix and parse the
-// first number after it in JS rather than trusting a single format. Zero-pads to the prefix's observed
-// width (e.g. MTE → "005", SUB → "193") so new ids match the existing sequence.
-export async function getNextShipId(prefix: string): Promise<string> {
+// ── the LAST (highest) ship_id used for a forwarder prefix — shown as a "last ID:" hint in the To-ship
+// group panel so the operator can decide whether to start the next number or add to an existing id (we
+// don't auto-fill, because a shipment can legitimately gain more items later). Ship_ids are messy
+// (spaces, occasional embedded "\n#tracking"), so we scan by prefix and parse the number in JS; the
+// returned string is re-composed as "<PREFIX> <n>" zero-padded to the observed width. '' if none. ──
+export async function getLastShipId(prefix: string): Promise<string> {
   const p = prefix.trim().toUpperCase();
   if (!p) return '';
   const supabase = createSupabaseServerClient();
   const { data } = await supabase.from('shipments').select('ship_id').ilike('ship_id', `${p}%`);
-  let max = 0;
+  let max = -1;
   let width = 3; // sensible default pad
   for (const row of (data ?? []) as { ship_id: string }[]) {
     const m = new RegExp(`^${p}\\s*0*(\\d+)`, 'i').exec((row.ship_id ?? '').trim());
@@ -228,7 +228,7 @@ export async function getNextShipId(prefix: string): Promise<string> {
       width = Math.max(width, m[1].length);
     }
   }
-  return `${p} ${String(max + 1).padStart(width, '0')}`;
+  return max < 0 ? '' : `${p} ${String(max).padStart(width, '0')}`;
 }
 
 export async function getOpenShipments(): Promise<OpenShipmentRow[]> {
@@ -850,18 +850,19 @@ export async function deleteForwarder(prefix: string): Promise<void> {
   if (error) throw new Error(`deleteForwarder: ${error.message}`);
 }
 
-// ── group selected POs into a forwarder shipment (atomic, via the RPC) → updated po_ids ──
+// ── group selected POs into a forwarder shipment, with optional per-line partial qty (atomic RPC) ──
 export async function groupIntoShipment(payload: GroupShipmentInput): Promise<{ affected: number[] }> {
-  if (!payload.po_ids?.length) throw new Error('groupIntoShipment: select at least one PO');
+  const items = (payload.items ?? []).filter((i) => i && Number.isFinite(i.po_id));
+  if (!items.length) throw new Error('groupIntoShipment: select at least one PO');
   const ship_id = payload.ship_id?.trim();
   if (!ship_id) throw new Error('groupIntoShipment: a ship id is required');
   const forwarder_prefix = payload.forwarder_prefix?.trim();
   if (!forwarder_prefix) throw new Error('groupIntoShipment: a forwarder is required');
 
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase.rpc('group_pos_into_shipment', {
+  const { data, error } = await supabase.rpc('group_pos_into_shipment_v2', {
     p_ship_id: ship_id,
-    p_po_ids: payload.po_ids,
+    p_items: items.map((i) => ({ po_id: i.po_id, qty: i.qty ?? null })),
     p_forwarder_prefix: forwarder_prefix,
     p_origin_country: payload.origin_country?.trim() || null,
     p_ship_date: payload.ship_date || null,
@@ -1026,14 +1027,19 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
 
 // ── History → Per shipment (read-only): completed shipments, newest received first; one row per
 // shipment with a count of its Received SKUs. Optional filter matches ship_id. (types in ./types) ──
+const SHIP_HISTORY_LIMIT = 400; // shipments shown in Purchasing → History (was capped at 100)
+
 export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow[]> {
   const supabase = createSupabaseServerClient();
+  // Every COMPLETED shipment is history — not just those with a received_date. Legacy/imported and
+  // recently-completed shipments often have status 'completed' but a null received_date; the old
+  // received_date filter hid them, so the list stopped at the newest received-dated shipment. We sort
+  // by the best available date (received_date, else ship_date) so the newest work is on top.
   const { data } = await supabase
     .from('shipments')
     .select('ship_id,forwarder_prefix,origin_country,ship_date,received_date,tracking,status')
-    .not('received_date', 'is', null)
-    .order('received_date', { ascending: false, nullsFirst: false })
-    .limit(300);
+    .eq('status', 'completed')
+    .limit(2000);
   let ships = (data ?? []) as {
     ship_id: string; forwarder_prefix: string | null; origin_country: string | null;
     ship_date: string | null; received_date: string | null; tracking: string | null;
@@ -1041,21 +1047,34 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
 
   const q = sanitize(query).toLowerCase();
   if (q) ships = ships.filter((s) => s.ship_id.toLowerCase().includes(q));
-  ships = ships.slice(0, HISTORY_LIMIT);
+  const bestDate = (s: { received_date: string | null; ship_date: string | null }) => s.received_date || s.ship_date || '';
+  ships.sort((a, b) => {
+    const da = bestDate(a), db = bestDate(b);
+    if (da && db) return da < db ? 1 : da > db ? -1 : a.ship_id.localeCompare(b.ship_id);
+    if (da) return -1;
+    if (db) return 1;
+    return a.ship_id.localeCompare(b.ship_id);
+  });
+  ships = ships.slice(0, SHIP_HISTORY_LIMIT);
   if (!ships.length) return [];
 
-  // roll-up the Received PO lines per ship_id: distinct SKUs, Σ cost, distinct supplier ids
+  // roll-up the Received PO lines per ship_id: distinct SKUs, Σ cost, distinct supplier ids. Chunk the
+  // .in() (a large id list can silently drop rows) and merge the batches.
   const shipIds = ships.map((s) => s.ship_id);
   const skusByShip = new Map<string, Set<string>>();
   const costByShip = new Map<string, number>();
   const supIdsByShip = new Map<string, Set<number>>();
   const allSupIds = new Set<number>();
-  const { data: pos } = await supabase
-    .from('purchase_orders')
-    .select('ship_id,item_code,item_cost,supplier_id,status')
-    .in('ship_id', shipIds)
-    .eq('status', 'Received');
-  for (const p of (pos ?? []) as { ship_id: string | null; item_code: string | null; item_cost: number | null; supplier_id: number | null }[]) {
+  const posRows: { ship_id: string | null; item_code: string | null; item_cost: number | null; supplier_id: number | null }[] = [];
+  for (let i = 0; i < shipIds.length; i += 100) {
+    const { data: chunk } = await supabase
+      .from('purchase_orders')
+      .select('ship_id,item_code,item_cost,supplier_id,status')
+      .in('ship_id', shipIds.slice(i, i + 100))
+      .eq('status', 'Received');
+    posRows.push(...((chunk ?? []) as typeof posRows));
+  }
+  for (const p of posRows) {
     if (!p.ship_id) continue;
     if (p.item_code) (skusByShip.get(p.ship_id) ?? skusByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.item_code);
     if (p.item_cost != null) costByShip.set(p.ship_id, (costByShip.get(p.ship_id) ?? 0) + Number(p.item_cost));
