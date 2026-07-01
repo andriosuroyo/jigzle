@@ -279,6 +279,8 @@ export type InventoryFilter = {
   state?: InventoryState;
   sort?: { column: InventorySortColumn; dir: 'asc' | 'desc' };
 };
+// Per-tab SKU counts for the Inventory filter tabs (all = the active set; the three states = column > 0).
+export type InventoryCounts = { all: number; on_order: number; shipping: number; warehouse: number };
 
 // ── Fulfill module (Sales pipeline step 4) ────────────────────────────────────
 // holds (0005): a physical hold-rack reservation; released_at NULL = active.

@@ -6,7 +6,7 @@
 // The service-role key is never used here. No stock-mutating writes live on this screen.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import type { InventoryFilter, InventorySortColumn, StockRow } from '@jigzle/db/types';
+import type { InventoryCounts, InventoryFilter, InventorySortColumn, StockRow } from '@jigzle/db/types';
 
 const LIMIT = 1000; // PostgREST caps responses at max_rows (1000); the operator narrows with search.
 
@@ -112,6 +112,25 @@ async function deadSkuFallback(supabase: Supabase, raw: string): Promise<StockRo
       refreshed_at,
     },
   ];
+}
+
+// ── per-tab SKU counts (for the filter tabs). `all` = the active snapshot size; each state = SKUs
+//    whose column is > 0. Head-only count queries (no rows transferred). ──
+export async function getInventoryCounts(): Promise<InventoryCounts> {
+  const supabase = createSupabaseServerClient();
+  const countWhere = async (col?: 'pending' | 'on_the_way' | 'physical') => {
+    let q = supabase.from('stock_snapshot').select('item_code', { count: 'exact', head: true });
+    if (col) q = q.gt(col, 0);
+    const { count } = await q;
+    return count ?? 0;
+  };
+  const [all, on_order, shipping, warehouse] = await Promise.all([
+    countWhere(),
+    countWhere('pending'),
+    countWhere('on_the_way'),
+    countWhere('physical'),
+  ]);
+  return { all, on_order, shipping, warehouse };
 }
 
 // ── recompute the snapshot now (the Refresh button) → the new "as of" timestamp ──
