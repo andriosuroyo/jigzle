@@ -1,18 +1,23 @@
 'use client';
 
-// Purchasing → History tab. Two sub-lists so shipment-level data isn't duplicated across item rows:
-//  • Per shipment — one row per completed shipment (receive date, tracking, SKU count).
-//  • Per item — one row per Received PO line (keeps per-item cost / shipID / supplier).
+// Purchasing → History tab. Two sub-lists (Sales-Pending style tabs with counts):
+//  • Per shipment — one quickview card per completed shipment; tap to see all its SKUs.
+//  • Per item — one row per Received PO line (per-item cost / shipID).
+// "Received" (and the date) comes from the inbound ledger, not just shipments.received_date, so a
+// shipment booked into inbound reads as received with its real date even if the ledger row was blank.
 // Read-only; each sub-list owns its search.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getReceivedItems, getShipmentHistory } from '@/app/purchasing/actions';
-import type { ReceivedItemRow, ShipmentHistoryRow } from '@/app/purchasing/types';
+import { getReceivedItems, getShipmentHistory, getShipmentItems } from '@/app/purchasing/actions';
+import type { ReceivedItemRow, ShipmentHistoryRow, ShipmentItemRow } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
+// shipped until the ship_id is received in inbound (received_date set) → then received
+const shipDateLabel = (s: { received_date: string | null; ship_date: string | null }): string =>
+  s.received_date ? `received ${fmtDate(s.received_date)}` : `shipped ${fmtDate(s.ship_date)}`;
 
 export default function PurchasingHistoryBoard({
   initialItems,
@@ -29,10 +34,15 @@ export default function PurchasingHistoryBoard({
   const reqRef = useRef(0);
   const firstRun = useRef(true); // skip the debounced refetch on mount (initial data already loaded)
 
-  const imgCodes = useMemo(
-    () => (sub === 'item' ? items.map((i) => i.item_code).filter((c): c is string => !!c) : []),
-    [sub, items]
-  );
+  // shipment detail (per-shipment tab): the selected shipment + its SKU lines
+  const [openShip, setOpenShip] = useState<ShipmentHistoryRow | null>(null);
+  const [shipItems, setShipItems] = useState<ShipmentItemRow[]>([]);
+  const [shipItemsLoading, setShipItemsLoading] = useState(false);
+
+  const imgCodes = useMemo(() => {
+    if (openShip) return shipItems.map((i) => i.item_code).filter((c): c is string => !!c);
+    return sub === 'item' ? items.map((i) => i.item_code).filter((c): c is string => !!c) : [];
+  }, [sub, items, openShip, shipItems]);
   const imgMap = useSkuImages(imgCodes);
 
   async function runSearch() {
@@ -53,8 +63,8 @@ export default function PurchasingHistoryBoard({
     }
   }
 
-  // clear the field when flipping sub-lists (their result sets are independent)
-  useEffect(() => { setQuery(''); }, [sub]);
+  // clear the field + any open detail when flipping sub-lists (their result sets are independent)
+  useEffect(() => { setQuery(''); setOpenShip(null); }, [sub]);
   // live search: re-query as you type, debounced. Skip the mount run — initial data already loaded.
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
@@ -63,11 +73,73 @@ export default function PurchasingHistoryBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, sub]);
 
+  async function selectShip(s: ShipmentHistoryRow) {
+    setOpenShip(s);
+    setShipItems([]);
+    setShipItemsLoading(true);
+    try {
+      setShipItems(await getShipmentItems(s.ship_id));
+    } catch {
+      setShipItems([]);
+    } finally {
+      setShipItemsLoading(false);
+    }
+  }
+
+  const TABS: { key: 'shipment' | 'item'; label: string; count: number }[] = [
+    { key: 'shipment', label: 'Per shipment', count: ships.length },
+    { key: 'item', label: 'Per item', count: items.length },
+  ];
+
+  // ── shipment detail: back + header + every SKU in the shipment ──
+  if (openShip) {
+    return (
+      <div className="purch-history">
+        <button className="btn-link" onClick={() => setOpenShip(null)}>← back to shipments</button>
+        <div className="fd-head">
+          <div className="fd-title">{openShip.ship_id}</div>
+          <div className="fd-sub">
+            {shipDateLabel(openShip)} · {openShip.item_count} {openShip.item_count === 1 ? 'SKU' : 'SKUs'}
+            {openShip.total_cost != null ? ` · cost ${openShip.total_cost}` : ''}
+          </div>
+        </div>
+        {shipItemsLoading && <div className="hint">Loading items…</div>}
+        {!shipItemsLoading && shipItems.length === 0 && <div className="hint">No item lines on this shipment.</div>}
+        <ul className="po-cards po-cards-compact">
+          {shipItems.map((it) => (
+            <li key={it.po_id}>
+              <div className="po-card">
+                <SkuImage status={imgMap[it.item_code ?? '']?.status} displayUrl={imgMap[it.item_code ?? '']?.displayUrl} name={it.name} size={SKU_IMG.sm} />
+                <div className="po-card-main">
+                  <div className="po-card-l1">
+                    <span className="ff-code">{it.item_code || '—'}</span>
+                    {it.item_cost != null && <span className="po-card-poid">cost {it.item_cost}</span>}
+                  </div>
+                  <div className="po-card-l2"><span className="ff-name">{it.name}</span><span className="po-card-qty">×{it.qty}</span></div>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   return (
     <div className="purch-history">
-      <div className="purch-subtabs">
-        <button className={`purch-subtab ${sub === 'shipment' ? 'active' : ''}`} onClick={() => setSub('shipment')}>Per shipment</button>
-        <button className={`purch-subtab ${sub === 'item' ? 'active' : ''}`} onClick={() => setSub('item')}>Per item</button>
+      {/* Sales-Pending style tabs with live counts */}
+      <div className="fq-filters" role="tablist" aria-label="History">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={sub === t.key}
+            className={`fq-filter ${sub === t.key ? 'active' : ''}`}
+            onClick={() => setSub(t.key)}
+          >
+            {t.label}<span className="fq-filter-count">{t.count}</span>
+          </button>
+        ))}
       </div>
 
       <div className="search-row" style={{ padding: '8px 0' }}>
@@ -81,45 +153,45 @@ export default function PurchasingHistoryBoard({
       </div>
 
       {sub === 'shipment' ? (
-        <ul className="ff-lines">
+        <ul className="po-cards po-cards-compact">
           {ships.length === 0 && <li className="hint fq-empty">{searching ? 'Searching…' : 'No completed shipments.'}</li>}
           {ships.map((s) => (
-            <li key={s.ship_id} className="ff-line">
-              <div className="fq-row-top">
-                <span className="fq-id">{s.ship_id}</span>
-                {/* shipped date until the ship_id is received in Inbound (received_date set) → then received */}
-                <span className="fq-id-sub">{s.received_date ? `received ${fmtDate(s.received_date)}` : `shipped ${fmtDate(s.ship_date)}`}</span>
-              </div>
-              <div className="fq-row-bot">
-                <span className="ff-items-skus">
-                  {s.item_count} {s.item_count === 1 ? 'SKU' : 'SKUs'}
-                  {s.total_cost != null ? ` · cost ${s.total_cost}` : ''}
-                  {s.suppliers.length ? ` · ${s.suppliers.join(', ')}` : ''}
-                  {s.forwarder_prefix ? ` · ${s.forwarder_prefix}` : ''}
-                  {s.tracking ? ` · ${s.tracking}` : ''}
-                </span>
-              </div>
+            <li key={s.ship_id}>
+              <button className="po-card po-card-btn" style={{ width: '100%' }} onClick={() => selectShip(s)}>
+                <div className="po-card-main">
+                  <div className="po-card-l1">
+                    <span className="ff-code">{s.ship_id}</span>
+                    <span className="po-card-poid">{shipDateLabel(s)}</span>
+                  </div>
+                  <div className="po-card-l2 hint">
+                    {s.item_count} {s.item_count === 1 ? 'SKU' : 'SKUs'}
+                    {s.total_cost != null ? ` · cost ${s.total_cost}` : ''}
+                  </div>
+                </div>
+              </button>
             </li>
           ))}
         </ul>
       ) : (
-        <ul className="ff-lines">
+        <ul className="po-cards po-cards-compact">
           {items.length === 0 && <li className="hint fq-empty">{searching ? 'Searching…' : 'No received items.'}</li>}
           {items.map((it) => (
-            <li key={it.po_id} className="ff-line pend-line">
-              <SkuImage status={imgMap[it.item_code ?? '']?.status} displayUrl={imgMap[it.item_code ?? '']?.displayUrl} name={it.name} size={SKU_IMG.sm} />
-              <div className="pend-line-main">
-                <span className="ff-code">{it.item_code || '—'}</span>
-                <span className="ff-name">{it.name}</span>
-                <span className="hint">
-                  {it.ship_id ? `ship ${it.ship_id}` : 'no ship id'}
-                  {it.item_cost != null ? ` · cost ${it.item_cost}` : ''}
-                  {it.supplier_name ? ` · ${it.supplier_name}` : ''}
-                  {it.receive_date ? ` · ${fmtDate(it.receive_date)}` : ''}
-                  {it.product_link ? <> · <a href={it.product_link} target="_blank" rel="noreferrer" className="btn-link">link ↗</a></> : null}
-                </span>
+            <li key={it.po_id}>
+              <div className="po-card">
+                <SkuImage status={imgMap[it.item_code ?? '']?.status} displayUrl={imgMap[it.item_code ?? '']?.displayUrl} name={it.name} size={SKU_IMG.sm} />
+                <div className="po-card-main">
+                  <div className="po-card-l1">
+                    <span className="ff-code">{it.item_code || '—'}</span>
+                    <span className="po-card-poid">{fmtDate(it.receive_date || it.ship_date)}</span>
+                  </div>
+                  <div className="po-card-l2"><span className="ff-name">{it.name}</span><span className="po-card-qty">×{it.qty}</span></div>
+                  <div className="po-card-l2 hint">
+                    {it.ship_id ? `ship ${it.ship_id}` : 'no ship id'}
+                    {it.item_cost != null ? ` · cost ${it.item_cost}` : ''}
+                    {it.product_link ? <> · <a href={it.product_link} target="_blank" rel="noreferrer" className="btn-link">link ↗</a></> : null}
+                  </div>
+                </div>
               </div>
-              <span className="ff-qty">×{it.qty}</span>
             </li>
           ))}
         </ul>

@@ -178,9 +178,19 @@ export interface ReceivedItemRow {
   item_cost: number | null;
   ship_id: string | null;
   supplier_name: string | null;
-  receive_date: string | null;
+  receive_date: string | null; // inbound-backed received date (null ⇒ not yet received)
+  ship_date: string | null;    // the shipment's ship date (shown when not yet received)
   marketplace_order_id: string | null;
   product_link: string | null;
+}
+
+// one SKU line within a shipment (History → shipment detail)
+export interface ShipmentItemRow {
+  po_id: number;
+  item_code: string | null;
+  name: string;
+  qty: number;
+  item_cost: number | null;
 }
 
 // ── Purchasing History → Per shipment (read-only): one completed shipment, so shipment-level data
