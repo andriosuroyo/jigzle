@@ -210,8 +210,15 @@ export default function OrderBoard({
   const [grpShipId, setGrpShipId] = useState('');
   const [grpOrigin, setGrpOrigin] = useState(''); // kept internally (from an existing shipment) — no UI field
   const [grpDate, setGrpDate] = useState(todayStr());
-  const [grpLastId, setGrpLastId] = useState<string | null>(null); // "last ID:" hint for the picked forwarder
   const [grpQty, setGrpQty] = useState<Record<number, number>>({}); // per-PO ship qty override (partial split)
+
+  // forwarders for the group picker, grouped by flag/country first, then acronym (prefix) A–Z
+  const forwardersSorted = useMemo(
+    () => [...forwarders].sort((a, b) =>
+      (a.country || '￿').localeCompare(b.country || '￿') || a.prefix.localeCompare(b.prefix)
+    ),
+    [forwarders]
+  );
 
   const selectedCount = selectedPoIds.size;
   const selectedPOs = useMemo(() => queue.filter((p) => selectedPoIds.has(p.po_id)), [queue, selectedPoIds]);
@@ -427,7 +434,6 @@ export default function OrderBoard({
         setGrpShipId('');
         setGrpOrigin('');
         setGrpDate(todayStr());
-        setGrpLastId(null);
         setGrpQty({});
       } else if (next.size === 0 && mode === 'group') {
         setMode(null);
@@ -436,19 +442,18 @@ export default function OrderBoard({
     });
   }
 
-  // pick a forwarder in the group panel → show its "last ID:" hint (we do NOT auto-fill the ship id,
-  // because a shipment can gain more items later, so the operator may reuse an existing id or start the
-  // next number themselves). Forwarder's country seeds the (hidden) origin.
+  // pick a forwarder in the group panel → load its LAST ship id into the Ship id field (editable free
+  // text: keep it to add to that shipment, or bump the number for a new one). Forwarder's country seeds
+  // the (hidden) origin.
   async function pickForwarder(prefix: string) {
     setGrpForwarder(prefix);
-    setGrpLastId(null);
     const fwd = forwarders.find((f) => f.prefix === prefix);
     if (fwd?.country) setGrpOrigin(fwd.country);
-    if (!prefix) return;
+    if (!prefix) { setGrpShipId(''); return; }
     try {
-      setGrpLastId(await getLastShipId(prefix));
+      setGrpShipId(await getLastShipId(prefix));
     } catch {
-      /* hint is best-effort */
+      /* leave the field for manual entry on failure */
     }
   }
 
@@ -1273,16 +1278,16 @@ export default function OrderBoard({
           </ul>
         </div>
 
-        {/* Forwarder + Ship id on one row. Forwarders are managed in Settings → Forwarders (no inline
-            add). Ship id is manual (a shipment can gain items later); the "last ID" hint shows the
-            highest number used for the picked forwarder so you can start the next one or reuse. */}
+        {/* Forwarder + Ship id on one row. Forwarders (flag + acronym, grouped by country) are managed
+            in Settings → Forwarders. Picking one loads its last ship id into the field, which stays
+            editable — keep it to add to that shipment, or bump the number for a new one. */}
         <div className="po-inline">
           <div className="po-field">
             <label>Forwarder</label>
             <select value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
               <option value="">— pick —</option>
-              {forwarders.map((f) => (
-                <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}{f.name ? ` — ${f.name}` : ''}</option>
+              {forwardersSorted.map((f) => (
+                <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
               ))}
             </select>
           </div>
@@ -1292,16 +1297,13 @@ export default function OrderBoard({
               type="text"
               list="po-shipids"
               className="rcv-shipid"
-              placeholder="PREFIX n"
+              placeholder="Last Shipment ID"
               value={grpShipId}
               onChange={(e) => pickExistingShipment(e.target.value)}
             />
             <datalist id="po-shipids">{shipments.map((s) => <option key={s.ship_id} value={s.ship_id} />)}</datalist>
           </div>
         </div>
-        {grpForwarder && (
-          <div className="hint" style={{ margin: '-4px 0 8px' }}>last ID: {grpLastId ? grpLastId : 'none yet'}</div>
-        )}
 
         <div className="fd-commit">
           <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>

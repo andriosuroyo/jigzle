@@ -30,6 +30,7 @@ import type {
   UpdatePOPatch,
   PreorderRow,
   ReceivedItemRow,
+  ShipmentItemRow,
   ShipmentHistoryRow,
   PlannedItemInput,
   PlannedItemRow,
@@ -1001,6 +1002,16 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
     })(),
   ]);
 
+  // per-item date follows its ship_id: received date from inbound (or the PO's own receive_date), else
+  // the shipment's ship_date (still only shipped). Look both up for the ship_ids in this page.
+  const itemShipIds = [...new Set(rows.map((r) => r.ship_id).filter((s): s is string => !!s))];
+  const inboundRecv = await inboundReceivedByShip(supabase, itemShipIds);
+  const shipDateById = new Map<string, string | null>();
+  for (let i = 0; i < itemShipIds.length; i += 100) {
+    const { data: sh } = await supabase.from('shipments').select('ship_id,ship_date').in('ship_id', itemShipIds.slice(i, i + 100));
+    for (const s of (sh ?? []) as { ship_id: string; ship_date: string | null }[]) shipDateById.set(s.ship_id, s.ship_date);
+  }
+
   let out: ReceivedItemRow[] = rows.map((r) => ({
     po_id: r.po_id,
     // uncatalogued codes (kept in item_code_raw by the reconcile) still show their code, not "(unnamed)"
@@ -1010,7 +1021,8 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
     item_cost: r.item_cost,
     ship_id: r.ship_id,
     supplier_name: r.supplier_id != null ? supplierById.get(r.supplier_id) ?? null : null,
-    receive_date: r.receive_date,
+    receive_date: r.receive_date || (r.ship_id ? inboundRecv.get(r.ship_id) ?? null : null),
+    ship_date: r.ship_id ? shipDateById.get(r.ship_id) ?? null : null,
     marketplace_order_id: r.marketplace_order_id,
     product_link: r.product_link,
   }));
@@ -1027,9 +1039,61 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
   return out.slice(0, HISTORY_LIMIT);
 }
 
+// ── History → one shipment's SKUs (Received PO lines for an exact ship_id), for the shipment detail
+// view. Newest first; resolves names in one catalogue round-trip. ──
+export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[]> {
+  const sid = shipId.trim();
+  if (!sid) return [];
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('purchase_orders')
+    .select('po_id,item_code,item_code_raw,qty,item_cost')
+    .eq('ship_id', sid)
+    .eq('status', 'Received')
+    .order('po_id', { ascending: false });
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; item_cost: number | null }[];
+  if (!rows.length) return [];
+
+  const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
+  const nameByCode = new Map<string, string>();
+  if (codes.length) {
+    const { data: cat } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
+    for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+  }
+  return rows.map((r) => ({
+    po_id: r.po_id,
+    item_code: r.item_code ?? r.item_code_raw,
+    name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : r.item_code_raw ?? '(no SKU)',
+    qty: r.qty,
+    item_cost: r.item_cost,
+  }));
+}
+
 // ── History → Per shipment (read-only): completed shipments, newest received first; one row per
 // shipment with a count of its Received SKUs. Optional filter matches ship_id. (types in ./types) ──
 const SHIP_HISTORY_LIMIT = 400; // shipments shown in Purchasing → History (was capped at 100)
+
+// ── the actual received-date per ship_id from the INBOUND ledger (the source of truth for "received":
+// a shipment is received once its goods are booked into inbound). Chunked .in() over the ids, returns
+// the latest receive_date seen per ship_id. Used to correctly label/date history even when the
+// shipments row was never stamped received_date (legacy / imported / grouped-then-received). ──
+async function inboundReceivedByShip(supabase: ReturnType<typeof createSupabaseServerClient>, shipIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(shipIds.filter(Boolean))];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data } = await supabase
+      .from('inbound')
+      .select('ship_id,receive_date')
+      .eq('is_opening_balance', false)
+      .in('ship_id', ids.slice(i, i + 100));
+    for (const r of (data ?? []) as { ship_id: string | null; receive_date: string | null }[]) {
+      if (!r.ship_id || !r.receive_date) continue;
+      const cur = out.get(r.ship_id);
+      if (!cur || r.receive_date > cur) out.set(r.ship_id, r.receive_date);
+    }
+  }
+  return out;
+}
 
 export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow[]> {
   const supabase = createSupabaseServerClient();
@@ -1049,7 +1113,14 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
 
   const q = sanitize(query).toLowerCase();
   if (q) ships = ships.filter((s) => s.ship_id.toLowerCase().includes(q));
-  const bestDate = (s: { received_date: string | null; ship_date: string | null }) => s.received_date || s.ship_date || '';
+  if (!ships.length) return [];
+
+  // received-date from the inbound ledger (source of truth) overrides a missing shipments.received_date,
+  // so a shipment that's been booked into inbound reads as RECEIVED (with its real date) even when the
+  // shipments row was never stamped. This also surfaces recently-received shipments (dateless rows) at top.
+  const inboundRecv = await inboundReceivedByShip(supabase, ships.map((s) => s.ship_id));
+  const recvOf = (s: { ship_id: string; received_date: string | null }) => s.received_date || inboundRecv.get(s.ship_id) || null;
+  const bestDate = (s: { ship_id: string; received_date: string | null; ship_date: string | null }) => recvOf(s) || s.ship_date || '';
   ships.sort((a, b) => {
     const da = bestDate(a), db = bestDate(b);
     if (da && db) return da < db ? 1 : da > db ? -1 : a.ship_id.localeCompare(b.ship_id);
@@ -1058,7 +1129,6 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     return a.ship_id.localeCompare(b.ship_id);
   });
   ships = ships.slice(0, SHIP_HISTORY_LIMIT);
-  if (!ships.length) return [];
 
   // roll-up the Received PO lines per ship_id: distinct SKUs, Σ cost, distinct supplier ids. Chunk the
   // .in() (a large id list can silently drop rows) and merge the batches.
@@ -1098,7 +1168,7 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     forwarder_prefix: s.forwarder_prefix,
     origin_country: s.origin_country,
     ship_date: s.ship_date,
-    received_date: s.received_date,
+    received_date: recvOf(s), // inbound-backed: present ⇒ received, null ⇒ still only shipped
     tracking: s.tracking,
     item_count: skusByShip.get(s.ship_id)?.size ?? 0,
     total_cost: costByShip.has(s.ship_id) ? costByShip.get(s.ship_id)! : null,
