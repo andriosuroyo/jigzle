@@ -84,7 +84,7 @@ export default function OutboundBoard({
   //   <address on ONE line>   — street, (notes), ward, subdistrict, city/district, province, country, postcode
   //   <phone>
   //   <blank>
-  //   <courier>, <#tracking>  — courier + tracking on ONE line
+  //   <courier>: <#tracking>  — courier + tracking on ONE line
   // name/phone fall back to the customer; the one-line address falls back to the raw blob if unparsed.
   const addressBlock = useMemo(() => {
     if (!detail) return '';
@@ -106,7 +106,7 @@ export default function OutboundBoard({
     // courier_label only — fall back so an imported line with `courier` but no `courier_label` still shows.
     const courier = detail.courier_label || detail.planned_courier;
     const tracking = detail.courier_tracking ? '#' + detail.courier_tracking : null;
-    const courierLine = [courier, tracking].filter(Boolean).join(', ');
+    const courierLine = [courier, tracking].filter(Boolean).join(': ');
     return courierLine ? `${head}\n\n${courierLine}` : head;
   }, [detail]);
 
