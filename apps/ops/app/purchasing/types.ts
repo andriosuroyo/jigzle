@@ -205,9 +205,10 @@ export interface ShipmentHistoryRow {
   received_date: string | null;
   tracking: string | null;
   completed: boolean;        // shipment status = completed (Completed tab) vs open (Active tab)
+  note: string | null;       // the per-Ship-ID note (editable here + in To-ship; shown on Inbound too)
   item_count: number;        // distinct items on this ship_id (POs ∪ inbound-received)
   sku_codes: string[];       // the distinct item identifiers, for the SKU search
   total_cost: number | null; // Σ item_cost×qty across the ship's PO lines (roll-up)
-  currency_symbol: string | null; // derived from origin_country (e.g. ¥) for the Total Cost label
+  currency: string | null;   // currency label from the forwarder's country (yuan / yen / NTD …)
   suppliers: string[];       // distinct supplier names on the ship (roll-up)
 }
