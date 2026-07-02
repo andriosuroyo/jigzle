@@ -64,11 +64,13 @@ export async function getReceiveQueue(): Promise<ReceiveQueueRow[]> {
   if (shipIds.length) {
     const { data: pos } = await supabase
       .from('purchase_orders')
-      .select('ship_id,item_code')
+      .select('ship_id,item_code,item_code_raw')
       .in('ship_id', shipIds);
     for (const p of pos ?? []) {
       const sid = p.ship_id as string | null;
-      const code = p.item_code as string | null;
+      // count unresolved POs too (item_code null → fall back to the raw placeholder), so the queue
+      // count/SKU list matches the receive detail (which lists unresolved lines). No more "no list".
+      const code = (p.item_code as string | null) ?? (p.item_code_raw as string | null);
       if (!sid || !code) continue;
       (poByShip.get(sid) ?? poByShip.set(sid, new Set()).get(sid)!).add(code);
     }
