@@ -24,8 +24,7 @@ import type {
 type Supabase = ReturnType<typeof createSupabaseServerClient>;
 
 const QUEUE_LIMIT = 100;
-const HISTORY_ROW_SCAN = 12000; // inbound rows scanned (paged, 1000/batch) to build the History tab before grouping
-const HISTORY_LIMIT = 100;     // shipments shown in History
+const HISTORY_ROW_SCAN = 20000; // inbound rows scanned (paged, 1000/batch) to build the FULL History (year sub-tabs, uncapped)
 
 // PostgREST `.or()` / `.ilike()` interpolate the raw string into a filter grammar where
 // , ( ) * \ are operators. Strip them from operator-typed input (defense-in-depth — the
@@ -300,27 +299,27 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
     if (b.receive_date) return 1;
     return a.ship_id.localeCompare(b.ship_id);
   });
-  out = out.slice(0, HISTORY_LIMIT);
+  // Full history (no 100-cap): the client groups by year into sub-tabs, so every shipment must reach it.
 
-  // shipment meta (origin / tracking) for ONLY the visible rows — bounds the .in() to ≤100 ids (a
-  // 200-id .in() over the full scan was silently failing, mislabelling real shipments as "unmarked").
-  // A ship_id with no shipments-ledger row is an unmarked (📦) receive.
+  // shipment meta (origin / tracking) for every row — batched in ≤100-id .in() chunks (a big single
+  // .in() silently fails, mislabelling real shipments as "unmarked"). A ship_id with no
+  // shipments-ledger row is an unmarked (📦) receive.
   const shipIds = out.map((r) => r.ship_id);
-  if (shipIds.length) {
+  const metaByShip = new Map<string, { origin_country: string | null; tracking: string | null }>();
+  for (let i = 0; i < shipIds.length; i += 100) {
     const { data: ships } = await supabase
       .from('shipments')
       .select('ship_id,origin_country,tracking')
-      .in('ship_id', shipIds);
-    const metaByShip = new Map<string, { origin_country: string | null; tracking: string | null }>();
+      .in('ship_id', shipIds.slice(i, i + 100));
     for (const s of (ships ?? []) as { ship_id: string; origin_country: string | null; tracking: string | null }[]) {
       metaByShip.set(s.ship_id, { origin_country: s.origin_country ?? null, tracking: s.tracking ?? null });
     }
-    for (const r of out) {
-      const meta = metaByShip.get(r.ship_id);
-      r.origin_country = meta?.origin_country ?? null;
-      r.tracking = meta?.tracking ?? null;
-      r.is_adhoc = !meta;
-    }
+  }
+  for (const r of out) {
+    const meta = metaByShip.get(r.ship_id);
+    r.origin_country = meta?.origin_country ?? null;
+    r.tracking = meta?.tracking ?? null;
+    r.is_adhoc = !meta;
   }
   return out;
 }

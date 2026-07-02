@@ -31,10 +31,8 @@ export default function InboundShell({
 }) {
   const [tab, setTab] = useState<InboundTab>('arrivals');
   const [arrivalsCount, setArrivalsCount] = useState(initialQueue.length);
-  const [historyCount, setHistoryCount] = useState(historyRows.length);
   const [adhocSignal, setAdhocSignal] = useState(0);
   const onArrivalsCount = useCallback((n: number) => setArrivalsCount(n), []);
-  const onHistoryCount = useCallback((n: number) => setHistoryCount(n), []);
 
   // "+ Unmarked shipment" (moved out of the queue list): jump to the Shipments tab and fire an ad-hoc receive.
   function startUnmarked() {
@@ -63,7 +61,7 @@ export default function InboundShell({
             className={`orders-tab ${tab === 'history' ? 'active' : ''}`}
             onClick={() => setTab('history')}
           >
-            History<span className="orders-tab-count">{historyCount}</span>
+            History
           </button>
         </nav>
         <button className="orders-new" onClick={startUnmarked}>+ Unmarked</button>
@@ -82,7 +80,7 @@ export default function InboundShell({
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <InboundHistoryBoard initialRows={historyRows} onCountChange={onHistoryCount} />
+          <InboundHistoryBoard initialRows={historyRows} />
         </div>
       </div>
     </div>

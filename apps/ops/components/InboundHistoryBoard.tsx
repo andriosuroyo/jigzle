@@ -38,11 +38,35 @@ export default function InboundHistoryBoard({
   const [rows, setRows] = useState<InboundHistoryRow[]>(initialRows);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const [yearFilter, setYearFilter] = useState<string | null>(null); // the selected year sub-tab
   const [selKey, setSelKey] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const reqRef = useRef(0);
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialRows already loaded)
+
+  // year sub-tabs (newest first; null-date receipts bucket under '—' at the end), each with a count.
+  const yearOf = (r: InboundHistoryRow): string => (r.receive_date ? r.receive_date.slice(0, 4) : '—');
+  const years = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(yearOf(r), (m.get(yearOf(r)) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => {
+      if (a[0] === '—') return 1;
+      if (b[0] === '—') return -1;
+      return a[0] < b[0] ? 1 : -1; // newest first
+    });
+  }, [rows]);
+
+  // keep the selected year valid as the list changes (search / reload): default to the newest year.
+  useEffect(() => {
+    if (!years.length) { if (yearFilter !== null) setYearFilter(null); return; }
+    if (!yearFilter || !years.some(([y]) => y === yearFilter)) setYearFilter(years[0][0]);
+  }, [years, yearFilter]);
+
+  const visibleRows = useMemo(
+    () => (yearFilter ? rows.filter((r) => yearOf(r) === yearFilter) : rows),
+    [rows, yearFilter]
+  );
 
   const sel = useMemo(() => rows.find((r) => r.ship_id === selKey) ?? null, [rows, selKey]);
 
@@ -109,9 +133,25 @@ export default function InboundHistoryBoard({
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        {rows.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No received shipments.'}</div>}
+        {/* Year sub-tabs (Sales-Pending style), newest first, each with a count. */}
+        {years.length > 0 && (
+          <div className="fq-filters" role="tablist" aria-label="Filter by year">
+            {years.map(([y, n]) => (
+              <button
+                key={y}
+                role="tab"
+                aria-selected={yearFilter === y}
+                className={`fq-filter ${yearFilter === y ? 'active' : ''}`}
+                onClick={() => setYearFilter(y)}
+              >
+                {y}<span className="fq-filter-count">{n}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {visibleRows.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No received shipments.'}</div>}
         <ul className="fq-list">
-          {rows.map((r) => (
+          {visibleRows.map((r) => (
             <li key={r.ship_id}>
               <button className={`fq-row ${selKey === r.ship_id ? 'active' : ''}`} onClick={() => setSelKey(r.ship_id)}>
                 <div className="fq-row-top">
@@ -120,7 +160,7 @@ export default function InboundHistoryBoard({
                 </div>
                 <div className="fq-row-bot">
                   <span className="ff-items-skus">
-                    {r.item_count} {r.item_count === 1 ? 'item' : 'items'}{r.sku_codes.length ? ` (${r.sku_codes.join(', ')})` : ''}
+                    {r.item_count} {r.item_count === 1 ? 'item' : 'items'}{r.sku_codes.length ? ` · ${r.sku_codes.join(', ')}` : ''}
                   </span>
                 </div>
               </button>
@@ -137,8 +177,7 @@ export default function InboundHistoryBoard({
             <div className="fd-head">
               <div className="fd-title">{sel.ship_id}</div>
               <div className="fd-sub">
-                {sel.tracking ? `${sel.tracking} · ` : ''}received {fmtDateTime(sel.received_at, sel.receive_date)}
-                {sel.staff ? ` · by ${sel.staff}` : ''}
+                Received {fmtDateTime(sel.received_at, sel.receive_date)}{sel.staff ? ` by ${sel.staff}` : ''}
               </div>
             </div>
 
