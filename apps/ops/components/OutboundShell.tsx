@@ -138,7 +138,7 @@ export default function OutboundShell({
         <button className="orders-new" onClick={() => setShowReport(true)}>Monthly report</button>
       </div>
 
-      <div className="staff-row"><StaffPicker options={staffOptions} /></div>
+      {staffOptions.length > 0 && <div className="staff-row"><StaffPicker options={staffOptions} /></div>}
 
       <div className="orders-panels">
         <div hidden={tab !== 'ready'}>
