@@ -393,6 +393,35 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
   return (data ?? []) as SkuHit[];
 }
 
+// ── map a preliminary/placeholder PO code to its real SKU at receive time ──
+// A PO can be bought under a provisional code (e.g. 'GUBU-mickey500p') that doesn't follow the SKU
+// format and never FK'd to the catalogue (item_code NULL, the placeholder held in item_code_raw). When
+// the goods arrive and the real SKU is known (box/barcode), this relinks every not-yet-received PO on
+// the shipment that carried that placeholder to the real item_code, so it allocates + closes like any
+// resolved line. item_code_raw is KEPT as provenance (the original preliminary code) — never shown once
+// item_code is set. The target SKU must already exist (the caller creates a stub first for a new code).
+export async function mapPlaceholderPO(shipId: string, rawCode: string, itemCode: string): Promise<{ updated: number }> {
+  const sid = shipId.trim();
+  const raw = rawCode.trim();
+  const code = itemCode.trim();
+  if (!sid || !raw || !code) throw new Error('mapPlaceholderPO: ship id, placeholder, and item code are required');
+  const supabase = createSupabaseServerClient();
+
+  const { data: cat } = await supabase.from('catalogue').select('item_code').eq('item_code', code).maybeSingle();
+  if (!cat) throw new Error(`mapPlaceholderPO: ${code} is not in the catalogue`);
+
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .update({ item_code: code })
+    .eq('ship_id', sid)
+    .is('item_code', null)
+    .eq('item_code_raw', raw)
+    .or('status.is.null,status.neq.Received')
+    .select('po_id');
+  if (error) throw new Error(`mapPlaceholderPO: ${error.message}`);
+  return { updated: (data ?? []).length };
+}
+
 // ── D2: create a minimal needs_review SKU stub for an unknown barcode ── (StubInput in ./types)
 export async function createCatalogueStub(input: StubInput): Promise<SkuHit> {
   const supabase = createSupabaseServerClient();

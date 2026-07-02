@@ -9,6 +9,7 @@ import {
   resolveBarcode,
   searchSkus,
   createCatalogueStub,
+  mapPlaceholderPO,
   newAdhocShipId,
   recordReceipt,
   reverseReceipt,
@@ -102,6 +103,10 @@ export default function InboundBoard({
   const searchSeq = useRef(0); // stale-response guard for the debounced SKU search
   const skuInputRef = useRef<HTMLInputElement>(null);
   const [manualAdd, setManualAdd] = useState(false); // the "manual add" search overlay
+  // when Manual add is opened from an unresolved line, the placeholder code being mapped (else null).
+  // In this mode a search pick / new-SKU relinks the placeholder PO to the real SKU instead of just
+  // adding a received unit.
+  const [mappingRaw, setMappingRaw] = useState<string | null>(null);
 
   const [receiveDate, setReceiveDate] = useState(todayStr());
   const [closeShipment, setCloseShipment] = useState(true);
@@ -180,6 +185,7 @@ export default function InboundBoard({
     setSkuHits([]);
     setSkuSearched(false);
     setManualAdd(false);
+    setMappingRaw(null);
     setReceiveDate(todayStr());
     setResult(null);
     setError(null);
@@ -356,22 +362,54 @@ export default function InboundBoard({
     }
     try {
       const hit = await createCatalogueStub({ item_code, name: stub.name.trim(), brand_prefix: stub.brand.trim() || null, barcode: stub.barcode });
-      addUnit(hit.item_code, hit.name);
-      setScanMsg(`✓ stub ${hit.item_code} created (needs review) +1`);
       setStub(null);
-      // if this was reached from the Manual-add modal, close it and clear the search
-      if (manualAdd) { setManualAdd(false); clearSearch(); }
+      if (mappingRaw) {
+        // creating the real SKU for a placeholder line → relink the PO to it, then it becomes countable
+        await doMap(hit.item_code, hit.name);
+      } else {
+        addUnit(hit.item_code, hit.name);
+        setScanMsg(`✓ stub ${hit.item_code} created (needs review) +1`);
+        if (manualAdd) { setManualAdd(false); clearSearch(); }
+      }
     } catch (e) {
       setScanMsg(e instanceof Error ? e.message : 'stub creation failed');
     }
   }
 
-  // open the Manual-add modal, optionally pre-filling the search (used by the "unresolved — map a SKU" lines)
-  function openManualAdd(prefill?: string) {
+  // relink the placeholder PO(s) on this shipment to a real SKU (map-at-receive), then reload the
+  // expected list so the line resolves and can be counted. Falls back to just receiving the unit if no
+  // placeholder PO matched (e.g. the line came from shipment contents, not a PO).
+  async function doMap(itemCode: string, itemName: string) {
+    const shipId = detail?.ship_id;
+    if (!shipId || !mappingRaw) return;
+    try {
+      const { updated } = await mapPlaceholderPO(shipId, mappingRaw, itemCode);
+      if (updated > 0) {
+        const d = await getShipmentForReceive(shipId);
+        setDetail(d);
+        setScanMsg(`✓ mapped ${mappingRaw} → ${itemCode} (${updated} PO${updated === 1 ? '' : 's'})`);
+      } else {
+        addUnit(itemCode, itemName); // nothing to relink → just record what arrived
+        setScanMsg(`✓ ${itemCode} +1`);
+      }
+    } catch (e) {
+      setScanMsg(e instanceof Error ? e.message : 'map failed');
+    } finally {
+      setManualAdd(false);
+      clearSearch();
+      setStub(null);
+      setMappingRaw(null);
+    }
+  }
+
+  // open the Manual-add modal, optionally pre-filling the search. When rawToMap is set (opened from an
+  // unresolved line) the modal is in "map" mode — a pick/new-SKU relinks the placeholder PO.
+  function openManualAdd(prefill?: string, rawToMap?: string) {
     setStub(null);
     setSkuSearched(false);
     setSkuHits([]);
     setSkuQuery(prefill ?? '');
+    setMappingRaw(rawToMap ?? null);
     setManualAdd(true);
   }
 
@@ -715,7 +753,7 @@ export default function InboundBoard({
 
                   {expectedUnresolved.map((e, i) => (
                     <li key={`unres-${i}`} className="ff-line">
-                      <button className="rcv-line-head rcv-unres-btn" onClick={() => openManualAdd(e.raw ?? e.name)} title="Click to map a SKU">
+                      <button className="rcv-line-head rcv-unres-btn" onClick={() => openManualAdd(e.raw ?? e.name, e.raw ?? e.name)} title="Click to map a SKU">
                         <span className="ff-name">{e.name}</span>
                         <span className="rcv-exp">qty {e.expected_qty}</span>
                         <span className="rcv-badge miss">click to map SKU</span>
@@ -741,10 +779,11 @@ export default function InboundBoard({
           search finds nothing, offer to add the SKU manually (a needs-review stub), mirroring
           Purchasing → manual. Stays open so several SKUs can be added in a row. */}
       {manualAdd && detail && (
-        <div className="sc-modal-backdrop" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); }}>
+        <div className="sc-modal-backdrop" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); }}>
           <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Manual add" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head">
-              <div className="sc-modal-title">Manual add</div>
+              <div className="sc-modal-title">{mappingRaw ? 'Map a SKU' : 'Manual add'}</div>
+              {mappingRaw && <div className="sc-modal-sub">Relink “{mappingRaw}” to its real SKU — search, or add it new.</div>}
             </div>
             <div className="sc-modal-body">
               {!stub ? (
@@ -766,9 +805,9 @@ export default function InboundBoard({
                       <div className="hint"><em>No results.</em></div>
                       <button
                         className="btn-secondary"
-                        onClick={() => setStub({ barcode: '', item_code: skuQuery.trim(), name: '', brand: '' })}
+                        onClick={() => setStub({ barcode: '', item_code: mappingRaw ? '' : skuQuery.trim(), name: '', brand: '' })}
                       >
-                        + Add{skuQuery.trim() ? ` “${skuQuery.trim()}”` : ''} as a new SKU
+                        + Add{!mappingRaw && skuQuery.trim() ? ` “${skuQuery.trim()}”` : ''} as a new SKU{mappingRaw ? ' + map' : ''}
                       </button>
                     </div>
                   )}
@@ -777,12 +816,12 @@ export default function InboundBoard({
                       {skuHits.map((h) => (
                         <li key={h.item_code}>
                           {/* §4a Pattern A: image left, code / name / avail stacked beside (ff-card family) */}
-                          <button className="result-item ff-card" onClick={() => { addUnit(h.item_code, h.name); setScanMsg(`✓ ${h.item_code} +1`); clearSearch(); }}>
+                          <button className="result-item ff-card" onClick={() => { if (mappingRaw) { doMap(h.item_code, h.name); } else { addUnit(h.item_code, h.name); setScanMsg(`✓ ${h.item_code} +1`); clearSearch(); } }}>
                             <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
                             <div className="ff-card-info">
                               <div className="ff-card-code">{h.item_code}</div>
                               <div className="ff-card-name">{displayName(h.name, h.item_code)}</div>
-                              <div className="ff-card-status">avail {h.available}</div>
+                              <div className="ff-card-status">{mappingRaw ? 'tap to map' : `avail ${h.available}`}</div>
                             </div>
                           </button>
                         </li>
@@ -799,13 +838,13 @@ export default function InboundBoard({
                   <input type="text" placeholder="brand prefix (optional)" value={stub.brand} onChange={(e) => setStub({ ...stub, brand: e.target.value })} />
                   <div className="subform-actions">
                     <button className="btn-link" onClick={() => setStub(null)}>← back to search</button>
-                    <button className="btn-secondary" onClick={createStub}>create + add</button>
+                    <button className="btn-secondary" onClick={createStub}>{mappingRaw ? 'create + map' : 'create + add'}</button>
                   </div>
                 </div>
               )}
             </div>
             <div className="sc-modal-foot">
-              <button className="btn-secondary" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); }}>Close</button>
+              <button className="btn-secondary" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); }}>Close</button>
             </div>
           </div>
         </div>
