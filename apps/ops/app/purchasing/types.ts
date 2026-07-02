@@ -193,6 +193,7 @@ export interface ShipmentItemRow {
   name: string;
   qty: number;
   item_cost: number | null;
+  currency: string | null; // from the line's supplier country (yuan / yen …) for the "each" label
 }
 
 // ── Purchasing History → Per shipment (read-only): one completed shipment, so shipment-level data

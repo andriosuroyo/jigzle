@@ -701,9 +701,6 @@ export default function InboundBoard({
                 </div>
               </div>
 
-              {/* Purchasing's per-Ship-ID note (read-only), so the warehouse sees what was flagged. */}
-              {detail.note && <div className="rcv-ship-note">📝 {detail.note}</div>}
-
               {error && <div className="validation err">{error}</div>}
 
               {/* Ad-hoc id (editable; operator can override with free text) */}
@@ -775,6 +772,14 @@ export default function InboundBoard({
                   ))}
                 </ul>
               </section>
+
+              {/* Purchasing's per-Ship-ID note (read-only), under the items so the warehouse sees it. */}
+              {detail.note && (
+                <section className="fd-section">
+                  <div className="fd-section-head">Shipment notes</div>
+                  <div className="rcv-ship-note">{detail.note}</div>
+                </section>
+              )}
 
               {/* Commit bar → opens the §6 confirmation window, where staff + receive date are picked
                   alongside the received/short recap before saving. */}
