@@ -222,7 +222,9 @@ export default function ToBuyBoard({
   async function done(t: BuyTarget) {
     setBusy(true); setError(null);
     try {
-      if (t.kind === 'manual' && t.po_id != null) await setPOStatus(t.po_id, 'Processing');
+      // manual + out-of-stock are both real POs → advance to Processing (To forwarder); a from-sales
+      // preorder isn't a PO yet, so it spawns one.
+      if ((t.kind === 'manual' || t.kind === 'oos') && t.po_id != null) await setPOStatus(t.po_id, 'Processing');
       else if (t.kind === 'sales') await buyPreorder({ item_code: t.item_code, qty: t.qty, customer_id: t.customer_id });
       await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); }

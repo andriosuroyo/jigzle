@@ -6,7 +6,8 @@
 // service-role key is never used here (the smoke harness uses it as a TEST harness only).
 //
 // PO / supplier / forwarder writes are single-table, direct RLS-gated writes; only shipment
-// grouping (multi-row + the shipments upsert) goes through the group_pos_into_shipment RPC (0018).
+// grouping (multi-row + the shipments upsert, with the completed-reopen guard) goes through the
+// group_pos_into_shipment_v2 RPC (0049, hardened in 0050).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import { customerLabel } from '@jigzle/lib';
@@ -49,6 +50,13 @@ function sanitize(q: string): string {
   return q.replace(/[,()*\\]/g, ' ').trim();
 }
 
+// run an .in(<ids>) lookup in batches so a big id list can't blow the URL length or the 1000-row cap.
+async function inBatches<T>(ids: (string | number)[], run: (batch: (string | number)[]) => PromiseLike<T[]>, size = 100): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += size) out.push(...(await run(ids.slice(i, i + size))));
+  return out;
+}
+
 type CatNameRow = {
   item_code: string;
   translate_name: string | null;
@@ -82,39 +90,33 @@ function todayJakarta(): string {
 // blank/unrecognized, and those are still open POs that must show in the only open-PO surface.
 export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
   const supabase = createSupabaseServerClient();
-  let query = supabase
-    .from('purchase_orders')
-    .select(
-      'po_id,item_code,item_code_raw,qty,status,status_since,ship_id,supplier_id,item_cost,method,marketplace_order_id,customer_id,item_note,product_link,input_date,tracking_to_forwarder,shipment_note'
-    )
-    .or('status.is.null,status.neq.Received')
-    .order('po_id', { ascending: false })
-    .limit(QUEUE_LIMIT);
-  if (filter?.status) query = query.eq('status', filter.status);
-  if (filter?.supplier_id) query = query.eq('supplier_id', filter.supplier_id);
-
-  const { data, error } = await query;
-  if (error || !data) return [];
-
-  const rows = data as {
-    po_id: number;
-    item_code: string | null;
-    item_code_raw: string | null;
-    qty: number;
-    status: OpenPORow['status'];
-    status_since: string | null;
-    ship_id: string | null;
-    supplier_id: number | null;
-    item_cost: number | null;
-    method: string | null;
-    marketplace_order_id: string | null;
-    customer_id: number | null;
-    item_note: string | null;
-    product_link: string | null;
-    input_date: string | null;
-    tracking_to_forwarder: string | null;
+  const SELECT = 'po_id,item_code,item_code_raw,qty,status,status_since,ship_id,supplier_id,item_cost,method,marketplace_order_id,customer_id,item_note,product_link,input_date,tracking_to_forwarder,shipment_note';
+  type RawPO = {
+    po_id: number; item_code: string | null; item_code_raw: string | null; qty: number;
+    status: OpenPORow['status']; status_since: string | null; ship_id: string | null;
+    supplier_id: number | null; item_cost: number | null; method: string | null;
+    marketplace_order_id: string | null; customer_id: number | null; item_note: string | null;
+    product_link: string | null; input_date: string | null; tracking_to_forwarder: string | null;
     shipment_note: string | null;
-  }[];
+  };
+  // Page through the whole open set — a single 200-row window (the old QUEUE_LIMIT) hid most of the
+  // pipeline (a tab's bucket could be crowded out by another's rows) and made the tab counts wrong.
+  // A bucket fetch (filter.statuses) narrows to that tab's statuses so each board loads its own bucket.
+  const PAGE = 1000;
+  const rows: RawPO[] = [];
+  for (let from = 0; from < 6000; from += PAGE) {
+    let query = supabase.from('purchase_orders').select(SELECT).order('po_id', { ascending: false }).range(from, from + PAGE - 1);
+    if (filter?.statuses?.length) query = query.in('status', filter.statuses);
+    else query = query.or('status.is.null,status.neq.Received');
+    if (filter?.status) query = query.eq('status', filter.status);
+    if (filter?.supplier_id) query = query.eq('supplier_id', filter.supplier_id);
+    const { data, error } = await query;
+    if (error) break;
+    const page = (data ?? []) as RawPO[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  if (!rows.length) return [];
 
   // Resolve names in three small round-trips (catalogue, suppliers, customers).
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -208,20 +210,21 @@ export async function getForwarders(): Promise<Forwarder[]> {
   return data as Forwarder[];
 }
 
-// ── the LAST (highest) ship_id used for a forwarder prefix — shown as a "last ID:" hint in the To-ship
-// group panel so the operator can decide whether to start the next number or add to an existing id (we
-// don't auto-fill, because a shipment can legitimately gain more items later). Ship_ids are messy
-// (spaces, occasional embedded "\n#tracking"), so we scan by prefix and parse the number in JS; the
-// returned string is re-composed as "<PREFIX> <n>" zero-padded to the observed width. '' if none. ──
+// ── the LAST (highest) ship_id used for a forwarder prefix — the To-ship group panel pre-fills it into
+// the (editable) Ship-id field when a forwarder is picked, so the operator can add to that shipment or
+// bump the number. Ship_ids are messy (spaces, occasional embedded "\n#tracking"), so we scan by prefix
+// and parse the number in JS; returned as "<PREFIX> <n>" zero-padded to the observed width. '' if none.
+// (Reopening a completed shipment is blocked in the group RPC — see 0050.) ──
 export async function getLastShipId(prefix: string): Promise<string> {
-  const p = prefix.trim().toUpperCase();
+  const p = sanitize(prefix).trim().toUpperCase();
   if (!p) return '';
+  const pEsc = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape for the RegExp below
   const supabase = createSupabaseServerClient();
-  const { data } = await supabase.from('shipments').select('ship_id').ilike('ship_id', `${p}%`);
+  const { data } = await supabase.from('shipments').select('ship_id').ilike('ship_id', `${p}%`).limit(2000);
   let max = -1;
   let width = 3; // sensible default pad
   for (const row of (data ?? []) as { ship_id: string }[]) {
-    const m = new RegExp(`^${p}\\s*0*(\\d+)`, 'i').exec((row.ship_id ?? '').trim());
+    const m = new RegExp(`^${pEsc}\\s*0*(\\d+)`, 'i').exec((row.ship_id ?? '').trim());
     if (!m) continue;
     const n = parseInt(m[1], 10);
     if (Number.isFinite(n)) {
@@ -879,15 +882,23 @@ export async function groupIntoShipment(payload: GroupShipmentInput): Promise<{ 
 export async function getPreorders(): Promise<PreorderRow[]> {
   const supabase = createSupabaseServerClient();
 
-  // unfulfilled, live order lines with a resolved SKU (no stock gate exists for code-less lines)
-  const { data: lines } = await supabase
-    .from('order_lines')
-    .select('line_id,sales_id,item_code,qty,item_link')
-    .is('fulfilled_at', null)
-    .eq('is_cancelled', false)
-    .not('item_code', 'is', null)
-    .limit(1000);
-  const rows = (lines ?? []) as { line_id: string; sales_id: string; item_code: string; qty: number; item_link: string | null }[];
+  // unfulfilled, live order lines with a resolved SKU (no stock gate exists for code-less lines).
+  // Paged (PostgREST caps a response at 1000) with a stable order so nothing is silently dropped.
+  type LineRow = { line_id: string; sales_id: string; item_code: string; qty: number; item_link: string | null };
+  const rows: LineRow[] = [];
+  for (let from = 0; from < 8000; from += 1000) {
+    const { data: lines } = await supabase
+      .from('order_lines')
+      .select('line_id,sales_id,item_code,qty,item_link')
+      .is('fulfilled_at', null)
+      .eq('is_cancelled', false)
+      .not('item_code', 'is', null)
+      .order('line_id', { ascending: true })
+      .range(from, from + 999);
+    const page = (lines ?? []) as LineRow[];
+    rows.push(...page);
+    if (page.length < 1000) break;
+  }
   if (!rows.length) return [];
 
   const salesIds = [...new Set(rows.map((r) => r.sales_id))];
@@ -901,38 +912,34 @@ export async function getPreorders(): Promise<PreorderRow[]> {
 
   await Promise.all([
     (async () => {
-      const { data } = await supabase.from('orders').select('sales_id,order_date,status,customer_id,urgency').in('sales_id', salesIds);
-      for (const o of (data ?? []) as { sales_id: string; order_date: string | null; status: string | null; customer_id: number | null; urgency: Urgency | null }[]) {
-        orderById.set(o.sales_id, { order_date: o.order_date, status: o.status, customer_id: o.customer_id, urgency: o.urgency });
-      }
+      const data = await inBatches(salesIds, (b) => supabase.from('orders').select('sales_id,order_date,status,customer_id,urgency').in('sales_id', b).then((r) => (r.data ?? []) as { sales_id: string; order_date: string | null; status: string | null; customer_id: number | null; urgency: Urgency | null }[]));
+      for (const o of data) orderById.set(o.sales_id, { order_date: o.order_date, status: o.status, customer_id: o.customer_id, urgency: o.urgency });
     })(),
     (async () => {
-      const { data } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
-      for (const c of (data ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
+      const data = await inBatches(codes, (b) => supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', b).then((r) => (r.data ?? []) as CatNameRow[]));
+      for (const c of data) nameByCode.set(c.item_code, nameOf(c, c.item_code));
     })(),
     (async () => {
-      const { data } = await supabase.from('stock_check').select('item_code,available').in('item_code', codes);
-      for (const s of (data ?? []) as { item_code: string; available: number }[]) availByCode.set(s.item_code, Number(s.available) || 0);
+      const data = await inBatches(codes, (b) => supabase.from('stock_check').select('item_code,available').in('item_code', b).then((r) => (r.data ?? []) as { item_code: string; available: number }[]));
+      for (const s of data) availByCode.set(s.item_code, Number(s.available) || 0);
     })(),
   ]);
 
   const customerIds = [...new Set([...orderById.values()].map((o) => o.customer_id).filter((c): c is number => c != null))];
   if (customerIds.length) {
-    const { data } = await supabase.from('customers').select('customer_id,name,phone').in('customer_id', customerIds);
-    for (const c of (data ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) customerById.set(c.customer_id, customerLabel(c.name, c.phone));
+    const data = await inBatches(customerIds, (b) => supabase.from('customers').select('customer_id,name,phone').in('customer_id', b).then((r) => (r.data ?? []) as { customer_id: number; name: string | null; phone: string | null }[]));
+    for (const c of data) customerById.set(c.customer_id, customerLabel(c.name, c.phone));
   }
 
   // a preorder drops once an OPEN PO for the same SKU + customer covers it (decision #2). Key by
   // `item_code|customer_id` (customer-less POs don't cover a customer's preorder).
   const coveredKeys = new Set<string>();
   {
-    const { data } = await supabase
-      .from('purchase_orders')
-      .select('item_code,customer_id,status')
-      .in('item_code', codes)
-      .not('customer_id', 'is', null)
-      .or('status.is.null,status.neq.Received');
-    for (const p of (data ?? []) as { item_code: string | null; customer_id: number | null }[]) {
+    const data = await inBatches(codes, (b) => supabase
+      .from('purchase_orders').select('item_code,customer_id,status')
+      .in('item_code', b).not('customer_id', 'is', null).or('status.is.null,status.neq.Received')
+      .then((r) => (r.data ?? []) as { item_code: string | null; customer_id: number | null }[]));
+    for (const p of data) {
       if (p.item_code && p.customer_id != null) coveredKeys.add(`${p.item_code}|${p.customer_id}`);
     }
   }
@@ -972,17 +979,41 @@ export async function getPreorders(): Promise<PreorderRow[]> {
 // Optional text filter matches item_code / name / ship_id. (types in ./types) ──
 export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
   const supabase = createSupabaseServerClient();
-  const { data } = await supabase
-    .from('purchase_orders')
-    .select('po_id,item_code,item_code_raw,qty,status,item_cost,ship_id,supplier_id,receive_date,marketplace_order_id,product_link')
-    .eq('status', 'Received')
-    .order('receive_date', { ascending: false, nullsFirst: false })
-    .order('po_id', { ascending: false })
-    .limit(500);
-  const rows = (data ?? []) as {
+  const q = sanitize(query).toLowerCase();
+  const SELECT = 'po_id,item_code,item_code_raw,qty,status,item_cost,ship_id,supplier_id,receive_date,marketplace_order_id,product_link';
+  type RawRcv = {
     po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; item_cost: number | null;
     ship_id: string | null; supplier_id: number | null; receive_date: string | null; marketplace_order_id: string | null; product_link: string | null;
-  }[];
+  };
+  let rows: RawRcv[] = [];
+  if (q) {
+    // Search the WHOLE Received history, not just the newest 500: match code / raw / ship_id in-query,
+    // plus rows whose catalogue name matches (resolve those codes first, then union). Newest first.
+    const { data: cat } = await supabase
+      .from('catalogue')
+      .select('item_code')
+      .or(`translate_name.ilike.%${q}%,original_name.ilike.%${q}%,self_code.ilike.%${q}%`)
+      .limit(300);
+    const nameCodes = [...new Set((cat ?? []).map((c) => (c as { item_code: string }).item_code))];
+    const byId = new Map<number, RawRcv>();
+    const pushAll = (data: unknown) => { for (const r of (data ?? []) as RawRcv[]) byId.set(r.po_id, r); };
+    const { data: d1 } = await supabase.from('purchase_orders').select(SELECT).eq('status', 'Received')
+      .or(`item_code.ilike.%${q}%,item_code_raw.ilike.%${q}%,ship_id.ilike.%${q}%`)
+      .order('receive_date', { ascending: false, nullsFirst: false }).limit(500);
+    pushAll(d1);
+    for (let i = 0; i < nameCodes.length; i += 100) {
+      const { data: d2 } = await supabase.from('purchase_orders').select(SELECT).eq('status', 'Received')
+        .in('item_code', nameCodes.slice(i, i + 100))
+        .order('receive_date', { ascending: false, nullsFirst: false }).limit(500);
+      pushAll(d2);
+    }
+    rows = [...byId.values()].sort((a, b) =>
+      (b.receive_date || '').localeCompare(a.receive_date || '') || b.po_id - a.po_id);
+  } else {
+    const { data } = await supabase.from('purchase_orders').select(SELECT).eq('status', 'Received')
+      .order('receive_date', { ascending: false, nullsFirst: false }).order('po_id', { ascending: false }).limit(500);
+    rows = (data ?? []) as RawRcv[];
+  }
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -1012,7 +1043,7 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
     for (const s of (sh ?? []) as { ship_id: string; ship_date: string | null }[]) shipDateById.set(s.ship_id, s.ship_date);
   }
 
-  let out: ReceivedItemRow[] = rows.map((r) => ({
+  const out: ReceivedItemRow[] = rows.map((r) => ({
     po_id: r.po_id,
     // uncatalogued codes (kept in item_code_raw by the reconcile) still show their code, not "(unnamed)"
     item_code: r.item_code ?? r.item_code_raw,
@@ -1027,16 +1058,7 @@ export async function getReceivedItems(query = ''): Promise<ReceivedItemRow[]> {
     product_link: r.product_link,
   }));
 
-  const q = sanitize(query).toLowerCase();
-  if (q) {
-    out = out.filter(
-      (r) =>
-        (r.item_code ?? '').toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q) ||
-        (r.ship_id ?? '').toLowerCase().includes(q)
-    );
-  }
-  return out.slice(0, HISTORY_LIMIT);
+  return out.slice(0, HISTORY_LIMIT); // filtering now happens in-query (searches the whole history)
 }
 
 // ── History → one shipment's SKUs (Received PO lines for an exact ship_id), for the shipment detail
@@ -1157,11 +1179,11 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
   const costByShip = new Map<string, number>();
   const supIdsByShip = new Map<string, Set<number>>();
   const allSupIds = new Set<number>();
-  const posRows: { ship_id: string | null; item_code: string | null; item_cost: number | null; supplier_id: number | null }[] = [];
+  const posRows: { ship_id: string | null; item_code: string | null; item_cost: number | null; qty: number | null; supplier_id: number | null }[] = [];
   for (let i = 0; i < shipIds.length; i += 100) {
     const { data: chunk } = await supabase
       .from('purchase_orders')
-      .select('ship_id,item_code,item_cost,supplier_id,status')
+      .select('ship_id,item_code,item_cost,qty,supplier_id,status')
       .in('ship_id', shipIds.slice(i, i + 100))
       .eq('status', 'Received');
     posRows.push(...((chunk ?? []) as typeof posRows));
@@ -1169,7 +1191,9 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
   for (const p of posRows) {
     if (!p.ship_id) continue;
     if (p.item_code) (skusByShip.get(p.ship_id) ?? skusByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.item_code);
-    if (p.item_cost != null) costByShip.set(p.ship_id, (costByShip.get(p.ship_id) ?? 0) + Number(p.item_cost));
+    // item_cost is a per-UNIT supplier-currency cost → multiply by qty. (Still a raw sum across mixed
+    // supplier currencies — a rough total, not a converted figure.)
+    if (p.item_cost != null) costByShip.set(p.ship_id, (costByShip.get(p.ship_id) ?? 0) + Number(p.item_cost) * (Number(p.qty) || 0));
     if (p.supplier_id != null) {
       (supIdsByShip.get(p.ship_id) ?? supIdsByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.supplier_id);
       allSupIds.add(p.supplier_id);
