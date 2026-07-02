@@ -1079,10 +1079,10 @@ export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,item_code_raw,qty,item_cost')
+    .select('po_id,item_code,item_code_raw,qty,item_cost,supplier_id')
     .eq('ship_id', sid)
     .order('po_id', { ascending: false });
-  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; item_cost: number | null }[];
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; item_cost: number | null; supplier_id: number | null }[];
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -1091,12 +1091,20 @@ export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[
     const { data: cat } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
     for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
   }
+  // per-line currency from the supplier's country (China → yuan, Japan → yen …), for the "each" label.
+  const supIds = [...new Set(rows.map((r) => r.supplier_id).filter((id): id is number => id != null))];
+  const supCcy = new Map<number, string | null>();
+  if (supIds.length) {
+    const { data: sup } = await supabase.from('suppliers').select('supplier_id,country').in('supplier_id', supIds);
+    for (const s of (sup ?? []) as { supplier_id: number; country: string | null }[]) supCcy.set(s.supplier_id, currencyForCountry(s.country));
+  }
   return rows.map((r) => ({
     po_id: r.po_id,
     item_code: r.item_code ?? r.item_code_raw,
     name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : r.item_code_raw ?? '(no SKU)',
     qty: r.qty,
     item_cost: r.item_cost,
+    currency: r.supplier_id != null ? supCcy.get(r.supplier_id) ?? null : null,
   }));
 }
 

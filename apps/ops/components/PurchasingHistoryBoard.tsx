@@ -114,7 +114,30 @@ export default function PurchasingHistoryBoard({
           </div>
         </div>
 
-        {/* Shipment notes — editable here (add or change), also shown to the warehouse on Inbound. */}
+        {/* Items */}
+        <section className="fd-section">
+          <div className="fd-section-head">Items</div>
+          {shipItemsLoading && <div className="hint">Loading items…</div>}
+          {!shipItemsLoading && shipItems.length === 0 && <div className="hint">No item lines on this shipment.</div>}
+          <ul className="po-cards po-cards-compact">
+            {shipItems.map((it) => (
+              <li key={it.po_id}>
+                <div className="po-card">
+                  <SkuImage status={imgMap[it.item_code ?? '']?.status} displayUrl={imgMap[it.item_code ?? '']?.displayUrl} name={it.name} size={SKU_IMG.sm} />
+                  <div className="po-card-main">
+                    <div className="po-card-l1">
+                      <span className="ff-code">{it.item_code || '—'}</span>
+                      {it.item_cost != null && <span className="po-card-poid">each {it.item_cost}{it.currency ? ` ${it.currency}` : ''}</span>}
+                    </div>
+                    <div className="po-card-l2"><span className="ff-name">{it.name}</span><span className="po-card-qty">×{it.qty}</span></div>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* Shipment notes — under the items list; editable here (add or change), also shown on Inbound. */}
         <section className="fd-section">
           <div className="fd-section-head fd-section-head-row">
             <span>Shipment notes</span>
@@ -134,25 +157,6 @@ export default function PurchasingHistoryBoard({
             <div className={openShip.note ? 'ship-note-text' : 'hint'}>{openShip.note || 'No note yet.'}</div>
           )}
         </section>
-
-        {shipItemsLoading && <div className="hint">Loading items…</div>}
-        {!shipItemsLoading && shipItems.length === 0 && <div className="hint">No item lines on this shipment.</div>}
-        <ul className="po-cards po-cards-compact">
-          {shipItems.map((it) => (
-            <li key={it.po_id}>
-              <div className="po-card">
-                <SkuImage status={imgMap[it.item_code ?? '']?.status} displayUrl={imgMap[it.item_code ?? '']?.displayUrl} name={it.name} size={SKU_IMG.sm} />
-                <div className="po-card-main">
-                  <div className="po-card-l1">
-                    <span className="ff-code">{it.item_code || '—'}</span>
-                    {it.item_cost != null && <span className="po-card-poid">each {it.item_cost}</span>}
-                  </div>
-                  <div className="po-card-l2"><span className="ff-name">{it.name}</span><span className="po-card-qty">×{it.qty}</span></div>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
       </div>
     );
   }
