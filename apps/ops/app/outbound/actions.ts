@@ -86,21 +86,28 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
   // pull a generous recent window of item rows; group into shipments, then cap. ~2.2 items/shipment, so
   // a 600/900-row window comfortably yields ≥HISTORY_LIMIT complete shipments at the cut (a shipment
   // straddling the very end may show fewer items — acceptable for the tail of a 100-shipment view).
-  let q = supabase
-    .from('outbound_shipments')
-    .select('customer_ref,recipient_name,ship_date,address,courier,weight_gram,qty,item_code,item_code_raw,note,verify_method,scanned_barcode,sales_id,customer_id,send_id')
-    .not('ship_date', 'is', null)
-    .order('ship_date', { ascending: false })
-    .limit(raw ? 900 : 600);
-  if (raw) {
-    q = q.or(
-      `recipient_name.ilike.%${raw}%,customer_ref.ilike.%${raw}%,courier.ilike.%${raw}%,note.ilike.%${raw}%,item_code.ilike.%${raw}%,item_code_raw.ilike.%${raw}%`
-    );
+  // `staff` is new (0052) — degrade gracefully if the migration isn't applied yet (retry sans staff)
+  // so History never goes blank in the deploy→migrate window.
+  const baseCols = 'customer_ref,recipient_name,ship_date,address,courier,weight_gram,qty,item_code,item_code_raw,note,verify_method,scanned_barcode,sales_id,customer_id,send_id';
+  async function fetchWith(cols: string) {
+    let q = supabase
+      .from('outbound_shipments')
+      .select(cols)
+      .not('ship_date', 'is', null)
+      .order('ship_date', { ascending: false })
+      .limit(raw ? 900 : 600);
+    if (raw) {
+      q = q.or(
+        `recipient_name.ilike.%${raw}%,customer_ref.ilike.%${raw}%,courier.ilike.%${raw}%,note.ilike.%${raw}%,item_code.ilike.%${raw}%,item_code_raw.ilike.%${raw}%`
+      );
+    }
+    return q;
   }
-  const { data, error } = await q;
+  let { data, error } = await fetchWith(`${baseCols},staff`);
+  if (error) ({ data, error } = await fetchWith(baseCols)); // staff column absent → retry without it
   if (error || !data) return [];
 
-  const items = data as {
+  const items = data as unknown as {
     customer_ref: string | null;
     recipient_name: string | null;
     ship_date: string | null;
@@ -116,6 +123,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
     sales_id: string | null;
     customer_id: number | null;
     send_id: string | null;
+    staff: string | null;
   }[];
   if (!items.length) return [];
 
@@ -157,7 +165,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
   type Group = {
     key: string; ship_date: string | null; customer: string | null; address: string | null;
     courier: string | null; weight_gram: number | null; send_id: string | null; customer_id: number | null;
-    items: ShipmentHistoryItem[]; codes: string[]; notes: Set<string>;
+    staff: string | null; items: ShipmentHistoryItem[]; codes: string[]; notes: Set<string>;
   };
   const groups = new Map<string, Group>();
   for (const it of items) {
@@ -170,7 +178,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
       g = {
         key, ship_date: it.ship_date, customer: it.recipient_name || it.customer_ref,
         address: it.address, courier: it.courier, weight_gram: it.weight_gram, send_id: it.send_id,
-        customer_id: it.customer_id, items: [], codes: [], notes: new Set(),
+        customer_id: it.customer_id, staff: it.staff, items: [], codes: [], notes: new Set(),
       };
       groups.set(key, g);
     }
@@ -196,6 +204,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
       customer: g.customer || (g.customer_id != null ? custName.get(g.customer_id) ?? null : null),
       address: g.address,
       courier: g.courier,
+      staff: g.staff,
       note: g.notes.size ? [...g.notes].join('\n') : null,
       items: g.items,
       sku_codes: [...new Set(g.codes)],
@@ -347,6 +356,19 @@ export async function recordShipment(payload: ShipInput): Promise<ShipResult> {
   if (error) throw new Error(`recordShipment: ${error.message}`);
 
   const affected = (data as string[] | null) ?? [];
+
+  // 0052: stamp the active warehouse staff onto the outbound_shipments rows just written for these
+  // lines (targeted by order_line_id + sales_id, so record_shipment stays untouched). Only when
+  // something actually shipped; non-fatal — a failed stamp never voids a real shipment.
+  const staff = payload.staff?.trim();
+  if (staff && affected.length) {
+    await supabase
+      .from('outbound_shipments')
+      .update({ staff })
+      .eq('sales_id', payload.sales_id)
+      .in('order_line_id', payload.line_ids);
+  }
+
   let stock: ShipResult['stock'] = [];
   if (affected.length) {
     const { data: s } = await supabase

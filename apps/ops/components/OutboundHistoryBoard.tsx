@@ -116,7 +116,7 @@ export default function OutboundHistoryBoard({
           <>
             <div className="fd-head">
               <div className="fd-title fd-title-plain">{sel.customer || '—'}</div>
-              <div className="fd-sub">shipped {fmtDate(sel.ship_date)}</div>
+              <div className="fd-sub">shipped {fmtDate(sel.ship_date)}{sel.staff ? ` · by ${sel.staff}` : ''}</div>
             </div>
 
             {sel.address && (

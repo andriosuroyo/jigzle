@@ -208,44 +208,55 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
   // PostgREST caps a single response at 1000 rows regardless of .limit(), which silently truncated the
   // scan and dropped older receipts from History (a SKU's earlier shipments would just vanish). Page
   // through in 1000-row batches (stable order: receive_date, then inbound_id) up to HISTORY_ROW_SCAN.
-  type Row = { item_code: string | null; item_code_raw: string | null; qty: number; excluded_qty: number | null; ship_id: string | null; receive_date: string | null };
+  type Row = { item_code: string | null; item_code_raw: string | null; qty: number; excluded_qty: number | null; ship_id: string | null; receive_date: string | null; created_at: string | null; staff: string | null };
   const PAGE = 1000;
   const rows: Row[] = [];
+  // `staff` is new (0052) — degrade gracefully if the migration isn't applied yet so History never
+  // goes blank in the deploy→migrate window (drop the column from the select and retry once).
+  let cols = 'item_code,item_code_raw,qty,excluded_qty,ship_id,receive_date,created_at,staff';
   for (let from = 0; from < HISTORY_ROW_SCAN; from += PAGE) {
     const { data, error } = await supabase
       .from('inbound')
-      .select('item_code,item_code_raw,qty,excluded_qty,ship_id,receive_date')
+      .select(cols)
       .eq('is_opening_balance', false)
       .not('ship_id', 'is', null)
       .order('receive_date', { ascending: false, nullsFirst: false })
       .order('inbound_id', { ascending: false })
       .range(from, from + PAGE - 1);
-    if (error) break;
-    const page = (data ?? []) as Row[];
+    if (error) {
+      if (cols.includes(',staff')) { cols = cols.replace(',staff', ''); from -= PAGE; continue; } // retry same page sans staff
+      break;
+    }
+    const page = (data ?? []) as unknown as Row[];
     rows.push(...page);
     if (page.length < PAGE) break;
   }
   if (!rows.length) return [];
 
-  // resolve names for every candidate code in one round-trip
-  const codes = new Set<string>();
-  for (const r of rows) if (r.item_code) codes.add(r.item_code);
+  // resolve names for every candidate code. A single .in() over ALL distinct codes builds a huge URL
+  // that PostgREST rejects (3k+ codes → a 60KB+ query string → the request FAILS), which silently left
+  // nameByCode empty so every History name fell back to the raw item_code. Batch the lookup in ≤200-code
+  // chunks so every name resolves.
+  const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
   const nameByCode = new Map<string, string>();
-  if (codes.size) {
+  const CHUNK = 200;
+  for (let i = 0; i < codes.length; i += CHUNK) {
     const { data: cat } = await supabase
       .from('catalogue')
       .select('item_code,translate_name,original_name,self_code')
-      .in('item_code', [...codes]);
+      .in('item_code', codes.slice(i, i + CHUNK));
     for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
   }
 
-  // group by ship_id → per-SKU summed qty + latest receive_date
-  type Group = { ship_id: string; receive_date: string | null; items: Map<string, InboundHistoryItem> };
+  // group by ship_id → per-SKU summed qty + latest receive_date. Track the latest created_at (drives the
+  // date+time display) and the staff on that latest row (who received).
+  type Group = { ship_id: string; receive_date: string | null; received_at: string | null; staff: string | null; items: Map<string, InboundHistoryItem> };
   const groups = new Map<string, Group>();
   for (const r of rows) {
     const sid = r.ship_id as string;
-    const g = groups.get(sid) ?? groups.set(sid, { ship_id: sid, receive_date: null, items: new Map() }).get(sid)!;
+    const g = groups.get(sid) ?? groups.set(sid, { ship_id: sid, receive_date: null, received_at: null, staff: null, items: new Map() }).get(sid)!;
     if (r.receive_date && (!g.receive_date || r.receive_date > g.receive_date)) g.receive_date = r.receive_date;
+    if (r.created_at && (!g.received_at || r.created_at > g.received_at)) { g.received_at = r.created_at; g.staff = r.staff ?? g.staff; }
     const key = r.item_code ?? `raw:${r.item_code_raw ?? ''}`;
     const name = r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : r.item_code_raw ?? '(unnamed)';
     const excl = Number(r.excluded_qty ?? 0) || 0;
@@ -261,6 +272,8 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
     return {
       ship_id: g.ship_id,
       receive_date: g.receive_date,
+      received_at: g.received_at,
+      staff: g.staff,
       origin_country: null, // meta filled in below for the final (sliced) rows only
       tracking: null,
       is_adhoc: false,
@@ -452,6 +465,14 @@ export async function recordReceipt(payload: RecordReceiptInput): Promise<Record
     affected: [],
     closed: false,
   };
+
+  // 0052: stamp the active warehouse staff onto this receipt's inbound rows (targeted by receipt_id, so
+  // the big record_receipt RPC stays untouched). Non-fatal — a failed stamp never voids a real receipt.
+  const staff = payload.staff?.trim();
+  if (staff && out.receipt_id) {
+    await supabase.from('inbound').update({ staff }).eq('receipt_id', out.receipt_id);
+  }
+
   const affected = out.affected ?? [];
   let stock: RecordReceiptResult['stock'] = [];
   if (affected.length) {

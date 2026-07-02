@@ -31,6 +31,7 @@ import BarcodePicker from '@/components/BarcodePicker';
 import ReceiveConfirm from '@/components/ReceiveConfirm';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import { getActiveStaff } from '@/components/staffStore';
 
 // Never render a raw internal id as a name (Fulfill F4 parity, §4b). When the only "name" we have is
 // the item_code itself (an edge case — stub creation + search both supply real names), show this.
@@ -64,6 +65,7 @@ export default function InboundBoard({
   userEmail,
   embedded = false,
   onCountChange,
+  adhocSignal = 0,
 }: {
   initialQueue: ReceiveQueueRow[];
   inboundLabels: InboundLabel[];
@@ -71,6 +73,8 @@ export default function InboundBoard({
   // Inbound window (InboundShell): same embedded/onCountChange contract as OutboundBoard.
   embedded?: boolean;
   onCountChange?: (n: number) => void;
+  // PR130: the "+ Unmarked shipment" trigger moved to the shell's tab bar — a bumped counter fires startAdhoc().
+  adhocSignal?: number;
 }) {
   const [queue, setQueue] = useState<ReceiveQueueRow[]>(initialQueue);
   const [selected, setSelected] = useState<string | null>(null); // ship_id, or ADHOC_SENTINEL
@@ -124,6 +128,13 @@ export default function InboundBoard({
   // picker shows — never silently attributing the scan to one arbitrary owner.
   // live count badge for the shell tab (mirrors OutboundBoard)
   useEffect(() => { onCountChange?.(queue.length); }, [queue, onCountChange]);
+
+  // PR130: the shell's "+ Unmarked shipment" button bumps adhocSignal → start an ad-hoc receive. Skip 0
+  // (initial) so a fresh mount doesn't auto-open one.
+  useEffect(() => {
+    if (adhocSignal) startAdhoc();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adhocSignal]);
 
   const barcodeMap = useMemo(() => {
     const m = new Map<string, string[]>();
@@ -464,6 +475,7 @@ export default function InboundBoard({
         ship_id: shipIdForSave,
         receive_date: receiveDate,
         close_shipment: willClose && canClose,
+        staff: getActiveStaff(),
         lines: saveLines.map((l) => ({
           item_code: l.item_code,
           qty: l.qty,
@@ -555,12 +567,6 @@ export default function InboundBoard({
             )}
           </div>
 
-          <div style={{ padding: '6px 6px 0' }}>
-            <button className={`fq-row ${selected === ADHOC_SENTINEL ? 'active' : ''}`} onClick={startAdhoc} style={{ borderStyle: 'dashed' }}>
-              <div className="fq-row-top"><span className="fq-id">+ unmarked shipment</span></div>
-              <div className="fq-row-bot"><span>goods with no shipment ID (📦)</span></div>
-            </button>
-          </div>
           {queue.length === 0 && <div className="hint fq-empty">No open shipments.</div>}
           <ul className="fq-list">
             {queue.map((q) => (

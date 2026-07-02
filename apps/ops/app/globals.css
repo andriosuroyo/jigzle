@@ -1267,6 +1267,12 @@ img.sku-img { background: #e8e8e8; }
 .orders-new:active { background: var(--brown-dark); }
 @media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
 
+/* Warehouse staff picker (0052) — header subtext row on Inbound + Outbound. */
+.staff-row { padding: 0 12px 6px; }
+.staff-bar { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.staff-bar-label { font-weight: 700; color: var(--brown); text-transform: uppercase; letter-spacing: 0.03em; font-size: 11px; }
+.staff-bar-select { font-size: 13px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); }
+
 /* Readiness filter tabs (Pending queue) — underline style with a count badge, distinct from the pill
    pipeline tabs above but clearly selectable. */
 .fq-filters { display: flex; gap: 2px; padding: 2px 8px 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; }

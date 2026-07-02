@@ -58,6 +58,7 @@ export interface RecordReceiptInput {
   receive_date: string; // 'YYYY-MM-DD'
   lines: RecordReceiptLine[];
   close_shipment: boolean;
+  staff?: string | null; // 0052: the active warehouse staff, stamped onto the inbound rows
 }
 export interface RecordReceiptResult {
   receipt_id: number; // the reversible-unit handle (Reverse needs it)
@@ -94,6 +95,8 @@ export interface InboundHistoryItem {
 export interface InboundHistoryRow {
   ship_id: string;                   // the join key + React key + selection id
   receive_date: string | null;       // latest receive_date across this shipment's rows
+  received_at: string | null;        // 0052: latest created_at (timestamptz) — drives the date+time display
+  staff: string | null;              // 0052: who received (from the latest receipt row in the group)
   origin_country: string | null;
   tracking: string | null;
   is_adhoc: boolean;                 // a 📦YYMMXXX id with no shipments-ledger row
