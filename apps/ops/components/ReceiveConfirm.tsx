@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import ConfirmModal from '@/components/ConfirmModal';
 import type { ReceiveClass, ReceiveConfirmData } from '@/app/inbound/types';
+import type { StaffMember } from '@/app/settings/types';
 
 const CLASS_LABEL: Record<ReceiveClass, string> = {
   ok: '✓ match',
@@ -23,6 +24,9 @@ export default function ReceiveConfirm({
   data,
   canClose,
   defaultClose,
+  staffOptions,
+  defaultStaff,
+  defaultDate,
   busy,
   error,
   onConfirm,
@@ -31,12 +35,17 @@ export default function ReceiveConfirm({
   data: ReceiveConfirmData;
   canClose: boolean; // a real shipment can be closed (ad-hoc cannot)
   defaultClose: boolean;
+  staffOptions: StaffMember[];
+  defaultStaff: string | null; // last-used staff (persisted per device)
+  defaultDate: string;         // 'YYYY-MM-DD' — the draft's receive date, editable here
   busy?: boolean;
   error?: string | null;
-  onConfirm: (closeShipment: boolean) => void;
+  onConfirm: (opts: { closeShipment: boolean; staff: string | null; receiveDate: string }) => void;
   onCancel: () => void;
 }) {
   const [close, setClose] = useState(canClose ? defaultClose : false);
+  const [staff, setStaff] = useState<string>(defaultStaff ?? '');
+  const [receiveDate, setReceiveDate] = useState(defaultDate);
 
   const sellable = data.rows.reduce((s, r) => s + (r.counted - r.excluded_qty), 0);
   const willRevert = close && data.shorts.length > 0;
@@ -54,7 +63,7 @@ export default function ReceiveConfirm({
       confirmLabel={busy ? 'Saving…' : close ? 'Confirm & close' : 'Confirm receive'}
       confirmDisabled={data.rows.length === 0}
       cancelLabel="← Back to scanning"
-      onConfirm={() => onConfirm(close)}
+      onConfirm={() => onConfirm({ closeShipment: close, staff: staff.trim() || null, receiveDate })}
       onCancel={onCancel}
     >
       {data.rows.length === 0 && <div className="sc-empty">Nothing counted yet — scan or add a line first.</div>}
@@ -74,6 +83,26 @@ export default function ReceiveConfirm({
               ))}
             </div>
           )}
+
+          {/* Who received + when — captured here as part of Mark received. */}
+          <div className="sc-sec">
+            <div className="sc-sec-title">Receiving</div>
+            <div className="sc-row rcv-confirm-meta">
+              <label className="rcv-date-field">
+                <span className="fd-label">Staff</span>
+                <select className="staff-bar-select" value={staff} onChange={(e) => setStaff(e.target.value)} disabled={busy}>
+                  <option value="">— none —</option>
+                  {staffOptions.map((s) => (
+                    <option key={s.id} value={s.label}>{s.icon ? `${s.icon} ` : ''}{s.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="rcv-date-field">
+                <span className="fd-label">Receive date</span>
+                <input type="date" className="rcv-date-input" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} disabled={busy} />
+              </label>
+            </div>
+          </div>
 
           {canClose && (
             <div className="sc-sec">

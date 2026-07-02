@@ -24,14 +24,14 @@ import type {
   ReceiveConfirmData,
   ReceiveConfirmRow,
 } from '@/app/inbound/types';
-import type { InboundLabel } from '@/app/settings/types';
+import type { InboundLabel, StaffMember } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import IconSelect from '@/components/IconSelect';
 import BarcodePicker from '@/components/BarcodePicker';
 import ReceiveConfirm from '@/components/ReceiveConfirm';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
-import { getActiveStaff } from '@/components/staffStore';
+import { getActiveStaff, setActiveStaff } from '@/components/staffStore';
 
 // Never render a raw internal id as a name (Fulfill F4 parity, §4b). When the only "name" we have is
 // the item_code itself (an edge case — stub creation + search both supply real names), show this.
@@ -62,6 +62,7 @@ function sellableOf(l: ReceiveLine): number {
 export default function InboundBoard({
   initialQueue,
   inboundLabels,
+  staffOptions = [],
   userEmail,
   embedded = false,
   onCountChange,
@@ -69,6 +70,7 @@ export default function InboundBoard({
 }: {
   initialQueue: ReceiveQueueRow[];
   inboundLabels: InboundLabel[];
+  staffOptions?: StaffMember[];
   userEmail: string;
   // Inbound window (InboundShell): same embedded/onCountChange contract as OutboundBoard.
   embedded?: boolean;
@@ -357,9 +359,20 @@ export default function InboundBoard({
       addUnit(hit.item_code, hit.name);
       setScanMsg(`✓ stub ${hit.item_code} created (needs review) +1`);
       setStub(null);
+      // if this was reached from the Manual-add modal, close it and clear the search
+      if (manualAdd) { setManualAdd(false); clearSearch(); }
     } catch (e) {
       setScanMsg(e instanceof Error ? e.message : 'stub creation failed');
     }
+  }
+
+  // open the Manual-add modal, optionally pre-filling the search (used by the "unresolved — map a SKU" lines)
+  function openManualAdd(prefill?: string) {
+    setStub(null);
+    setSkuSearched(false);
+    setSkuHits([]);
+    setSkuQuery(prefill ?? '');
+    setManualAdd(true);
   }
 
   async function runSearch() {
@@ -465,17 +478,18 @@ export default function InboundBoard({
     setShowConfirm(true);
   }
 
-  // confirm → one transaction (record_receipt). closeShipment comes from the window's toggle.
-  async function doCommit(willClose: boolean) {
+  // confirm → one transaction (record_receipt). closeShipment/staff/receiveDate come from the overlay.
+  async function doCommit({ closeShipment, staff, receiveDate: rDate }: { closeShipment: boolean; staff: string | null; receiveDate: string }) {
     if (!detail) return;
     setCommitting(true);
     setError(null);
+    setActiveStaff(staff); // remember the choice as the default for next time
     try {
       const res = await recordReceipt({
         ship_id: shipIdForSave,
-        receive_date: receiveDate,
-        close_shipment: willClose && canClose,
-        staff: getActiveStaff(),
+        receive_date: rDate,
+        close_shipment: closeShipment && canClose,
+        staff,
         lines: saveLines.map((l) => ({
           item_code: l.item_code,
           qty: l.qty,
@@ -668,7 +682,7 @@ export default function InboundBoard({
                     onChange={(e) => setScan(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doScan(); } }}
                   />
-                  <button className="btn-secondary" onClick={() => { setManualAdd(true); setSkuSearched(false); }}>Manual add</button>
+                  <button className="btn-secondary" onClick={() => openManualAdd()}>Manual add</button>
                   {scanMsg && <span className="scan-msg">{scanMsg}</span>}
                 </div>
 
@@ -677,8 +691,8 @@ export default function InboundBoard({
                   <BarcodePicker skus={picker} imgMap={imgMap} onPick={(s) => pick(s)} onCancel={() => setPicker(null)} />
                 )}
 
-                {/* D2 unknown barcode → minimal stub */}
-                {stub && (
+                {/* D2 unknown barcode → minimal stub (inline; the Manual-add modal owns its own stub form) */}
+                {stub && !manualAdd && (
                   <div className="rcv-stub">
                     <div className="subform-label">+ add new SKU (flagged needs review)</div>
                     <div className="hint">barcode {stub.barcode}</div>
@@ -701,73 +715,98 @@ export default function InboundBoard({
 
                   {expectedUnresolved.map((e, i) => (
                     <li key={`unres-${i}`} className="ff-line">
-                      <div className="rcv-line-head">
+                      <button className="rcv-line-head rcv-unres-btn" onClick={() => openManualAdd(e.raw ?? e.name)} title="Manual add to map a SKU">
                         <span className="ff-name">{e.name}</span>
                         <span className="rcv-exp">exp {e.expected_qty}</span>
-                        <span className="rcv-badge miss">unresolved — Manual add to map a SKU</span>
-                      </div>
+                        <span className="rcv-badge miss">unresolved — tap to map a SKU</span>
+                      </button>
                     </li>
                   ))}
                 </ul>
               </section>
 
-              {/* Commit bar → opens the §6 confirmation window (the received + short recap). The receive
-                  date sits to the right of the button (two lines) to keep the Items area clean. */}
+              {/* Commit bar → opens the §6 confirmation window, where staff + receive date are picked
+                  alongside the received/short recap before saving. */}
               <div className="fd-commit">
                 <button className="btn-primary" onClick={openConfirm} disabled={committing || saveLines.length === 0 || !shipIdForSave}>
                   {canClose ? 'Mark received' : 'Save inbound'}
                 </button>
-                <label className="rcv-date-field">
-                  <span className="fd-label">Receive date</span>
-                  <input type="date" className="rcv-date-input" value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} />
-                </label>
               </div>
             </>
           )}
         </main>
       </div>
 
-      {/* Manual add — full-screen search overlay (replaces the inline search field). Adds to the
-          received list; stays open so several SKUs can be added in a row. */}
+      {/* Manual add — compact centered modal. Autocomplete search adds to the received list; when a
+          search finds nothing, offer to add the SKU manually (a needs-review stub), mirroring
+          Purchasing → manual. Stays open so several SKUs can be added in a row. */}
       {manualAdd && detail && (
-        <div className="orders-overlay" role="dialog" aria-modal="true" aria-label="Manual add">
-          <div className="orders-overlay-bar">
-            <span className="orders-overlay-title">Manual add</span>
-            <button className="orders-overlay-close" onClick={() => { setManualAdd(false); clearSearch(); }} aria-label="Close">×</button>
-          </div>
-          <div className="orders-overlay-body" style={{ padding: '14px 16px' }}>
-            <div className="scan-row">
-              <input
-                ref={skuInputRef}
-                type="text"
-                autoFocus
-                placeholder="Code, name, or piece count…"
-                value={skuQuery}
-                onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); }}
-              />
-              {(skuQuery || skuHits.length > 0) && <button className="btn-link" onClick={clearSearch}>Clear</button>}
+        <div className="sc-modal-backdrop" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); }}>
+          <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Manual add" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head">
+              <div className="sc-modal-title">Manual add</div>
             </div>
-            {searching && <div className="hint">Searching…</div>}
-            {!searching && skuSearched && skuHits.length === 0 && (
-              <div className="hint"><em>No results</em></div>
-            )}
-            {skuHits.length > 0 && (
-              <ul className="result-list" style={{ marginTop: 6 }}>
-                {skuHits.map((h) => (
-                  <li key={h.item_code}>
-                    {/* §4a Pattern A: image left, code / name / avail stacked beside (ff-card family) */}
-                    <button className="result-item ff-card" onClick={() => { addUnit(h.item_code, h.name); setScanMsg(`✓ ${h.item_code} +1`); clearSearch(); }}>
-                      <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
-                      <div className="ff-card-info">
-                        <div className="ff-card-code">{h.item_code}</div>
-                        <div className="ff-card-name">{displayName(h.name, h.item_code)}</div>
-                        <div className="ff-card-status">avail {h.available}</div>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="sc-modal-body">
+              {!stub ? (
+                <>
+                  <div className="scan-row">
+                    <input
+                      ref={skuInputRef}
+                      type="text"
+                      autoFocus
+                      placeholder="Code, name, or piece count…"
+                      value={skuQuery}
+                      onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); }}
+                    />
+                    {(skuQuery || skuHits.length > 0) && <button className="btn-link" onClick={clearSearch}>Clear</button>}
+                  </div>
+                  {searching && <div className="hint">Searching…</div>}
+                  {!searching && skuSearched && skuHits.length === 0 && (
+                    <div className="rcv-noresult">
+                      <div className="hint"><em>No results.</em></div>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => setStub({ barcode: '', item_code: skuQuery.trim(), name: '', brand: '' })}
+                      >
+                        + Add{skuQuery.trim() ? ` “${skuQuery.trim()}”` : ''} as a new SKU
+                      </button>
+                    </div>
+                  )}
+                  {skuHits.length > 0 && (
+                    <ul className="result-list" style={{ marginTop: 6 }}>
+                      {skuHits.map((h) => (
+                        <li key={h.item_code}>
+                          {/* §4a Pattern A: image left, code / name / avail stacked beside (ff-card family) */}
+                          <button className="result-item ff-card" onClick={() => { addUnit(h.item_code, h.name); setScanMsg(`✓ ${h.item_code} +1`); clearSearch(); }}>
+                            <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
+                            <div className="ff-card-info">
+                              <div className="ff-card-code">{h.item_code}</div>
+                              <div className="ff-card-name">{displayName(h.name, h.item_code)}</div>
+                              <div className="ff-card-status">avail {h.available}</div>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                // add a new SKU manually (needs-review stub) — like Purchasing → manual
+                <div className="rcv-stub">
+                  <div className="subform-label">+ add new SKU (flagged needs review)</div>
+                  <input type="text" placeholder="item code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
+                  <input type="text" placeholder="name" value={stub.name} onChange={(e) => setStub({ ...stub, name: e.target.value })} />
+                  <input type="text" placeholder="brand prefix (optional)" value={stub.brand} onChange={(e) => setStub({ ...stub, brand: e.target.value })} />
+                  <div className="subform-actions">
+                    <button className="btn-link" onClick={() => setStub(null)}>← back to search</button>
+                    <button className="btn-secondary" onClick={createStub}>create + add</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="sc-modal-foot">
+              <button className="btn-secondary" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); }}>Close</button>
+            </div>
           </div>
         </div>
       )}
@@ -778,9 +817,12 @@ export default function InboundBoard({
           data={buildConfirmData()}
           canClose={canClose}
           defaultClose={closeShipment}
+          staffOptions={staffOptions}
+          defaultStaff={getActiveStaff()}
+          defaultDate={receiveDate}
           busy={committing}
           error={error}
-          onConfirm={(close) => doCommit(close)}
+          onConfirm={(opts) => doCommit(opts)}
           onCancel={() => setShowConfirm(false)}
         />
       )}
