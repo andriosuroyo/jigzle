@@ -48,24 +48,23 @@ export default function InboundShell({
       <AppHeader active="inbound" userEmail={userEmail} />
       <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inbound', href: '/inbound' }, { label: TAB_LABELS[tab] }]} />
 
-      {/* Sales-Pending-style underline tabs (Shipments / History) with live counts. */}
       <div className="orders-bar">
-        <nav className="fq-filters" role="tablist" aria-label="Inbound">
+        <nav className="orders-tabs" role="tablist" aria-label="Inbound">
           <button
             role="tab"
             aria-selected={tab === 'arrivals'}
-            className={`fq-filter ${tab === 'arrivals' ? 'active' : ''}`}
+            className={`orders-tab ${tab === 'arrivals' ? 'active' : ''}`}
             onClick={() => setTab('arrivals')}
           >
-            Shipments<span className="fq-filter-count">{arrivalsCount}</span>
+            Shipments<span className="orders-tab-count">{arrivalsCount}</span>
           </button>
           <button
             role="tab"
             aria-selected={tab === 'history'}
-            className={`fq-filter ${tab === 'history' ? 'active' : ''}`}
+            className={`orders-tab ${tab === 'history' ? 'active' : ''}`}
             onClick={() => setTab('history')}
           >
-            History<span className="fq-filter-count">{historyCount}</span>
+            History<span className="orders-tab-count">{historyCount}</span>
           </button>
         </nav>
       </div>
