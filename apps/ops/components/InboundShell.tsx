@@ -9,7 +9,6 @@ import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import InboundBoard from '@/components/InboundBoard';
 import InboundHistoryBoard from '@/components/InboundHistoryBoard';
-import StaffPicker from '@/components/StaffPicker';
 import type { ReceiveQueueRow } from '@jigzle/db/types';
 import type { InboundHistoryRow } from '@/app/inbound/types';
 import type { InboundLabel, StaffMember } from '@/app/settings/types';
@@ -67,12 +66,7 @@ export default function InboundShell({
             History<span className="orders-tab-count">{historyCount}</span>
           </button>
         </nav>
-      </div>
-
-      {/* Staff picker + Unmarked-shipment button share one line. */}
-      <div className="inbound-actions">
-        {staffOptions.length > 0 && <StaffPicker options={staffOptions} />}
-        <button className="orders-new" onClick={startUnmarked}>+ Unmarked shipment</button>
+        <button className="orders-new" onClick={startUnmarked}>+ Unmarked</button>
       </div>
 
       <div className="orders-panels">
@@ -81,6 +75,7 @@ export default function InboundShell({
             embedded
             initialQueue={initialQueue}
             inboundLabels={inboundLabels}
+            staffOptions={staffOptions}
             userEmail={userEmail}
             onCountChange={onArrivalsCount}
             adhocSignal={adhocSignal}

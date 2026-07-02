@@ -1265,8 +1265,13 @@ img.sku-img { background: #e8e8e8; }
 .orders-tab.active .orders-tab-count { background: var(--orange); color: white; }
 .orders-new { flex-shrink: 0; font-size: 13px; font-weight: 700; padding: 9px 14px; border: none; border-radius: 8px; background: var(--brown); color: white; cursor: pointer; white-space: nowrap; }
 .orders-new:active { background: var(--brown-dark); }
-/* Inbound: staff picker + "+ Unmarked shipment" button share one line, below the tabs. */
-.inbound-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1100px; margin: 0 auto; padding: 8px 16px 0; }
+/* Receive-confirm overlay: staff + receive-date row. */
+.rcv-confirm-meta { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+/* Manual-add compact modal (search + add-SKU-on-no-result). */
+.rcv-manual-modal { max-width: 460px; }
+.rcv-noresult { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-top: 8px; }
+/* Clickable "unresolved — tap to map a SKU" line. */
+.rcv-unres-btn { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; text-align: left; cursor: pointer; padding: 0; font: inherit; }
 @media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
 
 /* Warehouse staff picker (0052) — header subtext row on Inbound + Outbound. */
