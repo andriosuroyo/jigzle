@@ -24,7 +24,7 @@ import type {
 type Supabase = ReturnType<typeof createSupabaseServerClient>;
 
 const QUEUE_LIMIT = 100;
-const HISTORY_ROW_SCAN = 2000; // inbound rows scanned to build the History tab before grouping
+const HISTORY_ROW_SCAN = 12000; // inbound rows scanned (paged, 1000/batch) to build the History tab before grouping
 const HISTORY_LIMIT = 100;     // shipments shown in History
 
 // PostgREST `.or()` / `.ilike()` interpolate the raw string into a filter grammar where
@@ -205,17 +205,27 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
   const supabase = createSupabaseServerClient();
   const q = sanitize(query).toLowerCase();
 
-  const { data, error } = await supabase
-    .from('inbound')
-    .select('item_code,item_code_raw,qty,excluded_qty,ship_id,receive_date')
-    .eq('is_opening_balance', false)
-    .not('ship_id', 'is', null)
-    .order('receive_date', { ascending: false, nullsFirst: false })
-    .limit(HISTORY_ROW_SCAN);
-  if (error || !data) return [];
-
+  // PostgREST caps a single response at 1000 rows regardless of .limit(), which silently truncated the
+  // scan and dropped older receipts from History (a SKU's earlier shipments would just vanish). Page
+  // through in 1000-row batches (stable order: receive_date, then inbound_id) up to HISTORY_ROW_SCAN.
   type Row = { item_code: string | null; item_code_raw: string | null; qty: number; excluded_qty: number | null; ship_id: string | null; receive_date: string | null };
-  const rows = (data ?? []) as Row[];
+  const PAGE = 1000;
+  const rows: Row[] = [];
+  for (let from = 0; from < HISTORY_ROW_SCAN; from += PAGE) {
+    const { data, error } = await supabase
+      .from('inbound')
+      .select('item_code,item_code_raw,qty,excluded_qty,ship_id,receive_date')
+      .eq('is_opening_balance', false)
+      .not('ship_id', 'is', null)
+      .order('receive_date', { ascending: false, nullsFirst: false })
+      .order('inbound_id', { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) break;
+    const page = (data ?? []) as Row[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  if (!rows.length) return [];
 
   // resolve names for every candidate code in one round-trip
   const codes = new Set<string>();

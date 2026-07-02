@@ -1080,16 +1080,26 @@ const SHIP_HISTORY_LIMIT = 400; // shipments shown in Purchasing → History (wa
 async function inboundReceivedByShip(supabase: ReturnType<typeof createSupabaseServerClient>, shipIds: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const ids = [...new Set(shipIds.filter(Boolean))];
+  const PAGE = 1000;
   for (let i = 0; i < ids.length; i += 100) {
-    const { data } = await supabase
-      .from('inbound')
-      .select('ship_id,receive_date')
-      .eq('is_opening_balance', false)
-      .in('ship_id', ids.slice(i, i + 100));
-    for (const r of (data ?? []) as { ship_id: string | null; receive_date: string | null }[]) {
-      if (!r.ship_id || !r.receive_date) continue;
-      const cur = out.get(r.ship_id);
-      if (!cur || r.receive_date > cur) out.set(r.ship_id, r.receive_date);
+    const chunk = ids.slice(i, i + 100);
+    // a 100-ship chunk can hold far more than 1000 inbound rows (heavy ships), and PostgREST caps a
+    // response at 1000 — so page through each chunk or the max receive_date could be silently missed.
+    for (let from = 0; from < 20000; from += PAGE) {
+      const { data } = await supabase
+        .from('inbound')
+        .select('ship_id,receive_date')
+        .eq('is_opening_balance', false)
+        .in('ship_id', chunk)
+        .order('receive_date', { ascending: false, nullsFirst: false })
+        .range(from, from + PAGE - 1);
+      const page = (data ?? []) as { ship_id: string | null; receive_date: string | null }[];
+      for (const r of page) {
+        if (!r.ship_id || !r.receive_date) continue;
+        const cur = out.get(r.ship_id);
+        if (!cur || r.receive_date > cur) out.set(r.ship_id, r.receive_date);
+      }
+      if (page.length < PAGE) break;
     }
   }
   return out;
@@ -1101,15 +1111,25 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
   // recently-completed shipments often have status 'completed' but a null received_date; the old
   // received_date filter hid them, so the list stopped at the newest received-dated shipment. We sort
   // by the best available date (received_date, else ship_date) so the newest work is on top.
-  const { data } = await supabase
-    .from('shipments')
-    .select('ship_id,forwarder_prefix,origin_country,ship_date,received_date,tracking,status')
-    .eq('status', 'completed')
-    .limit(2000);
-  let ships = (data ?? []) as {
+  // page through completed shipments (PostgREST caps a response at 1000; .limit(2000) would silently
+  // truncate once there are >1000 completed shipments). Stable order by ship_id for consistent paging.
+  type ShipRow = {
     ship_id: string; forwarder_prefix: string | null; origin_country: string | null;
     ship_date: string | null; received_date: string | null; tracking: string | null;
-  }[];
+  };
+  const PAGE = 1000;
+  let ships: ShipRow[] = [];
+  for (let from = 0; from < 12000; from += PAGE) {
+    const { data } = await supabase
+      .from('shipments')
+      .select('ship_id,forwarder_prefix,origin_country,ship_date,received_date,tracking,status')
+      .eq('status', 'completed')
+      .order('ship_id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    const page = (data ?? []) as ShipRow[];
+    ships.push(...page);
+    if (page.length < PAGE) break;
+  }
 
   const q = sanitize(query).toLowerCase();
   if (q) ships = ships.filter((s) => s.ship_id.toLowerCase().includes(q));
