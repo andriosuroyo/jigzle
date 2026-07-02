@@ -105,7 +105,9 @@ export default function PresenceSession({
     try {
       await p;
     } catch (e) {
-      setLines((ls) => ls.map((l) => (l.line_id === line.line_id ? { ...l, confirmed: true } : l)));
+      // Roll back the optimistic clear fully — restore counted_qty too, not just confirmed, or the
+      // row would show ticked-but-blank after a failed un-tick (L3).
+      setLines((ls) => ls.map((l) => (l.line_id === line.line_id ? { ...l, confirmed: true, counted_qty: line.counted_qty } : l)));
       setError(e instanceof Error ? e.message : 'Update failed.');
     } finally {
       inflight.current.delete(p);
