@@ -1272,6 +1272,9 @@ img.sku-img { background: #e8e8e8; }
 .rcv-noresult { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-top: 8px; }
 /* Clickable "unresolved — tap to map a SKU" line. */
 .rcv-unres-btn { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; text-align: left; cursor: pointer; padding: 0; font: inherit; }
+/* Map modal: optional barcode capture field. */
+.rcv-map-barcode { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.rcv-map-barcode input { width: 100%; }
 @media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
 
 /* Warehouse staff picker (0052) — header subtext row on Inbound + Outbound. */
