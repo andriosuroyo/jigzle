@@ -103,7 +103,7 @@ export async function getShipmentForReceive(shipId: string): Promise<ReceiveDeta
 
   const { data: ship } = await supabase
     .from('shipments')
-    .select('ship_id,origin_country,ship_date,tracking,contents')
+    .select('ship_id,origin_country,ship_date,tracking,contents,note')
     .eq('ship_id', sid)
     .maybeSingle();
 
@@ -191,6 +191,7 @@ export async function getShipmentForReceive(shipId: string): Promise<ReceiveDeta
     origin_country: (ship?.origin_country as string | null) ?? null,
     ship_date: (ship?.ship_date as string | null) ?? null,
     tracking: (ship?.tracking as string | null) ?? null,
+    note: (ship?.note as string | null) ?? null,
     is_shipment: !!ship,
     expected,
     barcodes,

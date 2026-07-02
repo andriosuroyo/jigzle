@@ -15,6 +15,7 @@ import {
   searchCustomers,
   searchSkus,
   setPOStatus,
+  setShipmentNote,
   updatePO,
 } from '@/app/purchasing/actions';
 import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
@@ -184,6 +185,7 @@ export default function OrderBoard({
 
   const [mode, setMode] = useState<RightMode>(null);
   const [editPo, setEditPo] = useState<OpenPORow | null>(null);
+  const [shipNote, setShipNote] = useState(''); // the edited PO's Ship-ID note (To-ship), seeded on open
   const [form, setForm] = useState<PoForm>(emptyForm());
 
   const [busy, setBusy] = useState(false);
@@ -350,6 +352,7 @@ export default function OrderBoard({
     resetMessages();
     setMode('edit');
     setEditPo(po);
+    setShipNote((po.ship_id ? shipmentById.get(po.ship_id)?.note : '') ?? '');
     setForm(formFromPO(po));
     setSkuQuery('');
     setSkuHits([]);
@@ -357,6 +360,20 @@ export default function OrderBoard({
     setCustHits([]);
     setSupForm(null);
     setConfirmDel(false);
+  }
+
+  // ── To-ship: save the per-Ship-ID note (auto-saves on blur; editable from any of the shipment's POs).
+  async function saveShipNote(next: string) {
+    const po = editPo;
+    if (!po?.ship_id) return;
+    const v = next.trim();
+    if (v === ((po.ship_id ? shipmentById.get(po.ship_id)?.note : '') ?? '')) return; // unchanged
+    try {
+      await setShipmentNote(po.ship_id, v);
+      setShipments((prev) => prev.map((s) => (s.ship_id === po.ship_id ? { ...s, note: v || null } : s)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save the shipment note.');
+    }
   }
 
   // ── To forwarder: auto-save one field (there's no Save button — fields persist as you fill them,
@@ -889,6 +906,18 @@ export default function OrderBoard({
                 <div className="fd-title">{mode === 'edit' && editPo ? `PO #${editPo.po_id}` : 'New PO'}</div>
                 <div className="fd-sub">{mode === 'edit' ? 'Edit an open PO' : 'Status starts Processing'}</div>
               </div>
+              {bucket === 'ship' && editPo?.ship_id && (
+                <div className="po-field">
+                  <label>Shipment note · {editPo.ship_id}</label>
+                  <textarea
+                    value={shipNote}
+                    onChange={(e) => setShipNote(e.target.value)}
+                    onBlur={(e) => saveShipNote(e.target.value)}
+                    placeholder="Note for this Ship ID — shown to the warehouse on Inbound receiving"
+                    rows={2}
+                  />
+                </div>
+              )}
               {renderPoForm(mode === 'edit')}
             </>
           ) : null}

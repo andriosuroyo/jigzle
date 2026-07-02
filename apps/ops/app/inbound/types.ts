@@ -10,6 +10,7 @@ export interface ReceiveDetail {
   origin_country: string | null;
   ship_date: string | null;
   tracking: string | null;
+  note: string | null; // per-Ship-ID note written in Purchasing (To-ship) — shown read-only here
   is_shipment: boolean; // the ship_id is a real shipments-ledger row (vs an ad-hoc id)
   expected: ExpectedLine[];
   barcodes: { barcode: string; item_code: string }[]; // for the expected SKUs (instant scan)

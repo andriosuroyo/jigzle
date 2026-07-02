@@ -98,6 +98,7 @@ export interface OpenShipmentRow {
   forwarder_prefix: string | null;
   origin_country: string | null;
   ship_date: string | null;
+  note: string | null; // per-Ship-ID note (shown on the Inbound receive detail)
 }
 
 // ── To buy → Preorder list (read-only, derived from Sales): an unfulfilled order line whose SKU has
