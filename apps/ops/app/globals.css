@@ -1270,8 +1270,9 @@ img.sku-img { background: #e8e8e8; }
 /* Manual-add compact modal (search + add-SKU-on-no-result). */
 .rcv-manual-modal { max-width: 460px; }
 .rcv-noresult { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-top: 8px; }
-/* Clickable "unresolved — tap to map a SKU" line. */
-.rcv-unres-btn { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; text-align: left; cursor: pointer; padding: 0; font: inherit; }
+/* Clickable "unresolved — click to map SKU" line. color:inherit kills the iOS default button-blue so
+   the code matches the other SKU codes (brown ff-code). */
+.rcv-unres-btn { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; text-align: left; cursor: pointer; padding: 0; font: inherit; color: inherit; -webkit-appearance: none; appearance: none; }
 /* Map modal: optional barcode capture field. */
 .rcv-map-barcode { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .rcv-map-barcode input { width: 100%; }
