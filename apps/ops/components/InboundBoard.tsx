@@ -225,7 +225,7 @@ export default function InboundBoard({
     const myReq = ++reqIdRef.current;
     setSelected(ADHOC_SENTINEL);
     setMode('adhoc');
-    setDetail({ ship_id: '', origin_country: null, ship_date: null, tracking: null, is_shipment: false, expected: [], barcodes: [] });
+    setDetail({ ship_id: '', origin_country: null, ship_date: null, tracking: null, note: null, is_shipment: false, expected: [], barcodes: [] });
     resetDraft();
     setCloseShipment(false);
     setAdhocShipId('');
@@ -700,6 +700,9 @@ export default function InboundBoard({
                   )}
                 </div>
               </div>
+
+              {/* Purchasing's per-Ship-ID note (read-only), so the warehouse sees what was flagged. */}
+              {detail.note && <div className="rcv-ship-note">📝 {detail.note}</div>}
 
               {error && <div className="validation err">{error}</div>}
 

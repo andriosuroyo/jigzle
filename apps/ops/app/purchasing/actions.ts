@@ -239,12 +239,22 @@ export async function getOpenShipments(): Promise<OpenShipmentRow[]> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from('shipments')
-    .select('ship_id,forwarder_prefix,origin_country,ship_date')
+    .select('ship_id,forwarder_prefix,origin_country,ship_date,note')
     .eq('status', 'open')
     .order('ship_date', { ascending: false, nullsFirst: false })
     .limit(QUEUE_LIMIT);
   if (error || !data) return [];
   return data as OpenShipmentRow[];
+}
+
+// ── set the per-Ship-ID note (To-ship). Editable from any of the shipment's POs; shown read-only on
+// the Inbound receive detail so the warehouse sees what Purchasing flagged. Empty → NULL. ──
+export async function setShipmentNote(shipId: string, note: string): Promise<void> {
+  const sid = shipId.trim();
+  if (!sid) throw new Error('setShipmentNote: a ship id is required');
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('shipments').update({ note: note.trim() || null }).eq('ship_id', sid);
+  if (error) throw new Error(`setShipmentNote: ${error.message}`);
 }
 
 // ── SKU search (catalogue text + barcode + brand name), with live available + incoming (D3) ──

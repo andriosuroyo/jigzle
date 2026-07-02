@@ -1278,6 +1278,8 @@ img.sku-img { background: #e8e8e8; }
 .rcv-map-barcode input { width: 100%; }
 /* History detail: title + "Edit ship id" on one row. */
 .fd-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+/* Inbound receive: Purchasing's per-Ship-ID note callout. */
+.rcv-ship-note { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--paper); border: 1px solid var(--line); font-size: 13px; color: var(--ink); white-space: pre-wrap; }
 @media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
 
 /* Warehouse staff picker (0052) — header subtext row on Inbound + Outbound. */
