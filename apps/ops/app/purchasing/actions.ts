@@ -1104,12 +1104,16 @@ export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[
 // tab, uncapped). One row per shipment: item count = distinct items (PO lines ∪ inbound-received codes,
 // so legacy shipments with no PO rows still count), Σ cost, and a currency symbol from origin. The board
 // filters into Active/Completed and searches ship_id OR sku. (types in ./types) ──
-const CURRENCY_SYMBOL_BY_COUNTRY: Record<string, string> = {
-  china: '¥', japan: '¥', taiwan: 'NT$', 'hong kong': 'HK$', korea: '₩', 'south korea': '₩',
-  singapore: 'S$', thailand: '฿', malaysia: 'RM', indonesia: 'Rp', 'united states': '$', usa: '$',
+// currency label per country (yuan/yen share ¥, so use distinct words/codes). The country comes from the
+// shipment's forwarder (SUB→China→yuan, IMA→Japan→yen, LGB→Taiwan→NTD), falling back to origin_country.
+const CURRENCY_LABEL_BY_COUNTRY: Record<string, string> = {
+  china: 'yuan', japan: 'yen', taiwan: 'NTD', 'hong kong': 'HKD', korea: 'won', 'south korea': 'won',
+  singapore: 'SGD', thailand: 'baht', malaysia: 'MYR', indonesia: 'rupiah', 'united states': 'USD', usa: 'USD',
 };
-const currencySymbolFor = (country: string | null): string | null =>
-  country ? (CURRENCY_SYMBOL_BY_COUNTRY[country.trim().toLowerCase()] ?? null) : null;
+const currencyForCountry = (country: string | null): string | null =>
+  country ? (CURRENCY_LABEL_BY_COUNTRY[country.trim().toLowerCase()] ?? null) : null;
+// leading alpha run of a ship_id → its forwarder prefix ('SUB 189' → 'SUB'; '📦2607001' → '')
+const prefixOfShip = (shipId: string): string => (shipId.match(/^[A-Za-z]+/)?.[0] ?? '').toUpperCase();
 
 // ── the actual received-date per ship_id from the INBOUND ledger (the source of truth for "received":
 // a shipment is received once its goods are booked into inbound). Chunked .in() over the ids, returns
@@ -1153,14 +1157,14 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
   // truncate once there are >1000 completed shipments). Stable order by ship_id for consistent paging.
   type ShipRow = {
     ship_id: string; forwarder_prefix: string | null; origin_country: string | null;
-    ship_date: string | null; received_date: string | null; tracking: string | null; status: string | null;
+    ship_date: string | null; received_date: string | null; tracking: string | null; status: string | null; note: string | null;
   };
   const PAGE = 1000;
   let ships: ShipRow[] = [];
   for (let from = 0; from < 12000; from += PAGE) {
     const { data } = await supabase
       .from('shipments')
-      .select('ship_id,forwarder_prefix,origin_country,ship_date,received_date,tracking,status')
+      .select('ship_id,forwarder_prefix,origin_country,ship_date,received_date,tracking,status,note')
       .in('status', ['open', 'completed'])
       .order('ship_id', { ascending: true })
       .range(from, from + PAGE - 1);
@@ -1169,6 +1173,17 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     if (page.length < PAGE) break;
   }
   if (!ships.length) return [];
+
+  // forwarder → country, to derive each shipment's currency (origin_country is usually null).
+  const fwdCountry = new Map<string, string>();
+  {
+    const { data: fwds } = await supabase.from('forwarders').select('prefix,country');
+    for (const f of (fwds ?? []) as { prefix: string; country: string | null }[]) if (f.country) fwdCountry.set(f.prefix.toUpperCase(), f.country);
+  }
+  const currencyOf = (s: ShipRow): string | null => {
+    const prefix = (s.forwarder_prefix ?? prefixOfShip(s.ship_id)).toUpperCase();
+    return currencyForCountry(fwdCountry.get(prefix) ?? s.origin_country);
+  };
 
   // received-date from the inbound ledger (source of truth) overrides a missing shipments.received_date.
   const inboundRecv = await inboundReceivedByShip(supabase, ships.map((s) => s.ship_id));
@@ -1225,10 +1240,11 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
       received_date: recvOf(s),
       tracking: s.tracking,
       completed: s.status === 'completed',
+      note: s.note,
       item_count: codes.length,
       sku_codes: codes,
       total_cost: costByShip.has(s.ship_id) ? costByShip.get(s.ship_id)! : null,
-      currency_symbol: currencySymbolFor(s.origin_country),
+      currency: currencyOf(s),
       suppliers: [...(supIdsByShip.get(s.ship_id) ?? [])].map((id) => supName.get(id) ?? `#${id}`).sort(),
     };
   });

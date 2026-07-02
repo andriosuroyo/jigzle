@@ -7,7 +7,7 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useState } from 'react';
-import { getShipmentItems } from '@/app/purchasing/actions';
+import { getShipmentItems, setShipmentNote } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -18,8 +18,8 @@ const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 const dateLabel = (s: ShipmentHistoryRow): string =>
   s.completed ? `received ${fmtDate(s.received_date || s.ship_date)}` : `shipped ${fmtDate(s.ship_date)}`;
 const fmtCost = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(2));
-const costLabel = (s: { total_cost: number | null; currency_symbol: string | null }): string | null =>
-  s.total_cost == null ? null : `Total Cost: ${s.currency_symbol ?? ''}${fmtCost(s.total_cost)}`;
+const costLabel = (s: { total_cost: number | null; currency: string | null }): string | null =>
+  s.total_cost == null ? null : `Total Cost: ${fmtCost(s.total_cost)}${s.currency ? ` ${s.currency}` : ''}`;
 
 export default function PurchasingHistoryBoard({
   initialShipments,
@@ -27,13 +27,17 @@ export default function PurchasingHistoryBoard({
   initialShipments: ShipmentHistoryRow[];
 }) {
   const [sub, setSub] = useState<'active' | 'completed'>('active');
-  const [ships] = useState<ShipmentHistoryRow[]>(initialShipments);
+  const [ships, setShips] = useState<ShipmentHistoryRow[]>(initialShipments);
   const [query, setQuery] = useState('');
 
   // shipment detail: the selected shipment + its item lines
   const [openShip, setOpenShip] = useState<ShipmentHistoryRow | null>(null);
   const [shipItems, setShipItems] = useState<ShipmentItemRow[]>([]);
   const [shipItemsLoading, setShipItemsLoading] = useState(false);
+  // shipment-note editor (detail view)
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   const imgCodes = useMemo(
     () => (openShip ? shipItems.map((i) => i.item_code).filter((c): c is string => !!c) : []),
@@ -62,6 +66,7 @@ export default function PurchasingHistoryBoard({
 
   async function selectShip(s: ShipmentHistoryRow) {
     setOpenShip(s);
+    setEditingNote(false);
     setShipItems([]);
     setShipItemsLoading(true);
     try {
@@ -70,6 +75,23 @@ export default function PurchasingHistoryBoard({
       setShipItems([]);
     } finally {
       setShipItemsLoading(false);
+    }
+  }
+
+  // save the per-Ship-ID note from the detail view (works even when starting empty).
+  async function saveNote() {
+    if (!openShip) return;
+    setSavingNote(true);
+    try {
+      await setShipmentNote(openShip.ship_id, noteDraft);
+      const v = noteDraft.trim() || null;
+      setShips((prev) => prev.map((s) => (s.ship_id === openShip.ship_id ? { ...s, note: v } : s)));
+      setOpenShip((prev) => (prev ? { ...prev, note: v } : prev));
+      setEditingNote(false);
+    } catch {
+      /* keep the editor open on a transient error */
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -83,7 +105,7 @@ export default function PurchasingHistoryBoard({
     const cost = costLabel(openShip);
     return (
       <div className="purch-history">
-        <button className="btn-link" onClick={() => setOpenShip(null)}>← back to shipments</button>
+        <button className="btn-link" onClick={() => setOpenShip(null)}>← back</button>
         <div className="fd-head">
           <div className="fd-title">{openShip.ship_id}</div>
           <div className="fd-sub">
@@ -91,6 +113,28 @@ export default function PurchasingHistoryBoard({
             {cost ? ` · ${cost}` : ''}
           </div>
         </div>
+
+        {/* Shipment notes — editable here (add or change), also shown to the warehouse on Inbound. */}
+        <section className="fd-section">
+          <div className="fd-section-head fd-section-head-row">
+            <span>Shipment notes</span>
+            {!editingNote && (
+              <button className="btn-link" onClick={() => { setNoteDraft(openShip.note ?? ''); setEditingNote(true); }}>Edit note</button>
+            )}
+          </div>
+          {editingNote ? (
+            <div className="ship-note-edit">
+              <textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder="Note for this Ship ID — shown on Inbound receiving" rows={3} disabled={savingNote} autoFocus />
+              <div className="subform-actions">
+                <button className="btn-link" onClick={() => setEditingNote(false)} disabled={savingNote}>Cancel</button>
+                <button className="btn-secondary" onClick={saveNote} disabled={savingNote}>{savingNote ? 'Saving…' : 'Save note'}</button>
+              </div>
+            </div>
+          ) : (
+            <div className={openShip.note ? 'ship-note-text' : 'hint'}>{openShip.note || 'No note yet.'}</div>
+          )}
+        </section>
+
         {shipItemsLoading && <div className="hint">Loading items…</div>}
         {!shipItemsLoading && shipItems.length === 0 && <div className="hint">No item lines on this shipment.</div>}
         <ul className="po-cards po-cards-compact">
@@ -101,7 +145,7 @@ export default function PurchasingHistoryBoard({
                 <div className="po-card-main">
                   <div className="po-card-l1">
                     <span className="ff-code">{it.item_code || '—'}</span>
-                    {it.item_cost != null && <span className="po-card-poid">cost {it.item_cost}</span>}
+                    {it.item_cost != null && <span className="po-card-poid">each {it.item_cost}</span>}
                   </div>
                   <div className="po-card-l2"><span className="ff-name">{it.name}</span><span className="po-card-qty">×{it.qty}</span></div>
                 </div>
