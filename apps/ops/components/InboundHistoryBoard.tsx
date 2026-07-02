@@ -5,7 +5,7 @@
 // the detail pane renders straight from the selected row. Mirrors OutboundHistoryBoard's shape.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getReceiveHistory, deleteInboundShipment } from '@/app/inbound/actions';
+import { getReceiveHistory, deleteInboundShipment, moveShipId } from '@/app/inbound/actions';
 import type { InboundHistoryRow } from '@/app/inbound/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -42,6 +42,12 @@ export default function InboundHistoryBoard({
   const [selKey, setSelKey] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // edit-ship-id overlay
+  const [editing, setEditing] = useState(false);
+  const [editShipId, setEditShipId] = useState('');
+  const [editClose, setEditClose] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editErr, setEditErr] = useState<string | null>(null);
   const reqRef = useRef(0);
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialRows already loaded)
 
@@ -106,9 +112,36 @@ export default function InboundHistoryBoard({
     }
   }
 
+  // open the edit-ship-id overlay for the selected entry
+  function openEdit() {
+    if (!sel) return;
+    setEditShipId(sel.ship_id);
+    setEditClose(false);
+    setEditErr(null);
+    setEditing(true);
+  }
+  async function saveEdit() {
+    if (!sel) return;
+    const next = editShipId.trim();
+    if (!next) { setEditErr('Enter a ship id.'); return; }
+    if (next === sel.ship_id) { setEditing(false); return; }
+    setEditBusy(true); setEditErr(null);
+    try {
+      await moveShipId(sel.ship_id, next, editClose);
+      setEditing(false);
+      const r = await getReceiveHistory(query.trim());
+      setRows(r);
+      setSelKey(next); // follow the entry to its new id
+    } catch (e) {
+      setEditErr(e instanceof Error ? e.message : 'Move failed.');
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   useEffect(() => { onCountChange?.(rows.length); }, [rows, onCountChange]);
-  // reset the delete confirm whenever the selection changes
-  useEffect(() => { setConfirmDelete(false); }, [selKey]);
+  // reset the delete confirm + edit overlay whenever the selection changes
+  useEffect(() => { setConfirmDelete(false); setEditing(false); }, [selKey]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
   // live search: re-query as you type (empty = recent), debounced. Skip the mount run — initialRows
@@ -175,7 +208,10 @@ export default function InboundHistoryBoard({
         {sel && (
           <>
             <div className="fd-head">
-              <div className="fd-title">{sel.ship_id}</div>
+              <div className="fd-title-row">
+                <div className="fd-title">{sel.ship_id}</div>
+                <button className="btn-link" onClick={openEdit} disabled={editing}>Edit ship id</button>
+              </div>
               <div className="fd-sub">
                 Received {fmtDateTime(sel.received_at, sel.receive_date)}{sel.staff ? ` by ${sel.staff}` : ''}
               </div>
@@ -216,6 +252,40 @@ export default function InboundHistoryBoard({
           </>
         )}
       </main>
+
+      {/* Edit ship id — relocates the receipt(s) to a new ship id and re-runs PO allocation (0053). */}
+      {editing && sel && (
+        <div className="sc-modal-backdrop" onClick={() => !editBusy && setEditing(false)}>
+          <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Edit ship id" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head">
+              <div className="sc-modal-title">Edit ship id</div>
+              <div className="sc-modal-sub">Move “{sel.ship_id}” to the correct ship id. Its POs re-allocate; the old shipment re-opens.</div>
+            </div>
+            <div className="sc-modal-body">
+              <label className="rcv-map-barcode">
+                <span className="fd-label">New ship id</span>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="e.g. SUB 191"
+                  value={editShipId}
+                  onChange={(e) => setEditShipId(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } }}
+                />
+              </label>
+              <label className="rcv-ctl" style={{ marginTop: 10 }}>
+                <input type="checkbox" checked={editClose} onChange={(e) => setEditClose(e.target.checked)} />
+                <span>Close the shipment after moving (all goods received)</span>
+              </label>
+              {editErr && <div className="validation err" style={{ marginTop: 10 }}>{editErr}</div>}
+            </div>
+            <div className="sc-modal-foot">
+              <button className="btn-secondary" onClick={() => setEditing(false)} disabled={editBusy}>Cancel</button>
+              <button className="btn-primary" onClick={saveEdit} disabled={editBusy}>{editBusy ? 'Moving…' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

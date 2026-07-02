@@ -341,6 +341,19 @@ export async function deleteInboundShipment(shipId: string): Promise<{ deleted: 
   return { deleted: (data ?? []).length };
 }
 
+// ── move a received History entry to a different ship id (edit the header), re-allocating POs ──
+// Wraps the move_ship_id RPC (0053): hard-relocates the receipt(s) to the new ship id and replays
+// allocation so the new shipment's POs close and the old one's re-open. Atomic; RLS-gated.
+export async function moveShipId(oldShipId: string, newShipId: string, close: boolean): Promise<{ moved_receipts: number; legacy_rows: number; new_ship_id: string }> {
+  const o = oldShipId.trim();
+  const n = newShipId.trim();
+  if (!o || !n) throw new Error('moveShipId: both the old and new ship id are required');
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.rpc('move_ship_id', { p_old_ship_id: o, p_new_ship_id: n, p_close: close });
+  if (error) throw new Error(`moveShipId: ${error.message}`);
+  return (data as { moved_receipts: number; legacy_rows: number; new_ship_id: string });
+}
+
 // ── scan resolution: barcode → SKU, a collision picker (D1), or not-found (D2) ── (types in ./types)
 export async function resolveBarcode(code: string): Promise<ResolveResult> {
   const supabase = createSupabaseServerClient();
