@@ -1265,6 +1265,8 @@ img.sku-img { background: #e8e8e8; }
 .orders-tab.active .orders-tab-count { background: var(--orange); color: white; }
 .orders-new { flex-shrink: 0; font-size: 13px; font-weight: 700; padding: 9px 14px; border: none; border-radius: 8px; background: var(--brown); color: white; cursor: pointer; white-space: nowrap; }
 .orders-new:active { background: var(--brown-dark); }
+/* Inbound: staff picker + "+ Unmarked shipment" button share one line, below the tabs. */
+.inbound-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1100px; margin: 0 auto; padding: 8px 16px 0; }
 @media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
 
 /* Warehouse staff picker (0052) — header subtext row on Inbound + Outbound. */

@@ -32,8 +32,10 @@ export default function InboundShell({
 }) {
   const [tab, setTab] = useState<InboundTab>('arrivals');
   const [arrivalsCount, setArrivalsCount] = useState(initialQueue.length);
+  const [historyCount, setHistoryCount] = useState(historyRows.length);
   const [adhocSignal, setAdhocSignal] = useState(0);
   const onArrivalsCount = useCallback((n: number) => setArrivalsCount(n), []);
+  const onHistoryCount = useCallback((n: number) => setHistoryCount(n), []);
 
   // "+ Unmarked shipment" (moved out of the queue list): jump to the Shipments tab and fire an ad-hoc receive.
   function startUnmarked() {
@@ -46,29 +48,33 @@ export default function InboundShell({
       <AppHeader active="inbound" userEmail={userEmail} />
       <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inbound', href: '/inbound' }, { label: TAB_LABELS[tab] }]} />
 
+      {/* Sales-Pending-style underline tabs (Shipments / History) with live counts. */}
       <div className="orders-bar">
-        <nav className="orders-tabs" role="tablist" aria-label="Inbound">
+        <nav className="fq-filters" role="tablist" aria-label="Inbound">
           <button
             role="tab"
             aria-selected={tab === 'arrivals'}
-            className={`orders-tab ${tab === 'arrivals' ? 'active' : ''}`}
+            className={`fq-filter ${tab === 'arrivals' ? 'active' : ''}`}
             onClick={() => setTab('arrivals')}
           >
-            Shipments<span className="orders-tab-count">{arrivalsCount}</span>
+            Shipments<span className="fq-filter-count">{arrivalsCount}</span>
           </button>
           <button
             role="tab"
             aria-selected={tab === 'history'}
-            className={`orders-tab ${tab === 'history' ? 'active' : ''}`}
+            className={`fq-filter ${tab === 'history' ? 'active' : ''}`}
             onClick={() => setTab('history')}
           >
-            History
+            History<span className="fq-filter-count">{historyCount}</span>
           </button>
         </nav>
-        <button className="orders-new" onClick={startUnmarked}>+ Unmarked shipment</button>
       </div>
 
-      <div className="staff-row"><StaffPicker options={staffOptions} /></div>
+      {/* Staff picker + Unmarked-shipment button share one line. */}
+      <div className="inbound-actions">
+        {staffOptions.length > 0 && <StaffPicker options={staffOptions} />}
+        <button className="orders-new" onClick={startUnmarked}>+ Unmarked shipment</button>
+      </div>
 
       <div className="orders-panels">
         <div hidden={tab !== 'arrivals'}>
@@ -82,7 +88,7 @@ export default function InboundShell({
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <InboundHistoryBoard initialRows={historyRows} />
+          <InboundHistoryBoard initialRows={historyRows} onCountChange={onHistoryCount} />
         </div>
       </div>
     </div>

@@ -24,14 +24,8 @@ export default function StaffPicker({ options }: { options: StaffMember[] }) {
     setActive(v);
   }
 
-  if (options.length === 0) {
-    return (
-      <div className="staff-bar">
-        <span className="staff-bar-label">Staff</span>
-        <span className="hint">— add names in Settings → Inbound → Warehouse staff</span>
-      </div>
-    );
-  }
+  // no staff configured yet → render nothing (names are added in Settings → Inbound → Warehouse staff)
+  if (options.length === 0) return null;
 
   return (
     <div className="staff-bar">
