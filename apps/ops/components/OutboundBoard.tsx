@@ -11,6 +11,7 @@ import SkuImage from '@/components/SkuImage';
 import IconSelect from '@/components/IconSelect';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import { getActiveStaff } from '@/components/staffStore';
 
 // preset = a box-preset code (dims from SETTINGS) or 'Custom' (manual P/L/T).
 type BoxDraft = { key: number; preset: string; real: string; p: string; l: string; t: string };
@@ -281,6 +282,7 @@ export default function OutboundBoard({
             const d = boxDims(b);
             return { real_weight: numOrNull(b.real), dim_p: d.p, dim_l: d.l, dim_t: d.t };
           }),
+        staff: getActiveStaff(),
       });
       if (res.affected.length === 0) {
         setError('Those lines were already shipped — nothing to do.');

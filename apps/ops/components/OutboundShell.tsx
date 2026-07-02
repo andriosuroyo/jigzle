@@ -9,10 +9,11 @@ import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import OutboundBoard from '@/components/OutboundBoard';
 import OutboundHistoryBoard from '@/components/OutboundHistoryBoard';
+import StaffPicker from '@/components/StaffPicker';
 import { getMonthlyShipmentsXlsx, getShipmentMonthRange } from '@/app/outbound/actions';
 import type { ShipQueueRow } from '@jigzle/db/types';
 import type { ShipmentHistoryRow } from '@/app/outbound/types';
-import type { BoxPreset } from '@/app/settings/types';
+import type { BoxPreset, StaffMember } from '@/app/settings/types';
 
 type OutboundTab = 'ready' | 'history';
 const TAB_LABELS: Record<OutboundTab, string> = { ready: 'Ready to ship', history: 'History' };
@@ -23,12 +24,14 @@ export default function OutboundShell({
   initialQueue,
   boxPresets,
   shippedHistory,
+  staffOptions,
   initialOrderId,
 }: {
   userEmail: string;
   initialQueue: ShipQueueRow[];
   boxPresets: BoxPreset[];
   shippedHistory: ShipmentHistoryRow[];
+  staffOptions: StaffMember[];
   initialOrderId: string | null;
 }) {
   const [tab, setTab] = useState<OutboundTab>('ready');
@@ -134,6 +137,8 @@ export default function OutboundShell({
         </nav>
         <button className="orders-new" onClick={() => setShowReport(true)}>Monthly report</button>
       </div>
+
+      <div className="staff-row"><StaffPicker options={staffOptions} /></div>
 
       <div className="orders-panels">
         <div hidden={tab !== 'ready'}>

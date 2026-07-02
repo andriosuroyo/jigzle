@@ -9,9 +9,10 @@ import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import InboundBoard from '@/components/InboundBoard';
 import InboundHistoryBoard from '@/components/InboundHistoryBoard';
+import StaffPicker from '@/components/StaffPicker';
 import type { ReceiveQueueRow } from '@jigzle/db/types';
 import type { InboundHistoryRow } from '@/app/inbound/types';
-import type { InboundLabel } from '@/app/settings/types';
+import type { InboundLabel, StaffMember } from '@/app/settings/types';
 
 type InboundTab = 'arrivals' | 'history';
 const TAB_LABELS: Record<InboundTab, string> = { arrivals: 'Shipments', history: 'History' };
@@ -20,16 +21,25 @@ export default function InboundShell({
   initialQueue,
   inboundLabels,
   historyRows,
+  staffOptions,
   userEmail,
 }: {
   initialQueue: ReceiveQueueRow[];
   inboundLabels: InboundLabel[];
   historyRows: InboundHistoryRow[];
+  staffOptions: StaffMember[];
   userEmail: string;
 }) {
   const [tab, setTab] = useState<InboundTab>('arrivals');
   const [arrivalsCount, setArrivalsCount] = useState(initialQueue.length);
+  const [adhocSignal, setAdhocSignal] = useState(0);
   const onArrivalsCount = useCallback((n: number) => setArrivalsCount(n), []);
+
+  // "+ Unmarked shipment" (moved out of the queue list): jump to the Shipments tab and fire an ad-hoc receive.
+  function startUnmarked() {
+    setTab('arrivals');
+    setAdhocSignal((n) => n + 1);
+  }
 
   return (
     <div className="ops">
@@ -55,7 +65,10 @@ export default function InboundShell({
             History
           </button>
         </nav>
+        <button className="orders-new" onClick={startUnmarked}>+ Unmarked shipment</button>
       </div>
+
+      <div className="staff-row"><StaffPicker options={staffOptions} /></div>
 
       <div className="orders-panels">
         <div hidden={tab !== 'arrivals'}>
@@ -65,6 +78,7 @@ export default function InboundShell({
             inboundLabels={inboundLabels}
             userEmail={userEmail}
             onCountChange={onArrivalsCount}
+            adhocSignal={adhocSignal}
           />
         </div>
         <div hidden={tab !== 'history'}>

@@ -65,6 +65,16 @@ export interface ChannelOption {
   sort_order: number;
 }
 
+// 0052: the warehouse staff pick-list (Inbound + Outbound). Same shape as PaymentMethod (label = name).
+// The active staff is chosen in the Inbound/Outbound header and stamped onto each receipt/outbound row.
+export interface StaffMember {
+  id: number;
+  label: string;
+  icon: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
 // what getSettings() returns — one ordered, active-only list per kind.
 export interface SettingsData {
   paymentMethods: PaymentMethod[];
@@ -73,12 +83,13 @@ export interface SettingsData {
   inboundLabels: InboundLabel[];
   commonNotes: CommonNote[];
   channels: ChannelOption[];
+  staff: StaffMember[];
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).
-export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels' | 'common_note' | 'channel';
+export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels' | 'common_note' | 'channel' | 'staff';
 
-export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel | CommonNote | ChannelOption;
+export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel | CommonNote | ChannelOption | StaffMember;
 
 // permissive payload shapes for add/update — the actions whitelist columns per kind, so a stray key
 // can never reach an identity/system column (id / user_id / sort_order / created_at).

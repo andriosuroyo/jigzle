@@ -1,7 +1,7 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import OutboundShell from '@/components/OutboundShell';
 import { getShipQueue, getOutboundHistory } from '@/app/outbound/actions';
-import { getBoxPresets } from '@/app/settings/actions';
+import { getBoxPresets, getStaffOptions } from '@/app/settings/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -11,11 +11,12 @@ export const revalidate = 0;
 // order. Loads the queue + recent shipped history + SETTINGS box presets up front.
 export default async function OutboundPage({ searchParams }: { searchParams?: { order?: string } }) {
   const supabase = createSupabaseServerClient();
-  const [{ data: { user } }, queue, shippedHistory, boxPresets] = await Promise.all([
+  const [{ data: { user } }, queue, shippedHistory, boxPresets, staffOptions] = await Promise.all([
     supabase.auth.getUser(),
     getShipQueue(),
     getOutboundHistory(''),
     getBoxPresets(),
+    getStaffOptions(),
   ]);
   return (
     <OutboundShell
@@ -23,6 +24,7 @@ export default async function OutboundPage({ searchParams }: { searchParams?: { 
       initialQueue={queue}
       boxPresets={boxPresets}
       shippedHistory={shippedHistory}
+      staffOptions={staffOptions}
       initialOrderId={searchParams?.order ?? null}
     />
   );

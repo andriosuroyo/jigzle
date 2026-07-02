@@ -58,6 +58,7 @@ export interface ShipInput {
   line_ids: string[];
   boxes: BoxInput[];
   verify?: ShipVerify[];   // per-line verification captured at Mark-shipped (0035)
+  staff?: string | null;   // 0052: the active warehouse staff, stamped onto the outbound rows
 }
 
 export interface ShipResult {
@@ -91,6 +92,7 @@ export interface ShipmentHistoryRow {
   customer: string | null;
   address: string | null;          // verbatim, as shipped (the CSV address text / order address)
   courier: string | null;
+  staff: string | null;            // 0052: who shipped (warehouse staff), when stamped
   note: string | null;             // combined shipment notes (from Sales)
   items: ShipmentHistoryItem[];
   sku_codes: string[];             // for the SKU search / quick-view line

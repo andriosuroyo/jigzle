@@ -13,6 +13,19 @@ import { SKU_IMG } from '@/components/skuImageSizes';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
+// "YYYY-MM-DD HH:MM" in Asia/Jakarta from a timestamptz (0052). Falls back to the plain receive_date
+// (date only) when there's no created_at stamp (older rows). Empty → '—'.
+function fmtDateTime(iso: string | null, fallbackDate: string | null): string {
+  if (!iso) return fmtDate(fallbackDate);
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return fmtDate(fallbackDate);
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d).reduce<Record<string, string>>((a, x) => ((a[x.type] = x.value), a), {});
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+}
+
 export default function InboundHistoryBoard({
   initialRows,
   onCountChange,
@@ -124,7 +137,8 @@ export default function InboundHistoryBoard({
             <div className="fd-head">
               <div className="fd-title">{sel.ship_id}</div>
               <div className="fd-sub">
-                {sel.tracking ? `${sel.tracking} · ` : ''}received {fmtDate(sel.receive_date)}
+                {sel.tracking ? `${sel.tracking} · ` : ''}received {fmtDateTime(sel.received_at, sel.receive_date)}
+                {sel.staff ? ` · by ${sel.staff}` : ''}
               </div>
             </div>
 

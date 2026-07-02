@@ -18,6 +18,7 @@ import type {
   SettingRow,
   SettingsData,
   SettingsKind,
+  StaffMember,
 } from './types';
 
 // kind → table. The only place a kind becomes a table name.
@@ -28,6 +29,7 @@ const TABLE: Record<SettingsKind, string> = {
   inbound_labels: 'settings_inbound_labels',
   common_note: 'settings_common_notes',
   channel: 'settings_customer_channels',
+  staff: 'settings_staff',
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -40,6 +42,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   inbound_labels: ['label', 'icon', 'is_active'],
   common_note: ['label', 'icon', 'is_active'],
   channel: ['label', 'icon', 'is_active'],
+  staff: ['label', 'icon', 'is_active'],
 };
 
 // uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
@@ -67,15 +70,44 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels] = await Promise.all([
+  // staff (0052) degrades to [] if the table isn't applied yet, so Settings still loads.
+  async function listSafe<T>(table: string): Promise<T[]> {
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .is('user_id', null)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true });
+    if (error) return [];
+    return (data ?? []) as T[];
+  }
+
+  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
     list<InboundLabel>(TABLE.inbound_labels),
     list<CommonNote>(TABLE.common_note),
     list<ChannelOption>(TABLE.channel),
+    listSafe<StaffMember>(TABLE.staff),
   ]);
-  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels };
+  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff };
+}
+
+// The Inbound/Outbound header staff picker reads this (mirrors getChannelOptions). Degrades to [] if
+// the table isn't present yet (0052 not applied), so the picker just shows no staff.
+export async function getStaffOptions(): Promise<StaffMember[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.staff)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as StaffMember[];
 }
 
 // the Customer detail's Channels picker reads this (mirrors how Fulfill reads courier services). Degrades

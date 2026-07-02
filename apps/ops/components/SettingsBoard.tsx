@@ -102,6 +102,14 @@ const SECTIONS: SectionDef[] = [
     sortKey: 'label',
     blank: { label: '' },
   },
+  {
+    kind: 'staff',
+    title: 'Warehouse staff',
+    sub: 'Names shown in the Inbound/Outbound staff picker. The active one is stamped onto each receipt/shipment.',
+    cols: [{ key: 'label', label: 'Name', type: 'text', grow: true }],
+    sortKey: 'label',
+    blank: { label: '' },
+  },
 ];
 const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SECTIONS.map((s) => [s.kind, s])) as Record<SettingsKind, SectionDef>;
 
@@ -113,7 +121,7 @@ type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
 const CATEGORIES: Category[] = [
   { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
   { key: 'shipping', title: 'Shipping', sub: 'Couriers and box presets used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }] },
-  { key: 'inbound', title: 'Inbound', sub: 'Labels for the Inbound receiving flow.', tabs: [{ kind: 'inbound_labels' }] },
+  { key: 'inbound', title: 'Inbound', sub: 'Labels for the receiving flow and warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'inbound_labels' }, { kind: 'staff' }] },
   { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers and forwarders for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
 ];
@@ -148,6 +156,7 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
     inbound_labels: initial.inboundLabels,
     common_note: initial.commonNotes,
     channel: initial.channels,
+    staff: initial.staff,
   });
   const [busy, setBusy] = useState(false);
   // notice tone follows the action: ok (green) = additive, err (red) = removed/failed, warn (yellow) = neutral edit.
