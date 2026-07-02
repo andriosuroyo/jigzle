@@ -422,6 +422,20 @@ export async function mapPlaceholderPO(shipId: string, rawCode: string, itemCode
   return { updated: (data ?? []).length };
 }
 
+// ── link a barcode to a SKU (used when mapping a placeholder at receive: the box's barcode is the
+// identifier, so linking it means future receives of the same item auto-resolve via the scan path).
+// Idempotent: a duplicate (barcode, item_code) link (0020 composite PK) is a no-op, not an error.
+// is_verified false — it's an operator-entered link, same posture as a stub's barcode.
+export async function linkBarcode(barcode: string, itemCode: string): Promise<{ linked: boolean }> {
+  const bc = barcode.trim();
+  const code = itemCode.trim();
+  if (!bc || !code) return { linked: false };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('barcodes').insert({ barcode: bc, item_code: code, is_verified: false });
+  if (error && error.code !== '23505') throw new Error(`linkBarcode: ${error.message}`);
+  return { linked: true };
+}
+
 // ── D2: create a minimal needs_review SKU stub for an unknown barcode ── (StubInput in ./types)
 export async function createCatalogueStub(input: StubInput): Promise<SkuHit> {
   const supabase = createSupabaseServerClient();

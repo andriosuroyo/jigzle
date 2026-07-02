@@ -10,6 +10,7 @@ import {
   searchSkus,
   createCatalogueStub,
   mapPlaceholderPO,
+  linkBarcode,
   newAdhocShipId,
   recordReceipt,
   reverseReceipt,
@@ -107,6 +108,8 @@ export default function InboundBoard({
   // In this mode a search pick / new-SKU relinks the placeholder PO to the real SKU instead of just
   // adding a received unit.
   const [mappingRaw, setMappingRaw] = useState<string | null>(null);
+  // optional barcode captured while mapping — linked to the chosen SKU so future receives auto-resolve.
+  const [mapBarcode, setMapBarcode] = useState('');
 
   const [receiveDate, setReceiveDate] = useState(todayStr());
   const [closeShipment, setCloseShipment] = useState(true);
@@ -186,6 +189,7 @@ export default function InboundBoard({
     setSkuSearched(false);
     setManualAdd(false);
     setMappingRaw(null);
+    setMapBarcode('');
     setReceiveDate(todayStr());
     setResult(null);
     setError(null);
@@ -382,15 +386,19 @@ export default function InboundBoard({
   async function doMap(itemCode: string, itemName: string) {
     const shipId = detail?.ship_id;
     if (!shipId || !mappingRaw) return;
+    const bc = mapBarcode.trim();
     try {
       const { updated } = await mapPlaceholderPO(shipId, mappingRaw, itemCode);
+      // link the captured barcode to the real SKU so future receives auto-resolve via the scan path
+      if (bc) { try { await linkBarcode(bc, itemCode); } catch { /* non-fatal — the map still stands */ } }
+      const linkedNote = bc ? ` · barcode linked` : '';
       if (updated > 0) {
         const d = await getShipmentForReceive(shipId);
         setDetail(d);
-        setScanMsg(`✓ mapped ${mappingRaw} → ${itemCode} (${updated} PO${updated === 1 ? '' : 's'})`);
+        setScanMsg(`✓ mapped ${mappingRaw} → ${itemCode} (${updated} PO${updated === 1 ? '' : 's'})${linkedNote}`);
       } else {
         addUnit(itemCode, itemName); // nothing to relink → just record what arrived
-        setScanMsg(`✓ ${itemCode} +1`);
+        setScanMsg(`✓ ${itemCode} +1${linkedNote}`);
       }
     } catch (e) {
       setScanMsg(e instanceof Error ? e.message : 'map failed');
@@ -399,6 +407,7 @@ export default function InboundBoard({
       clearSearch();
       setStub(null);
       setMappingRaw(null);
+      setMapBarcode('');
     }
   }
 
@@ -410,6 +419,7 @@ export default function InboundBoard({
     setSkuHits([]);
     setSkuQuery(prefill ?? '');
     setMappingRaw(rawToMap ?? null);
+    setMapBarcode('');
     setManualAdd(true);
   }
 
@@ -779,13 +789,26 @@ export default function InboundBoard({
           search finds nothing, offer to add the SKU manually (a needs-review stub), mirroring
           Purchasing → manual. Stays open so several SKUs can be added in a row. */}
       {manualAdd && detail && (
-        <div className="sc-modal-backdrop" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); }}>
+        <div className="sc-modal-backdrop" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); setMapBarcode(''); }}>
           <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Manual add" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head">
               <div className="sc-modal-title">{mappingRaw ? 'Map a SKU' : 'Manual add'}</div>
-              {mappingRaw && <div className="sc-modal-sub">Relink “{mappingRaw}” to its real SKU — search, or add it new.</div>}
+              {mappingRaw && <div className="sc-modal-sub">Relink “{mappingRaw}” to its real SKU — search or add it new. Add the barcode to auto-resolve it next time.</div>}
             </div>
             <div className="sc-modal-body">
+              {/* map mode: optionally capture the box's barcode → linked to the SKU on map, so future
+                  receives of this item auto-resolve via the scan path. */}
+              {mappingRaw && (
+                <label className="rcv-map-barcode">
+                  <span className="fd-label">Barcode (optional)</span>
+                  <input
+                    type="text"
+                    placeholder="scan / type the item's barcode"
+                    value={mapBarcode}
+                    onChange={(e) => setMapBarcode(e.target.value)}
+                  />
+                </label>
+              )}
               {!stub ? (
                 <>
                   <div className="scan-row">
@@ -844,7 +867,7 @@ export default function InboundBoard({
               )}
             </div>
             <div className="sc-modal-foot">
-              <button className="btn-secondary" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); }}>Close</button>
+              <button className="btn-secondary" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); setMapBarcode(''); }}>Close</button>
             </div>
           </div>
         </div>
