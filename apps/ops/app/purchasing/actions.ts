@@ -1081,7 +1081,6 @@ export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[
     .from('purchase_orders')
     .select('po_id,item_code,item_code_raw,qty,item_cost')
     .eq('ship_id', sid)
-    .eq('status', 'Received')
     .order('po_id', { ascending: false });
   const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; item_cost: number | null }[];
   if (!rows.length) return [];
@@ -1101,9 +1100,16 @@ export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[
   }));
 }
 
-// ── History → Per shipment (read-only): completed shipments, newest received first; one row per
-// shipment with a count of its Received SKUs. Optional filter matches ship_id. (types in ./types) ──
-const SHIP_HISTORY_LIMIT = 400; // shipments shown in Purchasing → History (was capped at 100)
+// ── History (read-only): ALL shipments — open (Active tab, not yet received) and completed (Completed
+// tab, uncapped). One row per shipment: item count = distinct items (PO lines ∪ inbound-received codes,
+// so legacy shipments with no PO rows still count), Σ cost, and a currency symbol from origin. The board
+// filters into Active/Completed and searches ship_id OR sku. (types in ./types) ──
+const CURRENCY_SYMBOL_BY_COUNTRY: Record<string, string> = {
+  china: '¥', japan: '¥', taiwan: 'NT$', 'hong kong': 'HK$', korea: '₩', 'south korea': '₩',
+  singapore: 'S$', thailand: '฿', malaysia: 'RM', indonesia: 'Rp', 'united states': '$', usa: '$',
+};
+const currencySymbolFor = (country: string | null): string | null =>
+  country ? (CURRENCY_SYMBOL_BY_COUNTRY[country.trim().toLowerCase()] ?? null) : null;
 
 // ── the actual received-date per ship_id from the INBOUND ledger (the source of truth for "received":
 // a shipment is received once its goods are booked into inbound). Chunked .in() over the ids, returns
@@ -1147,7 +1153,7 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
   // truncate once there are >1000 completed shipments). Stable order by ship_id for consistent paging.
   type ShipRow = {
     ship_id: string; forwarder_prefix: string | null; origin_country: string | null;
-    ship_date: string | null; received_date: string | null; tracking: string | null;
+    ship_date: string | null; received_date: string | null; tracking: string | null; status: string | null;
   };
   const PAGE = 1000;
   let ships: ShipRow[] = [];
@@ -1155,58 +1161,50 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     const { data } = await supabase
       .from('shipments')
       .select('ship_id,forwarder_prefix,origin_country,ship_date,received_date,tracking,status')
-      .eq('status', 'completed')
+      .in('status', ['open', 'completed'])
       .order('ship_id', { ascending: true })
       .range(from, from + PAGE - 1);
     const page = (data ?? []) as ShipRow[];
     ships.push(...page);
     if (page.length < PAGE) break;
   }
-
-  const q = sanitize(query).toLowerCase();
-  if (q) ships = ships.filter((s) => s.ship_id.toLowerCase().includes(q));
   if (!ships.length) return [];
 
-  // received-date from the inbound ledger (source of truth) overrides a missing shipments.received_date,
-  // so a shipment that's been booked into inbound reads as RECEIVED (with its real date) even when the
-  // shipments row was never stamped. This also surfaces recently-received shipments (dateless rows) at top.
+  // received-date from the inbound ledger (source of truth) overrides a missing shipments.received_date.
   const inboundRecv = await inboundReceivedByShip(supabase, ships.map((s) => s.ship_id));
-  const recvOf = (s: { ship_id: string; received_date: string | null }) => s.received_date || inboundRecv.get(s.ship_id) || null;
-  const bestDate = (s: { ship_id: string; received_date: string | null; ship_date: string | null }) => recvOf(s) || s.ship_date || '';
-  ships.sort((a, b) => {
-    const da = bestDate(a), db = bestDate(b);
-    if (da && db) return da < db ? 1 : da > db ? -1 : a.ship_id.localeCompare(b.ship_id);
-    if (da) return -1;
-    if (db) return 1;
-    return a.ship_id.localeCompare(b.ship_id);
-  });
-  ships = ships.slice(0, SHIP_HISTORY_LIMIT);
+  const recvOf = (s: ShipRow) => s.received_date || inboundRecv.get(s.ship_id) || null;
 
-  // roll-up the Received PO lines per ship_id: distinct SKUs, Σ cost, distinct supplier ids. Chunk the
-  // .in() (a large id list can silently drop rows) and merge the batches.
   const shipIds = ships.map((s) => s.ship_id);
-  const skusByShip = new Map<string, Set<string>>();
+  // items per ship = distinct identifiers from PO lines (item_code ?? raw) ∪ inbound-received codes, so a
+  // legacy shipment with no PO rows still counts what actually arrived. Cost + suppliers from PO lines.
+  const codesByShip = new Map<string, Set<string>>();
   const costByShip = new Map<string, number>();
   const supIdsByShip = new Map<string, Set<number>>();
   const allSupIds = new Set<number>();
-  const posRows: { ship_id: string | null; item_code: string | null; item_cost: number | null; qty: number | null; supplier_id: number | null }[] = [];
+  const addCode = (sid: string, code: string) => (codesByShip.get(sid) ?? codesByShip.set(sid, new Set()).get(sid)!).add(code);
   for (let i = 0; i < shipIds.length; i += 100) {
-    const { data: chunk } = await supabase
+    const slice = shipIds.slice(i, i + 100);
+    const { data: pos } = await supabase
       .from('purchase_orders')
-      .select('ship_id,item_code,item_cost,qty,supplier_id,status')
-      .in('ship_id', shipIds.slice(i, i + 100))
-      .eq('status', 'Received');
-    posRows.push(...((chunk ?? []) as typeof posRows));
-  }
-  for (const p of posRows) {
-    if (!p.ship_id) continue;
-    if (p.item_code) (skusByShip.get(p.ship_id) ?? skusByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.item_code);
-    // item_cost is a per-UNIT supplier-currency cost → multiply by qty. (Still a raw sum across mixed
-    // supplier currencies — a rough total, not a converted figure.)
-    if (p.item_cost != null) costByShip.set(p.ship_id, (costByShip.get(p.ship_id) ?? 0) + Number(p.item_cost) * (Number(p.qty) || 0));
-    if (p.supplier_id != null) {
-      (supIdsByShip.get(p.ship_id) ?? supIdsByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.supplier_id);
-      allSupIds.add(p.supplier_id);
+      .select('ship_id,item_code,item_code_raw,item_cost,qty,supplier_id')
+      .in('ship_id', slice);
+    for (const p of (pos ?? []) as { ship_id: string | null; item_code: string | null; item_code_raw: string | null; item_cost: number | null; qty: number | null; supplier_id: number | null }[]) {
+      if (!p.ship_id) continue;
+      const code = p.item_code ?? p.item_code_raw;
+      if (code) addCode(p.ship_id, code);
+      if (p.item_cost != null) costByShip.set(p.ship_id, (costByShip.get(p.ship_id) ?? 0) + Number(p.item_cost) * (Number(p.qty) || 0));
+      if (p.supplier_id != null) {
+        (supIdsByShip.get(p.ship_id) ?? supIdsByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.supplier_id);
+        allSupIds.add(p.supplier_id);
+      }
+    }
+    const { data: inb } = await supabase
+      .from('inbound')
+      .select('ship_id,item_code')
+      .eq('is_opening_balance', false)
+      .in('ship_id', slice);
+    for (const r of (inb ?? []) as { ship_id: string | null; item_code: string | null }[]) {
+      if (r.ship_id && r.item_code) addCode(r.ship_id, r.item_code);
     }
   }
 
@@ -1217,15 +1215,32 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     for (const s of (sup ?? []) as { supplier_id: number; name: string | null }[]) supName.set(s.supplier_id, s.name ?? `#${s.supplier_id}`);
   }
 
-  return ships.map((s) => ({
-    ship_id: s.ship_id,
-    forwarder_prefix: s.forwarder_prefix,
-    origin_country: s.origin_country,
-    ship_date: s.ship_date,
-    received_date: recvOf(s), // inbound-backed: present ⇒ received, null ⇒ still only shipped
-    tracking: s.tracking,
-    item_count: skusByShip.get(s.ship_id)?.size ?? 0,
-    total_cost: costByShip.has(s.ship_id) ? costByShip.get(s.ship_id)! : null,
-    suppliers: [...(supIdsByShip.get(s.ship_id) ?? [])].map((id) => supName.get(id) ?? `#${id}`).sort(),
-  }));
+  const rows: ShipmentHistoryRow[] = ships.map((s) => {
+    const codes = [...(codesByShip.get(s.ship_id) ?? [])].sort((a, b) => a.localeCompare(b));
+    return {
+      ship_id: s.ship_id,
+      forwarder_prefix: s.forwarder_prefix,
+      origin_country: s.origin_country,
+      ship_date: s.ship_date,
+      received_date: recvOf(s),
+      tracking: s.tracking,
+      completed: s.status === 'completed',
+      item_count: codes.length,
+      sku_codes: codes,
+      total_cost: costByShip.has(s.ship_id) ? costByShip.get(s.ship_id)! : null,
+      currency_symbol: currencySymbolFor(s.origin_country),
+      suppliers: [...(supIdsByShip.get(s.ship_id) ?? [])].map((id) => supName.get(id) ?? `#${id}`).sort(),
+    };
+  });
+
+  // newest first by best available date (received else shipped); ship_id tiebreak.
+  const bestDate = (r: ShipmentHistoryRow) => r.received_date || r.ship_date || '';
+  rows.sort((a, b) => {
+    const da = bestDate(a), db = bestDate(b);
+    if (da && db) return da < db ? 1 : da > db ? -1 : a.ship_id.localeCompare(b.ship_id);
+    if (da) return -1;
+    if (db) return 1;
+    return a.ship_id.localeCompare(b.ship_id);
+  });
+  return rows;
 }

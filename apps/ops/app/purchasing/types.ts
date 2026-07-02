@@ -204,7 +204,10 @@ export interface ShipmentHistoryRow {
   ship_date: string | null;
   received_date: string | null;
   tracking: string | null;
-  item_count: number;       // distinct Received SKUs on this ship_id
-  total_cost: number | null; // Σ item_cost across the ship's Received lines (roll-up)
-  suppliers: string[];      // distinct supplier names on the ship (roll-up)
+  completed: boolean;        // shipment status = completed (Completed tab) vs open (Active tab)
+  item_count: number;        // distinct items on this ship_id (POs ∪ inbound-received)
+  sku_codes: string[];       // the distinct item identifiers, for the SKU search
+  total_cost: number | null; // Σ item_cost×qty across the ship's PO lines (roll-up)
+  currency_symbol: string | null; // derived from origin_country (e.g. ¥) for the Total Cost label
+  suppliers: string[];       // distinct supplier names on the ship (roll-up)
 }

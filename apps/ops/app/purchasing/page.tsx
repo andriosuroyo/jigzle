@@ -6,7 +6,6 @@ import {
   getOpenShipments,
   getPlannedItems,
   getPreorders,
-  getReceivedItems,
   getShipmentHistory,
   getSoldOutItems,
   getSuppliers,
@@ -28,7 +27,6 @@ export default async function OrderPage() {
     planned,
     preorders,
     soldOut,
-    receivedItems,
     shipmentHistory,
   ] = await Promise.all([
     supabase.auth.getUser(),
@@ -39,7 +37,6 @@ export default async function OrderPage() {
     getPlannedItems(),
     getPreorders(),
     getSoldOutItems(),
-    getReceivedItems(''),
     getShipmentHistory(''),
   ]);
 
@@ -52,7 +49,6 @@ export default async function OrderPage() {
       planned={planned}
       preorders={preorders}
       soldOut={soldOut}
-      receivedItems={receivedItems}
       shipmentHistory={shipmentHistory}
       userEmail={user?.email || ''}
     />

@@ -12,7 +12,7 @@ import OrderBoard from '@/components/OrderBoard';
 import ToBuyBoard from '@/components/ToBuyBoard';
 import PurchasingHistoryBoard from '@/components/PurchasingHistoryBoard';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier } from '@jigzle/db/types';
-import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ReceivedItemRow, ShipmentHistoryRow, SoldOutRow } from '@/app/purchasing/types';
+import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ShipmentHistoryRow, SoldOutRow } from '@/app/purchasing/types';
 
 type PurchasingTab = 'tobuy' | 'forwarder' | 'ship' | 'history';
 const TAB_LABELS: Record<PurchasingTab, string> = { tobuy: 'To buy', forwarder: 'To forwarder', ship: 'To ship', history: 'History' };
@@ -27,7 +27,6 @@ export default function PurchasingShell({
   planned,
   preorders,
   soldOut,
-  receivedItems,
   shipmentHistory,
   userEmail,
 }: {
@@ -38,7 +37,6 @@ export default function PurchasingShell({
   planned: PlannedItemRow[];
   preorders: PreorderRow[];
   soldOut: SoldOutRow[];
-  receivedItems: ReceivedItemRow[];
   shipmentHistory: ShipmentHistoryRow[];
   userEmail: string;
 }) {
@@ -94,7 +92,7 @@ export default function PurchasingShell({
             userEmail={userEmail}
           />
         )}
-        {tab === 'history' && <PurchasingHistoryBoard initialItems={receivedItems} initialShipments={shipmentHistory} />}
+        {tab === 'history' && <PurchasingHistoryBoard initialShipments={shipmentHistory} />}
       </div>
     </div>
   );
