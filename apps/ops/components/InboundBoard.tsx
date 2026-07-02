@@ -715,10 +715,10 @@ export default function InboundBoard({
 
                   {expectedUnresolved.map((e, i) => (
                     <li key={`unres-${i}`} className="ff-line">
-                      <button className="rcv-line-head rcv-unres-btn" onClick={() => openManualAdd(e.raw ?? e.name)} title="Manual add to map a SKU">
+                      <button className="rcv-line-head rcv-unres-btn" onClick={() => openManualAdd(e.raw ?? e.name)} title="Click to map a SKU">
                         <span className="ff-name">{e.name}</span>
-                        <span className="rcv-exp">exp {e.expected_qty}</span>
-                        <span className="rcv-badge miss">unresolved — tap to map a SKU</span>
+                        <span className="rcv-exp">qty {e.expected_qty}</span>
+                        <span className="rcv-badge miss">click to map SKU</span>
                       </button>
                     </li>
                   ))}
