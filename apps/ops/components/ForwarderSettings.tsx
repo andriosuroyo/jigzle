@@ -79,7 +79,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
   return (
     <Wrap className={embedded ? '' : 'set-sec'}>
       {!embedded && <div className="set-sec-title">Forwarders</div>}
-      <div className="set-sec-sub">Freight forwarders, shown (flag + prefix) in the To-ship group panel. The prefix is the ship-id series (SUB, MTE, LGB, IMA, …) — new ship ids auto-number from the last one. The flag sets the country.</div>
+      <div className="set-sec-sub">Freight forwarders, shown (flag + prefix) in the To-ship group panel. The prefix is the ship-id series (SUB, MTE, LGB, IMA, …) — picking a forwarder there pre-fills its last ship id (editable). The flag sets the country.</div>
 
       {notice && <div className={`validation ${notice.tone}`} style={{ margin: '8px 0' }}>{notice.text}</div>}
 

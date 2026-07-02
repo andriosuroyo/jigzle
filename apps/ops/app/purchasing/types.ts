@@ -41,6 +41,7 @@ export interface CustomerHit {
 // the open-PO queue filter (status + supplier)
 export interface OpenPOFilter {
   status?: string | null;
+  statuses?: string[];        // bucket fetch (e.g. ['Processing','On the way']); overrides the default open filter
   supplier_id?: number | null;
 }
 

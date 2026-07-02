@@ -299,6 +299,7 @@ export default function OrderBoard({
 
   function currentFilter() {
     return {
+      statuses: bucket ? BUCKET_STATUSES[bucket] : undefined, // fetch only this tab's bucket, fully
       status: filterStatus || null,
       supplier_id: filterSupplier ? Number(filterSupplier) : null,
     };

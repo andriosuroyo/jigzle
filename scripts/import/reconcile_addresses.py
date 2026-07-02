@@ -279,6 +279,8 @@ def main():
     ap.add_argument("--address-id", type=int, help="scope to one address")
     ap.add_argument("--limit", type=int, help="cap rows processed (sampling)")
     ap.add_argument("--execute", action="store_true", help="APPLY the parse (writes via service key)")
+    ap.add_argument("--force-overwrite-llm-data", action="store_true",
+                    help="required with --execute: acknowledges this clobbers the richer LLM-parsed rows")
     args = ap.parse_args()
 
     if not POSTAL_JSON.exists():
@@ -343,6 +345,15 @@ def main():
     if not args.execute:
         print("\nDRY-RUN — nothing written. Re-run with --execute to apply.")
         return
+
+    # QUARANTINE (audit H6): the live customer_addresses were bulk-parsed by a MORE CAPABLE LLM pass
+    # (Opus, snapped to id-postal.json) that this heuristic script cannot reproduce — a blind --execute
+    # reproduces only ~4,997 of 7,366 rows and would DEGRADE ~2,369 (wiping inferred geo, etc.). This
+    # script is non-authoritative for a full re-parse; use it only for brand-new/never-parsed rows.
+    if not args.force_overwrite_llm_data:
+        sys.exit("\nREFUSING to --execute: this would overwrite the richer LLM-parsed address data with "
+                 "weaker heuristic output (audit H6). If you REALLY mean to, re-run with "
+                 "--force-overwrite-llm-data. Prefer scoping to new rows via --address-id / --customer-id.")
 
     if not has_new_columns(client):
         sys.exit("\nABORT: columns source_blob / delivery_note do not exist yet. "
