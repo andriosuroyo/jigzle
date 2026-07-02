@@ -1276,6 +1276,8 @@ img.sku-img { background: #e8e8e8; }
 /* Map modal: optional barcode capture field. */
 .rcv-map-barcode { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .rcv-map-barcode input { width: 100%; }
+/* History detail: title + "Edit ship id" on one row. */
+.fd-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 @media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
 
 /* Warehouse staff picker (0052) — header subtext row on Inbound + Outbound. */
