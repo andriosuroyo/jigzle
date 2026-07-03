@@ -1332,6 +1332,16 @@ img.sku-img { background: #e8e8e8; }
 /* ── PR144 — Sales quickview + detail restyle ── */
 /* quickview row: pay pill pinned to the bottom-right (the date moved to the top row). */
 .fq-row-bot .pay { margin-left: auto; }
+
+/* ── PR146 — dual status circles (box = item readiness, $ = payment) on sales quickview rows ── */
+.stat-circles { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+.stat-circle { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: white; }
+.stat-circle svg { width: 12px; height: 12px; display: block; }
+.stat-circle-dollar { font-size: 12px; font-weight: 800; line-height: 1; }
+.stat-circle.red    { background: var(--red); }
+.stat-circle.yellow { background: #E0A92E; }
+.stat-circle.green  { background: var(--green); }
+.stat-circle.grey   { background: var(--line); color: var(--muted); }
 /* detail header: customer id headline left, order date right; the sales id moves to the very bottom. */
 .fd-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .fd-date { flex-shrink: 0; font-size: 13px; color: var(--muted); }

@@ -5,6 +5,7 @@ import AppHeader from '@/components/AppHeader';
 import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending } from '@/app/fulfill/actions';
 import { deletePendingOrder } from '@/app/pending/actions';
 import SearchInput from '@/components/SearchInput';
+import StatusCircles, { payTone } from '@/components/StatusCircles';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
 import type { CourierService, CommonNote } from '@/app/settings/types';
 import NoteEditor from '@/components/NoteEditor';
@@ -236,7 +237,8 @@ export default function FulfillBoard({
                     <span className="ff-items-skus">
                       {q.item_count} {q.item_count === 1 ? 'item' : 'items'}{q.sku_codes.length ? ` (${q.sku_codes.join(', ')})` : ''}
                     </span>
-                    {q.payment_status && <span className={`pay pay-${q.payment_status.toLowerCase()}`}>{q.payment_status}</span>}
+                    {/* PR146: in Fulfill the cut items are ready by definition → box circle is green. */}
+                    <StatusCircles box="green" pay={payTone(q.payment_status)} />
                   </div>
                 </button>
               </li>
