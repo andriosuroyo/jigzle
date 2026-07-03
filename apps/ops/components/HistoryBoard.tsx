@@ -12,6 +12,7 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import StatusCircles, { payTone, type CircleTone } from '@/components/StatusCircles';
 
 const STATE_LABEL: Record<HistoryState, string> = {
   cancelled: 'Cancelled',
@@ -21,6 +22,14 @@ const STATE_LABEL: Record<HistoryState, string> = {
   complete: 'Complete',
 };
 const fmtIDR = (n: number | null | undefined): string => 'Rp ' + (n ?? 0).toLocaleString('id-ID');
+
+// PR146 — the box circle's tone from the lifecycle state: shipped/shippable green, cut-but-unsent
+// yellow, cancelled grey; need_payment/need_send say nothing about item readiness → grey too.
+function boxToneOf(state: HistoryState): CircleTone {
+  if (state === 'complete') return 'green';
+  if (state === 'ready_to_ship') return 'yellow';
+  return 'grey';
+}
 
 export default function HistoryBoard({
   initialOrders,
@@ -146,8 +155,8 @@ export default function HistoryBoard({
           <ul className="fq-list">
             {orders.map((o) => (
               <li key={o.sales_id}>
-                {/* PR144 row: customer id + date on top (no sales id); state (Complete implied → no pill)
-                    + item count left, pay pill right below. */}
+                {/* PR146 row: customer id + date on top; state (Complete implied → no pill) + item
+                    count left, dual status circles bottom-right. */}
                 <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className="fq-headline">{o.customer_name || '—'}</span>
@@ -156,7 +165,7 @@ export default function HistoryBoard({
                   <div className="fq-row-bot">
                     {o.state !== 'complete' && <span className={`ord-state ${o.state}`}>{STATE_LABEL[o.state]}</span>}
                     <span>{o.item_count} {o.item_count === 1 ? 'item' : 'items'}</span>
-                    <span className={`pay pay-${(o.payment_status || '').toLowerCase()}`}>{o.payment_status || '—'}</span>
+                    <StatusCircles box={boxToneOf(o.state)} pay={payTone(o.payment_status)} />
                   </div>
                 </button>
               </li>

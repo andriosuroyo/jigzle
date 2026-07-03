@@ -7,6 +7,7 @@ import type { OrderDot, PendingOrder } from '@/app/pending/types';
 import type { CommonNote } from '@/app/settings/types';
 import NoteEditor from '@/components/NoteEditor';
 import SkuImage from '@/components/SkuImage';
+import StatusCircles, { payTone } from '@/components/StatusCircles';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
@@ -191,17 +192,17 @@ export default function PendingBoard({
           <ul className="fq-list">
             {visible.map((o) => (
               <li key={o.sales_id}>
-                {/* PR144 row: customer id + date on top (no sales id); items/ready left + pay pill right below. */}
+                {/* PR146 row: customer id + date on top; items/ready left, dual status circles
+                    (box = readiness dot, $ = payment) bottom-right. */}
                 <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
-                    <span className={`pend-dot ${o.dot}`} aria-hidden="true" />
                     <span className="fq-headline">{o.customer_name || '—'}</span>
                     <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
                   </div>
                   <div className="fq-row-bot">
                     <span>{o.lines.length} {o.lines.length === 1 ? 'item' : 'items'}</span>
                     {o.ready_count > 0 && <span className="pend-ready">{o.ready_count} ready</span>}
-                    <span className={`pay pay-${(o.payment_status || '').toLowerCase()}`}>{o.payment_status || '—'}</span>
+                    <StatusCircles box={o.dot === 'red' ? 'red' : o.dot === 'yellow' ? 'yellow' : 'green'} pay={payTone(o.payment_status)} />
                   </div>
                 </button>
               </li>
