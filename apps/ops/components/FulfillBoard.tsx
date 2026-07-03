@@ -213,21 +213,27 @@ export default function FulfillBoard({
 
   const canSend = !!detail && detail.lines.length > 0 && addressId != null && courierId != null && !committing;
 
+  // PR147 — bodyview: the body shows EITHER the full-width To-send queue OR the tapped order's detail
+  // with a ← back button (the Purchasing-History pattern); breadcrumb + pipeline tabs stay put above.
   const body = (
-    <>
-      <div className="fulfill-layout">
-        {/* ── Queue ── */}
-        <aside className="fq-pane">
+    <div className="bodyview">
+      {/* FT-7 / FT-8: success + errors render independent of the detail block */}
+      {success && <div className="validation ok">{success}</div>}
+      {error && <div className="validation err">{error}</div>}
+
+      {/* ── Queue ── */}
+      {!selected && (
+        <>
           {/* No queue-count header — the Fulfill tab badge above already shows the count. */}
-          <div className="search-row" style={{ padding: '8px' }}>
+          <div className="search-row" style={{ padding: '0 0 8px' }}>
             <SearchInput value={search} onChange={setSearch} placeholder="Search customer or SKU…" />
           </div>
           {shown.length === 0 && <div className="hint fq-empty">{queue.length === 0 ? 'Nothing waiting to send.' : 'No match.'}</div>}
           <ul className="fq-list">
             {shown.map((q) => (
               <li key={q.sales_id}>
-                <button className={`fq-row ${selected === q.sales_id ? 'active' : ''}`} onClick={() => openOrder(q.sales_id)}>
-                  {/* PR144 row: customer id + date on top (no sales id); items/SKUs + pay pill below. */}
+                <button className="fq-row" onClick={() => openOrder(q.sales_id)}>
+                  {/* PR144 row: customer id + date on top (no sales id); items/SKUs + circles below. */}
                   <div className="fq-row-top">
                     <span className="fq-headline">{q.customer_name || '—'}</span>
                     <span className="ord-date">{q.order_date ? q.order_date.slice(0, 10) : '—'}</span>
@@ -244,17 +250,16 @@ export default function FulfillBoard({
               </li>
             ))}
           </ul>
-        </aside>
+        </>
+      )}
 
-        {/* ── Detail ── */}
-        <main className="fd-pane">
-          {/* FT-7 / FT-8: success + errors render independent of the detail block */}
-          {success && <div className="validation ok">{success}</div>}
-          {error && <div className="validation err">{error}</div>}
-
-          {!selected && !success && <div className="fd-empty">Select an order to confirm its address + courier.</div>}
-          {selected && loadingDetail && <div className="fd-empty">Loading…</div>}
-          {selected && !loadingDetail && !detail && <div className="fd-empty">Order not found or already sent.</div>}
+      {/* ── Detail ── */}
+      {selected && (
+        <>
+          <button className="btn-link bv-back" onClick={() => { setSelected(null); setDetail(null); setError(null); }}>← back</button>
+          <div className="bv-detail">
+          {loadingDetail && <div className="fd-empty">Loading…</div>}
+          {!loadingDetail && !detail && <div className="fd-empty">Order not found or already sent.</div>}
 
           {detail && (
             <>
@@ -355,9 +360,10 @@ export default function FulfillBoard({
               <div className="fd-orderid">{detail.sales_id}</div>
             </>
           )}
-        </main>
-      </div>
-    </>
+          </div>
+        </>
+      )}
+    </div>
   );
 
   if (embedded) return body;

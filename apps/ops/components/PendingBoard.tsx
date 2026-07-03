@@ -167,11 +167,17 @@ export default function PendingBoard({
     }
   }
 
+  // PR147 — bodyview: the body shows EITHER the filter tabs + full-width queue OR the tapped order's
+  // detail with a ← back button (the Purchasing-History pattern); breadcrumb + pipeline tabs stay put.
   const body = (
-    <>
-      <div className="fulfill-layout">
-        {/* ── Board ── */}
-        <aside className="fq-pane">
+    <div className="bodyview">
+      {/* success / error pinned to the top for both actions (mark paid + send ready) */}
+      {error && <div className="validation err">{error}</div>}
+      {success && <div className="validation ok">{success}</div>}
+
+      {/* ── Queue ── */}
+      {!sel && (
+        <>
           {/* Readiness filter — underline tabs at the top of the queue, each with a live count badge. */}
           <div className="fq-filters" role="tablist" aria-label="Filter by stock readiness">
             {FILTERS.map((f) => (
@@ -194,7 +200,7 @@ export default function PendingBoard({
               <li key={o.sales_id}>
                 {/* PR146 row: customer id + date on top; items/ready left, dual status circles
                     (box = readiness dot, $ = payment) bottom-right. */}
-                <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
+                <button className="fq-row" onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className="fq-headline">{o.customer_name || '—'}</span>
                     <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
@@ -208,16 +214,14 @@ export default function PendingBoard({
               </li>
             ))}
           </ul>
-        </aside>
+        </>
+      )}
 
-        {/* ── Detail ── */}
-        <main className="fd-pane">
-          {/* success / error pinned to the top of the box for both actions (mark paid + send ready) */}
-          {error && <div className="validation err">{error}</div>}
-          {success && <div className="validation ok">{success}</div>}
-          {!sel && <div className="fd-empty">Pick an order to send ready items, settle payment, or delete.</div>}
-
-          {sel && (
+      {/* ── Detail ── */}
+      {sel && (
+        <>
+          <button className="btn-link bv-back" onClick={() => setSelId(null)}>← back</button>
+          <div className="bv-detail">
             <>
               {/* PR144 header: customer id left, order date right; the sales id moved to the bottom. */}
               <div className="fd-head">
@@ -283,10 +287,10 @@ export default function PendingBoard({
 
               <div className="fd-orderid">{sel.sales_id}</div>
             </>
-          )}
-        </main>
-      </div>
-    </>
+          </div>
+        </>
+      )}
+    </div>
   );
 
   if (embedded) return body;

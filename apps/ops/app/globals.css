@@ -1333,6 +1333,17 @@ img.sku-img { background: #e8e8e8; }
 /* quickview row: pay pill pinned to the bottom-right (the date moved to the top row). */
 .fq-row-bot .pay { margin-left: auto; }
 
+/* ── PR147 — bodyview: the Purchasing-History pattern for the Sales boards. The body shows EITHER
+   the full-width quickview list OR (after a tap) the order detail with a ← back button; breadcrumb
+   + pipeline tabs stay put above. The list flows with the page (no inner scrollbox). ── */
+.bodyview { max-width: 1100px; margin: 0 auto; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
+.bodyview > .validation { margin-bottom: 10px; }
+.bodyview .fq-list { height: auto; max-height: none; overflow: visible; padding: 6px 0; }
+.bv-back { display: inline-block; margin-bottom: 10px; font-size: 13px; }
+.bv-detail { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+/* New-order bodyview: back row above the form (tabs hidden, breadcrumb stays). */
+.bv-backrow { max-width: 1040px; margin: 0 auto; padding: 12px 18px 0; }
+
 /* ── PR146 — dual status circles (box = item readiness, $ = payment) on sales quickview rows ── */
 .stat-circles { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 .stat-circle { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: white; }
