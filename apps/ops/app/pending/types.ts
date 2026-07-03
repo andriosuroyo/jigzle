@@ -91,6 +91,8 @@ export interface OrderSummary {
   paid_idr: number;
   order_note: string | null;
   ship_address: string | null;     // the address the order was sent to (verbatim raw_address)
+  ship_recipient: string | null;   // that address's recipient name (PR144 — full-format ADDRESS block)
+  ship_phone: string | null;       // that address's contact phone
   lines: ShippedLineSummary[];
   boxes: BoxSummary[];
 }

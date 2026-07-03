@@ -10,6 +10,7 @@ export interface ToSendQueueRow {
   sales_id: string;
   order_date: string | null;
   customer_name: string | null;
+  payment_status: string | null; // PR144 — pay pill on the quickview row (matches Pending/History)
   item_count: number;     // cut, courier-null, unshipped lines
   sku_codes: string[];    // for the preview SKU list (FT-3)
 }

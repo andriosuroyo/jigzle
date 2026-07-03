@@ -5,7 +5,7 @@
 // (is_allowed_user()) gates every read and write. The service-role key is never used here.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { customerLabel } from '@jigzle/lib';
+import { customerIdLabel } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import type {
   FulfillCutLine,
@@ -113,7 +113,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
   return {
     sales_id: order.sales_id as string,
     order_date: (order.order_date as string | null) ?? null,
-    customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
+    customer_name: cust ? customerIdLabel(cust.name, cust.phone) : null,
     customer_phone: cust?.phone ?? null,
     default_address_id: addressId,
     needs_address: addressId == null,
@@ -134,7 +134,7 @@ export async function getToSendQueue(): Promise<ToSendQueueRow[]> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,customer_id,customers(name,phone),order_lines!inner(line_id,item_code)')
+    .select('sales_id,order_date,customer_id,payment_status,customers(name,phone),order_lines!inner(line_id,item_code)')
     .not('order_lines.fulfilled_at', 'is', null)
     .is('order_lines.courier', null)
     .is('order_lines.shipped_at', null)
@@ -149,7 +149,8 @@ export async function getToSendQueue(): Promise<ToSendQueueRow[]> {
     return {
       sales_id: o.sales_id as string,
       order_date: (o.order_date as string | null) ?? null,
-      customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
+      customer_name: cust ? customerIdLabel(cust.name, cust.phone) : null,
+      payment_status: (o.payment_status as string | null) ?? null,
       item_count: lines.length,
       sku_codes: lines.map((l) => l.item_code).filter((c): c is string => !!c),
     };

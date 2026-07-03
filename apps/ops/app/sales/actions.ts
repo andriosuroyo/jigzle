@@ -217,10 +217,10 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
 }
 
 // ── Panel 4: save + route the order (SA-3) ── (types in ./types)
-// New does not gate on payment (D5). It creates the order, then re-checks availability against the
-// LIVE stock_check view (not the search-time snapshot) and decides where the order goes:
-//   • every coded line has Σqty ≤ available  → cut all lines now (cut_order_lines) → To-send (Fulfill).
-//   • any coded line short                    → cut nothing → the order waits in Pending.
+// It creates the order, then re-checks availability against the LIVE stock_check view (not the
+// search-time snapshot) and decides where the order goes (PR144 supersedes D5 — Fulfill = ready AND paid):
+//   • every coded line has Σqty ≤ available AND fully paid → cut all lines now (cut_order_lines) → Fulfill.
+//   • any coded line short, or not fully paid              → cut nothing → the order waits in Pending.
 // An address may be null here (SA-1 "confirm address later"); create_order (0033) permits it and
 // Fulfill confirms the address before Outbound. Lines with no item_code carry no stock gate (the
 // per-code constraint simply doesn't include them) and never block the Fulfill route.
@@ -261,7 +261,12 @@ export async function submitOrder(payload: CreateOrderInput): Promise<SubmitResu
     if ((availByCode.get(code) ?? 0) < need) { allAvailable = false; break; }
   }
 
-  if (allAvailable) {
+  // PR144 — payment gate on the Fulfill route: only a fully-paid order cuts at save. A green-but-unpaid
+  // order waits in Pending's Ready list until payment settles (same gate as Pending's Send ready items).
+  const orderTotal = payload.lines.reduce((s, l) => s + l.qty * l.unit_price_idr, 0);
+  const fullyPaid = (payload.payment?.amount_idr ?? 0) >= orderTotal;
+
+  if (allAvailable && fullyPaid) {
     const { error: cutErr } = await supabase.rpc('cut_order_lines', {
       p_sales_id: salesId,
       p_line_ids: lines.map((l) => l.line_id),

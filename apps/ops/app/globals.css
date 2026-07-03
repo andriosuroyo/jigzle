@@ -180,6 +180,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .panel { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .panel-head { background: var(--paper); padding: 10px 14px; font-size: 13px; font-weight: 700; color: var(--brown-dark); display: flex; align-items: center; gap: 8px; }
 .panel-num { width: 20px; height: 20px; background: var(--brown); color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+.panel-opt { font-style: normal; font-weight: 400; color: var(--muted); }  /* PR144 — "(optional …)" tag in a panel head */
 .panel-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .panel-locked { opacity: 0.55; }
 .panel-locked .panel-body { pointer-events: none; }
@@ -258,14 +259,15 @@ button.po-pick-btn:active { background: var(--paper); }
 @media (max-width: 800px) {
   .fulfill-layout { grid-template-columns: 1fr; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
   .fq-pane { position: static; top: auto; }
-  .fq-list { max-height: none; }
 }
 
 .fq-pane { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; position: sticky; top: 70px; }
 .fq-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--paper); font-size: 13px; font-weight: 700; color: var(--brown-dark); }
 .fq-filter { font-size: 11px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 5px; }
 .fq-empty { padding: 14px; }
-.fq-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 5px; max-height: 360px; overflow-y: auto; }  /* PR26 F1 — ~5.5 rows then scroll */
+/* PR144 — FIXED height (was max-height): the quickview keeps its ~6-row size even with fewer items,
+   so the pane doesn't jump around as lists shrink. Scrolls beyond six. */
+.fq-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 5px; height: 360px; overflow-y: auto; }
 .fq-row { width: 100%; text-align: left; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .fq-row.active { border-color: var(--orange); background: var(--orange-tint); }
 .fq-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -1313,6 +1315,39 @@ img.sku-img { background: #e8e8e8; }
 .orders-overlay-close { background: rgba(255,255,255,0.15); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; font-size: 22px; line-height: 1; cursor: pointer; flex-shrink: 0; }
 .orders-overlay-close:active { background: rgba(255,255,255,0.25); }
 .orders-overlay-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* ── PR144 — the one search bar (SearchInput): magnifier + pill input + built-in clear ×, the
+   address-autofill type-ahead's look, used by every list search across the system. ── */
+.search-input { position: relative; display: flex; align-items: center; flex: 1; min-width: 0; }
+.search-input-icon { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--muted); pointer-events: none; }
+.search-input input { width: 100%; padding: 9px 34px 9px 33px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; background: white; color: var(--ink); }
+.search-input input:focus { outline: none; border-color: var(--brown-light); }
+.search-input input::placeholder { color: var(--muted); }
+/* kill the native webkit clear so only our × shows */
+.search-input input::-webkit-search-cancel-button, .search-input input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+.search-input-clear { position: absolute; right: 7px; width: 22px; height: 22px; border: none; border-radius: 50%; background: var(--paper); color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.search-input-clear:active { background: var(--line); color: var(--ink); }
+@media (max-width: 760px) { .search-input input { min-height: 44px; } }
+
+/* ── PR144 — Sales quickview + detail restyle ── */
+/* quickview row: pay pill pinned to the bottom-right (the date moved to the top row). */
+.fq-row-bot .pay { margin-left: auto; }
+/* detail header: customer id headline left, order date right; the sales id moves to the very bottom. */
+.fd-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.fd-date { flex-shrink: 0; font-size: 13px; color: var(--muted); }
+.fd-orderid { margin-top: 16px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+/* ADDRESS block (History detail) — recipient bold, then the raw address + phone. */
+.fd-addr { font-size: 13px; color: var(--ink); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.fd-addr b { display: block; }
+
+/* ── PR144 — New-order rail: per-SKU mini lines under the item count ── */
+.rail-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rail-line { display: flex; align-items: center; gap: 8px; }
+.rail-line-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rail-line-code { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--brown); }
+.rail-line-name { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-line-qty { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--brown); }
+.rail-line-amt { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--ink); }
 
 /* Monthly report month-picker. */
 .report-body { max-width: 480px; margin: 0 auto; padding: 16px; }

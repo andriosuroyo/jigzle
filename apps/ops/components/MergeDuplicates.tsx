@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { customerLabel, fmtRpCompact } from '@jigzle/lib';
 import { findCustomersForMerge, getDuplicateGroups, getMergeCandidatesByIds, mergeCustomers } from '@/app/customers/actions';
 import type { DuplicateGroup, DuplicateMember, MergeResult } from '@/app/customers/types';
+import SearchInput from '@/components/SearchInput';
 
 const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 const SEARCH_KEY = 'search';
@@ -286,12 +287,10 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery, initi
           {mode === 'search' && (
             <>
               <div className="dup-search">
-                <input
-                  className="cust-search"
-                  type="search"
-                  placeholder="Customer ID, name or phone…"
+                <SearchInput
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={setQuery}
+                  placeholder="Customer ID, name or phone…"
                   onKeyDown={(e) => { if (e.key === 'Enter') runSearch(); }}
                 />
                 <button className="btn-secondary" onClick={runSearch} disabled={searching || query.trim().length < 2}>

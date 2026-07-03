@@ -22,6 +22,7 @@ import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import SearchInput from '@/components/SearchInput';
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -733,13 +734,7 @@ export default function OrderBoard({
               no separate "Group into shipment" button. */}
           {bucket === 'ship' && (
             <div className="po-searchbar">
-              <input
-                type="text"
-                className="po-search"
-                placeholder="search name, SKU, supplier…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+              <SearchInput value={search} onChange={setSearch} placeholder="search name, SKU, supplier…" />
               <button className="btn-secondary" onClick={clearSelection} disabled={!search && selectedCount === 0}>Clear</button>
             </div>
           )}

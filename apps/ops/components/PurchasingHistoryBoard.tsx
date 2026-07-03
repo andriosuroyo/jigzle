@@ -12,6 +12,7 @@ import type { ShipmentHistoryRow, ShipmentItemRow } from '@/app/purchasing/types
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import SearchInput from '@/components/SearchInput';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 // Active = shipped date; Completed = received date.
@@ -179,13 +180,7 @@ export default function PurchasingHistoryBoard({
       </div>
 
       <div className="search-row" style={{ padding: '8px 0' }}>
-        <input
-          type="text"
-          inputMode="search"
-          placeholder="Search ship id or SKU…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <SearchInput value={query} onChange={setQuery} placeholder="Search ship id or SKU…" />
       </div>
 
       <ul className="po-cards po-cards-compact">

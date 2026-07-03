@@ -26,6 +26,7 @@ import {
 } from '@/app/customers/actions';
 import type { AddressInput, ChannelEntry, CustomerDetail, CustomerListRow, CustomerPatch } from '@/app/customers/types';
 import type { CustomerAddress } from '@jigzle/db/types';
+import SearchInput from '@/components/SearchInput';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -303,13 +304,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
         {/* ── left: A–Z tabs + list ── */}
         <aside className="fq-pane">
           <div className="cust-search-wrap">
-            <input
-              className="cust-search"
-              type="search"
-              placeholder="Search name or phone…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+            <SearchInput value={query} onChange={setQuery} placeholder="Search name or phone…" />
           </div>
 
           {/* A–Z tabs hide while searching (results span every letter) */}

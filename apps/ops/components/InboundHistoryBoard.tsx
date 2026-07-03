@@ -10,6 +10,7 @@ import type { InboundHistoryRow } from '@/app/inbound/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import SearchInput from '@/components/SearchInput';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
@@ -158,13 +159,7 @@ export default function InboundHistoryBoard({
       {/* ── List ── */}
       <aside className="fq-pane">
         <div className="search-row" style={{ padding: '8px' }}>
-          <input
-            type="text"
-            inputMode="search"
-            placeholder="Search ship id, SKU, or name…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          <SearchInput value={query} onChange={setQuery} placeholder="Search ship id, SKU, or name…" />
         </div>
         {/* Year sub-tabs (Sales-Pending style), newest first, each with a count. */}
         {years.length > 0 && (

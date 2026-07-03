@@ -8,6 +8,7 @@ import { getInventory, getInventoryCounts, refreshSnapshot } from '@/app/invento
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import SearchInput from '@/components/SearchInput';
 
 const ROW_LIMIT = 1000; // matches the server LIMIT — used only for the "refine your search" hint
 
@@ -156,14 +157,12 @@ export default function InventoryBoard({
         {/* autocomplete-style search bar; the refresh + "as of" timestamp fold into its right edge to
             reclaim the row they used to occupy. */}
         <div className="search-row inv-search-row">
-          <input
-            type="text"
-            placeholder="search SKU code or name"
+          <SearchInput
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
+            placeholder="search SKU code or name"
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSearch(); } }}
           />
-          {search && <button className="btn-link" onClick={() => setSearch('')}>Clear</button>}
           <span className="inv-asof-inline" title={`Stock as of ${fmtAsOf(refreshedAt)}`}>
             <span>{fmtAsOfDate(refreshedAt)}</span>
             <span>{fmtAsOfTime(refreshedAt)}</span>

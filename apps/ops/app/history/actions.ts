@@ -6,7 +6,7 @@
 // the one write (Mark paid) are reused from the Pending module (getOrderSummary / markOrderPaid).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { customerLabel } from '@jigzle/lib';
+import { customerIdLabel } from '@jigzle/lib';
 import type { HistoryRow, HistoryState } from './types';
 
 // Keep History light: load only the most recent orders by default. Search still queries the full
@@ -83,7 +83,7 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
     const paid = (o.paid_idr as number | null) ?? 0;
     return {
       sales_id: o.sales_id as string,
-      customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
+      customer_name: cust ? customerIdLabel(cust.name, cust.phone) : null,
       order_date: (o.order_date as string | null) ?? null,
       status: (o.status as string | null) ?? null,
       payment_status: (o.payment_status as string | null) ?? null,
