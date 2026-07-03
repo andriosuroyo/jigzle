@@ -46,7 +46,10 @@ export async function setOrderNote(salesId: string, note: string): Promise<strin
   return value;
 }
 
-// ── searchable all-orders list (HI-1): match sales_id OR customer name OR order_date; newest first ──
+// ── searchable finished-orders list (HI-1, narrowed PR149): History = TERMINAL orders only
+// (Complete + Cancelled). In-flight orders live in Pending/Fulfill — listing them here too read as
+// noise ("NEED SEND" rows the operator expected to be green). Match sales_id OR customer name OR
+// order_date; newest first. ──
 export async function getHistory(query = ''): Promise<HistoryRow[]> {
   const supabase = createSupabaseServerClient();
   const raw = sanitize(query);
@@ -54,6 +57,7 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
   let q = supabase
     .from('orders')
     .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customer_id,customers(name,phone),order_lines(line_id,fulfilled_at,shipped_at,is_cancelled)')
+    .in('status', ['Complete', 'Cancelled'])
     .order('order_date', { ascending: false, nullsFirst: false })
     .limit(LIMIT);
 

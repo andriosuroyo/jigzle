@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getPending, sendReadyItems, deleteOrder, markOrderPaid } from '@/app/pending/actions';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
+import SearchInput from '@/components/SearchInput';
 import type { OrderDot, PendingOrder } from '@/app/pending/types';
 import type { CommonNote } from '@/app/settings/types';
 import NoteEditor from '@/components/NoteEditor';
@@ -44,6 +45,7 @@ export default function PendingBoard({
 }) {
   const [orders, setOrders] = useState<PendingOrder[]>(initialOrders);
   const [filter, setFilter] = useState<DotFilter>('all');
+  const [search, setSearch] = useState(''); // PR149: filter the queue by customer, order id, or SKU
   const [loadingList, setLoadingList] = useState(false);
 
   const [selId, setSelId] = useState<string | null>(null);
@@ -55,7 +57,19 @@ export default function PendingBoard({
   const [delErr, setDelErr] = useState<string | null>(null);
   const reqRef = useRef(0);
 
-  const visible = useMemo(() => (filter === 'all' ? orders : orders.filter((o) => o.dot === filter)), [orders, filter]);
+  // PR149: readiness-tab filter + free-text search (customer name, order id, or a SKU on the order)
+  // over the loaded queue — History went terminal-only, so in-flight orders are found HERE.
+  const visible = useMemo(() => {
+    const byDot = filter === 'all' ? orders : orders.filter((o) => o.dot === filter);
+    const q = search.trim().toLowerCase();
+    if (!q) return byDot;
+    return byDot.filter(
+      (o) =>
+        (o.customer_name ?? '').toLowerCase().includes(q) ||
+        o.sales_id.toLowerCase().includes(q) ||
+        o.lines.some((l) => (l.item_code ?? '').toLowerCase().includes(q))
+    );
+  }, [orders, filter, search]);
 
   // Per-filter counts for the readiness tabs (red+yellow+green sum to the All total — every order has
   // exactly one dot).
@@ -179,6 +193,10 @@ export default function PendingBoard({
       {/* ── Queue ── */}
       {!sel && (
         <>
+          {/* PR149: free-text search over the queue (in-flight orders no longer appear in History). */}
+          <div className="search-row" style={{ padding: '0 0 8px' }}>
+            <SearchInput value={search} onChange={setSearch} placeholder="Search customer, order id, or SKU…" />
+          </div>
           {/* Readiness filter — underline tabs at the top of the queue, each with a live count badge. */}
           <div className="fq-filters" role="tablist" aria-label="Filter by stock readiness">
             {FILTERS.map((f) => (
@@ -195,7 +213,9 @@ export default function PendingBoard({
               </button>
             ))}
           </div>
-          {visible.length === 0 && <div className="hint fq-empty">{loadingList ? 'Loading…' : 'Nothing waiting in Pending.'}</div>}
+          {visible.length === 0 && (
+            <div className="hint fq-empty">{loadingList ? 'Loading…' : search.trim() ? 'No match.' : 'Nothing waiting in Pending.'}</div>
+          )}
           <ul className="fq-list">
             {visible.map((o) => (
               <li key={o.sales_id}>
