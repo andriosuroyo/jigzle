@@ -10,6 +10,7 @@ import {
   getSoldOutItems,
   getSuppliers,
 } from '@/app/purchasing/actions';
+import { getLocalCouriers } from '@/app/settings/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -28,6 +29,7 @@ export default async function OrderPage() {
     preorders,
     soldOut,
     shipmentHistory,
+    localCouriers,
   ] = await Promise.all([
     supabase.auth.getUser(),
     getOpenPOs(),
@@ -38,6 +40,7 @@ export default async function OrderPage() {
     getPreorders(),
     getSoldOutItems(),
     getShipmentHistory(''),
+    getLocalCouriers(),
   ]);
 
   return (
@@ -50,6 +53,7 @@ export default async function OrderPage() {
       preorders={preorders}
       soldOut={soldOut}
       shipmentHistory={shipmentHistory}
+      localCouriers={localCouriers.map((c) => c.label)}
       userEmail={user?.email || ''}
     />
   );

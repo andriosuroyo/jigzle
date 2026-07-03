@@ -75,6 +75,16 @@ export interface StaffMember {
   sort_order: number;
 }
 
+// 0055: local (domestic, supplier-side) couriers — Purchasing To-forwarder's suggestions. SEPARATE
+// from CourierService (the mandatory OUTBOUND shipping couriers Fulfill uses).
+export interface LocalCourier {
+  id: number;
+  label: string;
+  icon: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
 // what getSettings() returns — one ordered, active-only list per kind.
 export interface SettingsData {
   paymentMethods: PaymentMethod[];
@@ -84,12 +94,13 @@ export interface SettingsData {
   commonNotes: CommonNote[];
   channels: ChannelOption[];
   staff: StaffMember[];
+  localCouriers: LocalCourier[];
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).
-export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels' | 'common_note' | 'channel' | 'staff';
+export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels' | 'common_note' | 'channel' | 'staff' | 'local_courier';
 
-export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel | CommonNote | ChannelOption | StaffMember;
+export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel | CommonNote | ChannelOption | StaffMember | LocalCourier;
 
 // permissive payload shapes for add/update — the actions whitelist columns per kind, so a stray key
 // can never reach an identity/system column (id / user_id / sort_order / created_at).

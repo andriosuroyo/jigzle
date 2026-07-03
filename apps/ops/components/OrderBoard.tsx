@@ -23,6 +23,7 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import TrashButton from '@/components/TrashButton';
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -161,6 +162,7 @@ export default function OrderBoard({
   userEmail,
   embedded = false,
   bucket,
+  localCouriers = [],
   onCountChange,
 }: {
   initialQueue: OpenPORow[];
@@ -171,6 +173,8 @@ export default function OrderBoard({
   // PurchasingShell embedding: render without the app chrome and constrain the queue to one bucket.
   embedded?: boolean;
   bucket?: 'forwarder' | 'ship';
+  // 0055 — Settings-managed local (domestic) courier suggestions for the To-forwarder form.
+  localCouriers?: string[];
   onCountChange?: (n: number) => void;
 }) {
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
@@ -723,7 +727,67 @@ export default function OrderBoard({
     }
   }
 
-  const body = (
+  // PR151 — To forwarder is a BODYVIEW (the Purchasing-History pattern): the body shows EITHER the
+  // full-width compact card list OR the tapped PO's detail (image header + auto-save form) with a
+  // ← back button. The other buckets keep the two-pane layout below.
+  const forwarderBody = (
+    <div className="bodyview">
+      {error && <div className="validation err">{error}</div>}
+      {success && <div className="validation ok">{success}</div>}
+
+      {!(mode === 'edit' && editPo) ? (
+        <>
+          {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
+          <ul className="po-cards po-cards-compact">
+            {shownFiltered.map((po) => (
+              <li key={po.po_id}>
+                <button className="po-card po-card-btn" onClick={() => openEdit(po)}>
+                  <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                  <div className="po-card-main">
+                    <div className="po-card-l1">
+                      <span className="ff-code">{po.item_code || '—'}</span>
+                      <span className="po-card-poid">{fmtDay(po.status_since)}</span>
+                    </div>
+                    <div className="po-card-l2">
+                      <span className="ff-name">{po.name}</span>
+                      <span className="po-card-qty">×{po.qty}</span>
+                    </div>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <>
+          <button className="btn-link bv-back" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }}>← back</button>
+          <div className="bv-detail">
+            {/* body-header: md image left; SKU + date / name + ×qty / PO # (+ customer) to its right */}
+            <div className="po-bvhead">
+              <SkuImage status={imgMap[editPo.item_code ?? '']?.status} displayUrl={imgMap[editPo.item_code ?? '']?.displayUrl} name={editPo.name} size={SKU_IMG.md} />
+              <div className="po-bvhead-main">
+                <div className="po-card-l1">
+                  <span className="ff-code">{editPo.item_code || '—'}</span>
+                  <span className="po-card-date">{fmtDay(editPo.input_date)}</span>
+                </div>
+                <div className="po-card-l1 po-card-mid">
+                  <span className="ff-name">{editPo.name}</span>
+                  <span className="po-card-qty">×{editPo.qty}</span>
+                </div>
+                <div className="po-card-l2 hint">
+                  PO #{editPo.po_id}
+                  {editPo.customer_id != null ? ` · ${editPo.customer_name || `#${editPo.customer_id}`}` : ''}
+                </div>
+              </div>
+            </div>
+            {renderForwarderForm()}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const body = bucket === 'forwarder' ? forwarderBody : (
     <>
       <div className="fulfill-layout">
         {/* ── Open-PO queue ── */}
@@ -778,29 +842,7 @@ export default function OrderBoard({
 
           {shownFiltered.length === 0 && <div className="hint fq-empty">{bucket ? 'Nothing here yet.' : 'No open POs.'}</div>}
 
-          {/* To forwarder: compact two-line quick-view cards (small image; line 1 SKU + PO#,
-              line 2 name + qty), no checkbox — tap a card to open its detail editor. */}
-          {bucket === 'forwarder' ? (
-            <ul className="po-cards po-cards-compact po-list-scroll" style={{ padding: 8 }}>
-              {shownFiltered.map((po) => (
-                <li key={po.po_id}>
-                  <button className={`po-card po-card-btn ${editPo?.po_id === po.po_id ? 'active' : ''}`} onClick={() => openEdit(po)}>
-                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                    <div className="po-card-main">
-                      <div className="po-card-l1">
-                        <span className="ff-code">{po.item_code || '—'}</span>
-                        <span className="po-card-poid">{fmtDay(po.status_since)}</span>
-                      </div>
-                      <div className="po-card-l2">
-                        <span className="ff-name">{po.name}</span>
-                        <span className="po-card-qty">×{po.qty}</span>
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : bucket === 'ship' ? (
+          {bucket === 'ship' ? (
             /* To ship: same compact card as To forwarder (SKU + PO date on line 1, name + ×qty on
                line 2), with a checkbox to select for grouping. No forwarder badge or supplier detail. */
             <ul className="po-cards po-cards-compact po-list-scroll" style={{ padding: 8 }}>
@@ -872,30 +914,13 @@ export default function OrderBoard({
         {/* ── Detail ── */}
         <main className="fd-pane">
           {!mode && !success && !error && (
-            <div className="fd-empty">
-              {bucket === 'forwarder'
-                ? 'Select an item to add its supplier, unit cost and tracking, then confirm it to To ship.'
-                : 'Select a PO to edit, hit “+ New PO”, or check rows to group into a shipment.'}
-            </div>
+            <div className="fd-empty">Select a PO to edit, hit “+ New PO”, or check rows to group into a shipment.</div>
           )}
 
           {error && <div className="validation err">{error}</div>}
           {success && <div className="validation ok">{success}</div>}
 
-          {(mode === 'new' || mode === 'edit') && bucket === 'forwarder' && editPo ? (
-            <>
-              {/* To-forwarder detail: header = SKU + qty; subheader = PO# · date · customer (sales only) */}
-              <div className="fd-head">
-                <div className="fd-title">{editPo.item_code || '—'} · ×{editPo.qty}</div>
-                <div className="fd-sub">
-                  PO #{editPo.po_id}
-                  {fmtDay(editPo.input_date) ? ` · ${fmtDay(editPo.input_date)}` : ''}
-                  {editPo.customer_id != null ? ` · ${editPo.customer_name || `#${editPo.customer_id}`}` : ''}
-                </div>
-              </div>
-              {renderForwarderForm()}
-            </>
-          ) : (mode === 'new' || mode === 'edit') ? (
+          {(mode === 'new' || mode === 'edit') ? (
             <>
               <div className="fd-head">
                 <div className="fd-title">{mode === 'edit' && editPo ? `PO #${editPo.po_id}` : 'New PO'}</div>
@@ -977,9 +1002,9 @@ export default function OrderBoard({
           />
         </div>
 
-        {/* 3 · Unit cost — currency filler follows the supplier's country (¥ yuan, ¥ yen, …). 0 is valid. */}
+        {/* 3 · Unit cost (optional) — the symbol filler still follows the supplier's country. */}
         <div className="po-field">
-          <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>({ccy ? ccy.label : 'supplier ccy'})</em></label>
+          <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
           <div className="po-cost-row">
             {ccy && <span className="po-cost-ccy">{ccy.symbol}</span>}
             <input
@@ -995,49 +1020,46 @@ export default function OrderBoard({
           </div>
         </div>
 
-        {/* 4 · Courier (optional) */}
+        {/* 4 · Local courier & tracking, one line (PR151) — the DOMESTIC leg to the forwarder,
+            distinct from the mandatory outbound Shipping courier. Suggestions come from Settings →
+            Purchasing → Local couriers (0055; falls back to the legacy hard-wired list). */}
         <div className="po-field">
-          <label>Courier <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-          <input
-            type="text"
-            list="po-methods"
-            placeholder="domestic courier"
-            value={form.method}
-            onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
-            onBlur={(e) => autoSaveForwarder({ method: e.target.value.trim() || null })}
-          />
-          <datalist id="po-methods">{METHODS.map((m) => <option key={m} value={m} />)}</datalist>
-        </div>
-
-        {/* 5 · Tracking number (optional) */}
-        <div className="po-field">
-          <label>Tracking number <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(to forwarder, optional)</em></label>
-          <input
-            type="text"
-            placeholder="courier tracking number"
-            value={form.tracking_to_forwarder}
-            onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))}
-            onBlur={(e) => autoSaveForwarder({ tracking_to_forwarder: e.target.value.trim() || null })}
-          />
-        </div>
-
-        {/* 6 · Taobao ID — only meaningful for a China supplier */}
-        {isChina(selSup?.country) && (
-          <div className="po-field">
-            <label>Taobao ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <div className="po-inline2">
             <input
               type="text"
-              placeholder="Taobao order id"
-              value={form.marketplace_order_id}
-              onChange={(e) => setForm((f) => ({ ...f, marketplace_order_id: e.target.value }))}
-              onBlur={(e) => autoSaveForwarder({ marketplace_order_id: e.target.value.trim() || null })}
+              list="po-methods"
+              placeholder="courier"
+              value={form.method}
+              onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
+              onBlur={(e) => autoSaveForwarder({ method: e.target.value.trim() || null })}
+            />
+            <input
+              type="text"
+              placeholder="tracking number"
+              value={form.tracking_to_forwarder}
+              onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))}
+              onBlur={(e) => autoSaveForwarder({ tracking_to_forwarder: e.target.value.trim() || null })}
             />
           </div>
-        )}
+          <datalist id="po-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
+        </div>
 
-        {/* 7 · Note (optional) */}
+        {/* 5 · Marketplace ID (PR151: always shown, no longer China-only) */}
         <div className="po-field">
-          <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>Marketplace ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <input
+            type="text"
+            placeholder="marketplace order id"
+            value={form.marketplace_order_id}
+            onChange={(e) => setForm((f) => ({ ...f, marketplace_order_id: e.target.value }))}
+            onBlur={(e) => autoSaveForwarder({ marketplace_order_id: e.target.value.trim() || null })}
+          />
+        </div>
+
+        {/* 6 · Notes (optional) */}
+        <div className="po-field">
+          <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
           <textarea
             value={form.item_note}
             onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
@@ -1045,15 +1067,14 @@ export default function OrderBoard({
           />
         </div>
 
-        {/* Confirm → To ship (the only button; edits already auto-save). Delete stays below. */}
+        {/* Confirm → To ship (the only button; edits auto-save on blur). Delete stays below. */}
         <div className="fd-commit">
-          <div className="fd-commit-info">Fields save as you go. Confirm once it’s with the forwarder.</div>
           <button className="btn-primary" onClick={confirmOne} disabled={busy}>{busy ? '…' : 'Confirm → To ship'}</button>
         </div>
 
         <div className="ob-return">
           {!confirmDel ? (
-            <button className="btn-link danger" onClick={() => setConfirmDel(true)} disabled={busy}>Delete order</button>
+            <TrashButton onClick={() => setConfirmDel(true)} disabled={busy} ariaLabel="Delete order" />
           ) : (
             <span className="rcv-reverse-ask">
               Delete PO #{editPo?.po_id}? This removes the order entirely.
