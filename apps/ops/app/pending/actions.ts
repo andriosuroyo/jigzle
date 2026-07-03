@@ -157,6 +157,16 @@ export async function deletePendingOrder(salesId: string): Promise<{ error: stri
   return { error: error ? `deletePendingOrder: ${error.message}` : null };
 }
 
+// ── Delete order — ANY stage (delete_order, 0054): snapshots the order into order_delete_log,
+// inserts compensating stock adjustments for shipped units, then hard-deletes boxes / shipments /
+// payments / lines / order in one transaction. The UI fronts this with an overlay confirm. ──
+export async function deleteOrder(salesId: string): Promise<{ error: string | null }> {
+  if (!salesId) return { error: 'deleteOrder: sales_id is required' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('delete_order', { p_sales_id: salesId });
+  return { error: error ? `deleteOrder: ${error.message}` : null };
+}
+
 // ── mark a Need-payment order paid (records the payment, recomputes status) ──
 export async function markOrderPaid(
   salesId: string,
