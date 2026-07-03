@@ -22,7 +22,6 @@ import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
-import SearchInput from '@/components/SearchInput';
 import TrashButton from '@/components/TrashButton';
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
@@ -191,6 +190,7 @@ export default function OrderBoard({
   const [mode, setMode] = useState<RightMode>(null);
   const [editPo, setEditPo] = useState<OpenPORow | null>(null);
   const [shipNote, setShipNote] = useState(''); // the edited PO's Ship-ID note (To-ship), seeded on open
+  const [attachShipId, setAttachShipId] = useState(''); // PR152: To-ship attach-to-open-shipment pick
   const [form, setForm] = useState<PoForm>(emptyForm());
 
   const [busy, setBusy] = useState(false);
@@ -358,6 +358,7 @@ export default function OrderBoard({
     setMode('edit');
     setEditPo(po);
     setShipNote((po.ship_id ? shipmentById.get(po.ship_id)?.note : '') ?? '');
+    setAttachShipId('');
     setForm(formFromPO(po));
     setSkuQuery('');
     setSkuHits([]);
@@ -675,6 +676,26 @@ export default function OrderBoard({
     }
   }
 
+  // ── PR152: attach a With-Forwarder PO to an already-open shipment (To-ship's one editable field) ──
+  async function attachShip() {
+    if (!editPo || !attachShipId) return;
+    resetMessages();
+    setBusy(true);
+    try {
+      await updatePO(editPo.po_id, { ship_id: attachShipId });
+      setSuccess(`PO #${editPo.po_id} attached to ${attachShipId}.`);
+      setForm((f) => ({ ...f, ship_id: attachShipId }));
+      setEditPo((prev) => (prev ? { ...prev, ship_id: attachShipId } : prev));
+      setShipNote(shipmentById.get(attachShipId)?.note ?? '');
+      setAttachShipId('');
+      await refreshQueue();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to attach.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // ── pick an existing open shipment in the group form ──
   function pickExistingShipment(shipId: string) {
     setGrpShipId(shipId);
@@ -787,21 +808,109 @@ export default function OrderBoard({
     </div>
   );
 
-  const body = bucket === 'forwarder' ? forwarderBody : (
+  // PR152 — To ship is a BODYVIEW too: country tabs + full-width checkbox card list (no search bar);
+  // ticking rows opens the group panel BELOW the list; tapping a card opens the locked-down PO detail
+  // (read-only summary of what To-forwarder recorded; the only editable thing is the Shipment ID).
+  const shipDetailOpen = mode === 'edit' && !!editPo;
+  const shipBody = (
+    <div className="bodyview">
+      {error && <div className="validation err">{error}</div>}
+      {success && <div className="validation ok">{success}</div>}
+
+      {!shipDetailOpen ? (
+        <>
+          {/* country sub-tabs (by supplier origin) so same-origin items group together */}
+          {shipCountryTabs.some((t) => t.key !== ALL_COUNTRIES && t.key !== OTHER_COUNTRY) && (
+            <div className="fq-filters" role="tablist" aria-label="Country">
+              {shipCountryTabs.map((t) => (
+                <button
+                  key={t.key}
+                  role="tab"
+                  aria-selected={shipCountry === t.key}
+                  className={`fq-filter ${shipCountry === t.key ? 'active' : ''}`}
+                  onClick={() => { setShipCountry(t.key); setSelectedPoIds(new Set()); }}
+                >
+                  {t.label}<span className="fq-filter-count">{t.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
+          <ul className="po-cards po-cards-compact">
+            {shownFiltered.map((po) => (
+              <li key={po.po_id}>
+                <div className="po-row-wrap">
+                  <input
+                    type="checkbox"
+                    className="po-check"
+                    checked={selectedPoIds.has(po.po_id)}
+                    onChange={() => toggleSelect(po.po_id)}
+                    aria-label={`select PO ${po.po_id}`}
+                  />
+                  <button className="po-card po-card-btn" style={{ flex: 1, minWidth: 0 }} onClick={() => openEdit(po)}>
+                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                    <div className="po-card-main">
+                      <div className="po-card-l1">
+                        <span className="ff-code">{po.item_code || '—'}</span>
+                        <span className="po-card-poid">{fmtDay(po.status_since)}</span>
+                      </div>
+                      <div className="po-card-l2">
+                        <span className="ff-name">{po.name}</span>
+                        <span className="po-card-qty">×{po.qty}</span>
+                      </div>
+                      {shortFromShip(po) && (
+                        <div className="po-card-l2"><span className="badge short">Short · from {shortFromShip(po)}</span></div>
+                      )}
+                    </div>
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* group panel opens under the list when rows are ticked (selection stays visible above) */}
+          {mode === 'group' && (
+            <div className="bv-detail" style={{ marginTop: 12 }}>
+              <div className="fd-head">
+                <div className="fd-title">Group into shipment</div>
+                <div className="fd-sub">Ship date: {fmtNiceDate(grpDate)}</div>
+              </div>
+              {renderGroupForm()}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <button className="btn-link bv-back" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }}>← back</button>
+          <div className="bv-detail">
+            {/* same body-header as To forwarder */}
+            <div className="po-bvhead">
+              <SkuImage status={imgMap[editPo!.item_code ?? '']?.status} displayUrl={imgMap[editPo!.item_code ?? '']?.displayUrl} name={editPo!.name} size={SKU_IMG.md} />
+              <div className="po-bvhead-main">
+                <div className="po-card-l1">
+                  <span className="ff-code">{editPo!.item_code || '—'}</span>
+                  <span className="po-card-date">{fmtDay(editPo!.status_since)}</span>
+                </div>
+                <div className="po-card-l1 po-card-mid">
+                  <span className="ff-name">{editPo!.name}</span>
+                  <span className="po-card-qty">×{editPo!.qty}</span>
+                </div>
+                <div className="po-card-l2 hint">PO #{editPo!.po_id}</div>
+              </div>
+            </div>
+            {renderShipDetail()}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const body = bucket === 'forwarder' ? forwarderBody : bucket === 'ship' ? shipBody : (
     <>
       <div className="fulfill-layout">
         {/* ── Open-PO queue ── */}
         <aside className="fq-pane">
           {!embedded && <div className="fq-head"><span>Open POs</span></div>}
-          {/* To ship: a free-text search over the queue (replaces the supplier filter), with Clear beside
-              it (clears the search + any selection). Ticking a row auto-opens the group panel — there's
-              no separate "Group into shipment" button. */}
-          {bucket === 'ship' && (
-            <div className="po-searchbar">
-              <SearchInput value={search} onChange={setSearch} placeholder="search name, SKU, supplier…" />
-              <button className="btn-secondary" onClick={clearSelection} disabled={!search && selectedCount === 0}>Clear</button>
-            </div>
-          )}
           {/* The standalone board keeps its status + supplier filters (the tab already scopes status when embedded). */}
           {!bucket && (
             <div className="po-filters">
@@ -823,61 +932,9 @@ export default function OrderBoard({
             </div>
           )}
 
-          {/* To ship: country sub-tabs (by supplier origin) so same-origin items group together */}
-          {bucket === 'ship' && shipCountryTabs.some((t) => t.key !== ALL_COUNTRIES && t.key !== OTHER_COUNTRY) && (
-            <div className="fq-filters" role="tablist" aria-label="Country">
-              {shipCountryTabs.map((t) => (
-                <button
-                  key={t.key}
-                  role="tab"
-                  aria-selected={shipCountry === t.key}
-                  className={`fq-filter ${shipCountry === t.key ? 'active' : ''}`}
-                  onClick={() => { setShipCountry(t.key); setSelectedPoIds(new Set()); }}
-                >
-                  {t.label}<span className="fq-filter-count">{t.count}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          {shownFiltered.length === 0 && <div className="hint fq-empty">No open POs.</div>}
 
-          {shownFiltered.length === 0 && <div className="hint fq-empty">{bucket ? 'Nothing here yet.' : 'No open POs.'}</div>}
-
-          {bucket === 'ship' ? (
-            /* To ship: same compact card as To forwarder (SKU + PO date on line 1, name + ×qty on
-               line 2), with a checkbox to select for grouping. No forwarder badge or supplier detail. */
-            <ul className="po-cards po-cards-compact po-list-scroll" style={{ padding: 8 }}>
-              {shownFiltered.map((po) => (
-                <li key={po.po_id}>
-                  <div className="po-row-wrap">
-                    <input
-                      type="checkbox"
-                      className="po-check"
-                      checked={selectedPoIds.has(po.po_id)}
-                      onChange={() => toggleSelect(po.po_id)}
-                      aria-label={`select PO ${po.po_id}`}
-                    />
-                    <button className={`po-card po-card-btn ${editPo?.po_id === po.po_id ? 'active' : ''}`} style={{ flex: 1, minWidth: 0 }} onClick={() => openEdit(po)}>
-                      <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                      <div className="po-card-main">
-                        <div className="po-card-l1">
-                          <span className="ff-code">{po.item_code || '—'}</span>
-                          <span className="po-card-poid">{fmtDay(po.status_since)}</span>
-                        </div>
-                        <div className="po-card-l2">
-                          <span className="ff-name">{po.name}</span>
-                          <span className="po-card-qty">×{po.qty}</span>
-                        </div>
-                        {shortFromShip(po) && (
-                          <div className="po-card-l2"><span className="badge short">Short · from {shortFromShip(po)}</span></div>
-                        )}
-                      </div>
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <ul className="fq-list">
+          <ul className="fq-list">
               {shownFiltered.map((po) => (
                 <li key={po.po_id}>
                   <div className="po-row-wrap">
@@ -908,7 +965,6 @@ export default function OrderBoard({
                 </li>
               ))}
             </ul>
-          )}
         </aside>
 
         {/* ── Detail ── */}
@@ -926,18 +982,6 @@ export default function OrderBoard({
                 <div className="fd-title">{mode === 'edit' && editPo ? `PO #${editPo.po_id}` : 'New PO'}</div>
                 <div className="fd-sub">{mode === 'edit' ? 'Edit an open PO' : 'Status starts Processing'}</div>
               </div>
-              {bucket === 'ship' && editPo?.ship_id && (
-                <div className="po-field">
-                  <label>Shipment note · {editPo.ship_id}</label>
-                  <textarea
-                    value={shipNote}
-                    onChange={(e) => setShipNote(e.target.value)}
-                    onBlur={(e) => saveShipNote(e.target.value)}
-                    placeholder="Note for this Ship ID — shown to the warehouse on Inbound receiving"
-                    rows={2}
-                  />
-                </div>
-              )}
               {renderPoForm(mode === 'edit')}
             </>
           ) : null}
@@ -964,9 +1008,75 @@ export default function OrderBoard({
     </div>
   );
 
+  // ── PR152: the To-ship detail — LOCKED reference view. One line summarises what To-forwarder
+  // recorded (supplier · unit cost · local courier · local tracking · marketplace id); the only
+  // editable thing is the Shipment ID: attach to an already-open Ship ID, or detach. SKU, qty,
+  // customer and status are all fixed at this stage (status flows from grouping / receiving). ──
+  function renderShipDetail() {
+    if (!editPo) return null;
+    const sup = suppliers.find((s) => s.supplier_id === editPo.supplier_id);
+    const ccy = currencyForCountry(sup?.country);
+    const parts = [
+      editPo.supplier_name || sup?.name || null,
+      editPo.item_cost != null ? `${ccy ? ccy.symbol : ''}${editPo.item_cost}` : null,
+      editPo.method || null,
+      editPo.tracking_to_forwarder ? `#${editPo.tracking_to_forwarder}` : null,
+      editPo.marketplace_order_id ? `MP ${editPo.marketplace_order_id}` : null,
+    ].filter(Boolean);
+    return (
+      <div className="po-form">
+        {/* what was set in To forwarder — read-only */}
+        <div className="po-ship-info">{parts.length ? parts.join(' · ') : 'Nothing recorded in To forwarder yet.'}</div>
+
+        {/* Shipment — attach / detach an open Ship ID; its warehouse note rides along when attached */}
+        <div className="po-field">
+          <label>Shipment</label>
+          {form.ship_id ? (
+            <>
+              <div className="po-shipbox">
+                <span className="fwd-prefix">{form.ship_id}</span>
+                <button className="btn-link" onClick={detach} disabled={busy}>detach</button>
+              </div>
+              <textarea
+                style={{ marginTop: 8 }}
+                value={shipNote}
+                onChange={(e) => setShipNote(e.target.value)}
+                onBlur={(e) => saveShipNote(e.target.value)}
+                placeholder="Note for this Ship ID — shown to the warehouse on Inbound receiving"
+                rows={2}
+              />
+            </>
+          ) : (
+            <div className="po-inline2">
+              <select value={attachShipId} onChange={(e) => setAttachShipId(e.target.value)}>
+                <option value="">— pick an open shipment —</option>
+                {shipments.map((s) => (
+                  <option key={s.ship_id} value={s.ship_id}>{s.ship_id}</option>
+                ))}
+              </select>
+              <button className="btn-secondary" onClick={attachShip} disabled={busy || !attachShipId}>Attach</button>
+            </div>
+          )}
+        </div>
+
+        <div className="ob-return">
+          {!confirmDel ? (
+            <TrashButton onClick={() => setConfirmDel(true)} disabled={busy} ariaLabel="Delete order" />
+          ) : (
+            <span className="rcv-reverse-ask">
+              Delete PO #{editPo.po_id}? This removes the order entirely.
+              <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
+              <button className="btn-primary danger" onClick={doDelete} disabled={busy}>{busy ? 'Deleting…' : 'Yes, delete'}</button>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── the To-forwarder detail form: record what was bought, then confirm it to To ship. No Save
   // button — every field auto-saves on blur/change (mirrors the Settings editors). Fields, in fill
-  // order: Supplier · Item link · Unit cost · Courier · Tracking # · Taobao ID (China only) · Note. ──
+  // order: Supplier · Item link · Unit cost · Courier · Tracking # · Marketplace ID · Notes. ──
   function renderForwarderForm() {
     const selSup = suppliers.find((s) => s.supplier_id === Number(form.supplier_id));
     const ccy = currencyForCountry(selSup?.country);
