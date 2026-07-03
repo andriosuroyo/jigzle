@@ -38,6 +38,10 @@ Notes:
 
 - Server data access goes through server actions (`'use server'`) using the SSR Supabase
   client; RLS (`is_allowed_user()`) gates reads/writes. Don't use the service-role key in app code.
+- **Mutation actions awaited by button handlers must return errors as data**
+  (`Promise<{ error: string | null }>`), never `throw` for expected failures — Next.js redacts
+  thrown Error messages in production, so the UI would only show the opaque "An error occurred in
+  the Server Components render" banner (PR145). Read-only loaders may still throw.
 - The primary nav is a single source of truth in `apps/ops/components/navConfig.tsx`
   (consumed by both the hub landing page and `AppHeader`).
 - Match the surrounding code's style, comment density, and naming when editing.

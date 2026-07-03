@@ -194,6 +194,18 @@ export async function getCommonNotes(): Promise<CommonNote[]> {
   return (data ?? []) as CommonNote[];
 }
 
+// PR145: the Couriers editor edits only the label, which used to leave the structured `courier`
+// column '' on new rows — and Fulfill's Send to Outbound refuses an empty courier (the error surfaced
+// as Next's masked production banner). Keep courier/speed derived from the label on every write
+// (first word = base courier, rest = speed tier) so a courier row is shippable by construction.
+function withCourierSync(kind: SettingsKind, upd: Record<string, unknown>): Record<string, unknown> {
+  if (kind !== 'courier') return upd;
+  const label = typeof upd.label === 'string' ? upd.label.trim() : '';
+  if (!label) return upd;
+  const [courier, ...rest] = label.split(/\s+/);
+  return { ...upd, courier, speed: rest.length ? rest.join(' ') : null };
+}
+
 // ── add: a new global row at the end of its list (sort_order = current max + 1) ──
 export async function addSetting(kind: SettingsKind, payload: SettingPayload): Promise<SettingRow> {
   const supabase = createSupabaseServerClient();
@@ -208,7 +220,7 @@ export async function addSetting(kind: SettingsKind, payload: SettingPayload): P
     .maybeSingle();
   const nextOrder = ((top?.sort_order as number | null) ?? -1) + 1;
 
-  const row = { ...pick(kind, payload), user_id: null, is_active: true, sort_order: nextOrder };
+  const row = { ...withCourierSync(kind, pick(kind, payload)), user_id: null, is_active: true, sort_order: nextOrder };
   const { data, error } = await supabase.from(table).insert(row).select('*').single();
   if (error) throw new Error(`addSetting(${kind}): ${error.message}`);
   return data as SettingRow;
@@ -217,7 +229,7 @@ export async function addSetting(kind: SettingsKind, payload: SettingPayload): P
 // ── update: edit a global row's content / active flag (whitelisted columns only) ──
 export async function updateSetting(kind: SettingsKind, id: number, patch: SettingPatch): Promise<SettingRow> {
   const supabase = createSupabaseServerClient();
-  const upd = pick(kind, patch);
+  const upd = withCourierSync(kind, pick(kind, patch));
   if (Object.keys(upd).length === 0) throw new Error(`updateSetting(${kind}): nothing to update`);
 
   const { data, error } = await supabase

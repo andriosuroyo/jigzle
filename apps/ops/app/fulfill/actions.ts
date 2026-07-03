@@ -157,12 +157,17 @@ export async function getToSendQueue(): Promise<ToSendQueueRow[]> {
   });
 }
 
+// PR145: button-handler actions RETURN their error as data ({ error }) instead of throwing —
+// Next.js redacts thrown Error messages in production ("An error occurred in the Server Components
+// render…"), which turned a simple "a courier is required" into an opaque banner. Returning the
+// message keeps it readable in production. Follow this pattern for every action a button awaits.
+
 // ── Send to Outbound (FT-6): set courier + (deferred) address on the cut lines via set_fulfillment
 // (PR-A). No stock movement. Server-validates the Outbound gate: address + courier both present. ──
-export async function sendToOutbound(input: SendToOutboundInput): Promise<void> {
-  if (!input.line_ids?.length) throw new Error('sendToOutbound: no cut lines to send');
-  if (!input.address_id) throw new Error('sendToOutbound: an address is required');
-  if (!input.courier) throw new Error('sendToOutbound: a courier is required');
+export async function sendToOutbound(input: SendToOutboundInput): Promise<{ error: string | null }> {
+  if (!input.line_ids?.length) return { error: 'sendToOutbound: no cut lines to send' };
+  if (!input.address_id) return { error: 'sendToOutbound: an address is required' };
+  if (!input.courier) return { error: 'sendToOutbound: a courier is required — check the courier row in Settings → Shipping' };
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.rpc('set_fulfillment', {
     p_sales_id: input.sales_id,
@@ -173,14 +178,14 @@ export async function sendToOutbound(input: SendToOutboundInput): Promise<void> 
     p_courier_speed: input.courier_speed ?? null,
     p_courier_label: input.courier_label ?? null,
   });
-  if (error) throw new Error(`sendToOutbound: ${error.message}`);
+  return { error: error ? `sendToOutbound: ${error.message}` : null };
 }
 
 // ── Send back to pending (FT-4): clear the cut entirely (unfulfill_order) → the lines return to
 // Pending uncut, stock restored. Inverse of the cut; holds + payment untouched. ──
-export async function sendBackToPending(salesId: string): Promise<void> {
-  if (!salesId) throw new Error('sendBackToPending: sales_id is required');
+export async function sendBackToPending(salesId: string): Promise<{ error: string | null }> {
+  if (!salesId) return { error: 'sendBackToPending: sales_id is required' };
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.rpc('unfulfill_order', { p_sales_id: salesId });
-  if (error) throw new Error(`sendBackToPending: ${error.message}`);
+  return { error: error ? `sendBackToPending: ${error.message}` : null };
 }

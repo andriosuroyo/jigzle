@@ -136,35 +136,41 @@ export async function setLineNote(lineId: string, note: string | null): Promise<
   if (error) throw new Error(`setLineNote: ${error.message}`);
 }
 
-// ── Send ready items (FP-6): cut the selected ready line_ids (cut_order_lines, PR-A). No payment gate
-// (D5). Short lines stay in Pending; the cut lines move to Fulfill. Returns affected item_codes. ──
-export async function sendReadyItems(salesId: string, lineIds: string[]): Promise<string[]> {
-  if (!lineIds?.length) throw new Error('sendReadyItems: select at least one ready line');
+// PR145: button-handler actions RETURN their error as data ({ error }) instead of throwing — Next.js
+// redacts thrown Error messages in production, leaving an opaque banner. See fulfill/actions.ts.
+
+// ── Send ready items (FP-6): cut the selected ready line_ids (cut_order_lines, PR-A). Short lines
+// stay in Pending; the cut lines move to Fulfill. ──
+export async function sendReadyItems(salesId: string, lineIds: string[]): Promise<{ error: string | null }> {
+  if (!lineIds?.length) return { error: 'sendReadyItems: select at least one ready line' };
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase.rpc('cut_order_lines', { p_sales_id: salesId, p_line_ids: lineIds });
-  if (error) throw new Error(`sendReadyItems: ${error.message}`);
-  return (data as string[] | null) ?? [];
+  const { error } = await supabase.rpc('cut_order_lines', { p_sales_id: salesId, p_line_ids: lineIds });
+  return { error: error ? `sendReadyItems: ${error.message}` : null };
 }
 
 // ── Delete pending (FP-4): hard delete a FULLY-uncut order (delete_pending_order, 0033). The RPC's
 // guard refuses if any line is cut/shipped; cascades payments + lines + order in one transaction. ──
-export async function deletePendingOrder(salesId: string): Promise<void> {
-  if (!salesId) throw new Error('deletePendingOrder: sales_id is required');
+export async function deletePendingOrder(salesId: string): Promise<{ error: string | null }> {
+  if (!salesId) return { error: 'deletePendingOrder: sales_id is required' };
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.rpc('delete_pending_order', { p_sales_id: salesId });
-  if (error) throw new Error(`deletePendingOrder: ${error.message}`);
+  return { error: error ? `deletePendingOrder: ${error.message}` : null };
 }
 
 // ── mark a Need-payment order paid (records the payment, recomputes status) ──
-export async function markOrderPaid(salesId: string, amount: number, method: string | null): Promise<MarkPaidResult> {
+export async function markOrderPaid(
+  salesId: string,
+  amount: number,
+  method: string | null
+): Promise<{ error: string | null; result: MarkPaidResult | null }> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase.rpc('mark_order_paid', {
     p_sales_id: salesId,
     p_amount: Math.round(amount),
     p_method: method,
   });
-  if (error) throw new Error(`markOrderPaid: ${error.message}`);
-  return data as MarkPaidResult;
+  if (error) return { error: `markOrderPaid: ${error.message}`, result: null };
+  return { error: null, result: data as MarkPaidResult };
 }
 
 // ── read-only summary for a Complete order (header + shipped lines + boxes) ──

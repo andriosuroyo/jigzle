@@ -110,7 +110,8 @@ export default function PendingBoard({
     setBusy(true);
     setError(null);
     try {
-      await sendReadyItems(sel.sales_id, readyIds);
+      const { error: sendErr } = await sendReadyItems(sel.sales_id, readyIds);
+      if (sendErr) { setError(sendErr); return; }
       setSuccess(`${sel.sales_id}: sent ${readyIds.length} ready item${readyIds.length === 1 ? '' : 's'} to Fulfill.`);
       onAdvance?.(sel.sales_id, 'Fulfill'); // JZ-001: pipeline toast — order advanced a stage
       setSelId(null);
@@ -130,8 +131,9 @@ export default function PendingBoard({
     setBusy(true);
     setError(null);
     try {
-      const res = await markOrderPaid(sel.sales_id, sel.balance, 'manual');
+      const { error: payErr, result: res } = await markOrderPaid(sel.sales_id, sel.balance, 'manual');
       if (reqRef.current !== myReq) return;
+      if (payErr || !res) { setError(payErr ?? 'Mark paid failed.'); return; }
       setSuccess(`${sel.sales_id}: ${res.balance <= 0 ? 'fully paid' : 'partially paid'}.`);
       await refresh();
     } catch (e) {
@@ -152,7 +154,8 @@ export default function PendingBoard({
     setBusy(true);
     setError(null);
     try {
-      await deletePendingOrder(sel.sales_id);
+      const { error: delErr } = await deletePendingOrder(sel.sales_id);
+      if (delErr) { setError(delErr); return; }
       setSuccess(`${sel.sales_id} deleted.`);
       setSelId(null);
       await refresh();
