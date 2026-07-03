@@ -7,7 +7,7 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useState } from 'react';
-import { getShipmentItems, setShipmentNote } from '@/app/purchasing/actions';
+import { getShipmentItems, setShipmentNote, setShipmentCourier } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -24,8 +24,14 @@ const costLabel = (s: { total_cost: number | null; currency: string | null }): s
 
 export default function PurchasingHistoryBoard({
   initialShipments,
+  shipmentCouriers = [],
+  onDetailOpenChange,
 }: {
   initialShipments: ShipmentHistoryRow[];
+  // 0056 — the Settings-managed international courier pick-list (DHL, FedEx, MTE…)
+  shipmentCouriers?: string[];
+  // PR153: the shell hides the pipeline tabs while a shipment detail is open (breadcrumb stays)
+  onDetailOpenChange?: (open: boolean) => void;
 }) {
   const [sub, setSub] = useState<'active' | 'completed'>('active');
   const [ships, setShips] = useState<ShipmentHistoryRow[]>(initialShipments);
@@ -39,6 +45,13 @@ export default function PurchasingHistoryBoard({
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  // PR153: shipment courier + tracking drafts (auto-save; shared quickview shows "DHL 012456789")
+  const [courierDraft, setCourierDraft] = useState('');
+  const [trackingDraft, setTrackingDraft] = useState('');
+  const [courierErr, setCourierErr] = useState<string | null>(null);
+
+  // PR153: tell the shell when a detail is open (it hides the pipeline tabs, keeps the breadcrumb)
+  useEffect(() => { onDetailOpenChange?.(!!openShip); }, [openShip, onDetailOpenChange]);
 
   const imgCodes = useMemo(
     () => (openShip ? shipItems.map((i) => i.item_code).filter((c): c is string => !!c) : []),
@@ -46,14 +59,18 @@ export default function PurchasingHistoryBoard({
   );
   const imgMap = useSkuImages(imgCodes);
 
-  // client-side filter over the loaded set: match ship_id OR any SKU in the shipment (so a SKU search
-  // shows which ship_ids contain it). Then split into the active/completed tab.
+  // client-side filter over the loaded set: match ship_id, any SKU code, OR any item name in the
+  // shipment (PR153). Then split into the active/completed tab.
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return ships.filter((s) => {
       if (s.completed !== (sub === 'completed')) return false;
       if (!q) return true;
-      return s.ship_id.toLowerCase().includes(q) || s.sku_codes.some((c) => c.toLowerCase().includes(q));
+      return (
+        s.ship_id.toLowerCase().includes(q) ||
+        s.sku_codes.some((c) => c.toLowerCase().includes(q)) ||
+        s.sku_names.some((n) => n.toLowerCase().includes(q))
+      );
     });
   }, [ships, sub, query]);
 
@@ -68,6 +85,9 @@ export default function PurchasingHistoryBoard({
   async function selectShip(s: ShipmentHistoryRow) {
     setOpenShip(s);
     setEditingNote(false);
+    setCourierDraft(s.courier ?? '');
+    setTrackingDraft(s.tracking ?? '');
+    setCourierErr(null);
     setShipItems([]);
     setShipItemsLoading(true);
     try {
@@ -96,6 +116,18 @@ export default function PurchasingHistoryBoard({
     }
   }
 
+  // PR153: persist courier + tracking together (select saves on change, tracking on blur).
+  async function saveCourier(courier: string, tracking: string) {
+    if (!openShip) return;
+    setCourierErr(null);
+    const { error } = await setShipmentCourier(openShip.ship_id, courier, tracking);
+    if (error) { setCourierErr(error); return; }
+    const c = courier.trim() || null;
+    const t = tracking.trim() || null;
+    setShips((prev) => prev.map((s) => (s.ship_id === openShip.ship_id ? { ...s, courier: c, tracking: t } : s)));
+    setOpenShip((prev) => (prev ? { ...prev, courier: c, tracking: t } : prev));
+  }
+
   const TABS: { key: 'active' | 'completed'; label: string; count: number }[] = [
     { key: 'active', label: 'Active', count: counts.active },
     { key: 'completed', label: 'Completed', count: counts.completed },
@@ -114,6 +146,30 @@ export default function PurchasingHistoryBoard({
             {cost ? ` · ${cost}` : ''}
           </div>
         </div>
+
+        {/* Shipment courier & tracking (PR153) — the international carrier, one line, above Items.
+            The pick-list is Settings → Purchasing → Shipment couriers; quickview shows "DHL 0124…". */}
+        <section className="fd-section">
+          <div className="fd-section-head">Shipment courier &amp; tracking <em className="panel-opt">(optional)</em></div>
+          {courierErr && <div className="validation err">{courierErr}</div>}
+          <div className="po-inline2">
+            <select
+              value={courierDraft}
+              onChange={(e) => { setCourierDraft(e.target.value); void saveCourier(e.target.value, trackingDraft); }}
+            >
+              <option value="">— courier —</option>
+              {shipmentCouriers.map((c) => <option key={c} value={c}>{c}</option>)}
+              {courierDraft && !shipmentCouriers.includes(courierDraft) && <option value={courierDraft}>{courierDraft}</option>}
+            </select>
+            <input
+              type="text"
+              placeholder="tracking number"
+              value={trackingDraft}
+              onChange={(e) => setTrackingDraft(e.target.value)}
+              onBlur={(e) => void saveCourier(courierDraft, e.target.value)}
+            />
+          </div>
+        </section>
 
         {/* Items */}
         <section className="fd-section">
@@ -180,7 +236,7 @@ export default function PurchasingHistoryBoard({
       </div>
 
       <div className="search-row" style={{ padding: '8px 0' }}>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search ship id or SKU…" />
+        <SearchInput value={query} onChange={setQuery} placeholder="Search by SKU or item name" />
       </div>
 
       <ul className="po-cards po-cards-compact">
@@ -197,9 +253,15 @@ export default function PurchasingHistoryBoard({
                     <span className="ff-code">{s.ship_id}</span>
                     <span className="po-card-poid">{dateLabel(s)}</span>
                   </div>
-                  <div className="po-card-l2 hint">
-                    {s.item_count} {s.item_count === 1 ? 'item' : 'items'}
-                    {cost ? ` · ${cost}` : ''}
+                  {/* PR153: courier + tracking combined ("DHL 012456789") on the right, under the date */}
+                  <div className="po-card-l1 po-card-mid">
+                    <span className="ff-name hint">
+                      {s.item_count} {s.item_count === 1 ? 'item' : 'items'}
+                      {cost ? ` · ${cost}` : ''}
+                    </span>
+                    {(s.courier || s.tracking) && (
+                      <span className="po-card-cust">{[s.courier, s.tracking].filter(Boolean).join(' ')}</span>
+                    )}
                   </div>
                 </div>
               </button>
