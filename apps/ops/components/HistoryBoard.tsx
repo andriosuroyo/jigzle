@@ -24,8 +24,8 @@ const STATE_LABEL: Record<HistoryState, string> = {
 };
 const fmtIDR = (n: number | null | undefined): string => 'Rp ' + (n ?? 0).toLocaleString('id-ID');
 
-// PR146 — the box circle's tone from the lifecycle state: shipped/shippable green, cut-but-unsent
-// yellow, cancelled grey; need_payment/need_send say nothing about item readiness → grey too.
+// PR146 — the box circle's tone from the lifecycle state. History is terminal-only (PR149:
+// Complete + Cancelled), so in practice: complete green, cancelled grey.
 function boxToneOf(state: HistoryState): CircleTone {
   if (state === 'complete') return 'green';
   if (state === 'ready_to_ship') return 'yellow';
