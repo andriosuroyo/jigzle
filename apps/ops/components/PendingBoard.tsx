@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
-import { getPending, sendReadyItems, deletePendingOrder, markOrderPaid } from '@/app/pending/actions';
+import { getPending, sendReadyItems, deleteOrder, markOrderPaid } from '@/app/pending/actions';
+import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
 import type { OrderDot, PendingOrder } from '@/app/pending/types';
 import type { CommonNote } from '@/app/settings/types';
 import NoteEditor from '@/components/NoteEditor';
@@ -49,6 +50,9 @@ export default function PendingBoard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // PR148: delete goes through the overlay confirm (no bare window.confirm); its error stays in the modal.
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [delErr, setDelErr] = useState<string | null>(null);
   const reqRef = useRef(0);
 
   const visible = useMemo(() => (filter === 'all' ? orders : orders.filter((o) => o.dot === filter)), [orders, filter]);
@@ -144,24 +148,21 @@ export default function PendingBoard({
     }
   }
 
-  // FP-4: hard delete. Confirm popup warns when the order has recorded payments.
+  // FP-4 / PR148: hard delete via delete_order (any stage; snapshotted into order_delete_log).
+  // Runs from the overlay confirm; errors render inside the modal.
   async function doDelete() {
     if (!sel) return;
-    const warn =
-      sel.paid_idr > 0
-        ? `${sel.sales_id} has ${fmtIDR(sel.paid_idr)} recorded — deleting erases the order AND its payments. Continue?`
-        : `Delete ${sel.sales_id}? This permanently removes the order. Continue?`;
-    if (!window.confirm(warn)) return;
     setBusy(true);
-    setError(null);
+    setDelErr(null);
     try {
-      const { error: delErr } = await deletePendingOrder(sel.sales_id);
-      if (delErr) { setError(delErr); return; }
+      const { error: err } = await deleteOrder(sel.sales_id);
+      if (err) { setDelErr(err); return; }
+      setConfirmDel(false);
       setSuccess(`${sel.sales_id} deleted.`);
       setSelId(null);
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed.');
+      setDelErr(e instanceof Error ? e.message : 'Delete failed.');
     } finally {
       setBusy(false);
     }
@@ -280,12 +281,28 @@ export default function PendingBoard({
                 )}
               </div>
 
-              {/* Delete pending (FP-4) */}
+              {/* Delete (FP-4 / PR148 — overlay confirm) */}
               <div className="ob-return">
-                <button className="btn-link pend-delete" onClick={doDelete} disabled={busy}>Delete order</button>
+                <button className="btn-link pend-delete" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={busy}>Delete order</button>
               </div>
 
               <div className="fd-orderid">{sel.sales_id}</div>
+
+              {confirmDel && (
+                <DeleteOrderConfirm
+                  salesId={sel.sales_id}
+                  lines={[
+                    `${sel.lines.length} pending item${sel.lines.length === 1 ? '' : 's'} removed with the order.`,
+                    sel.paid_idr > 0
+                      ? `${fmtIDR(sel.paid_idr)} in recorded payments is erased.`
+                      : 'No payments recorded on this order.',
+                  ]}
+                  busy={busy}
+                  error={delErr}
+                  onConfirm={doDelete}
+                  onCancel={() => setConfirmDel(false)}
+                />
+              )}
             </>
           </div>
         </>

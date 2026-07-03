@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { volWeight } from '@jigzle/lib';
 import AppHeader from '@/components/AppHeader';
 import { getHistory, setOrderNote } from '@/app/history/actions';
-import { getOrderSummary } from '@/app/pending/actions';
+import { getOrderSummary, deleteOrder } from '@/app/pending/actions';
+import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
 import type { HistoryRow, HistoryState } from '@/app/history/types';
 import type { OrderSummary, BoxSummary } from '@/app/pending/types';
 import type { BoxPreset } from '@/app/settings/types';
@@ -57,6 +58,11 @@ export default function HistoryBoard({
   const [summary, setSummary] = useState<OrderSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  // PR148: delete goes through the overlay confirm; its error stays in the modal.
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [delErr, setDelErr] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -126,8 +132,30 @@ export default function HistoryBoard({
     }
   }
 
+  // PR148: delete via delete_order — payments + shipping records go with the order; shipped units
+  // stay deducted from stock (the RPC logs a compensating adjustment). Snapshot in order_delete_log.
+  async function doDelete() {
+    if (!summary) return;
+    setDeleting(true);
+    setDelErr(null);
+    try {
+      const { error: err } = await deleteOrder(summary.sales_id);
+      if (err) { setDelErr(err); return; }
+      setConfirmDel(false);
+      setSuccess(`${summary.sales_id} deleted.`);
+      setSelRow(null);
+      setSummary(null);
+      await runSearch();
+    } catch (e) {
+      setDelErr(e instanceof Error ? e.message : 'Delete failed.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function openOrder(row: HistoryRow) {
     setError(null);
+    setSuccess(null);
     setEditingNote(false);
     setSelRow(row);
     setSummary(null);
@@ -148,6 +176,7 @@ export default function HistoryBoard({
   const body = (
     <div className="bodyview">
       {error && <div className="validation err">{error}</div>}
+      {success && <div className="validation ok">{success}</div>}
 
       {/* ── List ── */}
       {!selId && (
@@ -294,7 +323,26 @@ export default function HistoryBoard({
                 )}
               </section>
 
+              {/* Delete (PR148 — overlay confirm; available even on completed orders) */}
+              <div className="ob-return">
+                <button className="btn-link pend-delete" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={deleting}>Delete order</button>
+              </div>
+
               <div className="fd-orderid">{summary.sales_id}</div>
+
+              {confirmDel && (
+                <DeleteOrderConfirm
+                  salesId={summary.sales_id}
+                  lines={[
+                    'The order, its payments and its shipping records are removed.',
+                    'Shipped units stay deducted from stock (a compensating adjustment is logged).',
+                  ]}
+                  busy={deleting}
+                  error={delErr}
+                  onConfirm={doDelete}
+                  onCancel={() => setConfirmDel(false)}
+                />
+              )}
             </>
           )}
           {!loadingSummary && !summary && <div className="hint">Summary not available.</div>}

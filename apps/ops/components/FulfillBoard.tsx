@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending } from '@/app/fulfill/actions';
-import { deletePendingOrder } from '@/app/pending/actions';
+import { deleteOrder } from '@/app/pending/actions';
 import SearchInput from '@/components/SearchInput';
+import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
 import StatusCircles, { payTone } from '@/components/StatusCircles';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
 import type { CourierService, CommonNote } from '@/app/settings/types';
@@ -51,6 +52,9 @@ export default function FulfillBoard({
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null); // FT-7: top-level, survives detail clearing
+  // PR148: delete goes through the overlay confirm; its error stays in the modal.
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [delErr, setDelErr] = useState<string | null>(null);
   const reqIdRef = useRef(0);
 
   // FT-1: filter the queue by customer name OR SKU code (client-side over the loaded worklist)
@@ -176,36 +180,27 @@ export default function FulfillBoard({
     }
   }
 
-  // PR144: delete from Fulfill — clear the cut first (unfulfill_order restores stock), then hard-delete
-  // via the same guarded RPC Pending uses. If the delete step fails (e.g. the order has already-shipped
-  // lines), the order is back in Pending uncut — recoverable, and the error says so.
+  // PR148: delete via delete_order (any stage; snapshot into order_delete_log; cut lines return to
+  // stock by deletion). Runs from the overlay confirm; errors render inside the modal.
   async function doDelete() {
     if (!detail) return;
-    const warn = `Delete ${detail.sales_id}? Its cut is cleared (stock restored) and the order + its payments are permanently removed. Continue?`;
-    if (!window.confirm(warn)) return;
     const myReq = ++reqIdRef.current;
     setCommitting(true);
-    setError(null);
+    setDelErr(null);
     try {
-      const { error: backErr } = await sendBackToPending(detail.sales_id);
-      if (backErr) {
-        if (reqIdRef.current === myReq) setError(backErr);
-        return;
-      }
-      const { error: delErr } = await deletePendingOrder(detail.sales_id);
-      if (delErr) {
-        if (reqIdRef.current === myReq) setError(`${delErr} — ${detail.sales_id} was returned to Pending, not deleted.`);
-        await refreshQueue();
+      const { error: err } = await deleteOrder(detail.sales_id);
+      if (err) {
+        if (reqIdRef.current === myReq) setDelErr(err);
         return;
       }
       if (reqIdRef.current !== myReq) return;
+      setConfirmDel(false);
       setSuccess(`${detail.sales_id} deleted.`);
       setDetail(null);
       setSelected(null);
       await refreshQueue();
     } catch (e) {
-      if (reqIdRef.current === myReq) setError(e instanceof Error ? e.message : 'Delete failed.');
-      await refreshQueue();
+      if (reqIdRef.current === myReq) setDelErr(e instanceof Error ? e.message : 'Delete failed.');
     } finally {
       setCommitting(false);
     }
@@ -354,10 +349,24 @@ export default function FulfillBoard({
               {/* Send back to pending + delete — bottom, left-aligned (like Pending's delete row). */}
               <div className="ob-return">
                 <button className="btn-link" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
-                <button className="btn-link pend-delete" onClick={doDelete} disabled={committing}>Delete order</button>
+                <button className="btn-link pend-delete" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={committing}>Delete order</button>
               </div>
 
               <div className="fd-orderid">{detail.sales_id}</div>
+
+              {confirmDel && (
+                <DeleteOrderConfirm
+                  salesId={detail.sales_id}
+                  lines={[
+                    `${detail.lines.length} cut item${detail.lines.length === 1 ? '' : 's'} return to stock.`,
+                    'Recorded payments are erased with the order.',
+                  ]}
+                  busy={committing}
+                  error={delErr}
+                  onConfirm={doDelete}
+                  onCancel={() => setConfirmDel(false)}
+                />
+              )}
             </>
           )}
           </div>
