@@ -28,6 +28,7 @@ export default function PurchasingShell({
   preorders,
   soldOut,
   shipmentHistory,
+  localCouriers = [],
   userEmail,
 }: {
   initialQueue: OpenPORow[];
@@ -38,6 +39,7 @@ export default function PurchasingShell({
   preorders: PreorderRow[];
   soldOut: SoldOutRow[];
   shipmentHistory: ShipmentHistoryRow[];
+  localCouriers?: string[]; // 0055 — To-forwarder's local-courier suggestions (Settings-managed)
   userEmail: string;
 }) {
   const [tab, setTab] = useState<PurchasingTab>('forwarder');
@@ -78,6 +80,7 @@ export default function PurchasingShell({
             suppliers={suppliers}
             forwarders={forwarders}
             shipments={shipments}
+            localCouriers={localCouriers}
             userEmail={userEmail}
           />
         )}

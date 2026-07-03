@@ -1359,6 +1359,13 @@ img.sku-img { background: #e8e8e8; }
 .po-card-mid .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .po-card-cust { flex-shrink: 0; margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--brown-dark); }
 
+/* ── PR151 — Purchasing bodyview detail header (md image left; SKU/date · name/qty · PO # right)
+   + the one-line "Local courier & tracking" field pair ── */
+.po-bvhead { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.po-bvhead-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.po-inline2 { display: flex; gap: 8px; }
+.po-inline2 input { flex: 1; min-width: 0; }
+
 /* ── PR148 — delete-order confirm overlay: consequence bullets inside the shared ConfirmModal ── */
 .del-confirm-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink); }
 

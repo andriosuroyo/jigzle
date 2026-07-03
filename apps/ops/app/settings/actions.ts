@@ -12,6 +12,7 @@ import type {
   CommonNote,
   CourierService,
   InboundLabel,
+  LocalCourier,
   PaymentMethod,
   SettingPatch,
   SettingPayload,
@@ -30,6 +31,7 @@ const TABLE: Record<SettingsKind, string> = {
   common_note: 'settings_common_notes',
   channel: 'settings_customer_channels',
   staff: 'settings_staff',
+  local_courier: 'settings_local_couriers',
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -43,6 +45,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   common_note: ['label', 'icon', 'is_active'],
   channel: ['label', 'icon', 'is_active'],
   staff: ['label', 'icon', 'is_active'],
+  local_courier: ['label', 'icon', 'is_active'],
 };
 
 // uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
@@ -83,7 +86,7 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
@@ -91,8 +94,23 @@ export async function getSettings(): Promise<SettingsData> {
     list<CommonNote>(TABLE.common_note),
     list<ChannelOption>(TABLE.channel),
     listSafe<StaffMember>(TABLE.staff),
+    listSafe<LocalCourier>(TABLE.local_courier), // 0055 — degrades to [] until the migration is applied
   ]);
-  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff };
+  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers };
+}
+
+// 0055: Purchasing To-forwarder's local-courier suggestions (mirrors getStaffOptions' degrade-to-[]).
+export async function getLocalCouriers(): Promise<LocalCourier[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.local_courier)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as LocalCourier[];
 }
 
 // The Inbound/Outbound header staff picker reads this (mirrors getChannelOptions). Degrades to [] if
