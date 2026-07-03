@@ -12,6 +12,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import { compute, fmtNum, fmtRp, type FxMap } from '@jigzle/lib';
 import type { Currency, ShippingMethod, SavedCalculation, UserPrefs } from '@jigzle/db/types';
 import { deleteCalculation, refreshFx, saveCalculation, savePrefs } from '@/app/calculator/actions';
+import SearchInput from '@/components/SearchInput';
 
 type View = 'calculator' | 'history' | 'rates';
 const VIEW_LABEL: Record<View, string> = { calculator: 'Calculator', history: 'History', rates: 'Rates' };
@@ -310,7 +311,7 @@ export default function CalculatorBoard({
         {/* ── HISTORY ── */}
         {view === 'history' && (
           <div className="calc-hist">
-            <input className="calc-hist-search" type="text" placeholder="Search SKU, route, currency…" value={histSearch} onChange={(e) => setHistSearch(e.target.value)} />
+            <SearchInput className="calc-hist-search" value={histSearch} onChange={setHistSearch} placeholder="Search SKU, route, currency…" />
             {filtered.length === 0 ? (
               <div className="hint">No saved calculations yet. Save one from the Calculator tab.</div>
             ) : (

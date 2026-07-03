@@ -188,17 +188,17 @@ export default function PendingBoard({
           <ul className="fq-list">
             {visible.map((o) => (
               <li key={o.sales_id}>
+                {/* PR144 row: customer id + date on top (no sales id); items/ready left + pay pill right below. */}
                 <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className={`pend-dot ${o.dot}`} aria-hidden="true" />
                     <span className="fq-headline">{o.customer_name || '—'}</span>
-                    <span className="fq-id-sub">{o.sales_id}</span>
+                    <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
                   </div>
                   <div className="fq-row-bot">
-                    <span className={`pay pay-${(o.payment_status || '').toLowerCase()}`}>{o.payment_status || '—'}</span>
                     <span>{o.lines.length} {o.lines.length === 1 ? 'item' : 'items'}</span>
                     {o.ready_count > 0 && <span className="pend-ready">{o.ready_count} ready</span>}
-                    <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
+                    <span className={`pay pay-${(o.payment_status || '').toLowerCase()}`}>{o.payment_status || '—'}</span>
                   </div>
                 </button>
               </li>
@@ -215,9 +215,12 @@ export default function PendingBoard({
 
           {sel && (
             <>
+              {/* PR144 header: customer id left, order date right; the sales id moved to the bottom. */}
               <div className="fd-head">
-                <div className="fd-title fd-title-plain">{sel.customer_name || '—'}</div>
-                <div className="fd-sub">{sel.sales_id}{sel.order_date ? ` · ${sel.order_date.slice(0, 10)}` : ''}</div>
+                <div className="fd-head-row">
+                  <div className="fd-title fd-title-plain">{sel.customer_name || '—'}</div>
+                  {sel.order_date && <span className="fd-date">{sel.order_date.slice(0, 10)}</span>}
+                </div>
               </div>
 
               {/* Lines — compact row: image left, code / name / qty / status to its right */}
@@ -253,22 +256,28 @@ export default function PendingBoard({
                 </div>
               </section>
 
-              {/* Actions — Mark as paid + Send ready items, left-aligned at the bottom */}
+              {/* Actions — Mark as paid + Send ready items, left-aligned at the bottom. PR144: Fulfill =
+                  ready AND paid, so Send ready gates on a settled balance (green-but-unpaid stays here). */}
               <div className="fd-commit">
                 <div className="fd-commit-actions">
                   {sel.balance > 0 && (
                     <button className="btn-secondary" onClick={doMarkPaid} disabled={busy}>{busy ? 'Saving…' : 'Mark as paid'}</button>
                   )}
-                  <button className="btn-primary" onClick={doSendReady} disabled={busy || sel.ready_count === 0}>
+                  <button className="btn-primary" onClick={doSendReady} disabled={busy || sel.ready_count === 0 || sel.balance > 0}>
                     {busy ? 'Working…' : `Send ready items${sel.ready_count ? ` (${sel.ready_count})` : ''}`}
                   </button>
                 </div>
+                {sel.balance > 0 && sel.ready_count > 0 && !busy && (
+                  <span className="warn-text">settle payment before sending</span>
+                )}
               </div>
 
               {/* Delete pending (FP-4) */}
               <div className="ob-return">
-                <button className="btn-link pend-delete" onClick={doDelete} disabled={busy}>Delete pending order</button>
+                <button className="btn-link pend-delete" onClick={doDelete} disabled={busy}>Delete order</button>
               </div>
+
+              <div className="fd-orderid">{sel.sales_id}</div>
             </>
           )}
         </main>

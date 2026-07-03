@@ -8,7 +8,7 @@
 //   itself reads getPending + sendReadyItems + deletePendingOrder.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { customerLabel } from '@jigzle/lib';
+import { customerIdLabel } from '@jigzle/lib';
 import type {
   BoxSummary,
   LineStatus,
@@ -112,7 +112,7 @@ export async function getPending(): Promise<PendingOrder[]> {
     const paid = (o.paid_idr as number | null) ?? 0;
     return {
       sales_id: o.sales_id as string,
-      customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
+      customer_name: cust ? customerIdLabel(cust.name, cust.phone) : null,
       order_date: (o.order_date as string | null) ?? null,
       payment_status: (o.payment_status as string | null) ?? null,
       sales_total_idr: total,
@@ -228,19 +228,23 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
   // the raw_address verbatim (it's the saved one-field combination). Outbound History surfaces this.
   const addressId = (lr.find((r) => r.address_id != null)?.address_id ?? (order.address_id as number | null)) ?? null;
   let shipAddress: string | null = null;
+  let shipRecipient: string | null = null;
+  let shipPhone: string | null = null;
   if (addressId != null) {
     const { data: a } = await supabase
       .from('customer_addresses')
-      .select('raw_address')
+      .select('raw_address,recipient_name,contact_phone')
       .eq('address_id', addressId)
       .maybeSingle();
     shipAddress = (a?.raw_address as string | null) ?? null;
+    shipRecipient = (a?.recipient_name as string | null) ?? null;
+    shipPhone = (a?.contact_phone as string | null) ?? null;
   }
 
   const cust = one<{ name: string | null; phone: string | null }>(order.customers as never);
   return {
     sales_id: order.sales_id as string,
-    customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
+    customer_name: cust ? customerIdLabel(cust.name, cust.phone) : null,
     customer_phone: cust?.phone ?? null,
     status: (order.status as string | null) ?? null,
     payment_status: (order.payment_status as string | null) ?? null,
@@ -248,6 +252,8 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
     paid_idr: (order.paid_idr as number | null) ?? 0,
     order_note: (order.order_note as string | null) ?? null,
     ship_address: shipAddress,
+    ship_recipient: shipRecipient,
+    ship_phone: shipPhone,
     lines,
     boxes,
   };

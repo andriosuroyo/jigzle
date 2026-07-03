@@ -22,6 +22,7 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
 import PostcodeAutofill from '@/components/PostcodeAutofill';
+import SearchInput from '@/components/SearchInput';
 import { loadPostal, type PostalData } from '@/lib/idPostal';
 import { tidyAddress, validateAddress, type TidyResult } from '@/lib/tidyAddress';
 
@@ -45,14 +46,15 @@ function payLabel(total: number, paid: number): string {
   return 'Unpaid';
 }
 
-// Live, DISPLAY-ONLY readiness preview (the rail). Payment gate first, then the weakest line wins. The
-// real routing (Fulfill vs Pending) is decided server-side at save by submitOrder's live re-check.
+// Live, DISPLAY-ONLY readiness preview (the rail). PR144: item readiness first (mirrors the Pending
+// dot — the weakest line wins), then the payment gate. The real routing (Fulfill vs Pending) is
+// decided server-side at save by submitOrder's live re-check.
 function deriveReadiness(lines: Line[], subtotal: number, paid: number): string {
   if (subtotal <= 0) return '—';
+  if (!lines.every((l) => l.available + l.on_the_way >= l.qty)) return 'Need to order';
+  if (!lines.every((l) => l.available >= l.qty)) return 'On the way';
   if (paid < subtotal) return 'Need payment';
-  if (lines.every((l) => l.available >= l.qty)) return 'Ready to send';
-  if (lines.every((l) => l.available + l.on_the_way >= l.qty)) return 'On the way';
-  return 'Need to order';
+  return 'Ready to send';
 }
 
 // Thousands separators for the price / DP inputs (display only; the state stores digits). PR24 §4.
@@ -397,12 +399,10 @@ export default function OrderEntry({
               {!customer && (
                 <>
                   <div className="search-row">
-                    <input
-                      type="text"
-                      inputMode="search"
-                      placeholder="Search phone or name…"
+                    <SearchInput
                       value={custQuery}
-                      onChange={(e) => { setCustQuery(e.target.value); setCustSearched(false); if (!e.target.value.trim()) setCustResults([]); }}
+                      onChange={(v) => { setCustQuery(v); setCustSearched(false); if (!v.trim()) setCustResults([]); }}
+                      placeholder="Search phone or name…"
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runCustSearch(); } }}
                     />
                   </div>
@@ -560,19 +560,15 @@ export default function OrderEntry({
             <div className="panel-head"><span className="panel-num">3</span> Items</div>
             <div className="panel-body">
               <div className="search-row">
-                <input
+                <SearchInput
                   ref={skuInputRef}
-                  type="text"
-                  inputMode="search"
-                  placeholder="Code, name, or piece count…"
                   value={skuQuery}
-                  onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); if (!e.target.value.trim()) setSkuResults([]); }}
+                  onChange={(v) => { setSkuQuery(v); setSkuSearched(false); if (!v.trim()) setSkuResults([]); }}
+                  placeholder="Code, name, or piece count…"
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSkuSearch(); } }}
                   disabled={!customer}
+                  onClear={clearSkuSearch}
                 />
-                {(skuQuery || skuResults.length > 0) && (
-                  <button className="btn-link sku-clear" onClick={clearSkuSearch}>Clear</button>
-                )}
               </div>
               {skuSearching && <div className="hint">Searching…</div>}
               {!skuSearching && skuSearched && skuResults.length === 0 && (
@@ -659,9 +655,10 @@ export default function OrderEntry({
             </div>
           </section>
 
-          {/* Panel 5 — Priority (PR73): optional buy-urgency, surfaced on the Purchasing From-Sales cards */}
+          {/* Panel 5 — Priority (PR73): optional buy-urgency, surfaced on the Purchasing From-Sales
+              cards. PR144: explicitly labelled optional (preorder items only), explanatory text dropped. */}
           <section className={`panel ${!customer ? 'panel-locked' : ''}`}>
-            <div className="panel-head"><span className="panel-num">5</span> Priority</div>
+            <div className="panel-head"><span className="panel-num">5</span> Priority <em className="panel-opt">(optional — preorder items only)</em></div>
             <div className="panel-body">
               <div className="urg-toggle" role="group" aria-label="Order urgency">
                 {URGENCY_OPTS.map((u) => (
@@ -676,7 +673,6 @@ export default function OrderEntry({
                   </button>
                 ))}
               </div>
-              <div className="hint">How urgently this order needs buying — shown on the Purchasing buy-list. Tap again to clear.</div>
             </div>
           </section>
         </main>
@@ -687,11 +683,30 @@ export default function OrderEntry({
             <div className="rail-title">Order summary</div>
             <div className="rail-row"><span>Customer</span><b>{customer?.name || '—'}</b></div>
             <div className="rail-sep" />
+            {/* PR144: item count + per-SKU mini lines (thumb · code/name · ×qty · line total) so the
+                Subtotal below reads as the sum of qty × price. No Payment row — Subtotal vs Paid
+                already says it; Status carries the pipeline readiness. */}
+            <div className="rail-row"><span>Items</span><b>{lines.length ? `×${lines.reduce((s, l) => s + l.qty, 0)}` : '—'}</b></div>
+            {lines.length > 0 && (
+              <ul className="rail-lines">
+                {lines.map((l, i) => (
+                  <li key={`${l.item_code}-${i}`} className="rail-line">
+                    <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+                    <div className="rail-line-main">
+                      <span className="rail-line-code">{l.item_code}</span>
+                      <span className="rail-line-name">{l.name}</span>
+                    </div>
+                    <span className="rail-line-qty">×{l.qty}</span>
+                    <span className="rail-line-amt">{fmtRp(l.qty * l.unit_price_idr)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="rail-sep" />
             <div className="rail-row"><span>Subtotal</span><b>{fmtRp(subtotal)}</b></div>
             <div className="rail-row"><span>Paid</span><b>{fmtRp(paid)}</b></div>
             <div className="rail-sep" />
             <div className="rail-row"><span>Status</span><span className={`rail-pill ${readinessClass(readiness)}`}>{readiness}</span></div>
-            <div className="rail-row"><span>Payment</span><span className={`pay pay-${payStatus.toLowerCase()}`}>{payStatus}</span></div>
             <button className="btn-primary rail-save" onClick={handleSave} disabled={!canSave}>
               {saving ? 'Saving…' : 'Save order'}
             </button>

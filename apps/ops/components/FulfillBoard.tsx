@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending } from '@/app/fulfill/actions';
+import { deletePendingOrder } from '@/app/pending/actions';
+import SearchInput from '@/components/SearchInput';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
 import type { CourierService, CommonNote } from '@/app/settings/types';
 import NoteEditor from '@/components/NoteEditor';
@@ -164,6 +166,38 @@ export default function FulfillBoard({
     }
   }
 
+  // PR144: delete from Fulfill — clear the cut first (unfulfill_order restores stock), then hard-delete
+  // via the same guarded RPC Pending uses. If the delete step fails (e.g. the order has already-shipped
+  // lines), the order is back in Pending uncut — recoverable, and the error says so.
+  async function doDelete() {
+    if (!detail) return;
+    const warn = `Delete ${detail.sales_id}? Its cut is cleared (stock restored) and the order + its payments are permanently removed. Continue?`;
+    if (!window.confirm(warn)) return;
+    const myReq = ++reqIdRef.current;
+    setCommitting(true);
+    setError(null);
+    try {
+      await sendBackToPending(detail.sales_id);
+      try {
+        await deletePendingOrder(detail.sales_id);
+      } catch (e) {
+        throw new Error(
+          `${e instanceof Error ? e.message : 'Delete failed.'} — ${detail.sales_id} was returned to Pending, not deleted.`
+        );
+      }
+      if (reqIdRef.current !== myReq) return;
+      setSuccess(`${detail.sales_id} deleted.`);
+      setDetail(null);
+      setSelected(null);
+      await refreshQueue();
+    } catch (e) {
+      if (reqIdRef.current === myReq) setError(e instanceof Error ? e.message : 'Delete failed.');
+      await refreshQueue();
+    } finally {
+      setCommitting(false);
+    }
+  }
+
   const canSend = !!detail && detail.lines.length > 0 && addressId != null && courierId != null && !committing;
 
   const body = (
@@ -173,24 +207,24 @@ export default function FulfillBoard({
         <aside className="fq-pane">
           {/* No queue-count header — the Fulfill tab badge above already shows the count. */}
           <div className="search-row" style={{ padding: '8px' }}>
-            <input type="text" inputMode="search" placeholder="Search customer or SKU…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <SearchInput value={search} onChange={setSearch} placeholder="Search customer or SKU…" />
           </div>
           {shown.length === 0 && <div className="hint fq-empty">{queue.length === 0 ? 'Nothing waiting to send.' : 'No match.'}</div>}
           <ul className="fq-list">
             {shown.map((q) => (
               <li key={q.sales_id}>
                 <button className={`fq-row ${selected === q.sales_id ? 'active' : ''}`} onClick={() => openOrder(q.sales_id)}>
-                  {/* Styled like Pending: customer name headline, sales id demoted; meta on the second row. */}
+                  {/* PR144 row: customer id + date on top (no sales id); items/SKUs + pay pill below. */}
                   <div className="fq-row-top">
                     <span className="fq-headline">{q.customer_name || '—'}</span>
-                    <span className="fq-id-sub">{q.sales_id}</span>
+                    <span className="ord-date">{q.order_date ? q.order_date.slice(0, 10) : '—'}</span>
                   </div>
                   <div className="fq-row-bot">
                     {/* SKU codes folded into the item count so a SKU search hit is obvious at a glance. */}
                     <span className="ff-items-skus">
                       {q.item_count} {q.item_count === 1 ? 'item' : 'items'}{q.sku_codes.length ? ` (${q.sku_codes.join(', ')})` : ''}
                     </span>
-                    <span className="ord-date">{q.order_date ? q.order_date.slice(0, 10) : '—'}</span>
+                    {q.payment_status && <span className={`pay pay-${q.payment_status.toLowerCase()}`}>{q.payment_status}</span>}
                   </div>
                 </button>
               </li>
@@ -210,10 +244,12 @@ export default function FulfillBoard({
 
           {detail && (
             <>
-              {/* Header styled like Pending: customer name + sales id · date. */}
+              {/* PR144 header: customer id left, order date right; the sales id moved to the bottom. */}
               <div className="fd-head">
-                <div className="fd-title fd-title-plain">{detail.customer_name || '—'}</div>
-                <div className="fd-sub">{detail.sales_id}{detail.order_date ? ` · ${detail.order_date.slice(0, 10)}` : ''}</div>
+                <div className="fd-head-row">
+                  <div className="fd-title fd-title-plain">{detail.customer_name || '—'}</div>
+                  {detail.order_date && <span className="fd-date">{detail.order_date.slice(0, 10)}</span>}
+                </div>
               </div>
 
               {/* Address (FT-6: radio + needs-address flag) */}
@@ -296,10 +332,13 @@ export default function FulfillBoard({
                 </button>
               </div>
 
-              {/* Send back to pending — bottom, left-aligned (like Pending's "Delete pending order"). */}
+              {/* Send back to pending + delete — bottom, left-aligned (like Pending's delete row). */}
               <div className="ob-return">
                 <button className="btn-link" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
+                <button className="btn-link pend-delete" onClick={doDelete} disabled={committing}>Delete order</button>
               </div>
+
+              <div className="fd-orderid">{detail.sales_id}</div>
             </>
           )}
         </main>

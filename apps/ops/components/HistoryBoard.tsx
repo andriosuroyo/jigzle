@@ -11,6 +11,7 @@ import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import SearchInput from '@/components/SearchInput';
 
 const STATE_LABEL: Record<HistoryState, string> = {
   cancelled: 'Cancelled',
@@ -139,28 +140,23 @@ export default function HistoryBoard({
         {/* ── List ── */}
         <aside className="fq-pane">
           <div className="search-row" style={{ padding: '8px' }}>
-            <input
-              type="text"
-              inputMode="search"
-              placeholder="Name, order id, or date (YYYY-MM-DD)…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+            <SearchInput value={query} onChange={setQuery} placeholder="Name, order id, or date (YYYY-MM-DD)…" />
           </div>
           {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No orders.'}</div>}
           <ul className="fq-list">
             {orders.map((o) => (
               <li key={o.sales_id}>
+                {/* PR144 row: customer id + date on top (no sales id); state (Complete implied → no pill)
+                    + item count left, pay pill right below. */}
                 <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className="fq-headline">{o.customer_name || '—'}</span>
-                    <span className="fq-id-sub">{o.sales_id}</span>
+                    <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
                   </div>
                   <div className="fq-row-bot">
-                    <span className={`ord-state ${o.state}`}>{STATE_LABEL[o.state]}</span>
-                    <span className={`pay pay-${(o.payment_status || '').toLowerCase()}`}>{o.payment_status || '—'}</span>
+                    {o.state !== 'complete' && <span className={`ord-state ${o.state}`}>{STATE_LABEL[o.state]}</span>}
                     <span>{o.item_count} {o.item_count === 1 ? 'item' : 'items'}</span>
-                    <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
+                    <span className={`pay pay-${(o.payment_status || '').toLowerCase()}`}>{o.payment_status || '—'}</span>
                   </div>
                 </button>
               </li>
@@ -176,9 +172,12 @@ export default function HistoryBoard({
           {selId && loadingSummary && <div className="hint">Loading summary…</div>}
           {selId && !loadingSummary && summary && (
             <>
+              {/* PR144 header: customer id left, order date right; the sales id moved to the bottom. */}
               <div className="fd-head">
-                <div className="fd-title fd-title-plain">{summary.customer_name || '—'}</div>
-                <div className="fd-sub">{summary.sales_id}{selRow?.order_date ? ` · ${selRow.order_date.slice(0, 10)}` : ''}</div>
+                <div className="fd-head-row">
+                  <div className="fd-title fd-title-plain">{summary.customer_name || '—'}</div>
+                  {selRow?.order_date && <span className="fd-date">{selRow.order_date.slice(0, 10)}</span>}
+                </div>
               </div>
 
               <section className="fd-section">
@@ -228,12 +227,27 @@ export default function HistoryBoard({
                               <span className="box-sum-l1">{boxType(b)} · {dims}</span>
                               <span className="box-sum-l2">vol: {vol != null ? `${vol} g` : '—'} · real: {b.real_weight != null ? `${b.real_weight} g` : '—'}</span>
                             </div>
-                            <span className="ff-qty">{b.chargeable_weight != null ? `${b.chargeable_weight} g` : '—'}</span>
+                            <span className="ff-qty">{b.chargeable_weight != null ? `${Math.round(b.chargeable_weight)} g` : '—'}</span>
                           </li>
                         );
                       })}
                     </ul>
                   </>
+                )}
+              </section>
+
+              {/* Address (PR144) — the selected address in full format: recipient, address, phone.
+                  "No address selected yet" when the order has none (SA-1 deferred). */}
+              <section className="fd-section">
+                <div className="fd-section-head">Address</div>
+                {summary.ship_address || summary.ship_recipient ? (
+                  <div className="fd-addr">
+                    {summary.ship_recipient && <b>{summary.ship_recipient}</b>}
+                    {summary.ship_address}
+                    {summary.ship_phone ? `\n${summary.ship_phone}` : ''}
+                  </div>
+                ) : (
+                  <div className="hint">No address selected yet.</div>
                 )}
               </section>
 
@@ -265,6 +279,8 @@ export default function HistoryBoard({
                   </>
                 )}
               </section>
+
+              <div className="fd-orderid">{summary.sales_id}</div>
             </>
           )}
           {selId && !loadingSummary && !summary && <div className="hint">Summary not available.</div>}

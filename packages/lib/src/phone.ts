@@ -40,3 +40,13 @@ export function phoneCode(phone: string | null | undefined): string | null {
 export function customerLabel(name: string | null | undefined, phone?: string | null | undefined): string {
   return (name ?? '').trim() || '(no name)';
 }
+
+// PR144 — the full CUSTOMER ID, "<alias> (<last4>)". Imported names already carry the "(last4)" code
+// inside customers.name; app-created ones don't, so append it from the phone when missing. Sales
+// quickviews + detail headers lead with this (the customer identity, never the address recipient).
+export function customerIdLabel(name: string | null | undefined, phone?: string | null | undefined): string {
+  const base = (name ?? '').trim() || '(no name)';
+  if (/\(\d{2,}\)$/.test(base)) return base;
+  const code = phoneCode(phone);
+  return code ? `${base} (${code})` : base;
+}

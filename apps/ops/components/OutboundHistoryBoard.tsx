@@ -13,6 +13,7 @@ import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import SearchInput from '@/components/SearchInput';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
@@ -81,13 +82,7 @@ export default function OutboundHistoryBoard({
       {/* ── List ── */}
       <aside className="fq-pane">
         <div className="search-row" style={{ padding: '8px' }}>
-          <input
-            type="text"
-            inputMode="search"
-            placeholder="Search name, SKU, or courier…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          <SearchInput value={query} onChange={setQuery} placeholder="Search name, SKU, or courier…" />
         </div>
         {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No shipped orders.'}</div>}
         <ul className="fq-list">
@@ -176,7 +171,7 @@ export default function OutboundHistoryBoard({
                           <span className="box-sum-l1">{boxType(b)} · {dims}</span>
                           <span className="box-sum-l2">real: {b.real_weight != null ? `${b.real_weight} g` : '—'}</span>
                         </div>
-                        <span className="ff-qty">{b.chargeable_weight != null ? `${b.chargeable_weight} g` : '—'}</span>
+                        <span className="ff-qty">{b.chargeable_weight != null ? `${Math.round(b.chargeable_weight)} g` : '—'}</span>
                       </li>
                     );
                   })
