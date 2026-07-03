@@ -10,7 +10,7 @@
 // group_pos_into_shipment_v2 RPC (0049, hardened in 0050).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { customerLabel } from '@jigzle/lib';
+import { customerIdLabel } from '@jigzle/lib';
 import type {
   Forwarder,
   GroupShipmentInput,
@@ -144,7 +144,7 @@ export async function getOpenPOs(filter?: OpenPOFilter): Promise<OpenPORow[]> {
     (async () => {
       if (!customerIds.length) return;
       const { data: cus } = await supabase.from('customers').select('customer_id,name,phone').in('customer_id', customerIds);
-      for (const c of (cus ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) customerById.set(c.customer_id, customerLabel(c.name, c.phone));
+      for (const c of (cus ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) customerById.set(c.customer_id, customerIdLabel(c.name, c.phone));
     })(),
   ]);
 
@@ -696,7 +696,7 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
     (async () => {
       if (!customerIds.length) return;
       const { data: cus } = await supabase.from('customers').select('customer_id,name,phone').in('customer_id', customerIds);
-      for (const c of (cus ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) customerById.set(c.customer_id, customerLabel(c.name, c.phone));
+      for (const c of (cus ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) customerById.set(c.customer_id, customerIdLabel(c.name, c.phone));
     })(),
   ]);
 
@@ -938,7 +938,7 @@ export async function getPreorders(): Promise<PreorderRow[]> {
   const customerIds = [...new Set([...orderById.values()].map((o) => o.customer_id).filter((c): c is number => c != null))];
   if (customerIds.length) {
     const data = await inBatches(customerIds, (b) => supabase.from('customers').select('customer_id,name,phone').in('customer_id', b).then((r) => (r.data ?? []) as { customer_id: number; name: string | null; phone: string | null }[]));
-    for (const c of data) customerById.set(c.customer_id, customerLabel(c.name, c.phone));
+    for (const c of data) customerById.set(c.customer_id, customerIdLabel(c.name, c.phone));
   }
 
   // a preorder drops once an OPEN PO for the same SKU + customer covers it (decision #2). Key by

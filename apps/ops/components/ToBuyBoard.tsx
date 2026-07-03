@@ -35,6 +35,8 @@ import type { SkuHit } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import StockPills from '@/components/StockPills';
+import TrashButton from '@/components/TrashButton';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
@@ -52,8 +54,8 @@ function UrgencyChip({ urgency }: { urgency: Urgency | null }) {
   return <span className={`urg-chip urg-${urgency}`}>{urgency}</span>;
 }
 
-// pipeline figures in the canonical order — forwarder → shipped → warehouse. A non-zero number reads
-// green; a zero stays muted.
+// pipeline figures in the canonical order — forwarder → shipped → warehouse. PR150: rendered as
+// icon+qty pills (StockPills); this text version remains only for the add/pick rows' compact line.
 function StockFigs({ wf, otw, avail }: { wf: number; otw: number; avail: number }) {
   const fig = (n: number) => <b className={n > 0 ? 'fig-pos' : 'fig-zero'}>{n}</b>;
   return <>at forwarder {fig(wf)} · shipped {fig(otw)} · warehouse {fig(avail)}</>;
@@ -287,13 +289,11 @@ export default function ToBuyBoard({
         ))}
       </div>
 
-      {/* Manual */}
+      {/* Manual — PR150 card: l1 SKU + date, l2 name + stock pills, l3 qty/Buy/Done/trash. The old
+          "Manual buy-list" header row is gone; "+ add item" is a full-width button at the top. */}
       {tab === 'manual' && (
         <section className="fd-section">
-          <div className="po-tobuy-head">
-            <div className="fd-section-head" style={{ marginBottom: 0 }}>Manual buy-list</div>
-            <button className="btn-secondary" onClick={openAdd}>+ add item</button>
-          </div>
+          <button className="btn-secondary po-add-full" onClick={openAdd}>+ add item</button>
           {planned.length === 0 && <div className="hint">Nothing planned. Use “+ add item” to start a buy-list.</div>}
           <ul className="po-cards">
             {planned.map((p) => (
@@ -302,14 +302,14 @@ export default function ToBuyBoard({
                 <div className="po-card-main">
                   <div className="po-card-l1">
                     <span className="ff-code">{p.item_code || '—'}</span>
-                    <span className="ff-name">{p.name}</span>
                     <UrgencyChip urgency={p.urgency} />
                     <span className="po-card-date">{fmtDate(p.input_date)}</span>
                   </div>
-                  <div className="po-card-l2 hint">
-                    <StockFigs wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />
-                    {p.item_note ? ` · ${p.item_note}` : ''}
+                  <div className="po-card-l1 po-card-mid">
+                    <span className="ff-name">{p.name}</span>
+                    <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />
                   </div>
+                  {p.item_note && <div className="po-card-l2 hint">{p.item_note}</div>}
                   <div className="po-card-l3">
                     <span className="qty-step">
                       <button type="button" onClick={() => changeQty(p.po_id, p.qty - 1)} disabled={p.qty <= 0} aria-label="decrease">−</button>
@@ -323,7 +323,7 @@ export default function ToBuyBoard({
                     <div className="po-card-actions">
                       <button className="btn-secondary" onClick={() => openBuy({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link })}>Buy</button>
                       <button className="btn-primary" onClick={() => done({ kind: 'manual', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link })} disabled={busy}>Done →</button>
-                      <button className="po-del-x" onClick={() => setConfirmDelId(p.po_id)} disabled={busy} aria-label="Cancel this item">×</button>
+                      <TrashButton onClick={() => setConfirmDelId(p.po_id)} disabled={busy} ariaLabel="Cancel this item" />
                     </div>
                   </div>
                 </div>
@@ -338,17 +338,20 @@ export default function ToBuyBoard({
         <section className="fd-section">
           {preorders.length === 0 && <div className="hint">No preorders — every ordered SKU is in stock.</div>}
           <ul className="po-cards">
+            {/* PR150 card: l1 SKU + date, l2 name + customer id (no order id), l3 qty/Buy/Done. */}
             {preorders.map((p) => (
               <li key={p.line_id} className="po-card">
                 <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.md} />
                 <div className="po-card-main">
                   <div className="po-card-l1">
                     <span className="ff-code">{p.item_code || '—'}</span>
-                    <span className="ff-name">{p.name}</span>
                     <UrgencyChip urgency={p.urgency} />
                     <span className="po-card-date">{fmtDate(p.order_date)}</span>
                   </div>
-                  <div className="po-card-l2 hint">{p.sales_id} · {p.customer_name || 'no customer'}</div>
+                  <div className="po-card-l1 po-card-mid">
+                    <span className="ff-name">{p.name}</span>
+                    <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
+                  </div>
                   <div className="po-card-l3">
                     <span className="qty-ro" aria-label="quantity">{p.qty}</span>
                     <div className="po-card-actions">
@@ -374,14 +377,14 @@ export default function ToBuyBoard({
                 <div className="po-card-main">
                   <div className="po-card-l1">
                     <span className="ff-code">{p.item_code || '—'}</span>
-                    <span className="ff-name">{p.name}</span>
                     <UrgencyChip urgency={p.urgency} />
                     <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
                   </div>
-                  <div className="po-card-l2 hint">
+                  <div className="po-card-l1 po-card-mid">
+                    <span className="ff-name">{p.name}</span>
                     {p.origin === 'sales'
-                      ? <>{p.sales_id} · {p.customer_name || 'no customer'}</>
-                      : <StockFigs wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />}
+                      ? <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
+                      : <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />}
                   </div>
                   <div className="po-card-l3">
                     {p.origin === 'manual'
@@ -400,7 +403,7 @@ export default function ToBuyBoard({
                     <div className="po-card-actions">
                       <button className="btn-secondary" onClick={() => openBuy({ kind: 'oos', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link })}>Buy</button>
                       <button className="btn-primary" onClick={() => done({ kind: 'oos', item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link })} disabled={busy}>Done →</button>
-                      <button className="po-del-x" onClick={() => setConfirmDelId(p.po_id)} disabled={busy} aria-label="Cancel this item">×</button>
+                      <TrashButton onClick={() => setConfirmDelId(p.po_id)} disabled={busy} ariaLabel="Cancel this item" />
                     </div>
                   </div>
                 </div>
