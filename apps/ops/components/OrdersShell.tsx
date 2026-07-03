@@ -59,8 +59,16 @@ export default function OrdersShell({
   });
   const [toast, setToast] = useState<{ key: number; msg: string } | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [newDirty, setNewDirty] = useState(false); // OrderEntry has un-saved input → back asks first
   const [reloadKey, setReloadKey] = useState(0);
   const toastSeq = useRef(0);
+
+  // PR147: leaving the New-order bodyview — confirm only when a draft would be lost.
+  const closeNew = useCallback(() => {
+    if (newDirty && !window.confirm('Discard this order draft?')) return;
+    setShowNew(false);
+    setNewDirty(false);
+  }, [newDirty]);
 
   // Stable per-tab count setters (boards report their list size up via onCountChange). Stable identity
   // keeps the boards' reporting effect from re-firing on every shell render.
@@ -93,27 +101,30 @@ export default function OrdersShell({
   return (
     <div className="ops">
       <AppHeader active="orders" userEmail={userEmail} />
-      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Sales', href: '/sales' }, { label: TABS.find((t) => t.key === tab)?.label ?? 'Sales' }]} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Sales', href: '/sales' }, { label: showNew ? 'New order' : TABS.find((t) => t.key === tab)?.label ?? 'Sales' }]} />
 
       {/* Pipeline bar — tabs (Pending/Fulfill carry a live count badge) on the left, the persistent
-          "+ New order" on the right. New is a button, not a tab: it's a creation form, not a queue. */}
-      <div className="orders-bar">
-        <nav className="orders-tabs" role="tablist" aria-label="Sales pipeline">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              role="tab"
-              aria-selected={tab === t.key}
-              className={`orders-tab ${tab === t.key ? 'active' : ''}`}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-              {t.badge && <span className="orders-tab-count">{counts[t.key as 'pending' | 'fulfill']}</span>}
-            </button>
-          ))}
-        </nav>
-        <button className="orders-new" onClick={() => setShowNew(true)} aria-label="New order">+ New</button>
-      </div>
+          "+ New order" on the right. PR147: hidden while the New-order bodyview is open (the
+          breadcrumb stays; ← back returns to the pipeline). */}
+      {!showNew && (
+        <div className="orders-bar">
+          <nav className="orders-tabs" role="tablist" aria-label="Sales pipeline">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                role="tab"
+                aria-selected={tab === t.key}
+                className={`orders-tab ${tab === t.key ? 'active' : ''}`}
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+                {t.badge && <span className="orders-tab-count">{counts[t.key as 'pending' | 'fulfill']}</span>}
+              </button>
+            ))}
+          </nav>
+          <button className="orders-new" onClick={() => setShowNew(true)} aria-label="New order">+ New</button>
+        </div>
+      )}
 
       {toast && (
         <div className="orders-toast" role="status" aria-live="polite" key={toast.key}>
@@ -122,7 +133,7 @@ export default function OrdersShell({
       )}
 
       {/* All three boards stay mounted; inactive ones are hidden so selection + scroll survive a switch. */}
-      <div className="orders-panels">
+      <div className="orders-panels" hidden={showNew}>
         <div hidden={tab !== 'pending'}>
           <PendingBoard
             embedded
@@ -158,20 +169,16 @@ export default function OrdersShell({
         </div>
       </div>
 
-      {/* "+ New order" → the existing create-order flow, layered over the window. On save the order
-          lands in Pending (or Fulfill if it cuts at save); the shell toasts + refreshes the counts. */}
+      {/* "+ New order" → PR147 bodyview: the create-order form fills the body (pipeline tabs hidden,
+          breadcrumb visible, ← back with a discard confirm on a dirty draft). On save the order lands
+          in Pending (or Fulfill if it cuts at save); the shell toasts + refreshes the counts. */}
       {showNew && (
-        <div className="orders-overlay" role="dialog" aria-modal="true" aria-label="New order">
-          <div className="orders-overlay-bar">
-            <span className="orders-overlay-title">+ New order</span>
-            <button className="orders-overlay-close" onClick={() => setShowNew(false)} aria-label="Close">
-              ×
-            </button>
+        <>
+          <div className="bv-backrow">
+            <button className="btn-link bv-back" onClick={closeNew}>← back</button>
           </div>
-          <div className="orders-overlay-body">
-            <OrderEntry embedded userEmail={userEmail} paymentMethods={paymentMethods} onSaved={onNewSaved} />
-          </div>
-        </div>
+          <OrderEntry embedded userEmail={userEmail} paymentMethods={paymentMethods} onSaved={onNewSaved} onDirtyChange={setNewDirty} />
+        </>
       )}
     </div>
   );

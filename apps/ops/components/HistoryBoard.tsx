@@ -143,12 +143,16 @@ export default function HistoryBoard({
     }
   }
 
+  // PR147 — bodyview: the body shows EITHER the full-width list OR the tapped order's detail with a
+  // ← back button (the Purchasing-History pattern); breadcrumb + pipeline tabs stay put above.
   const body = (
-    <>
-      <div className="fulfill-layout">
-        {/* ── List ── */}
-        <aside className="fq-pane">
-          <div className="search-row" style={{ padding: '8px' }}>
+    <div className="bodyview">
+      {error && <div className="validation err">{error}</div>}
+
+      {/* ── List ── */}
+      {!selId && (
+        <>
+          <div className="search-row" style={{ padding: '0 0 8px' }}>
             <SearchInput value={query} onChange={setQuery} placeholder="Name, order id, or date (YYYY-MM-DD)…" />
           </div>
           {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No orders.'}</div>}
@@ -157,7 +161,7 @@ export default function HistoryBoard({
               <li key={o.sales_id}>
                 {/* PR146 row: customer id + date on top; state (Complete implied → no pill) + item
                     count left, dual status circles bottom-right. */}
-                <button className={`fq-row ${selId === o.sales_id ? 'active' : ''}`} onClick={() => openOrder(o)}>
+                <button className="fq-row" onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className="fq-headline">{o.customer_name || '—'}</span>
                     <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
@@ -171,15 +175,16 @@ export default function HistoryBoard({
               </li>
             ))}
           </ul>
-        </aside>
+        </>
+      )}
 
-        {/* ── Detail (read-only summary + Mark paid) ── */}
-        <main className="fd-pane">
-          {!selId && <div className="fd-empty">Pick an order to see its summary.</div>}
-          {error && <div className="validation err">{error}</div>}
-
-          {selId && loadingSummary && <div className="hint">Loading summary…</div>}
-          {selId && !loadingSummary && summary && (
+      {/* ── Detail (read-only summary + note) ── */}
+      {selId && (
+        <>
+          <button className="btn-link bv-back" onClick={() => { setSelRow(null); setSummary(null); }}>← back</button>
+          <div className="bv-detail">
+          {loadingSummary && <div className="hint">Loading summary…</div>}
+          {!loadingSummary && summary && (
             <>
               {/* PR144 header: customer id left, order date right; the sales id moved to the bottom. */}
               <div className="fd-head">
@@ -292,10 +297,11 @@ export default function HistoryBoard({
               <div className="fd-orderid">{summary.sales_id}</div>
             </>
           )}
-          {selId && !loadingSummary && !summary && <div className="hint">Summary not available.</div>}
-        </main>
-      </div>
-    </>
+          {!loadingSummary && !summary && <div className="hint">Summary not available.</div>}
+          </div>
+        </>
+      )}
+    </div>
   );
 
   if (embedded) return body;

@@ -76,13 +76,17 @@ export default function OrderEntry({
   paymentMethods,
   embedded = false,
   onSaved,
+  onDirtyChange,
 }: {
   userEmail: string;
   paymentMethods: PaymentMethod[];
-  // JZ-001: when opened from the Orders window's "+ New order" overlay, drop the page chrome and let the
-  // shell know an order was saved (so it can toast + refresh the pipeline counts).
+  // JZ-001: when opened from the Orders window's "+ New order" bodyview, drop the page chrome and let
+  // the shell know an order was saved (so it can toast + refresh the pipeline counts).
   embedded?: boolean;
   onSaved?: (salesId: string, routed: 'fulfill' | 'pending') => void;
+  // PR147: report whether un-saved input exists (customer picked / lines added) so the shell's ← back
+  // can confirm before discarding a draft. A saved order (result screen) is not dirty.
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   // Panel 1 — customer
   const [customer, setCustomer] = useState<CustomerHit | null>(null);
@@ -138,6 +142,11 @@ export default function OrderEntry({
   // still the latest (debounced typing can fire several overlapping requests).
   const custSeq = useRef(0);
   const skuSeq = useRef(0);
+
+  // PR147: dirty = anything entered and not yet saved (the shell's ← back confirms before discarding).
+  useEffect(() => {
+    onDirtyChange?.(!result && (!!customer || lines.length > 0));
+  }, [customer, lines, result, onDirtyChange]);
 
   // ── derived totals ──
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.qty * l.unit_price_idr, 0), [lines]);
