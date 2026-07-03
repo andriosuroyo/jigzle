@@ -118,20 +118,28 @@ export default function FulfillBoard({
     if (!detail || addressId == null || courierId == null) return;
     const svc = courierServices.find((c) => c.id === courierId) ?? null;
     if (!svc) { setError('Pick a courier.'); return; }
+    // PR145: courier rows added via Settings carry only a label (courier column '') — derive the
+    // structured pair from the label (first word = base courier, rest = speed) so they still ship.
+    // New/edited rows get the same derivation persisted by Settings; this covers pre-fix rows.
+    const labelTokens = svc.label.trim().split(/\s+/).filter(Boolean);
+    const courierName = (svc.courier || '').trim() || labelTokens[0] || '';
+    const courierSpeed = svc.speed ?? ((svc.courier || '').trim() ? null : labelTokens.slice(1).join(' ') || null);
+    if (!courierName) { setError('This courier has no name — edit its label in Settings → Shipping → Couriers.'); return; }
     const myReq = ++reqIdRef.current;
     setCommitting(true);
     setError(null);
     try {
-      await sendToOutbound({
+      const { error: sendErr } = await sendToOutbound({
         sales_id: detail.sales_id,
         line_ids: detail.lines.map((l) => l.line_id),
         address_id: addressId,
-        courier: svc.courier,
-        courier_speed: svc.speed,
+        courier: courierName,
+        courier_speed: courierSpeed,
         courier_label: svc.label,
         tracking: tracking.trim() || null,
       });
       if (reqIdRef.current !== myReq) return; // superseded — don't clobber a newer selection
+      if (sendErr) { setError(sendErr); return; }
       setSuccess(`${detail.sales_id} sent to Outbound (${svc.label}).`);
       onAdvance?.(detail.sales_id, 'Outbound'); // JZ-001: pipeline toast
       setDetail(null);
@@ -152,8 +160,9 @@ export default function FulfillBoard({
     setCommitting(true);
     setError(null);
     try {
-      await sendBackToPending(detail.sales_id);
+      const { error: backErr } = await sendBackToPending(detail.sales_id);
       if (reqIdRef.current !== myReq) return;
+      if (backErr) { setError(backErr); return; }
       setSuccess(`${detail.sales_id} sent back to Pending.`);
       onAdvance?.(detail.sales_id, 'Pending'); // JZ-001: pipeline toast (moves back a stage)
       setDetail(null);
@@ -177,13 +186,16 @@ export default function FulfillBoard({
     setCommitting(true);
     setError(null);
     try {
-      await sendBackToPending(detail.sales_id);
-      try {
-        await deletePendingOrder(detail.sales_id);
-      } catch (e) {
-        throw new Error(
-          `${e instanceof Error ? e.message : 'Delete failed.'} — ${detail.sales_id} was returned to Pending, not deleted.`
-        );
+      const { error: backErr } = await sendBackToPending(detail.sales_id);
+      if (backErr) {
+        if (reqIdRef.current === myReq) setError(backErr);
+        return;
+      }
+      const { error: delErr } = await deletePendingOrder(detail.sales_id);
+      if (delErr) {
+        if (reqIdRef.current === myReq) setError(`${delErr} — ${detail.sales_id} was returned to Pending, not deleted.`);
+        await refreshQueue();
+        return;
       }
       if (reqIdRef.current !== myReq) return;
       setSuccess(`${detail.sales_id} deleted.`);
