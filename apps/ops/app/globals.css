@@ -1344,6 +1344,21 @@ img.sku-img { background: #e8e8e8; }
 /* New-order bodyview: back row above the form (tabs hidden, breadcrumb stays). */
 .bv-backrow { max-width: 1040px; margin: 0 auto; padding: 12px 18px 0; }
 
+/* ── PR150 — To-buy stock pills (icon + qty) + the standard red trash delete button ── */
+.stock-pills { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; flex-shrink: 0; }
+.stock-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--paper); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--brown-dark); }
+.stock-pill svg { width: 12px; height: 12px; }
+.stock-pill.zero { opacity: 0.4; }
+.btn-trash { flex-shrink: 0; width: 34px; height: 30px; border: none; border-radius: 8px; background: var(--red); color: white; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.btn-trash svg { width: 15px; height: 15px; }
+.btn-trash:active { filter: brightness(0.9); }
+.btn-trash:disabled { opacity: 0.5; cursor: not-allowed; }
+/* full-width "+ add item" at the top of the manual buy-list (replaces the section header row) */
+.po-add-full { width: 100%; justify-content: center; margin-bottom: 8px; }
+/* card middle line: name (ellipsised) left, pills / customer id right */
+.po-card-mid .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-card-cust { flex-shrink: 0; margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--brown-dark); }
+
 /* ── PR148 — delete-order confirm overlay: consequence bullets inside the shared ConfirmModal ── */
 .del-confirm-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink); }
 
