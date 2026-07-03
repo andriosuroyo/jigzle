@@ -14,6 +14,7 @@ import type {
   InboundLabel,
   LocalCourier,
   PaymentMethod,
+  ShipmentCourier,
   SettingPatch,
   SettingPayload,
   SettingRow,
@@ -32,6 +33,7 @@ const TABLE: Record<SettingsKind, string> = {
   channel: 'settings_customer_channels',
   staff: 'settings_staff',
   local_courier: 'settings_local_couriers',
+  ship_courier: 'settings_shipment_couriers',
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -46,6 +48,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   channel: ['label', 'icon', 'is_active'],
   staff: ['label', 'icon', 'is_active'],
   local_courier: ['label', 'icon', 'is_active'],
+  ship_courier: ['label', 'icon', 'is_active'],
 };
 
 // uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
@@ -86,7 +89,7 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
@@ -95,8 +98,23 @@ export async function getSettings(): Promise<SettingsData> {
     list<ChannelOption>(TABLE.channel),
     listSafe<StaffMember>(TABLE.staff),
     listSafe<LocalCourier>(TABLE.local_courier), // 0055 — degrades to [] until the migration is applied
+    listSafe<ShipmentCourier>(TABLE.ship_courier), // 0056 — same degrade
   ]);
-  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers };
+  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers };
+}
+
+// 0056: Purchasing History's shipment-courier pick-list (degrades to [] until 0056 is applied).
+export async function getShipmentCouriers(): Promise<ShipmentCourier[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(TABLE.ship_courier)
+    .select('*')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as ShipmentCourier[];
 }
 
 // 0055: Purchasing To-forwarder's local-courier suggestions (mirrors getStaffOptions' degrade-to-[]).

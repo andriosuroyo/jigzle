@@ -257,6 +257,23 @@ export async function setShipmentNote(shipId: string, note: string): Promise<voi
   if (error) throw new Error(`setShipmentNote: ${error.message}`);
 }
 
+// ── PR153: set the shipment's international courier + tracking (Purchasing History detail). Returns
+// the error as data (PR145 convention — a thrown message would be masked in production). Empty → NULL. ──
+export async function setShipmentCourier(
+  shipId: string,
+  courier: string,
+  tracking: string
+): Promise<{ error: string | null }> {
+  const sid = shipId.trim();
+  if (!sid) return { error: 'setShipmentCourier: a ship id is required' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from('shipments')
+    .update({ courier: courier.trim() || null, tracking: tracking.trim() || null })
+    .eq('ship_id', sid);
+  return { error: error ? `setShipmentCourier: ${error.message}` : null };
+}
+
 // ── SKU search (catalogue text + barcode + brand name), with live available + incoming (D3) ──
 // (SkuHit in ./types). PR73: the add-item search also matches on brand — brands.name → brand_prefix →
 // catalogue.brand_prefix — so "lego", a piece count, a code, a name, or a barcode all resolve a SKU.
@@ -1197,6 +1214,14 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
   const inboundRecv = await inboundReceivedByShip(supabase, ships.map((s) => s.ship_id));
   const recvOf = (s: ShipRow) => s.received_date || inboundRecv.get(s.ship_id) || null;
 
+  // PR153: shipments.courier is 0056 — read it in a SEPARATE query that degrades to an empty map, so
+  // History still loads while the migration hasn't been applied yet.
+  const courierByShip = new Map<string, string>();
+  {
+    const { data: cr } = await supabase.from('shipments').select('ship_id,courier').not('courier', 'is', null).limit(5000);
+    for (const c of (cr ?? []) as { ship_id: string; courier: string | null }[]) if (c.courier) courierByShip.set(c.ship_id, c.courier);
+  }
+
   const shipIds = ships.map((s) => s.ship_id);
   // items per ship = distinct identifiers from PO lines (item_code ?? raw) ∪ inbound-received codes, so a
   // legacy shipment with no PO rows still counts what actually arrived. Cost + suppliers from PO lines.
@@ -1238,6 +1263,23 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     for (const s of (sup ?? []) as { supplier_id: number; name: string | null }[]) supName.set(s.supplier_id, s.name ?? `#${s.supplier_id}`);
   }
 
+  // PR153: resolve the items' catalogue names once (batched) so the History search matches item
+  // names, not just codes. Codes with no catalogue row simply contribute no name.
+  const nameByCode = new Map<string, string>();
+  {
+    const allCodes = [...new Set([...codesByShip.values()].flatMap((set) => [...set]))];
+    for (let i = 0; i < allCodes.length; i += 200) {
+      const { data: cat } = await supabase
+        .from('catalogue')
+        .select('item_code,original_name,translate_name,self_code')
+        .in('item_code', allCodes.slice(i, i + 200));
+      for (const c of (cat ?? []) as { item_code: string; original_name: string | null; translate_name: string | null; self_code: string | null }[]) {
+        const nm = c.translate_name || c.original_name || c.self_code;
+        if (nm) nameByCode.set(c.item_code, nm);
+      }
+    }
+  }
+
   const rows: ShipmentHistoryRow[] = ships.map((s) => {
     const codes = [...(codesByShip.get(s.ship_id) ?? [])].sort((a, b) => a.localeCompare(b));
     return {
@@ -1247,10 +1289,12 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
       ship_date: s.ship_date,
       received_date: recvOf(s),
       tracking: s.tracking,
+      courier: courierByShip.get(s.ship_id) ?? null,
       completed: s.status === 'completed',
       note: s.note,
       item_count: codes.length,
       sku_codes: codes,
+      sku_names: codes.map((c) => nameByCode.get(c)).filter((n): n is string => !!n),
       total_cost: costByShip.has(s.ship_id) ? costByShip.get(s.ship_id)! : null,
       currency: currencyOf(s),
       suppliers: [...(supIdsByShip.get(s.ship_id) ?? [])].map((id) => supName.get(id) ?? `#${id}`).sort(),

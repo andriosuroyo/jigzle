@@ -162,6 +162,7 @@ export default function OrderBoard({
   embedded = false,
   bucket,
   localCouriers = [],
+  onDetailOpenChange,
   onCountChange,
 }: {
   initialQueue: OpenPORow[];
@@ -174,6 +175,8 @@ export default function OrderBoard({
   bucket?: 'forwarder' | 'ship';
   // 0055 — Settings-managed local (domestic) courier suggestions for the To-forwarder form.
   localCouriers?: string[];
+  // PR153: report when a bucket's bodyview DETAIL is open (the shell hides the pipeline tabs).
+  onDetailOpenChange?: (open: boolean) => void;
   onCountChange?: (n: number) => void;
 }) {
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
@@ -197,6 +200,10 @@ export default function OrderBoard({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState(false); // inline delete-order confirm (edit pane)
+
+  // PR153: a bucketed bodyview detail is open → the shell hides the pipeline tabs.
+  const bvDetailOpen = !!bucket && mode === 'edit' && !!editPo;
+  useEffect(() => { onDetailOpenChange?.(bvDetailOpen); }, [bvDetailOpen, onDetailOpenChange]);
 
   // SKU search
   const [skuQuery, setSkuQuery] = useState('');
