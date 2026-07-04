@@ -80,9 +80,15 @@ export default function PurchasingShell({
       </div>
       )}
 
+      {/* PR167 — keep every board MOUNTED (hidden when inactive), like the Sales/Outbound shells. With
+          the old `{tab === x && <Board/>}` a tab switch unmounted the board and re-mounted it from these
+          stale page-load props, so a just-deleted item re-appeared until a full reload. Staying mounted
+          preserves each board's own post-delete state across tab switches. */}
       <div className="orders-panels">
-        {tab === 'tobuy' && <ToBuyBoard planned={planned} preorders={preorders} soldOut={soldOut} />}
-        {tab === 'forwarder' && (
+        <div hidden={tab !== 'tobuy'}>
+          <ToBuyBoard planned={planned} preorders={preorders} soldOut={soldOut} />
+        </div>
+        <div hidden={tab !== 'forwarder'}>
           <OrderBoard
             embedded
             bucket="forwarder"
@@ -94,8 +100,8 @@ export default function PurchasingShell({
             onDetailOpenChange={setDetailOpen}
             userEmail={userEmail}
           />
-        )}
-        {tab === 'ship' && (
+        </div>
+        <div hidden={tab !== 'ship'}>
           <OrderBoard
             embedded
             bucket="ship"
@@ -106,8 +112,10 @@ export default function PurchasingShell({
             onDetailOpenChange={setDetailOpen}
             userEmail={userEmail}
           />
-        )}
-        {tab === 'history' && <PurchasingHistoryBoard initialShipments={shipmentHistory} shipmentCouriers={shipmentCouriers} onDetailOpenChange={setDetailOpen} />}
+        </div>
+        <div hidden={tab !== 'history'}>
+          <PurchasingHistoryBoard initialShipments={shipmentHistory} shipmentCouriers={shipmentCouriers} onDetailOpenChange={setDetailOpen} />
+        </div>
       </div>
     </div>
   );
