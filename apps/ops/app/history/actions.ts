@@ -56,11 +56,17 @@ export async function setOrderNote(salesId: string, note: string): Promise<strin
 export async function getHistory(query = ''): Promise<HistoryRow[]> {
   const supabase = createSupabaseServerClient();
   const raw = sanitize(query);
+  const SELECT =
+    'sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customer_id,customers(name,phone),order_lines(line_id,fulfilled_at,shipped_at,is_cancelled)';
 
   // Resolve the search filter ONCE (a date range, or the OR-clauses for id / customer / SKU), then apply
   // it to every page below. Empty query → no filter, so History returns the whole terminal-order log.
   let dateRange: [string, string] | null = null;
   let orClauses: string[] | null = null;
+  // PR169 (Option B) — order ids that SHIPPED a non-cancelled line of the searched SKU. Terminal ones
+  // already surface in the main scan; the IN-FLIGHT (non-terminal) ones are appended afterwards so a SKU
+  // search shows every unit that actually left, even from a still-open order.
+  let shippedSkuSalesIds: string[] = [];
   if (raw) {
     // a date-like query (YYYY, YYYY-MM, YYYY-MM-DD) filters order_date by [lower, upperExclusive);
     // otherwise match sales_id OR a customer whose name contains the query.
@@ -70,10 +76,12 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
       // (PR161: SKU search — the order_lines.item_code index makes the contains-lookup cheap).
       const [{ data: custs }, { data: lineRows }] = await Promise.all([
         supabase.from('customers').select('customer_id').ilike('name', `%${raw}%`).limit(500),
-        supabase.from('order_lines').select('sales_id').ilike('item_code', `%${raw}%`).limit(1000),
+        supabase.from('order_lines').select('sales_id,shipped_at,is_cancelled').ilike('item_code', `%${raw}%`).limit(2000),
       ]);
       const ids = ((custs ?? []) as { customer_id: number }[]).map((c) => c.customer_id);
-      const salesIds = Array.from(new Set(((lineRows ?? []) as { sales_id: string }[]).map((r) => r.sales_id)));
+      const lr = (lineRows ?? []) as { sales_id: string; shipped_at: string | null; is_cancelled: boolean }[];
+      const salesIds = Array.from(new Set(lr.map((r) => r.sales_id)));
+      shippedSkuSalesIds = Array.from(new Set(lr.filter((r) => r.shipped_at && !r.is_cancelled).map((r) => r.sales_id)));
       orClauses = [`sales_id.ilike.%${raw}%`];
       if (ids.length) orClauses.push(`customer_id.in.(${ids.join(',')})`);
       if (salesIds.length) orClauses.push(`sales_id.in.(${salesIds.map((s) => `"${s}"`).join(',')})`);
@@ -87,7 +95,7 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
   for (let from = 0; from < HISTORY_SCAN; from += PAGE) {
     let q = supabase
       .from('orders')
-      .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customer_id,customers(name,phone),order_lines(line_id,fulfilled_at,shipped_at,is_cancelled)')
+      .select(SELECT)
       .in('status', ['Complete', 'Cancelled'])
       .order('order_date', { ascending: false, nullsFirst: false })
       .order('sales_id', { ascending: false })
@@ -98,6 +106,22 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
     if (error || !page) break;
     data.push(...(page as OrderRow[]));
     if (page.length < PAGE) break;
+  }
+
+  // PR169 (Option B) — append the IN-FLIGHT orders that shipped a unit of the searched SKU but aren't
+  // terminal (so the status filter above skipped them). They keep their real state (Need send / Need
+  // payment / Ready to ship), so the board flags them as in-flight rather than as finished orders.
+  if (shippedSkuSalesIds.length) {
+    const have = new Set(data.map((o) => o.sales_id as string));
+    const pending = shippedSkuSalesIds.filter((s) => !have.has(s)); // terminal ones already returned above
+    for (let i = 0; i < pending.length; i += 200) {
+      const { data: extra } = await supabase
+        .from('orders')
+        .select(SELECT)
+        .in('sales_id', pending.slice(i, i + 200))
+        .order('order_date', { ascending: false, nullsFirst: false });
+      if (extra) data.push(...(extra as OrderRow[]));
+    }
   }
 
   return data.map((o) => {
