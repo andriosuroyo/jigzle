@@ -221,7 +221,7 @@ export default function FulfillBoard({
         <>
           {/* No queue-count header — the Fulfill tab badge above already shows the count. */}
           <div className="search-row" style={{ padding: '0 0 8px' }}>
-            <SearchInput value={search} onChange={setSearch} placeholder="Search customer or SKU…" />
+            <SearchInput value={search} onChange={setSearch} placeholder="Search by customer ID or SKU…" />
           </div>
           {shown.length === 0 && <div className="hint fq-empty">{queue.length === 0 ? 'Nothing waiting to send.' : 'No match.'}</div>}
           <ul className="fq-list">

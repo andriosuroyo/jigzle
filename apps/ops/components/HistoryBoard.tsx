@@ -67,6 +67,7 @@ export default function HistoryBoard({
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [copiedId, setCopiedId] = useState(false); // PR165: order-number copy feedback
   const sumReqRef = useRef(0);
   const searchSeq = useRef(0);   // stale-response guard for the live search
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
@@ -141,6 +142,18 @@ export default function HistoryBoard({
     setEditingNote(true);
   }
 
+  // PR165: one-tap copy of the order number, with a brief ✓ confirmation.
+  async function copyOrderId() {
+    if (!summary) return;
+    try {
+      await navigator.clipboard.writeText(summary.sales_id);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 1500);
+    } catch {
+      setError('Copy failed — select the order number and copy manually.');
+    }
+  }
+
   async function doSaveNote() {
     if (!summary) return;
     setSavingNote(true);
@@ -206,7 +219,7 @@ export default function HistoryBoard({
       {!selId && (
         <>
           <div className="search-row" style={{ padding: '0 0 8px' }}>
-            <SearchInput value={query} onChange={setQuery} placeholder="Name, order id, SKU, or date (YYYY-MM-DD)…" />
+            <SearchInput value={query} onChange={setQuery} placeholder="Search by customer ID, order ID, or SKU…" />
           </div>
           {/* Year sub-tabs (newest first, each with a count) — the full log divided by order year. */}
           {years.length > 0 && (
@@ -368,7 +381,13 @@ export default function HistoryBoard({
                 <button className="btn-link pend-delete" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={deleting}>Delete order</button>
               </div>
 
-              <div className="fd-orderid">{summary.sales_id}</div>
+              {/* PR165: order number at the bottom right with a one-tap copy icon */}
+              <div className="fd-orderid">
+                <span>{summary.sales_id}</span>
+                <button className="fd-orderid-copy" onClick={copyOrderId} aria-label="Copy order number" title="Copy order number">
+                  {copiedId ? '✓ Copied' : '⧉'}
+                </button>
+              </div>
 
               {confirmDel && (
                 <DeleteOrderConfirm
