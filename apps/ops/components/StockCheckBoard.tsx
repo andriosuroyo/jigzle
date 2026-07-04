@@ -16,6 +16,7 @@ import AdjustmentsTab from '@/components/AdjustmentsTab';
 import { getSessions, openStockCheck } from '@/app/stock-check/actions';
 import { modeLabel } from '@/app/stock-check/types';
 import type { BrandOption, NewCountInput, SessionRow, StockCheckMode, StockCheckScope } from '@/app/stock-check/types';
+import SearchInput from '@/components/SearchInput';
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -257,7 +258,7 @@ function NewCountModal({
 
           {scope === 'brand' && (
             <div className="sc-brandpick">
-              <input type="text" placeholder="filter brands" value={filter} onChange={(e) => setFilter(e.target.value)} />
+              <SearchInput value={filter} onChange={setFilter} placeholder="filter brands" />
               <div className="sc-brandlist">
                 {shown.map((b) => (
                   <label key={b.prefix} className="sc-brandopt">

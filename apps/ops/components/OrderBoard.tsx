@@ -23,6 +23,7 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import TrashButton from '@/components/TrashButton';
+import SearchInput from '@/components/SearchInput';
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -1253,12 +1254,7 @@ export default function OrderBoard({
           ) : (
             <>
               <div className="scan-row">
-                <input
-                  type="text"
-                  placeholder="search SKU by code / name"
-                  value={skuQuery}
-                  onChange={(e) => setSkuQuery(e.target.value)}
-                />
+                <SearchInput value={skuQuery} onChange={setSkuQuery} placeholder="search SKU by code / name" />
               </div>
               {skuQuery.trim().length >= 2 && !skuSearching && skuHits.length === 0 && (
                 <div className="hint" style={{ marginTop: 6 }}>No matching SKUs.</div>
@@ -1315,12 +1311,7 @@ export default function OrderBoard({
           ) : (
             <>
               <div className="scan-row">
-                <input
-                  type="text"
-                  placeholder="search customer by name / phone"
-                  value={custQuery}
-                  onChange={(e) => setCustQuery(e.target.value)}
-                />
+                <SearchInput value={custQuery} onChange={setCustQuery} placeholder="search customer by name / phone" />
               </div>
               {custQuery.trim().length >= 2 && !custSearching && custHits.length === 0 && (
                 <div className="hint" style={{ marginTop: 6 }}>No matching customers.</div>

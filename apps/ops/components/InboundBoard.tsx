@@ -34,6 +34,7 @@ import ReceiveConfirm from '@/components/ReceiveConfirm';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { getActiveStaff, setActiveStaff } from '@/components/staffStore';
+import SearchInput from '@/components/SearchInput';
 
 // Never render a raw internal id as a name (Fulfill F4 parity, §4b). When the only "name" we have is
 // the item_code itself (an edge case — stub creation + search both supply real names), show this.
@@ -880,15 +881,14 @@ export default function InboundBoard({
               {!stub ? (
                 <>
                   <div className="scan-row">
-                    <input
+                    <SearchInput
                       ref={skuInputRef}
-                      type="text"
                       autoFocus
                       placeholder="Code, name, or piece count…"
                       value={skuQuery}
-                      onChange={(e) => { setSkuQuery(e.target.value); setSkuSearched(false); }}
+                      onChange={(v) => { setSkuQuery(v); setSkuSearched(false); }}
+                      onClear={clearSearch}
                     />
-                    {(skuQuery || skuHits.length > 0) && <button className="btn-link" onClick={clearSearch}>Clear</button>}
                   </div>
                   {searching && <div className="hint">Searching…</div>}
                   {!searching && skuSearched && skuHits.length === 0 && (
