@@ -388,10 +388,15 @@ button.po-pick-btn:active { background: var(--paper); }
 .sku-name-line { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stock-stats { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
 .sku-avail { font-size: 11px; color: var(--green); font-weight: 600; }
+/* PR157: compact third line (the To-buy card sizing — 26/28px stepper, 30px controls) so the card's
+   three lines bottom-align with the md image. */
+.sku-main { gap: 4px; }
 .sku-add { display: flex; align-items: center; gap: 6px; }
+.sku-add .qty-step button { width: 26px; height: 28px; font-size: 16px; }
+.sku-add .qty-step input { width: 36px; height: 28px; font-size: 14px; }
 .sku-add .qty { width: 64px; } .sku-add .price { flex: 1; min-width: 0; }
-.sku-add input.price, .sku-add select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
-.sku-add .btn-secondary { flex-shrink: 0; }
+.sku-add input.price, .sku-add select { height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+.sku-add .btn-secondary { flex-shrink: 0; height: 30px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; }
 /* SA-1: "Confirm address later" checkbox row in the Address panel */
 .addr-later { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin-bottom: 8px; cursor: pointer; }
 .addr-later input { width: 16px; height: 16px; }
