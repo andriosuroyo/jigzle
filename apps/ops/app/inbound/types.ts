@@ -104,6 +104,7 @@ export interface InboundHistoryRow {
   courier: string | null;            // 0056 — international carrier (with tracking in the detail header)
   ship_date: string | null;          // PR154 — shipped date, for the detail header subtext
   is_adhoc: boolean;                 // a 📦YYMMXXX id with no shipments-ledger row
+  is_opening_balance?: boolean;      // PR162 — the synthetic "Up to 2023" pre-2023 snapshot (search-only, read-only)
   items: InboundHistoryItem[];
   sku_codes: string[];               // A-Z, for the SKU search / quick-view line
   item_count: number;                // distinct SKUs received

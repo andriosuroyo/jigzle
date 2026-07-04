@@ -214,13 +214,16 @@ export default function InboundHistoryBoard({
             <div className="fd-head">
               <div className="fd-title-row">
                 <div className="fd-title">{sel.ship_id}</div>
-                <button className="btn-link" onClick={openEdit} disabled={editing}>Edit ship id</button>
+                {/* PR162: the synthetic "Up to 2023" opening-balance entry is read-only (no ship_id to edit) */}
+                {!sel.is_opening_balance && <button className="btn-link" onClick={openEdit} disabled={editing}>Edit ship id</button>}
               </div>
               <div className="fd-sub">
-                Received {fmtDateTime(sel.received_at, sel.receive_date)}{sel.staff ? ` by ${sel.staff}` : ''}
+                {sel.is_opening_balance
+                  ? 'Opening balance — arrivals recorded up to 2023'
+                  : `Received ${fmtDateTime(sel.received_at, sel.receive_date)}${sel.staff ? ` by ${sel.staff}` : ''}`}
               </div>
               {/* PR154 header subtext: shipped date + shipment courier & tracking (ledger shipments only) */}
-              {!sel.is_adhoc && (
+              {!sel.is_adhoc && !sel.is_opening_balance && (
                 <div className="fd-sub">
                   shipped {fmtDate(sel.ship_date)} · {[sel.courier, sel.tracking].filter(Boolean).join(' ') || 'no tracking'}
                 </div>
@@ -247,7 +250,9 @@ export default function InboundHistoryBoard({
               </ul>
             </section>
 
-            {/* Delete this received entry (text-button; removes the inbound rows, stock self-corrects). */}
+            {/* Delete this received entry (text-button; removes the inbound rows, stock self-corrects).
+                Hidden for the read-only opening-balance entry (no ship_id to delete by). */}
+            {!sel.is_opening_balance && (
             <div className="ob-return">
               {!confirmDelete ? (
                 <button className="btn-link danger" onClick={() => setConfirmDelete(true)} disabled={deleting}>Delete entry</button>
@@ -259,6 +264,7 @@ export default function InboundHistoryBoard({
                 </span>
               )}
             </div>
+            )}
           </div>
         </>
       )}
