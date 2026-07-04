@@ -52,7 +52,9 @@ export default function PurchasingShell({
 
   // tab badges from the initial server load (static for step 1; refreshes on reload)
   const forwarderCount = useMemo(() => initialQueue.filter((p) => FORWARDER_STATUSES.includes(p.status as POOpenStatus)).length, [initialQueue]);
-  const shipCount = useMemo(() => initialQueue.filter((p) => p.status === 'With Forwarder').length, [initialQueue]);
+  // PR163: To ship counts only ungrouped POs — once grouped into a shipment (ship_id set) a PO moves to
+  // History → Active, so it leaves the To-ship queue (matches OrderBoard's `shown` filter).
+  const shipCount = useMemo(() => initialQueue.filter((p) => p.status === 'With Forwarder' && !p.ship_id).length, [initialQueue]);
 
   return (
     <div className="ops">
