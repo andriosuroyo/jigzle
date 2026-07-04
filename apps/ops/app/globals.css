@@ -111,7 +111,7 @@ input, textarea, select, button { font-family: inherit; }
 .po-card-poid { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--muted); }
 .po-card-qty { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--brown-dark); }
 /* a muted date at the top-right of a To-buy card's first line (create / order date) */
-.po-card-date { flex-shrink: 0; margin-left: 8px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.po-card-date { flex-shrink: 0; margin-left: auto; font-size: 11px; font-weight: 700; color: var(--muted); }  /* PR158: right-aligned */
 /* quickview list: cap at ~6 cards then scroll (the rest of the page stays put) */
 .po-list-scroll { max-height: 25rem; overflow-y: auto; }
 
@@ -168,6 +168,13 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-pick-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-pick-l1 .ff-name { flex: 1; }
 .po-pick-l2 { font-size: 11px; color: var(--muted); }
+/* PR158 — pick-row line 2: name left (ellipsised) + stock pills right */
+.po-pick-mid { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.po-pick-mid .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+/* PR158 — add-item overlay: Qty + Product link share one line */
+.po-field-row { display: flex; align-items: flex-end; gap: 10px; }
+.po-field-row .po-field { margin-bottom: 0; }
+.po-field-row .po-field.grow { flex: 1; min-width: 0; }
 .po-pick-x { flex-shrink: 0; width: 30px; height: 30px; border: none; border-radius: 8px; background: var(--red-tint); color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; }
 .po-pick-x:active { background: #f3c9bf; }
 

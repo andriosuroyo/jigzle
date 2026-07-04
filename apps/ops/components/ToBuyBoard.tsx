@@ -55,13 +55,6 @@ function UrgencyChip({ urgency }: { urgency: Urgency | null }) {
   return <span className={`urg-chip urg-${urgency}`}>{urgency}</span>;
 }
 
-// pipeline figures in the canonical order — forwarder → shipped → warehouse. PR150: rendered as
-// icon+qty pills (StockPills); this text version remains only for the add/pick rows' compact line.
-function StockFigs({ wf, otw, avail }: { wf: number; otw: number; avail: number }) {
-  const fig = (n: number) => <b className={n > 0 ? 'fig-pos' : 'fig-zero'}>{n}</b>;
-  return <>at forwarder {fig(wf)} · shipped {fig(otw)} · warehouse {fig(avail)}</>;
-}
-
 // the bare hostname of a URL (no www.), for the favicon + a tidy fallback
 function hostOf(url: string): string | null {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; }
@@ -433,7 +426,7 @@ export default function ToBuyBoard({
                   placeholder="search SKU by code / name / piece count / brand"
                 />
               </div>
-              {/* search results — quick-view rows (small picture, code + name, availability line) */}
+              {/* search results — PR158 rows: l1 = SKU code; l2 = name (left) + stock pills (right) */}
               {!picked && skuHits.length > 0 && (
                 <ul className="result-list" style={{ marginTop: 6 }}>
                   {skuHits.map((h) => (
@@ -441,8 +434,11 @@ export default function ToBuyBoard({
                       <button className="po-pick po-pick-btn" onClick={() => pick(h)}>
                         <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
                         <div className="po-pick-main">
-                          <div className="po-pick-l1"><span className="ff-code">{h.item_code}</span><span className="ff-name">{h.name}{h.brand ? ` · ${h.brand}` : ''}</span></div>
-                          <div className="po-pick-l2"><StockFigs wf={h.with_forwarder} otw={h.on_the_way} avail={h.available} /></div>
+                          <div className="po-pick-l1"><span className="ff-code">{h.item_code}</span></div>
+                          <div className="po-pick-mid">
+                            <span className="ff-name">{h.name}{h.brand ? ` · ${h.brand}` : ''}</span>
+                            <StockPills wf={h.with_forwarder} otw={h.on_the_way} avail={h.available} />
+                          </div>
                         </div>
                       </button>
                     </li>
@@ -450,39 +446,42 @@ export default function ToBuyBoard({
                 </ul>
               )}
 
-              {/* chosen SKU — same quick-view row, with a red × to remove */}
+              {/* chosen SKU — same row style; the trash delete stays foremost right (PR158) */}
               {picked && (
                 <div className="po-pick" style={{ marginTop: 8 }}>
                   <SkuImage status={imgMap[picked.item_code]?.status} displayUrl={imgMap[picked.item_code]?.displayUrl} name={picked.name} size={SKU_IMG.sm} />
                   <div className="po-pick-main">
-                    <div className="po-pick-l1"><span className="ff-code">{picked.item_code}</span><span className="ff-name">{picked.name}</span></div>
-                    <div className="po-pick-l2">
+                    <div className="po-pick-l1"><span className="ff-code">{picked.item_code}</span></div>
+                    <div className="po-pick-mid">
+                      <span className="ff-name">{picked.name}</span>
                       {pickedStock
-                        ? <StockFigs wf={pickedStock.with_forwarder} otw={pickedStock.on_the_way} avail={pickedStock.available} />
-                        : 'loading…'}
+                        ? <StockPills wf={pickedStock.with_forwarder} otw={pickedStock.on_the_way} avail={pickedStock.available} />
+                        : <span className="hint">loading…</span>}
                     </div>
                   </div>
-                  <button className="po-pick-x" onClick={() => { setPicked(null); setPickedStock(null); }} aria-label="Remove">×</button>
+                  <TrashButton onClick={() => { setPicked(null); setPickedStock(null); }} ariaLabel="Remove" />
                 </div>
               )}
               {isNewSku && (
                 <div className="validation ok" style={{ margin: '8px 0' }}>New SKU: it will be added to the catalog.</div>
               )}
 
-              {/* item fields — always shown, qty defaults to 1 */}
+              {/* item fields — always shown, qty defaults to 1. PR158: Qty + Product link share a line
+                  (link fills the space to the right) to keep the overlay short. */}
               <div className="po-form" style={{ marginTop: 4 }}>
-                <div className="po-field">
-                  <label>Qty</label>
-                  <span className="qty-step">
-                    <button type="button" onClick={() => setQty((q) => Math.max(0, q - 1))} disabled={qty <= 0} aria-label="decrease">−</button>
-                    <input type="number" inputMode="numeric" min={0} value={qty} onChange={(e) => setQty(Math.max(0, parseInt(e.target.value, 10) || 0))} />
-                    <button type="button" onClick={() => setQty((q) => q + 1)} aria-label="increase">+</button>
-                  </span>
-                </div>
-
-                <div className="po-field">
-                  <label>Product link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  <input type="text" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} />
+                <div className="po-field-row">
+                  <div className="po-field">
+                    <label>Qty</label>
+                    <span className="qty-step">
+                      <button type="button" onClick={() => setQty((q) => Math.max(0, q - 1))} disabled={qty <= 0} aria-label="decrease">−</button>
+                      <input type="number" inputMode="numeric" min={0} value={qty} onChange={(e) => setQty(Math.max(0, parseInt(e.target.value, 10) || 0))} />
+                      <button type="button" onClick={() => setQty((q) => q + 1)} aria-label="increase">+</button>
+                    </span>
+                  </div>
+                  <div className="po-field grow">
+                    <label>Product link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                    <input type="text" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} />
+                  </div>
                 </div>
 
                 <div className="po-field">
