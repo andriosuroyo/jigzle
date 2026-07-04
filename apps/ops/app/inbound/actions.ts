@@ -329,6 +329,67 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
     r.ship_date = meta?.ship_date ?? null;
     r.is_adhoc = !meta;
   }
+
+  // PR162 — opening-balance ("Up to 2023") rows are a bulk pre-2023 snapshot with no ship_id, so the
+  // default History (real receipts, filtered above) hides them. A SKU SEARCH should still surface an
+  // item's earlier arrivals, so on a non-empty query collect the matching opening-balance rows into ONE
+  // synthetic, read-only "Up to 2023" entry (they share no ship_id to group by). Appended last so it
+  // sits after the real receipts within its 2023 year bucket.
+  if (q) {
+    type OBRow = { item_code: string | null; item_code_raw: string | null; qty: number; excluded_qty: number | null; receive_date: string | null };
+    const obRows: OBRow[] = [];
+    for (let from = 0; from < HISTORY_ROW_SCAN; from += PAGE) {
+      const { data } = await supabase
+        .from('inbound')
+        .select('item_code,item_code_raw,qty,excluded_qty,receive_date')
+        .eq('is_opening_balance', true)
+        .or(`item_code.ilike.%${q}%,item_code_raw.ilike.%${q}%`)
+        .order('inbound_id', { ascending: false })
+        .range(from, from + PAGE - 1);
+      const page = (data ?? []) as unknown as OBRow[];
+      obRows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    if (obRows.length) {
+      // resolve names for the matched codes (a search hits a small set — one chunked lookup)
+      const obCodes = [...new Set(obRows.map((r) => r.item_code).filter((c): c is string => !!c))];
+      const obNames = new Map<string, string>();
+      for (let i = 0; i < obCodes.length; i += CHUNK) {
+        const { data: cat } = await supabase
+          .from('catalogue')
+          .select('item_code,translate_name,original_name,self_code')
+          .in('item_code', obCodes.slice(i, i + CHUNK));
+        for (const c of (cat ?? []) as CatNameRow[]) obNames.set(c.item_code, nameOf(c, c.item_code));
+      }
+      const itemMap = new Map<string, InboundHistoryItem>();
+      let latest: string | null = null;
+      for (const r of obRows) {
+        if (r.receive_date && (!latest || r.receive_date > latest)) latest = r.receive_date;
+        const key = r.item_code ?? `raw:${r.item_code_raw ?? ''}`;
+        const name = r.item_code ? obNames.get(r.item_code) ?? r.item_code : r.item_code_raw ?? '(unnamed)';
+        const excl = Number(r.excluded_qty ?? 0) || 0;
+        const sellable = (Number(r.qty ?? 0) || 0) - excl;
+        const cur = itemMap.get(key);
+        if (cur) { cur.qty += sellable; cur.excluded_qty += excl; }
+        else itemMap.set(key, { item_code: r.item_code, name, qty: sellable, excluded_qty: excl });
+      }
+      const items = [...itemMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+      const sku_codes = items.map((i) => i.item_code).filter((c): c is string => !!c).sort((a, b) => a.localeCompare(b));
+      out.push({
+        ship_id: 'Up to 2023',
+        receive_date: latest,
+        received_at: null,
+        staff: null,
+        origin_country: null, tracking: null, courier: null, ship_date: null,
+        is_adhoc: false,
+        is_opening_balance: true,
+        items,
+        sku_codes,
+        item_count: items.length,
+        total_qty: items.reduce((s, i) => s + i.qty, 0),
+      });
+    }
+  }
   return out;
 }
 
