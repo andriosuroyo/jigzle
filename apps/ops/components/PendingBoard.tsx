@@ -195,7 +195,7 @@ export default function PendingBoard({
         <>
           {/* PR149: free-text search over the queue (in-flight orders no longer appear in History). */}
           <div className="search-row" style={{ padding: '0 0 8px' }}>
-            <SearchInput value={search} onChange={setSearch} placeholder="Search customer, order id, or SKU…" />
+            <SearchInput value={search} onChange={setSearch} placeholder="Search by customer ID or SKU…" />
           </div>
           {/* Readiness filter — underline tabs at the top of the queue, each with a live count badge. */}
           <div className="fq-filters" role="tablist" aria-label="Filter by stock readiness">
