@@ -103,7 +103,7 @@ export async function getShipmentForReceive(shipId: string): Promise<ReceiveDeta
 
   const { data: ship } = await supabase
     .from('shipments')
-    .select('ship_id,origin_country,ship_date,tracking,contents,note')
+    .select('ship_id,origin_country,ship_date,tracking,courier,contents,note')
     .eq('ship_id', sid)
     .maybeSingle();
 
@@ -191,6 +191,7 @@ export async function getShipmentForReceive(shipId: string): Promise<ReceiveDeta
     origin_country: (ship?.origin_country as string | null) ?? null,
     ship_date: (ship?.ship_date as string | null) ?? null,
     tracking: (ship?.tracking as string | null) ?? null,
+    courier: (ship?.courier as string | null) ?? null,
     note: (ship?.note as string | null) ?? null,
     is_shipment: !!ship,
     expected,
@@ -278,6 +279,8 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
       staff: g.staff,
       origin_country: null, // meta filled in below for the final (sliced) rows only
       tracking: null,
+      courier: null,
+      ship_date: null,
       is_adhoc: false,
       items,
       sku_codes,
@@ -308,20 +311,22 @@ export async function getReceiveHistory(query: string): Promise<InboundHistoryRo
   // .in() silently fails, mislabelling real shipments as "unmarked"). A ship_id with no
   // shipments-ledger row is an unmarked (📦) receive.
   const shipIds = out.map((r) => r.ship_id);
-  const metaByShip = new Map<string, { origin_country: string | null; tracking: string | null }>();
+  const metaByShip = new Map<string, { origin_country: string | null; tracking: string | null; courier: string | null; ship_date: string | null }>();
   for (let i = 0; i < shipIds.length; i += 100) {
     const { data: ships } = await supabase
       .from('shipments')
-      .select('ship_id,origin_country,tracking')
+      .select('ship_id,origin_country,tracking,courier,ship_date')
       .in('ship_id', shipIds.slice(i, i + 100));
-    for (const s of (ships ?? []) as { ship_id: string; origin_country: string | null; tracking: string | null }[]) {
-      metaByShip.set(s.ship_id, { origin_country: s.origin_country ?? null, tracking: s.tracking ?? null });
+    for (const s of (ships ?? []) as { ship_id: string; origin_country: string | null; tracking: string | null; courier: string | null; ship_date: string | null }[]) {
+      metaByShip.set(s.ship_id, { origin_country: s.origin_country ?? null, tracking: s.tracking ?? null, courier: s.courier ?? null, ship_date: s.ship_date ?? null });
     }
   }
   for (const r of out) {
     const meta = metaByShip.get(r.ship_id);
     r.origin_country = meta?.origin_country ?? null;
     r.tracking = meta?.tracking ?? null;
+    r.courier = meta?.courier ?? null;
+    r.ship_date = meta?.ship_date ?? null;
     r.is_adhoc = !meta;
   }
   return out;
