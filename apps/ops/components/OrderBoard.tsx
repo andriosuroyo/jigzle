@@ -245,7 +245,12 @@ export default function OrderBoard({
   const shown = useMemo(() => {
     if (!bucket) return queue;
     const allowed = BUCKET_STATUSES[bucket];
-    return queue.filter((p) => allowed.includes(p.status as POOpenStatus));
+    let rows = queue.filter((p) => allowed.includes(p.status as POOpenStatus));
+    // PR163: To ship lists only POs NOT yet grouped into a shipment. Once grouped (ship_id set) a PO has
+    // shipped from the forwarder and lives under its shipment in History → Active, so it drops out of the
+    // To-ship work queue (and its count badge) instead of lingering as an already-shipped row.
+    if (bucket === 'ship') rows = rows.filter((p) => !p.ship_id);
+    return rows;
   }, [queue, bucket]);
   useEffect(() => { onCountChange?.(shown.length); }, [shown, onCountChange]);
   // embedded tabs mount fresh on each switch — refetch so a confirm/group done in a sibling tab shows.
