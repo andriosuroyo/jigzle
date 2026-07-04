@@ -68,6 +68,7 @@ export default function InboundBoard({
   userEmail,
   embedded = false,
   onCountChange,
+  onDetailOpenChange,
   adhocSignal = 0,
 }: {
   initialQueue: ReceiveQueueRow[];
@@ -77,6 +78,8 @@ export default function InboundBoard({
   // Inbound window (InboundShell): same embedded/onCountChange contract as OutboundBoard.
   embedded?: boolean;
   onCountChange?: (n: number) => void;
+  // PR154: the shell hides the tab bar while the receive detail bodyview is open (breadcrumb stays).
+  onDetailOpenChange?: (open: boolean) => void;
   // PR130: the "+ Unmarked shipment" trigger moved to the shell's tab bar — a bumped counter fires startAdhoc().
   adhocSignal?: number;
 }) {
@@ -131,6 +134,42 @@ export default function InboundBoard({
   const [finding, setFinding] = useState(false);
   const [suggestions, setSuggestions] = useState<ShipIdSuggestion[] | null>(null);
   const [findMsg, setFindMsg] = useState<string | null>(null);
+  const [findNotFound, setFindNotFound] = useState(false); // PR154 → offer "+ Receive as unmarked"
+
+  // PR154: bodyview — the shell hides the tab bar while the receive detail is open.
+  useEffect(() => { onDetailOpenChange?.(!!selected); }, [selected, onDetailOpenChange]);
+
+  // PR154: the queue sorts by shipped date, newest first (undated last; ship_id tiebreak).
+  const sortedQueue = useMemo(() => {
+    return [...queue].sort((a, b) => {
+      const da = a.ship_date ?? '', db = b.ship_date ?? '';
+      if (da && db) return da < db ? 1 : da > db ? -1 : a.ship_id.localeCompare(b.ship_id);
+      if (da) return -1;
+      if (db) return 1;
+      return a.ship_id.localeCompare(b.ship_id);
+    });
+  }, [queue]);
+
+  // PR154 map-modal: live "check barcode" — does any SKU already carry the typed/scanned code?
+  const [mapBcHits, setMapBcHits] = useState<ResolvedSku[] | null>(null);
+  const [mapBcChecked, setMapBcChecked] = useState(false);
+  useEffect(() => {
+    const code = mapBarcode.trim();
+    setMapBcHits(null);
+    setMapBcChecked(false);
+    if (!code) return;
+    const t = setTimeout(async () => {
+      try {
+        const res = await resolveBarcode(code);
+        setMapBcHits(res.status === 'resolved' ? [res.sku] : res.status === 'collision' ? res.skus : []);
+      } catch {
+        setMapBcHits([]);
+      } finally {
+        setMapBcChecked(true);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [mapBarcode]);
 
   // barcode → expected item_code(s). Composite barcode model (0020): a barcode can link to many
   // SKUs, so this maps to a LIST. The fast path only fires when exactly ONE expected SKU owns the
@@ -225,7 +264,7 @@ export default function InboundBoard({
     const myReq = ++reqIdRef.current;
     setSelected(ADHOC_SENTINEL);
     setMode('adhoc');
-    setDetail({ ship_id: '', origin_country: null, ship_date: null, tracking: null, note: null, is_shipment: false, expected: [], barcodes: [] });
+    setDetail({ ship_id: '', origin_country: null, ship_date: null, tracking: null, courier: null, note: null, is_shipment: false, expected: [], barcodes: [] });
     resetDraft();
     setCloseShipment(false);
     setAdhocShipId('');
@@ -251,6 +290,7 @@ export default function InboundBoard({
     setFinding(true);
     setFindMsg(null);
     setSuggestions(null);
+    setFindNotFound(false);
     try {
       // resolve the scan to a SKU first (a barcode → its item_code; a typed item_code resolves to itself).
       let itemCode = code;
@@ -260,6 +300,7 @@ export default function InboundBoard({
       const sug = await suggestShipIds(itemCode);
       if (sug.length === 0) {
         setFindMsg(`No open shipment has an open order line for ${itemCode}.`);
+        setFindNotFound(true); // PR154 → offer receiving it as an unmarked box
       } else if (sug.length === 1) {
         setSuggestions(sug);
         setFindMsg(`1 candidate — ${sug[0].ship_id}.`);
@@ -596,103 +637,100 @@ export default function InboundBoard({
 
   const headerTitle = mode === 'adhoc' ? 'Unmarked shipment' : detail?.ship_id ?? '';
 
+  // PR154 — bodyview: the body shows EITHER the scan-to-find + arrivals list (full width) OR the
+  // receive detail with a ← back button; the shell hides the tab bar while the detail is open.
   const body = (
     <>
-      <div className="fulfill-layout">
-        {/* ── Arrivals queue ── */}
-        <aside className="fq-pane">
-          {/* §5 scan-to-find-shipment */}
-          <div className="rcv-find">
-            <div className="scan-row">
-              <input
-                type="text"
-                placeholder="scan an item → find its shipment"
-                value={findScan}
-                onChange={(e) => setFindScan(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); findShipment(); } }}
-              />
-              <button className="btn-secondary" onClick={findShipment} disabled={finding}>{finding ? '…' : 'find'}</button>
-            </div>
-            {findMsg && <div className="hint">{findMsg}</div>}
-            {suggestions && suggestions.length > 0 && (
-              <ul className="rcv-suggest">
-                {suggestions.map((s) => (
-                  <li key={s.ship_id}>
-                    <button className="rcv-suggest-opt" onClick={() => { setSuggestions(null); setFindScan(''); openShipment(s.ship_id); }}>
-                      <span className="fq-id">{s.ship_id}</span>
-                      <span>{s.origin_country || '—'}{s.ship_date ? ` · ${s.ship_date}` : ''}</span>
-                      <span className="badge ready" style={{ marginLeft: 'auto' }}>order {s.open_qty}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {queue.length === 0 && <div className="hint fq-empty">No open shipments.</div>}
-          <ul className="fq-list">
-            {queue.map((q) => (
-              <li key={q.ship_id}>
-                <button className={`fq-row ${selected === q.ship_id ? 'active' : ''}`} onClick={() => openShipment(q.ship_id)}>
-                  {/* top: ship id (left) · ship date (right) */}
-                  <div className="fq-row-top">
-                    <span className="fq-id">{q.ship_id}</span>
-                    <span className="fq-id-sub">{q.ship_date || 'no date'}</span>
-                  </div>
-                  {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
-                  <div className="fq-row-bot">
-                    {q.expected_count > 0 ? (
-                      <span className="ff-items-skus">
-                        {q.expected_count} {q.expected_count === 1 ? 'item' : 'items'}
-                        {q.sku_codes.length ? ` · ${q.sku_codes.join(', ')}` : ''}
-                      </span>
-                    ) : (
-                      <span className="badge ready" style={{ marginLeft: 0 }}>no list</span>
-                    )}
-                  </div>
+      <div className="bodyview">
+        {/* ── Arrivals list ── */}
+        {!selected && (
+          <>
+            {/* §5 scan-to-find-shipment — Enter submits (the scanner's auto-return); no button. */}
+            <div className="rcv-find">
+              <div className="fd-section-head">Scan barcode to search</div>
+              <div className="scan-row">
+                <input
+                  type="text"
+                  placeholder="scan an item → find its shipment"
+                  value={findScan}
+                  onChange={(e) => setFindScan(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); findShipment(); } }}
+                />
+                {finding && <span className="scan-msg">…</span>}
+              </div>
+              {findMsg && <div className="hint">{findMsg}</div>}
+              {findNotFound && (
+                <button className="btn-link" onClick={() => { setFindNotFound(false); setFindMsg(null); setFindScan(''); startAdhoc(); }}>
+                  + Receive it as an unmarked shipment
                 </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
+              )}
+              {suggestions && suggestions.length > 0 && (
+                <ul className="rcv-suggest">
+                  {suggestions.map((s) => (
+                    <li key={s.ship_id}>
+                      <button className="rcv-suggest-opt" onClick={() => { setSuggestions(null); setFindScan(''); openShipment(s.ship_id); }}>
+                        <span className="fq-id">{s.ship_id}</span>
+                        <span>{s.origin_country || '—'}{s.ship_date ? ` · ${s.ship_date}` : ''}</span>
+                        <span className="badge ready" style={{ marginLeft: 'auto' }}>order {s.open_qty}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* banners survive a close (detail cleared) → visible back on the list */}
+            {reverseMsg && <div className="validation ok">{reverseMsg}</div>}
+            {result && renderResultBanner()}
+
+            {sortedQueue.length === 0 && <div className="hint fq-empty">No open shipments.</div>}
+            <ul className="fq-list">
+              {sortedQueue.map((q) => (
+                <li key={q.ship_id}>
+                  <button className="fq-row" onClick={() => openShipment(q.ship_id)}>
+                    {/* top: ship id (left) · shipped date (right — mirrors Purchasing History Active) */}
+                    <div className="fq-row-top">
+                      <span className="fq-id">{q.ship_id}</span>
+                      <span className="fq-id-sub">shipped {q.ship_date || '—'}</span>
+                    </div>
+                    {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
+                    <div className="fq-row-bot">
+                      {q.expected_count > 0 ? (
+                        <span className="ff-items-skus">
+                          {q.expected_count} {q.expected_count === 1 ? 'item' : 'items'}
+                          {q.sku_codes.length ? ` · ${q.sku_codes.join(', ')}` : ''}
+                        </span>
+                      ) : (
+                        <span className="badge ready" style={{ marginLeft: 0 }}>no list</span>
+                      )}
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         {/* ── Receive detail ── */}
-        <main className="fd-pane">
-          {!selected && !result && !reverseMsg && <div className="fd-empty">Select a shipment to receive, or start an ad-hoc receive.</div>}
-          {selected && loadingDetail && <div className="fd-empty">Loading…</div>}
+        {selected && (
+          <>
+          <button className="btn-link bv-back" onClick={() => { setSelected(null); setDetail(null); setSuggestions(null); setFindMsg(null); setFindNotFound(false); }}>← back</button>
+          <div className="bv-detail">
+          {loadingDetail && <div className="fd-empty">Loading…</div>}
 
           {/* persistent result banner (survives a close, where detail is cleared) + Reverse */}
           {reverseMsg && <div className="validation ok">{reverseMsg}</div>}
-          {result && (
-            <div className="validation ok rcv-result">
-              <div>
-                Received {result.units} sellable unit{result.units === 1 ? '' : 's'}.{' '}
-                {result.closed ? 'Shipment → completed. ' : 'Shipment left open. '}
-                {result.stock.map((s) => `${s.item_code}: avail ${s.available}, physical ${s.physical}`).join(' · ')}
-              </div>
-              <div className="rcv-result-actions">
-                {!reverseAsk ? (
-                  <button className="btn-link" onClick={() => setReverseAsk(true)} disabled={reversing}>Reverse this receipt</button>
-                ) : (
-                  <span className="rcv-reverse-ask">
-                    Undo this receipt? Stock it added will be reversed.
-                    <button className="btn-secondary" onClick={() => setReverseAsk(false)} disabled={reversing}>Cancel</button>
-                    <button className="btn-primary danger" onClick={doReverse} disabled={reversing}>{reversing ? 'Reversing…' : 'Yes, reverse'}</button>
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
+          {result && renderResultBanner()}
 
           {detail && (
             <>
+              {/* PR154 header subtext: shipped date + shipment courier & tracking */}
               <div className="fd-head">
                 <div className="fd-title">{headerTitle}</div>
                 <div className="fd-sub">
                   {mode === 'shipment' ? (
                     <>
-                      {detail.tracking || 'no tracking'}
-                      {detail.ship_date ? ` · ${detail.ship_date}` : ''}
+                      {`shipped ${detail.ship_date || '—'} · ${[detail.courier, detail.tracking].filter(Boolean).join(' ') || 'no tracking'}`}
                       {!detail.is_shipment && <span className="warn-text"> · not in the shipment ledger</span>}
                     </>
                   ) : (
@@ -790,7 +828,9 @@ export default function InboundBoard({
               </div>
             </>
           )}
-        </main>
+          </div>
+          </>
+        )}
       </div>
 
       {/* Manual add — compact centered modal. Autocomplete search adds to the received list; when a
@@ -801,21 +841,41 @@ export default function InboundBoard({
           <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Manual add" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head">
               <div className="sc-modal-title">{mappingRaw ? 'Map a SKU' : 'Manual add'}</div>
-              {mappingRaw && <div className="sc-modal-sub">Relink “{mappingRaw}” to its real SKU — search or add it new. Add the barcode to auto-resolve it next time.</div>}
             </div>
             <div className="sc-modal-body">
               {/* map mode: optionally capture the box's barcode → linked to the SKU on map, so future
-                  receives of this item auto-resolve via the scan path. */}
+                  receives of this item auto-resolve via the scan path. PR154: a live check shows any
+                  SKU(s) already carrying the scanned code right under the field. */}
               {mappingRaw && (
-                <label className="rcv-map-barcode">
-                  <span className="fd-label">Barcode (optional)</span>
-                  <input
-                    type="text"
-                    placeholder="scan / type the item's barcode"
-                    value={mapBarcode}
-                    onChange={(e) => setMapBarcode(e.target.value)}
-                  />
-                </label>
+                <>
+                  <label className="rcv-map-barcode">
+                    <span className="fd-label">Check Barcode (optional)</span>
+                    <input
+                      type="text"
+                      placeholder="scan / type the item's barcode"
+                      value={mapBarcode}
+                      onChange={(e) => setMapBarcode(e.target.value)}
+                    />
+                  </label>
+                  {mapBcChecked && mapBcHits && mapBcHits.length > 0 && (
+                    <ul className="po-cards po-cards-compact" style={{ marginBottom: 10 }}>
+                      {mapBcHits.map((h) => (
+                        <li key={h.item_code} className="po-card">
+                          <div className="po-card-main">
+                            <div className="po-card-l1">
+                              <span className="ff-code">{h.item_code}</span>
+                              <span className="po-card-poid">{mapBarcode.trim()}</span>
+                            </div>
+                            <div className="po-card-l2"><span className="ff-name">{displayName(h.name, h.item_code)}</span></div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {mapBcChecked && mapBcHits && mapBcHits.length === 0 && (
+                    <div className="hint" style={{ marginBottom: 10 }}>No SKU carries this barcode yet — it will be linked when you map.</div>
+                  )}
+                </>
               )}
               {!stub ? (
                 <>
@@ -906,6 +966,32 @@ export default function InboundBoard({
       {body}
     </div>
   );
+
+  // the post-save result banner + Reverse — shown in the detail AND back on the list after a close
+  // (PR154: extracted so both bodyview states render the same block).
+  function renderResultBanner() {
+    if (!result) return null;
+    return (
+      <div className="validation ok rcv-result">
+        <div>
+          Received {result.units} sellable unit{result.units === 1 ? '' : 's'}.{' '}
+          {result.closed ? 'Shipment → completed. ' : 'Shipment left open. '}
+          {result.stock.map((s) => `${s.item_code}: avail ${s.available}, physical ${s.physical}`).join(' · ')}
+        </div>
+        <div className="rcv-result-actions">
+          {!reverseAsk ? (
+            <button className="btn-link" onClick={() => setReverseAsk(true)} disabled={reversing}>Reverse this receipt</button>
+          ) : (
+            <span className="rcv-reverse-ask">
+              Undo this receipt? Stock it added will be reversed.
+              <button className="btn-secondary" onClick={() => setReverseAsk(false)} disabled={reversing}>Cancel</button>
+              <button className="btn-primary danger" onClick={doReverse} disabled={reversing}>{reversing ? 'Reversing…' : 'Yes, reverse'}</button>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // one item row: image · code/name · an editable received/expected (0/X) counter. Each scan +1s the
   // matching line; the counter field accepts direct entry. The exclude/label/dim controls drop in

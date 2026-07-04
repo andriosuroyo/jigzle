@@ -30,10 +30,13 @@ function fmtDateTime(iso: string | null, fallbackDate: string | null): string {
 export default function InboundHistoryBoard({
   initialRows,
   onCountChange,
+  onDetailOpenChange,
   reloadKey = 0,
 }: {
   initialRows: InboundHistoryRow[];
   onCountChange?: (n: number) => void;
+  // PR154: the shell hides the tab bar while a receipt detail bodyview is open (breadcrumb stays).
+  onDetailOpenChange?: (open: boolean) => void;
   reloadKey?: number;
 }) {
   const [rows, setRows] = useState<InboundHistoryRow[]>(initialRows);
@@ -143,6 +146,8 @@ export default function InboundHistoryBoard({
   useEffect(() => { onCountChange?.(rows.length); }, [rows, onCountChange]);
   // reset the delete confirm + edit overlay whenever the selection changes
   useEffect(() => { setConfirmDelete(false); setEditing(false); }, [selKey]);
+  // PR154: bodyview — the shell hides the tab bar while a detail is open.
+  useEffect(() => { onDetailOpenChange?.(!!selKey); }, [selKey, onDetailOpenChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
   // live search: re-query as you type (empty = recent), debounced. Skip the mount run — initialRows
@@ -154,11 +159,14 @@ export default function InboundHistoryBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
+  // PR154 — bodyview: the body shows EITHER the search + year tabs + full-width list OR the tapped
+  // receipt's detail with a ← back button; the shell hides the tab bar while the detail is open.
   return (
-    <div className="fulfill-layout">
+    <div className="bodyview">
       {/* ── List ── */}
-      <aside className="fq-pane">
-        <div className="search-row" style={{ padding: '8px' }}>
+      {!sel && (
+        <>
+        <div className="search-row" style={{ padding: '0 0 8px' }}>
           <SearchInput value={query} onChange={setQuery} placeholder="Search ship id, SKU, or name…" />
         </div>
         {/* Year sub-tabs (Sales-Pending style), newest first, each with a count. */}
@@ -181,7 +189,7 @@ export default function InboundHistoryBoard({
         <ul className="fq-list">
           {visibleRows.map((r) => (
             <li key={r.ship_id}>
-              <button className={`fq-row ${selKey === r.ship_id ? 'active' : ''}`} onClick={() => setSelKey(r.ship_id)}>
+              <button className="fq-row" onClick={() => setSelKey(r.ship_id)}>
                 <div className="fq-row-top">
                   <span className="fq-id">{r.ship_id}</span>
                   <span className="fq-id-sub">{fmtDate(r.receive_date)}</span>
@@ -195,13 +203,14 @@ export default function InboundHistoryBoard({
             </li>
           ))}
         </ul>
-      </aside>
+        </>
+      )}
 
       {/* ── Detail (read-only) ── */}
-      <main className="fd-pane">
-        {!sel && <div className="fd-empty">Pick a shipment to see what was received.</div>}
-        {sel && (
-          <>
+      {sel && (
+        <>
+          <button className="btn-link bv-back" onClick={() => setSelKey(null)}>← back</button>
+          <div className="bv-detail">
             <div className="fd-head">
               <div className="fd-title-row">
                 <div className="fd-title">{sel.ship_id}</div>
@@ -210,6 +219,12 @@ export default function InboundHistoryBoard({
               <div className="fd-sub">
                 Received {fmtDateTime(sel.received_at, sel.receive_date)}{sel.staff ? ` by ${sel.staff}` : ''}
               </div>
+              {/* PR154 header subtext: shipped date + shipment courier & tracking (ledger shipments only) */}
+              {!sel.is_adhoc && (
+                <div className="fd-sub">
+                  shipped {fmtDate(sel.ship_date)} · {[sel.courier, sel.tracking].filter(Boolean).join(' ') || 'no tracking'}
+                </div>
+              )}
             </div>
 
             <section className="fd-section">
@@ -244,9 +259,9 @@ export default function InboundHistoryBoard({
                 </span>
               )}
             </div>
-          </>
-        )}
-      </main>
+          </div>
+        </>
+      )}
 
       {/* Edit ship id — relocates the receipt(s) to a new ship id and re-runs PO allocation (0053). */}
       {editing && sel && (

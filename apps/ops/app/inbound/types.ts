@@ -10,6 +10,7 @@ export interface ReceiveDetail {
   origin_country: string | null;
   ship_date: string | null;
   tracking: string | null;
+  courier: string | null; // 0056 — the international carrier, shown beside tracking in the header
   note: string | null; // per-Ship-ID note written in Purchasing (To-ship) — shown read-only here
   is_shipment: boolean; // the ship_id is a real shipments-ledger row (vs an ad-hoc id)
   expected: ExpectedLine[];
@@ -100,6 +101,8 @@ export interface InboundHistoryRow {
   staff: string | null;              // 0052: who received (from the latest receipt row in the group)
   origin_country: string | null;
   tracking: string | null;
+  courier: string | null;            // 0056 — international carrier (with tracking in the detail header)
+  ship_date: string | null;          // PR154 — shipped date, for the detail header subtext
   is_adhoc: boolean;                 // a 📦YYMMXXX id with no shipments-ledger row
   items: InboundHistoryItem[];
   sku_codes: string[];               // A-Z, for the SKU search / quick-view line
