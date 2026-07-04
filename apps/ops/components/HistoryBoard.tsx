@@ -53,6 +53,7 @@ export default function HistoryBoard({
   const [orders, setOrders] = useState<HistoryRow[]>(initialOrders);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const [yearFilter, setYearFilter] = useState<string | null>(null); // the selected year sub-tab
 
   const [selRow, setSelRow] = useState<HistoryRow | null>(null); // the clicked row → date + derived status
   const [summary, setSummary] = useState<OrderSummary | null>(null);
@@ -84,6 +85,29 @@ export default function HistoryBoard({
     [summary]
   );
   const imgMap = useSkuImages(imgCodes);
+
+  // PR164 — year sub-tabs (newest first; null-date orders bucket under '—' at the end), each with a
+  // count. Mirrors Inbound/Outbound History so the full terminal-order log is browsable by year, and a
+  // new year (e.g. 2027) appears automatically as soon as an order lands in it.
+  const yearOf = (o: HistoryRow): string => (o.order_date ? o.order_date.slice(0, 4) : '—');
+  const years = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const o of orders) m.set(yearOf(o), (m.get(yearOf(o)) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => {
+      if (a[0] === '—') return 1;
+      if (b[0] === '—') return -1;
+      return a[0] < b[0] ? 1 : -1; // newest first
+    });
+  }, [orders]);
+  // keep the selected year valid as the list changes (search / reload): default to the newest year.
+  useEffect(() => {
+    if (!years.length) { if (yearFilter !== null) setYearFilter(null); return; }
+    if (!yearFilter || !years.some(([y]) => y === yearFilter)) setYearFilter(years[0][0]);
+  }, [years, yearFilter]);
+  const visibleRows = useMemo(
+    () => (yearFilter ? orders.filter((o) => yearOf(o) === yearFilter) : orders),
+    [orders, yearFilter]
+  );
 
   async function runSearch() {
     const _id = ++searchSeq.current;
@@ -184,9 +208,25 @@ export default function HistoryBoard({
           <div className="search-row" style={{ padding: '0 0 8px' }}>
             <SearchInput value={query} onChange={setQuery} placeholder="Name, order id, SKU, or date (YYYY-MM-DD)…" />
           </div>
-          {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No orders.'}</div>}
+          {/* Year sub-tabs (newest first, each with a count) — the full log divided by order year. */}
+          {years.length > 0 && (
+            <div className="fq-filters" role="tablist" aria-label="Filter by year">
+              {years.map(([y, n]) => (
+                <button
+                  key={y}
+                  role="tab"
+                  aria-selected={yearFilter === y}
+                  className={`fq-filter ${yearFilter === y ? 'active' : ''}`}
+                  onClick={() => setYearFilter(y)}
+                >
+                  {y}<span className="fq-filter-count">{n}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {visibleRows.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No orders.'}</div>}
           <ul className="fq-list">
-            {orders.map((o) => (
+            {visibleRows.map((o) => (
               <li key={o.sales_id}>
                 {/* PR146 row: customer id + date on top; state (Complete implied → no pill) + item
                     count left, dual status circles bottom-right. */}
