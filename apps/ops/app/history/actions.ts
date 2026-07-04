@@ -9,9 +9,12 @@ import { createSupabaseServerClient } from '@jigzle/db/server';
 import { customerIdLabel } from '@jigzle/lib';
 import type { HistoryRow, HistoryState } from './types';
 
-// Keep History light: load only the most recent orders by default. Search still queries the full
-// orders table server-side (filtered), so older history is reachable on demand — just not shown up front.
-const LIMIT = 100;
+// PR164 — History shows the FULL terminal-order log (the client buckets it into year sub-tabs), so the
+// loader pages through everything instead of capping. PostgREST caps a single response at 1000 rows
+// regardless of .limit(), so we page in 1000-row batches (stable order: order_date, then sales_id) up
+// to HISTORY_SCAN.
+const PAGE = 1000;
+const HISTORY_SCAN = 40000; // orders scanned (1 row per order) — a safety backstop well above real volume
 
 function one<T>(v: T | T[] | null | undefined): T | null {
   if (v == null) return null;
@@ -54,20 +57,15 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
   const supabase = createSupabaseServerClient();
   const raw = sanitize(query);
 
-  let q = supabase
-    .from('orders')
-    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customer_id,customers(name,phone),order_lines(line_id,fulfilled_at,shipped_at,is_cancelled)')
-    .in('status', ['Complete', 'Cancelled'])
-    .order('order_date', { ascending: false, nullsFirst: false })
-    .limit(LIMIT);
-
+  // Resolve the search filter ONCE (a date range, or the OR-clauses for id / customer / SKU), then apply
+  // it to every page below. Empty query → no filter, so History returns the whole terminal-order log.
+  let dateRange: [string, string] | null = null;
+  let orClauses: string[] | null = null;
   if (raw) {
     // a date-like query (YYYY, YYYY-MM, YYYY-MM-DD) filters order_date by [lower, upperExclusive);
     // otherwise match sales_id OR a customer whose name contains the query.
-    const dateRange = isoRange(raw);
-    if (dateRange) {
-      q = q.gte('order_date', dateRange[0]).lt('order_date', dateRange[1]);
-    } else {
+    dateRange = isoRange(raw);
+    if (!dateRange) {
       // Non-date query → match order id OR a customer name OR an item SKU on any of the order's lines
       // (PR161: SKU search — the order_lines.item_code index makes the contains-lookup cheap).
       const [{ data: custs }, { data: lineRows }] = await Promise.all([
@@ -76,15 +74,31 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
       ]);
       const ids = ((custs ?? []) as { customer_id: number }[]).map((c) => c.customer_id);
       const salesIds = Array.from(new Set(((lineRows ?? []) as { sales_id: string }[]).map((r) => r.sales_id)));
-      const ors = [`sales_id.ilike.%${raw}%`];
-      if (ids.length) ors.push(`customer_id.in.(${ids.join(',')})`);
-      if (salesIds.length) ors.push(`sales_id.in.(${salesIds.map((s) => `"${s}"`).join(',')})`);
-      q = q.or(ors.join(','));
+      orClauses = [`sales_id.ilike.%${raw}%`];
+      if (ids.length) orClauses.push(`customer_id.in.(${ids.join(',')})`);
+      if (salesIds.length) orClauses.push(`sales_id.in.(${salesIds.map((s) => `"${s}"`).join(',')})`);
     }
   }
 
-  const { data, error } = await q;
-  if (error || !data) return [];
+  // Page through the full result set (PostgREST caps a response at 1000 rows). Stable order —
+  // order_date desc then sales_id desc — so paging never drops or repeats a row.
+  type OrderRow = Record<string, unknown> & { order_lines?: LineLite[]; customers?: unknown; order_date?: string | null };
+  const data: OrderRow[] = [];
+  for (let from = 0; from < HISTORY_SCAN; from += PAGE) {
+    let q = supabase
+      .from('orders')
+      .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customer_id,customers(name,phone),order_lines(line_id,fulfilled_at,shipped_at,is_cancelled)')
+      .in('status', ['Complete', 'Cancelled'])
+      .order('order_date', { ascending: false, nullsFirst: false })
+      .order('sales_id', { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (dateRange) q = q.gte('order_date', dateRange[0]).lt('order_date', dateRange[1]);
+    else if (orClauses) q = q.or(orClauses.join(','));
+    const { data: page, error } = await q;
+    if (error || !page) break;
+    data.push(...(page as OrderRow[]));
+    if (page.length < PAGE) break;
+  }
 
   return data.map((o) => {
     const lines = (o.order_lines ?? []) as LineLite[];
