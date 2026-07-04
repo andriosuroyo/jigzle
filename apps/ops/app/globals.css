@@ -387,7 +387,9 @@ button.po-pick-btn:active { background: var(--paper); }
 /* ── SKU results + lines ── */
 .sku-result { background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 /* PR156 card: md image left; beside it l1 = SKU + stat icons, l2 = name, l3 = qty stepper/price/add */
-.sku-line { display: flex; align-items: flex-start; gap: 10px; }
+/* PR159: stretch the row so .sku-main matches the md image height; the qty/price/add row (.sku-add)
+   then pins to the bottom via margin-top:auto — bottom-aligned to the image, like the To-buy card. */
+.sku-line { display: flex; align-items: stretch; gap: 10px; }
 .sku-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .sku-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sku-code { font-size: 12px; font-weight: 700; color: var(--brown); }
@@ -398,7 +400,7 @@ button.po-pick-btn:active { background: var(--paper); }
 /* PR157: compact third line (the To-buy card sizing — 26/28px stepper, 30px controls) so the card's
    three lines bottom-align with the md image. */
 .sku-main { gap: 4px; }
-.sku-add { display: flex; align-items: center; gap: 6px; }
+.sku-add { display: flex; align-items: center; gap: 6px; margin-top: auto; }
 .sku-add .qty-step button { width: 26px; height: 28px; font-size: 16px; }
 .sku-add .qty-step input { width: 36px; height: 28px; font-size: 14px; }
 .sku-add .qty { width: 64px; } .sku-add .price { flex: 1; min-width: 0; }
@@ -1049,6 +1051,18 @@ img.sku-img { background: #e8e8e8; }
 /* two-class selector to beat `.icon-select { width: 100% }` (defined later) — keep the picker narrow */
 .cust-channel .cust-channel-platform { flex: 0 0 10.5em; width: 10.5em; }
 .cust-channel-handle { flex: 1 1 auto; min-width: 0; }
+/* PR159 — new-customer subform rows: a narrow picker on the left + a field filling the rest.
+   Phone = country (flag + dial code) + local number; channel = platform picker + handle. */
+.nc-row { display: flex; gap: 6px; align-items: stretch; }
+.nc-row .phone-cc { flex: 0 0 6.75em; width: 6.75em; }
+.nc-row .phone-cc-btn { padding: 9px 8px; gap: 4px; }
+.nc-row .phone-cc-btn .country-select-val { flex: 1; white-space: nowrap; overflow: hidden; }
+.nc-phone { flex: 1 1 auto; min-width: 0; }
+.nc-row .nc-channel-platform { flex: 0 0 9.5em; width: 9.5em; }
+.nc-channel-handle { flex: 1 1 auto; min-width: 0; }
+/* the picker dropdown rows: name grows, dial code sits at the right */
+.phone-cc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phone-cc-dial { flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Indonesia postcode autofill (PR98) — type-ahead over the local kelurahan dataset */
 .pc-autofill { position: relative; }
 .pc-autofill-input { width: 100%; }

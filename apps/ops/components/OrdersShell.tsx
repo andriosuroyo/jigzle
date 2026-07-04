@@ -19,7 +19,7 @@ import OrderEntry from '@/components/OrderEntry';
 import type { PendingOrder } from '@/app/pending/types';
 import type { ToSendQueueRow } from '@/app/fulfill/types';
 import type { HistoryRow } from '@/app/history/types';
-import type { PaymentMethod, CourierService, BoxPreset, CommonNote } from '@/app/settings/types';
+import type { PaymentMethod, CourierService, BoxPreset, CommonNote, ChannelOption } from '@/app/settings/types';
 
 export type OrdersTab = 'pending' | 'fulfill' | 'history';
 // `badge: false` → a read-only log (History) shows no count; only the work-queues do.
@@ -40,6 +40,7 @@ export default function OrdersShell({
   courierServices,
   boxPresets,
   commonNotes,
+  channelOptions,
 }: {
   userEmail: string;
   initialTab: OrdersTab;
@@ -51,6 +52,7 @@ export default function OrdersShell({
   courierServices: CourierService[];
   boxPresets: BoxPreset[];
   commonNotes: CommonNote[];
+  channelOptions: ChannelOption[];
 }) {
   const [tab, setTab] = useState<OrdersTab>(initialTab);
   const [counts, setCounts] = useState<{ pending: number; fulfill: number }>({
@@ -177,7 +179,7 @@ export default function OrdersShell({
           <div className="bv-backrow">
             <button className="btn-link bv-back" onClick={closeNew}>← back</button>
           </div>
-          <OrderEntry embedded userEmail={userEmail} paymentMethods={paymentMethods} onSaved={onNewSaved} onDirtyChange={setNewDirty} />
+          <OrderEntry embedded userEmail={userEmail} paymentMethods={paymentMethods} channelOptions={channelOptions} onSaved={onNewSaved} onDirtyChange={setNewDirty} />
         </>
       )}
     </div>

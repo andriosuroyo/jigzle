@@ -15,9 +15,11 @@ import {
   submitOrder,
 } from '@/app/sales/actions';
 import type { CustomerHit, LoyaltyReadout, SkuHit, Urgency } from '@/app/sales/types';
-import type { PaymentMethod } from '@/app/settings/types';
+import type { PaymentMethod, ChannelOption } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import IconSelect from '@/components/IconSelect';
+import PhoneCountrySelect from '@/components/PhoneCountrySelect';
+import { dialOf } from '@/components/countries';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
@@ -26,8 +28,6 @@ import SearchInput from '@/components/SearchInput';
 import StockStats from '@/components/StockStats';
 import { loadPostal, type PostalData } from '@/lib/idPostal';
 import { tidyAddress, validateAddress, type TidyResult } from '@/lib/tidyAddress';
-
-const CHANNELS = ['WHATSAPP', 'TOKOPEDIA', 'SHOPEE', 'INSTAGRAM', 'TIKTOK', 'WEBSITE', 'LINE', 'OTHER'];
 
 // PR73: buy-priority options — low / mid / high → green / yellow / red. Shared visual language with the
 // Purchasing To-buy cards. Optional (an order may carry no urgency).
@@ -75,12 +75,15 @@ function readinessClass(r: string): string {
 export default function OrderEntry({
   userEmail,
   paymentMethods,
+  channelOptions,
   embedded = false,
   onSaved,
   onDirtyChange,
 }: {
   userEmail: string;
   paymentMethods: PaymentMethod[];
+  // PR159 — Settings-driven contact-channel pick-list (same source as the Customer detail's Channels).
+  channelOptions: ChannelOption[];
   // JZ-001: when opened from the Orders window's "+ New order" bodyview, drop the page chrome and let
   // the shell know an order was saved (so it can toast + refresh the pipeline counts).
   embedded?: boolean;
@@ -98,9 +101,14 @@ export default function OrderEntry({
   const [custSearched, setCustSearched] = useState(false); // a search settled → gates the "No matches" line (SA-7)
   const [showNewCust, setShowNewCust] = useState(false);
   const [ncName, setNcName] = useState('');
-  const [ncPhone, setNcPhone] = useState('');
-  const [ncChannel, setNcChannel] = useState(CHANNELS[0]);
+  const [ncCountry, setNcCountry] = useState('ID'); // PR159 — phone country (flag + dial code); default Indonesia
+  const [ncPhone, setNcPhone] = useState('');        // local number as typed (leading 0 dropped at save)
+  const [ncChannel, setNcChannel] = useState('');    // channel platform (— pick —), from channelOptions
+  const [ncHandle, setNcHandle] = useState('');      // channel handle (username / number)
   const [savingCust, setSavingCust] = useState(false);
+
+  // channel platform options for the new-customer picker (icon + label), from Settings → Customer → Channel
+  const channelSelectOptions = channelOptions.map((c) => ({ value: c.label, label: c.label, icon: c.icon }));
 
   // Panel 2 — address
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
@@ -245,8 +253,13 @@ export default function OrderEntry({
     setSavingCust(true);
     setError(null);
     try {
+      // PR159 — combine the picked country's dial code with the local number (leading 0s dropped),
+      // e.g. ID (+62) + "081260002889" → "6281260002889". Empty local number → no phone.
+      const local = ncPhone.replace(/\D/g, '').replace(/^0+/, '');
+      const fullPhone = local ? `${dialOf(ncCountry)}${local}` : '';
+      const channels = ncChannel ? [{ platform: ncChannel, handle: ncHandle.trim() }] : [];
       // step 1 creates the customer only — the address is added in step 2 (below).
-      const { customer: cust } = await createCustomer({ name: ncName, phone: ncPhone, channel: ncChannel });
+      const { customer: cust } = await createCustomer({ name: ncName, phone: fullPhone, channel: ncChannel, channels });
       const [loy, addrs] = await Promise.all([
         getLoyalty(cust.customer_id),
         getCustomerAddresses(cust.customer_id),
@@ -257,7 +270,7 @@ export default function OrderEntry({
       setAddressId(addrs[0]?.address_id ?? null);
       setConfirmLater(false);
       setShowNewCust(false);
-      setNcName(''); setNcPhone('');
+      setNcName(''); setNcPhone(''); setNcCountry('ID'); setNcChannel(''); setNcHandle('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create customer.');
     } finally {
@@ -366,7 +379,7 @@ export default function OrderEntry({
 
   function resetAll() {
     setCustomer(null); setLoyalty(null); setCustQuery(''); setCustResults([]); setCustSearched(false); setShowNewCust(false);
-    setNcName(''); setNcPhone(''); setNcChannel(CHANNELS[0]);
+    setNcName(''); setNcPhone(''); setNcCountry('ID'); setNcChannel(''); setNcHandle('');
     setAddresses([]); setAddressId(null); setConfirmLater(false); setShowNewAddr(false);
     setNaRecipient(''); setNaContact(''); setNaAddr(''); setTidy(null);
     setSkuQuery(''); setSkuResults([]); setSkuSearched(false); setDraftQty({}); setDraftPrice({}); setLines([]);
@@ -450,11 +463,25 @@ export default function OrderEntry({
                   )}
                   {showNewCust && (
                     <div className="subform">
-                      <input type="text" placeholder="Name" value={ncName} onChange={(e) => setNcName(e.target.value)} />
-                      <input type="text" placeholder="Phone (08… / 62…)" value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} />
-                      <select value={ncChannel} onChange={(e) => setNcChannel(e.target.value)}>
-                        {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
-                      </select>
+                      <input type="text" placeholder="Customer ID" value={ncName} onChange={(e) => setNcName(e.target.value)} />
+                      {/* PR159: phone = country (flag + dial code) + local number, side by side. */}
+                      <div className="nc-row">
+                        <PhoneCountrySelect value={ncCountry} onChange={setNcCountry} disabled={savingCust} />
+                        <input className="nc-phone" type="tel" inputMode="numeric" placeholder="081260002889" value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} />
+                      </div>
+                      {/* PR159: channel = platform picker + handle, side by side (mirrors Customer › Channels). */}
+                      <div className="nc-row">
+                        <IconSelect
+                          className="nc-channel-platform"
+                          value={ncChannel || null}
+                          options={channelSelectOptions}
+                          placeholder="— channel —"
+                          ariaLabel="Channel platform"
+                          disabled={savingCust}
+                          onChange={setNcChannel}
+                        />
+                        <input className="nc-channel-handle" type="text" placeholder="username / number" value={ncHandle} onChange={(e) => setNcHandle(e.target.value)} disabled={savingCust} />
+                      </div>
                       <div className="subform-actions">
                         <button className="btn-secondary" onClick={() => setShowNewCust(false)} disabled={savingCust}>Cancel</button>
                         <button className="btn-primary" onClick={handleCreateCustomer} disabled={savingCust}>
@@ -511,9 +538,9 @@ export default function OrderEntry({
                     <button className="btn-secondary" onClick={() => setShowNewAddr(true)} disabled={!customer}>+ New address</button>
                   ) : (
                     <div className="subform">
-                      <input type="text" placeholder="Recipient name (leave blank if same as customer)" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />
-                      <input type="text" placeholder="Contact phone (leave blank if same as customer)" value={naContact} onChange={(e) => setNaContact(e.target.value)} />
-                      <textarea placeholder="Address — paste it in any format; we'll tidy it up" value={naAddr} onChange={(e) => setNaAddr(e.target.value)} />
+                      <input type="text" placeholder="Recipient name" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />
+                      <input type="text" placeholder="Recipient phone number" value={naContact} onChange={(e) => setNaContact(e.target.value)} />
+                      <textarea placeholder="Recipient address" value={naAddr} onChange={(e) => setNaAddr(e.target.value)} />
                       <div className="subform-actions">
                         <button className="btn-secondary" onClick={() => setShowNewAddr(false)} disabled={tidying}>Cancel</button>
                         <button className="btn-primary" onClick={handleTidyAddress} disabled={tidying}>{tidying ? 'Tidying…' : 'Add address'}</button>

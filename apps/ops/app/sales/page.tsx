@@ -3,7 +3,7 @@ import OrdersShell, { type OrdersTab } from '@/components/OrdersShell';
 import { getPending } from '@/app/pending/actions';
 import { getToSendQueue } from '@/app/fulfill/actions';
 import { getHistory } from '@/app/history/actions';
-import { getPaymentMethods, getCourierServices, getBoxPresets, getCommonNotes } from '@/app/settings/actions';
+import { getPaymentMethods, getCourierServices, getBoxPresets, getCommonNotes, getChannelOptions } from '@/app/settings/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -29,6 +29,7 @@ export default async function SalesPage({
     courierServices,
     boxPresets,
     commonNotes,
+    channelOptions,
   ] = await Promise.all([
     supabase.auth.getUser(),
     getPending(),
@@ -38,6 +39,7 @@ export default async function SalesPage({
     getCourierServices(),
     getBoxPresets(),
     getCommonNotes(),
+    getChannelOptions(),
   ]);
 
   const tabParam = (searchParams?.tab ?? '') as OrdersTab;
@@ -56,6 +58,7 @@ export default async function SalesPage({
       courierServices={courierServices}
       boxPresets={boxPresets}
       commonNotes={commonNotes}
+      channelOptions={channelOptions}
     />
   );
 }

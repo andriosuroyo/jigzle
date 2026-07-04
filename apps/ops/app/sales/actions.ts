@@ -124,6 +124,11 @@ export async function createCustomer(
   const phone = normalizePhone(input.phone);
   const phone_raw = input.phone?.trim() || null;
   const channel = input.channel?.trim() || null;
+  // PR159 — contact channels ({ platform, handle }), same jsonb shape the Customer detail writes;
+  // keep only rows carrying a platform (a handle without a platform is dropped).
+  const channels = (input.channels ?? [])
+    .map((ch) => ({ platform: (ch.platform || '').trim(), handle: (ch.handle || '').trim() }))
+    .filter((ch) => ch.platform);
 
   // Dedup: an existing normalized phone resolves to that customer (never a duplicate).
   if (phone) {
@@ -137,7 +142,7 @@ export async function createCustomer(
 
   const { data, error } = await supabase
     .from('customers')
-    .insert({ name: input.name?.trim() || null, phone, phone_raw, channel, channel_raw: channel })
+    .insert({ name: input.name?.trim() || null, phone, phone_raw, channel, channel_raw: channel, channels })
     .select('*')
     .single();
 

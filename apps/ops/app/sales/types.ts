@@ -25,6 +25,8 @@ export interface NewCustomerInput {
   name: string;
   phone: string;
   channel?: string;
+  // PR159 — optional contact channels ({ platform, handle }), same shape the Customer detail stores.
+  channels?: { platform: string; handle: string }[];
 }
 
 // Structured address (PR115): the tidy-overlay produces these; createAddress composes raw_address
