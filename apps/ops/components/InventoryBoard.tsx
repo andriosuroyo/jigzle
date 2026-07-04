@@ -10,6 +10,7 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
 import { IconOnOrder, IconShipped, IconWarehouse } from '@/components/StockStats';
+import AdjustmentsTab from '@/components/AdjustmentsTab';
 
 const ROW_LIMIT = 1000; // matches the server LIMIT — used only for the "refine your search" hint
 
@@ -57,6 +58,7 @@ export default function InventoryBoard({
 }) {
   const [rows, setRows] = useState<StockRow[]>(initialRows);
   const [counts, setCounts] = useState<InventoryCounts>(initialCounts);
+  const [view, setView] = useState<'browse' | 'adjustments'>('browse'); // PR170: adjustments moved here from Stock Check
   const [search, setSearch] = useState('');
   const [state, setState] = useState<InventoryState>('all');
   const [refreshedAt, setRefreshedAt] = useState<string | null>(initialRefreshedAt);
@@ -137,9 +139,18 @@ export default function InventoryBoard({
   return (
     <div className="ops">
       <AppHeader active="inventory" userEmail={userEmail} />
-      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: STATES.find((s) => s.key === state)?.label ?? 'All' }]} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: view === 'adjustments' ? 'Adjustments' : (STATES.find((s) => s.key === state)?.label ?? 'All') }]} />
 
       <div className="inv-wrap">
+        {/* PR170 — Inventory owns the two-way stock views: Browse (read-only levels) + Adjustments
+            (the signed ± ledger, moved here from Stock Check since Inbound is +only). */}
+        <div className="sc-tabs">
+          <button className={`sc-tab ${view === 'browse' ? 'active' : ''}`} onClick={() => setView('browse')}>Browse</button>
+          <button className={`sc-tab ${view === 'adjustments' ? 'active' : ''}`} onClick={() => setView('adjustments')}>Adjustments</button>
+        </div>
+
+        {view === 'adjustments' ? <AdjustmentsTab /> : (
+        <>
         {/* autocomplete-style search bar; the refresh + "as of" timestamp fold into its right edge to
             reclaim the row they used to occupy. */}
         <div className="search-row inv-search-row">
@@ -202,6 +213,8 @@ export default function InventoryBoard({
           <div className="inv-count">
             {rows.length} SKU{rows.length === 1 ? '' : 's'}{truncated ? ` — showing the first ${ROW_LIMIT}; refine your search to narrow` : ''} · read-only
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

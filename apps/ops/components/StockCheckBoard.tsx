@@ -12,7 +12,6 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import PresenceSession from '@/components/PresenceSession';
 import CountSession from '@/components/CountSession';
 import SnapshotView from '@/components/SnapshotView';
-import AdjustmentsTab from '@/components/AdjustmentsTab';
 import { getSessions, openStockCheck } from '@/app/stock-check/actions';
 import { modeLabel } from '@/app/stock-check/types';
 import type { BrandOption, NewCountInput, SessionRow, StockCheckMode, StockCheckScope } from '@/app/stock-check/types';
@@ -39,7 +38,6 @@ export default function StockCheckBoard({
   brands: BrandOption[];
   userEmail: string;
 }) {
-  const [tab, setTab] = useState<'counts' | 'adjustments'>('counts');
   const [sessions, setSessions] = useState<SessionRow[]>(initialSessions);
   const [detail, setDetail] = useState<SessionRow | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -98,7 +96,7 @@ export default function StockCheckBoard({
   }
 
   // ── detail (a single open/closed session) ──
-  if (tab === 'counts' && detail) {
+  if (detail) {
     if (detail.status === 'open' && detail.mode === 'presence') {
       return (
         <div className="ops">
@@ -129,22 +127,15 @@ export default function StockCheckBoard({
   return (
     <div className="ops">
       <AppHeader active="stock-check" userEmail={userEmail} />
-      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: tab === 'adjustments' ? 'Adjustments' : 'Counts' }]} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: 'Counts' }]} />
 
       <div className="sc-wrap">
-        <div className="sc-tabs">
-          <button className={`sc-tab ${tab === 'counts' ? 'active' : ''}`} onClick={() => setTab('counts')}>Counts</button>
-          <button className={`sc-tab ${tab === 'adjustments' ? 'active' : ''}`} onClick={() => setTab('adjustments')}>Adjustments</button>
-        </div>
-
         {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
 
-        {tab === 'counts' ? (
-          <>
-            <div className="sc-bar">
-              <button className="btn-primary" onClick={() => setShowNew(true)}>+ New count</button>
-            </div>
-            <div className="sc-sess-list">
+        <div className="sc-bar">
+          <button className="btn-primary" onClick={() => setShowNew(true)}>+ New count</button>
+        </div>
+        <div className="sc-sess-list">
               {sessions.length === 0 && <div className="sc-empty">No counts yet. Start one with “New count”.</div>}
               {sessions.map((s) => (
                 <button key={s.stock_check_id} className="sc-sess" onClick={() => setDetail(s)}>
@@ -165,10 +156,6 @@ export default function StockCheckBoard({
                 </button>
               ))}
             </div>
-          </>
-        ) : (
-          <AdjustmentsTab />
-        )}
       </div>
 
       {showNew && (
