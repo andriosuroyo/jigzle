@@ -12,6 +12,8 @@ import IconSelect from '@/components/IconSelect';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { getActiveStaff } from '@/components/staffStore';
+import StaffPicker from '@/components/StaffPicker';
+import type { StaffMember } from '@/app/settings/types';
 
 // preset = a box-preset code (dims from SETTINGS) or 'Custom' (manual P/L/T).
 type BoxDraft = { key: number; preset: string; real: string; p: string; l: string; t: string };
@@ -23,13 +25,21 @@ const numOrNull = (s: string): number | null => {
   return s.trim() && isFinite(n) ? n : null;
 };
 
+// today's local date, 'YYYY-MM-DD' — the right side of the staff line (PR155)
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function OutboundBoard({
   initialQueue,
   boxPresets,
   initialOrderId,
   userEmail,
   embedded = false,
+  staffOptions = [],
   onCountChange,
+  onDetailOpenChange,
   onAdvance,
   reloadKey = 0,
 }: {
@@ -39,7 +49,11 @@ export default function OutboundBoard({
   userEmail: string;
   // JZ-001: Orders pipeline window — see PendingBoard for the embedded/onCountChange/onAdvance contract.
   embedded?: boolean;
+  // PR155: the staff picker is a line in THIS tab's body (Ready to ship only), not the shell header.
+  staffOptions?: StaffMember[];
   onCountChange?: (n: number) => void;
+  // PR155: the shell hides the tab bar while the ship detail bodyview is open (breadcrumb stays).
+  onDetailOpenChange?: (open: boolean) => void;
   onAdvance?: (salesId: string, toStage: string) => void;
   reloadKey?: number;
 }) {
@@ -161,6 +175,8 @@ export default function OutboundBoard({
 
   // JZ-001: live count badge + external reload (see PendingBoard).
   useEffect(() => { onCountChange?.(queue.length); }, [queue, onCountChange]);
+  // PR155: bodyview — the shell hides the tab bar while the ship detail is open.
+  useEffect(() => { onDetailOpenChange?.(!!selected); }, [selected, onDetailOpenChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (reloadKey) reloadQueue(); }, [reloadKey]);
 
@@ -314,37 +330,49 @@ export default function OutboundBoard({
     }
   }
 
+  // PR155 — bodyview: the body shows EITHER the staff line + ship queue (full width) OR the tapped
+  // order's ship detail with a ← back button; the shell hides the tab bar while the detail is open.
   const body = (
     <>
-      <div className="fulfill-layout">
+      <div className="bodyview">
         {/* ── Queue ── */}
-        <aside className="fq-pane">
-          {/* No queue header — the tab badge shows the count. */}
-          {queue.length === 0 && <div className="hint fq-empty">Nothing fulfilled and waiting to ship.</div>}
-          <ul className="fq-list">
-            {queue.map((q) => (
-              <li key={q.sales_id}>
-                <button className={`fq-row ${selected === q.sales_id ? 'active' : ''}`} onClick={() => openOrder(q.sales_id)}>
-                  {/* Styled like Sales: customer name headline, sales id demoted. */}
-                  <div className="fq-row-top">
-                    <span className="fq-headline">{q.customer_name || '—'}</span>
-                    <span className="fq-id-sub">{q.sales_id}</span>
-                  </div>
-                  <div className="fq-row-bot">
-                    <span>{q.ready_count} {q.ready_count === 1 ? 'item' : 'items'}</span>
-                    <span className="badge ready" style={{ marginLeft: 'auto' }}>{q.planned_courier || '—'}</span>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
+        {!selected && (
+          <>
+            {/* Staff line — who's on shift (stamped onto each shipment), today's date on the right. */}
+            {staffOptions.length > 0 && (
+              <div className="ob-staff-line">
+                <StaffPicker options={staffOptions} />
+                <span className="ob-staff-date">{todayLocal()}</span>
+              </div>
+            )}
+            {queue.length === 0 && <div className="hint fq-empty">Nothing fulfilled and waiting to ship.</div>}
+            <ul className="fq-list">
+              {queue.map((q) => (
+                <li key={q.sales_id}>
+                  <button className="fq-row" onClick={() => openOrder(q.sales_id)}>
+                    {/* Styled like Sales: customer name headline, sales id demoted. */}
+                    <div className="fq-row-top">
+                      <span className="fq-headline">{q.customer_name || '—'}</span>
+                      <span className="fq-id-sub">{q.sales_id}</span>
+                    </div>
+                    <div className="fq-row-bot">
+                      <span>{q.ready_count} {q.ready_count === 1 ? 'item' : 'items'}</span>
+                      <span className="badge ready" style={{ marginLeft: 'auto' }}>{q.planned_courier || '—'}</span>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
         {/* ── Detail ── */}
-        <main className="fd-pane">
-          {!selected && <div className="fd-empty">Select an order from the queue to ship.</div>}
-          {selected && loadingDetail && <div className="fd-empty">Loading…</div>}
-          {selected && !loadingDetail && !detail && <div className="fd-empty">Order not found or nothing left to ship.</div>}
+        {selected && (
+          <>
+          <button className="btn-link bv-back" onClick={() => { setSelected(null); setDetail(null); }}>← back</button>
+          <div className="bv-detail">
+          {loadingDetail && <div className="fd-empty">Loading…</div>}
+          {!loadingDetail && !detail && <div className="fd-empty">Order not found or nothing left to ship.</div>}
 
           {detail && (
             <>
@@ -484,7 +512,9 @@ export default function OutboundBoard({
               </div>
             </>
           )}
-        </main>
+          </div>
+          </>
+        )}
       </div>
     </>
   );

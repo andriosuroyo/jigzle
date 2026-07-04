@@ -1374,6 +1374,10 @@ img.sku-img { background: #e8e8e8; }
 /* ── PR148 — delete-order confirm overlay: consequence bullets inside the shared ConfirmModal ── */
 .del-confirm-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink); }
 
+/* ── PR155 — Outbound Ready-to-ship: staff line in the tab body (picker left, today right) ── */
+.ob-staff-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 10px; }
+.ob-staff-date { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+
 /* ── PR146 — dual status circles (box = item readiness, $ = payment) on sales quickview rows ── */
 .stat-circles { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
 .stat-circle { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: white; }

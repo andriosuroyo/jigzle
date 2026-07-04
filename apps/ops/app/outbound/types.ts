@@ -89,7 +89,9 @@ export interface ShipmentHistoryBox {
 export interface ShipmentHistoryRow {
   key: string;                     // synthetic id (send_id, or a composite) — for React keys + selection
   ship_date: string | null;
-  customer: string | null;
+  customer: string | null;         // PR155: the CUSTOMER ID label ("Name (last4)") when resolvable
+  recipient: string | null;        // PR155: recipient name — leads the Shipped-to block
+  phone: string | null;            // PR155: customer phone — ends the Shipped-to block
   address: string | null;          // verbatim, as shipped (the CSV address text / order address)
   courier: string | null;
   staff: string | null;            // 0052: who shipped (warehouse staff), when stamped
