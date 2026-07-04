@@ -6,6 +6,7 @@ import AppHeader from '@/components/AppHeader';
 import { getHistory, setOrderNote } from '@/app/history/actions';
 import { getOrderSummary, deleteOrder } from '@/app/pending/actions';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
+import TrashButton from '@/components/TrashButton';
 import type { HistoryRow, HistoryState } from '@/app/history/types';
 import type { OrderSummary, BoxSummary } from '@/app/pending/types';
 import type { BoxPreset } from '@/app/settings/types';
@@ -86,6 +87,24 @@ export default function HistoryBoard({
     [summary]
   );
   const imgMap = useSkuImages(imgCodes);
+
+  // PR166 — courier + tracking shown as part of the ADDRESS block (as it prints during Outbound), not on
+  // each item card. Collapse the per-line couriers to the distinct set (usually one) so the block reads
+  // "COURIER: tracking" under the address; multiple couriers each get their own line.
+  const couriers = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { label: string | null; tracking: string | null }[] = [];
+    for (const l of summary?.lines ?? []) {
+      if (!l.courier_label && !l.courier_tracking) continue;
+      const key = `${l.courier_label ?? ''}|${l.courier_tracking ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ label: l.courier_label, tracking: l.courier_tracking });
+    }
+    return out;
+  }, [summary]);
+  const fmtCourier = (c: { label: string | null; tracking: string | null }): string =>
+    c.label && c.tracking ? `${c.label}: ${c.tracking}` : c.label || c.tracking || '';
 
   // PR164 — year sub-tabs (newest first; null-date orders bucket under '—' at the end), each with a
   // count. Mirrors Inbound/Outbound History so the full terminal-order log is browsable by year, and a
@@ -297,9 +316,6 @@ export default function HistoryBoard({
                         <span className="ff-name">{l.name}</span>
                       </div>
                       <span className="ff-qty">×{l.qty}</span>
-                      {(l.courier_label || l.courier_tracking) && (
-                        <span className="ord-sum-courier">{l.courier_label || '—'}{l.courier_tracking ? ` · #${l.courier_tracking}` : ''}</span>
-                      )}
                     </li>
                   ))}
                   {summary.lines.length === 0 && <li className="hint">No shipped lines yet.</li>}
@@ -341,7 +357,11 @@ export default function HistoryBoard({
                     {summary.ship_recipient && <b>{summary.ship_recipient}</b>}
                     {summary.ship_address}
                     {summary.ship_phone ? `\n${summary.ship_phone}` : ''}
+                    {/* PR166: courier + tracking, blank-line spaced, as it prints during Outbound */}
+                    {couriers.length > 0 ? `\n\n${couriers.map(fmtCourier).join('\n')}` : ''}
                   </div>
+                ) : couriers.length > 0 ? (
+                  <div className="fd-addr">{couriers.map(fmtCourier).join('\n')}</div>
                 ) : (
                   <div className="hint">No address selected yet.</div>
                 )}
@@ -376,9 +396,10 @@ export default function HistoryBoard({
                 )}
               </section>
 
-              {/* Delete (PR148 — overlay confirm; available even on completed orders) */}
-              <div className="ob-return">
-                <button className="btn-link pend-delete" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={deleting}>Delete order</button>
+              {/* Delete (PR148 — overlay confirm; available even on completed orders). PR166: right-aligned
+                  red trashcan (the standard delete affordance). */}
+              <div className="ob-return" style={{ justifyContent: 'flex-end' }}>
+                <TrashButton onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={deleting} ariaLabel="Delete order" />
               </div>
 
               {/* PR165: order number at the bottom right with a one-tap copy icon */}
