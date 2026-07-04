@@ -71,6 +71,10 @@ input, textarea, select, button { font-family: inherit; }
 /* ── To-buy cards (PR73): one 3-line layout for Manual / From Sales / Out of Stock ── */
 .po-cards { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .po-card { display: flex; align-items: stretch; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+/* PR167 — priority as a thin coloured bar down the card's left edge (replaces the line-1 urgency pill) */
+.po-card.po-urg-high { border-left: 4px solid var(--red); }
+.po-card.po-urg-mid  { border-left: 4px solid var(--orange); }
+.po-card.po-urg-low  { border-left: 4px solid var(--green); }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .po-card-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-card-l1 .ff-name { flex: 1; }

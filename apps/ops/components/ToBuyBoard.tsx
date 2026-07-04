@@ -49,11 +49,9 @@ const URGENCY_OPTS: { key: Urgency; label: string }[] = [
   { key: 'high', label: 'High' },
 ];
 
-// little coloured priority chip (right side of a card's line 1)
-function UrgencyChip({ urgency }: { urgency: Urgency | null }) {
-  if (!urgency) return null;
-  return <span className={`urg-chip urg-${urgency}`}>{urgency}</span>;
-}
+// PR167 — priority now shows as a thin coloured bar down the card's LEFT edge (red=high, orange=mid,
+// green=low) via a modifier class on the .po-card, instead of a pill on line 1 — de-clutters the card.
+const urgClass = (u: Urgency | null): string => (u ? ` po-urg-${u}` : '');
 
 // the bare hostname of a URL (no www.), for the favicon + a tidy fallback
 function hostOf(url: string): string | null {
@@ -291,12 +289,11 @@ export default function ToBuyBoard({
           {planned.length === 0 && <div className="hint">Nothing planned. Use “+ add item” to start a buy-list.</div>}
           <ul className="po-cards">
             {planned.map((p) => (
-              <li key={p.po_id} className="po-card">
+              <li key={p.po_id} className={`po-card${urgClass(p.urgency)}`}>
                 <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.md} />
                 <div className="po-card-main">
                   <div className="po-card-l1">
                     <span className="ff-code">{p.item_code || '—'}</span>
-                    <UrgencyChip urgency={p.urgency} />
                     <span className="po-card-date">{fmtDate(p.input_date)}</span>
                   </div>
                   <div className="po-card-l1 po-card-mid">
@@ -334,12 +331,11 @@ export default function ToBuyBoard({
           <ul className="po-cards">
             {/* PR150 card: l1 SKU + date, l2 name + customer id (no order id), l3 qty/Buy/Done. */}
             {preorders.map((p) => (
-              <li key={p.line_id} className="po-card">
+              <li key={p.line_id} className={`po-card${urgClass(p.urgency)}`}>
                 <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.md} />
                 <div className="po-card-main">
                   <div className="po-card-l1">
                     <span className="ff-code">{p.item_code || '—'}</span>
-                    <UrgencyChip urgency={p.urgency} />
                     <span className="po-card-date">{fmtDate(p.order_date)}</span>
                   </div>
                   <div className="po-card-l1 po-card-mid">
@@ -366,12 +362,11 @@ export default function ToBuyBoard({
           {soldOut.length === 0 && <div className="hint">Nothing marked out of stock.</div>}
           <ul className="po-cards">
             {soldOut.map((p) => (
-              <li key={p.po_id} className="po-card">
+              <li key={p.po_id} className={`po-card${urgClass(p.urgency)}`}>
                 <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.md} />
                 <div className="po-card-main">
                   <div className="po-card-l1">
                     <span className="ff-code">{p.item_code || '—'}</span>
-                    <UrgencyChip urgency={p.urgency} />
                     <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
                   </div>
                   <div className="po-card-l1 po-card-mid">
