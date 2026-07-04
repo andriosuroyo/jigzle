@@ -182,7 +182,7 @@ export default function HistoryBoard({
       {!selId && (
         <>
           <div className="search-row" style={{ padding: '0 0 8px' }}>
-            <SearchInput value={query} onChange={setQuery} placeholder="Name, order id, or date (YYYY-MM-DD)…" />
+            <SearchInput value={query} onChange={setQuery} placeholder="Name, order id, SKU, or date (YYYY-MM-DD)…" />
           </div>
           {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No orders.'}</div>}
           <ul className="fq-list">
