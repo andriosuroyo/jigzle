@@ -1,0 +1,1192 @@
+<!doctype html>
+<!--
+  Jigzle Ops — application sitemap (self-contained, offline-openable).
+
+  WHAT: A wayfinding map of apps/ops — every route, tab, button, dropdown, and
+  modal, grouped the same way the app's own nav is (NAV_GROUPS in
+  apps/ops/components/navConfig.tsx). Meant as a shared reference for discussing
+  which part of the app to change.
+
+  HOW TO UPDATE (keep it in step with the app as it grows):
+    - Routes come from apps/ops/app/*/page.tsx; the real UI lives in the matching
+      *Board / *Shell components under apps/ops/components/.
+    - When a screen gains/loses a tab, button, dropdown, or modal, edit the
+      corresponding <details class="route"> block below. Controls are tagged by
+      type via the .k-btn / .k-drop / .k-input / .k-toggle / .k-link / .k-modal
+      classes (see the "How to read this map" legend near the top of <body>).
+    - Bump the "Sitemap generated" date in the footer, and the stat tiles in the
+      masthead if a whole route/tab was added or removed.
+    - No build step: it's plain HTML/CSS/JS with system fonts. Open the file in a
+      browser to preview.
+-->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jigzle Ops — Sitemap</title>
+<style>
+  :root {
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+
+    /* warm, brown-biased neutrals — the app's own paper */
+    --ground: #ECE7DF;
+    --surface: #FBFAF7;
+    --surface-2: #F3EFE8;
+    --ink: #241D17;
+    --ink-soft: #5A4E42;
+    --muted: #8B7C6C;
+    --line: #DED6C9;
+    --line-soft: #E8E1D6;
+
+    /* brand — the app theme brown (#724F33) */
+    --brand: #724F33;
+    --brand-bright: #8A6141;
+    --brand-tint: #EFE6DB;
+
+    /* nav-group wayfinding hues (desaturated, harmonised with brown) */
+    --g-sales: #7A5230;
+    --g-warehouse: #4C6673;
+    --g-database: #4F7355;
+    --g-tools: #6B5570;
+
+    /* semantic — the readiness circles that recur across the app */
+    --s-red: #BF4A3F;
+    --s-amber: #B6811F;
+    --s-green: #4E8A5C;
+    --s-red-bg: #F6E2DE;
+    --s-amber-bg: #F4E9D2;
+    --s-green-bg: #E1EFE1;
+
+    --shadow: 0 1px 2px rgba(60,44,28,.06), 0 6px 20px rgba(60,44,28,.05);
+    --radius: 12px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #171310;
+      --surface: #211B16;
+      --surface-2: #1B1611;
+      --ink: #EFE7DC;
+      --ink-soft: #C3B6A6;
+      --muted: #94836F;
+      --line: #382E25;
+      --line-soft: #2C241D;
+      --brand: #C69A6F;
+      --brand-bright: #DDB185;
+      --brand-tint: #2E241B;
+      --g-sales: #C39A6E;
+      --g-warehouse: #8DAAB8;
+      --g-database: #85B58C;
+      --g-tools: #B296B9;
+      --s-red: #E08379;
+      --s-amber: #DCB25A;
+      --s-green: #7FBE8B;
+      --s-red-bg: #3A2723;
+      --s-amber-bg: #362C1A;
+      --s-green-bg: #21321F;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #ECE7DF; --surface: #FBFAF7; --surface-2: #F3EFE8; --ink: #241D17;
+    --ink-soft: #5A4E42; --muted: #8B7C6C; --line: #DED6C9; --line-soft: #E8E1D6;
+    --brand: #724F33; --brand-bright: #8A6141; --brand-tint: #EFE6DB;
+    --g-sales: #7A5230; --g-warehouse: #4C6673; --g-database: #4F7355; --g-tools: #6B5570;
+    --s-red: #BF4A3F; --s-amber: #B6811F; --s-green: #4E8A5C;
+    --s-red-bg: #F6E2DE; --s-amber-bg: #F4E9D2; --s-green-bg: #E1EFE1;
+    --shadow: 0 1px 2px rgba(60,44,28,.06), 0 6px 20px rgba(60,44,28,.05);
+  }
+  :root[data-theme="dark"] {
+    --ground: #171310; --surface: #211B16; --surface-2: #1B1611; --ink: #EFE7DC;
+    --ink-soft: #C3B6A6; --muted: #94836F; --line: #382E25; --line-soft: #2C241D;
+    --brand: #C69A6F; --brand-bright: #DDB185; --brand-tint: #2E241B;
+    --g-sales: #C39A6E; --g-warehouse: #8DAAB8; --g-database: #85B58C; --g-tools: #B296B9;
+    --s-red: #E08379; --s-amber: #DCB25A; --s-green: #7FBE8B;
+    --s-red-bg: #3A2723; --s-amber-bg: #362C1A; --s-green-bg: #21321F;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 20px 96px;
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    grid-column: 1 / -1;
+    margin: 0 -20px 8px;
+    padding: 40px 28px 30px;
+    background:
+      radial-gradient(120% 140% at 88% -20%, color-mix(in srgb, var(--brand) 16%, transparent), transparent 60%),
+      var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .mh-inner { max-width: 1140px; margin: 0 auto; }
+  .mh-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--brand-bright);
+    margin: 0 0 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .mh-mark {
+    display: inline-grid; place-items: center;
+    width: 30px; height: 30px; border-radius: 8px;
+    background: var(--brand); color: #fff;
+    font-family: var(--font-sans); font-weight: 800; font-size: 17px;
+    letter-spacing: 0;
+  }
+  @media (prefers-color-scheme: dark) { .mh-mark { color: #1c150e; } }
+  :root[data-theme="dark"] .mh-mark { color: #1c150e; }
+  .masthead h1 {
+    margin: 0 0 12px;
+    font-size: clamp(30px, 5vw, 46px);
+    letter-spacing: -.02em;
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+  .masthead p.lede {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--ink-soft);
+    font-size: 16px;
+  }
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-top: 24px;
+  }
+  .stat {
+    display: flex; flex-direction: column;
+    padding: 10px 16px 11px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .stat b {
+    font-family: var(--font-mono);
+    font-size: 20px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.01em;
+  }
+  .stat span {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin-top: 2px;
+  }
+
+  /* ---------- sidebar TOC ---------- */
+  aside {
+    position: sticky; top: 16px;
+    align-self: start;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    padding-right: 6px;
+  }
+  .toc-tools {
+    display: flex; gap: 6px; margin-bottom: 14px;
+  }
+  .toc-tools button {
+    flex: 1;
+    font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: .04em;
+    padding: 7px 8px; border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .toc-tools button:hover { border-color: var(--brand); color: var(--brand-bright); }
+  .toc-group { margin-bottom: 16px; }
+  .toc-group > p {
+    margin: 0 0 6px;
+    font-family: var(--font-mono);
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--g);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .toc-group > p::before {
+    content: ""; width: 8px; height: 8px; border-radius: 2px;
+    background: var(--g);
+  }
+  aside a {
+    display: block;
+    text-decoration: none;
+    color: var(--ink-soft);
+    font-size: 13px;
+    padding: 3px 0 3px 15px;
+    border-left: 2px solid var(--line-soft);
+    transition: color .12s, border-color .12s;
+  }
+  aside a:hover { color: var(--brand-bright); border-left-color: var(--g, var(--brand)); }
+  aside a code { font-family: var(--font-mono); font-size: 12px; opacity: .75; }
+
+  /* ---------- main column ---------- */
+  main { min-width: 0; }
+
+  .section-head {
+    margin: 34px 0 4px;
+    padding-top: 10px;
+  }
+  .section-head:first-child { margin-top: 8px; }
+  .section-head h2 {
+    margin: 0;
+    font-size: 13px; font-family: var(--font-mono);
+    text-transform: uppercase; letter-spacing: .16em;
+    color: var(--g);
+    display: flex; align-items: center; gap: 9px;
+  }
+  .section-head h2::before {
+    content: ""; width: 11px; height: 11px; border-radius: 3px; background: var(--g);
+  }
+  .section-head p { margin: 6px 0 0 20px; color: var(--muted); font-size: 13.5px; max-width: 62ch; }
+
+  /* route card = details/summary */
+  .route {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--g, var(--brand));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin: 14px 0;
+    overflow: hidden;
+  }
+  .route > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 16px 20px;
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  }
+  .route > summary::-webkit-details-marker { display: none; }
+  .route > summary::after {
+    content: "▸";
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 13px;
+    transition: transform .15s;
+  }
+  .route[open] > summary::after { transform: rotate(90deg); }
+  .route > summary:hover .r-path { color: var(--brand-bright); }
+  .r-path {
+    font-family: var(--font-mono);
+    font-weight: 600; font-size: 16px;
+    color: var(--brand);
+    letter-spacing: -.01em;
+  }
+  .r-name { font-weight: 700; font-size: 16px; }
+  .r-purpose {
+    flex-basis: 100%;
+    color: var(--ink-soft); font-size: 13.5px;
+    margin-top: 2px;
+  }
+  .route-body { padding: 4px 20px 20px; border-top: 1px solid var(--line-soft); }
+
+  .note {
+    font-size: 13px; color: var(--ink-soft);
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 9px 13px;
+    margin: 14px 0;
+  }
+  .note b { color: var(--ink); }
+
+  /* tab block */
+  .tab {
+    margin: 18px 0 0;
+    padding-top: 4px;
+  }
+  .tab-title {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    margin: 0 0 4px;
+  }
+  .tab-title h4 {
+    margin: 0; font-size: 14.5px; letter-spacing: -.01em;
+  }
+  .tab-badge {
+    font-family: var(--font-mono);
+    font-size: 10.5px; letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 1px 9px;
+  }
+  .tab-desc { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+
+  /* control rows */
+  .ctls { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+  .ctls li {
+    display: grid;
+    grid-template-columns: 190px minmax(0,1fr);
+    gap: 14px;
+    align-items: start;
+    padding: 5px 0;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .ctls li:last-child { border-bottom: none; }
+  .ctl-name { display: flex; }
+  .k {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.35;
+    padding: 3px 9px;
+    border-radius: 7px;
+    font-weight: 500;
+    word-break: break-word;
+  }
+  .k-btn   { background: var(--brand-tint); color: var(--brand-bright); border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent); }
+  .k-drop  { background: transparent; color: var(--ink-soft); border: 1px solid var(--line); }
+  .k-drop::before { content: "▾ "; opacity: .6; }
+  .k-input { background: var(--surface-2); color: var(--ink-soft); border: 1px dashed var(--line); }
+  .k-input::before { content: "▮ "; opacity: .45; }
+  .k-link  { background: transparent; color: var(--brand-bright); border: none; padding-left: 0; text-decoration: underline; text-underline-offset: 2px; text-decoration-style: dotted; }
+  .k-modal { background: transparent; color: var(--ink-soft); border: 1px dashed var(--muted); }
+  .k-modal::before { content: "▭ "; opacity: .6; }
+  .k-toggle{ background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--line); }
+  .k-toggle::before { content: "◧ "; opacity: .55; }
+  .ctl-desc { color: var(--ink-soft); font-size: 13.5px; padding-top: 2px; }
+  .ctl-desc code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+
+  /* nested modal group */
+  .modal-group {
+    margin: 12px 0 4px;
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+  }
+  .modal-group > .mg-title {
+    font-size: 13px; font-weight: 700; margin: 0 0 3px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mg-tag {
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px;
+  }
+  .modal-group > .mg-sub { margin: 0 0 9px; color: var(--muted); font-size: 12.5px; }
+
+  /* status chips */
+  .s { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 20px; white-space: nowrap; }
+  .s-red   { background: var(--s-red-bg);   color: var(--s-red); }
+  .s-amber { background: var(--s-amber-bg); color: var(--s-amber); }
+  .s-green { background: var(--s-green-bg); color: var(--s-green); }
+
+  /* legend + flow */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+    margin: 14px 0;
+  }
+  .legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px,1fr)); gap: 8px 22px; }
+  .legend-grid .row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; padding: 3px 0; }
+  .legend-grid .row span:last-child { font-size: 12.5px; color: var(--ink-soft); }
+
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-family: var(--font-mono); font-size: 12.5px; }
+  .flow .node { padding: 4px 11px; border-radius: 7px; background: var(--brand-tint); color: var(--brand-bright); border: 1px solid color-mix(in srgb, var(--brand) 28%, transparent); }
+  .flow .arw { color: var(--muted); }
+
+  .foot {
+    grid-column: 1 / -1;
+    margin-top: 44px; padding-top: 20px;
+    border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 12.5px;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    font-family: var(--font-mono);
+  }
+
+  :focus-visible { outline: 2px solid var(--brand-bright); outline-offset: 2px; border-radius: 4px; }
+
+  @media (max-width: 860px) {
+    .wrap { grid-template-columns: 1fr; gap: 0; }
+    aside { position: static; max-height: none; overflow: visible; margin-bottom: 18px;
+            border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--surface); }
+    .ctls li { grid-template-columns: 1fr; gap: 3px; }
+    .ctl-name { margin-bottom: 1px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+  html { scroll-behavior: smooth; }
+  main :target > summary { box-shadow: inset 0 0 0 2px var(--brand-bright); border-radius: var(--radius); }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="mh-inner">
+      <p class="mh-eyebrow"><span class="mh-mark">J</span> Jigzle Ops · application sitemap</p>
+      <h1>Every screen, tab & button — one map to point at.</h1>
+      <p class="lede">A complete wayfinding map of the Jigzle Ops app (<code>jigzle.vercel.app</code>), from the home hub outward. Grouped exactly the way the app's own navigation is. Each route folds open to reveal its tabs, and every button, dropdown, input, and modal is listed with what it does — so we can name the exact spot that needs changing.</p>
+      <div class="stats">
+        <div class="stat"><b>11</b><span>Primary routes</span></div>
+        <div class="stat"><b>4</b><span>Nav groups</span></div>
+        <div class="stat"><b>27</b><span>Tabs & sub-views</span></div>
+        <div class="stat"><b>4</b><span>Legacy redirects</span></div>
+      </div>
+    </div>
+  </header>
+
+  <aside>
+    <div class="toc-tools">
+      <button type="button" id="expand-all">Expand all</button>
+      <button type="button" id="collapse-all">Collapse all</button>
+    </div>
+
+    <nav class="toc-group" style="--g:var(--muted)">
+      <p style="--g:var(--muted)">Global</p>
+      <a href="#chrome"><code>every page</code> App chrome</a>
+      <a href="#login"><code>/login</code> Sign in</a>
+      <a href="#home"><code>/</code> Home hub</a>
+    </nav>
+    <nav class="toc-group" style="--g:var(--g-sales)">
+      <p>Sales</p>
+      <a href="#sales"><code>/sales</code> Sales pipeline</a>
+      <a href="#purchasing"><code>/purchasing</code> Purchasing</a>
+    </nav>
+    <nav class="toc-group" style="--g:var(--g-warehouse)">
+      <p>Warehouse</p>
+      <a href="#inbound"><code>/inbound</code> Inbound</a>
+      <a href="#outbound"><code>/outbound</code> Outbound</a>
+      <a href="#inventory"><code>/inventory</code> Inventory</a>
+    </nav>
+    <nav class="toc-group" style="--g:var(--g-database)">
+      <p>Database</p>
+      <a href="#customers"><code>/customers</code> Customer</a>
+      <a href="#catalog"><code>/catalog</code> Catalog</a>
+    </nav>
+    <nav class="toc-group" style="--g:var(--g-tools)">
+      <p>Tools & Settings</p>
+      <a href="#data-health"><code>/data-health</code> Data Health</a>
+      <a href="#calculator"><code>/calculator</code> Calculator</a>
+      <a href="#stock-check"><code>/stock-check</code> Stock Check</a>
+      <a href="#settings"><code>/settings</code> Settings</a>
+    </nav>
+    <nav class="toc-group" style="--g:var(--muted)">
+      <p style="--g:var(--muted)">Reference</p>
+      <a href="#legend"><code>?</code> Symbol legend</a>
+    </nav>
+  </aside>
+
+  <main>
+
+    <!-- LEGEND -->
+    <section class="section-head" id="legend" style="--g:var(--muted)">
+      <h2 style="--g:var(--muted)">How to read this map</h2>
+      <p>Each control is tagged by <em>type</em>. The three status colours are the app's own readiness circles — they recur on every order and stock row.</p>
+    </section>
+    <div class="panel">
+      <div class="legend-grid">
+        <div class="row"><span class="ctl-name"><span class="k k-btn">Button</span></span><span>Performs an action (save, advance, delete…)</span></div>
+        <div class="row"><span class="ctl-name"><span class="k k-drop">Dropdown</span></span><span>A select / picker of preset options</span></div>
+        <div class="row"><span class="ctl-name"><span class="k k-input">Input</span></span><span>Text / number / scan field you type into</span></div>
+        <div class="row"><span class="ctl-name"><span class="k k-toggle">Toggle</span></span><span>Segmented / on-off / sub-tab switch</span></div>
+        <div class="row"><span class="ctl-name"><span class="k k-link">Link</span></span><span>Inline text action (often destructive/secondary)</span></div>
+        <div class="row"><span class="ctl-name"><span class="k k-modal">Modal</span></span><span>Opens an overlay / dialog (detailed below it)</span></div>
+      </div>
+      <div style="height:1px;background:var(--line-soft);margin:14px 0"></div>
+      <div class="legend-grid">
+        <div class="row"><span class="ctl-name"><span class="s s-red">To order</span></span><span>Line needs buying — nothing in stock yet</span></div>
+        <div class="row"><span class="ctl-name"><span class="s s-amber">On the way</span></span><span>Stock inbound but not yet received</span></div>
+        <div class="row"><span class="ctl-name"><span class="s s-green">Ready</span></span><span>Fully in stock / satisfied</span></div>
+      </div>
+    </div>
+
+    <!-- GLOBAL CHROME -->
+    <section class="section-head" id="chrome" style="--g:var(--muted)">
+      <h2 style="--g:var(--muted)">Global · appears on every page</h2>
+      <p>The header, breadcrumb, and auth gate wrap every authenticated screen below.</p>
+    </section>
+
+    <details class="route" id="chrome-header" style="--g:var(--muted)">
+      <summary><span class="r-path">AppHeader</span> <span class="r-name">Top bar + navigation</span>
+        <span class="r-purpose">Persistent header on every authenticated page — the single source of navigation.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <div class="tab-title"><h4>Header controls</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-link">J logo</span></span><span class="ctl-desc">Returns to the home hub (<code>/</code>).</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Jigzle Ops title</span></span><span class="ctl-desc">Also links to the home hub.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Primary nav (desktop)</span></span><span class="ctl-desc">One horizontal bar of the 7 sections in 4 groups (Sales · Warehouse · Database · Tools & Settings). Current section is highlighted.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">☰ Menu (mobile)</span></span><span class="ctl-desc">Hamburger toggles a slide-down drawer with the same 4 labelled groups.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Sign out</span></span><span class="ctl-desc">Ends the Supabase session and returns to <code>/login</code>. Tooltip shows the signed-in email.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Breadcrumbs</h4><span class="tab-badge">below header</span></div>
+          <p class="tab-desc">A <code>Home › Section › Tab</code> trail on every section. Home and Section are clickable; the last crumb is the current tab (bold, not a link).</p>
+        </div>
+        <div class="note"><b>Auth gate (middleware).</b> Every route except <code>/login</code> and <code>/auth/callback</code> is gated: not signed in → redirect to <code>/login</code>; signed in but not on the allow-list → signed out and sent to <code>/login?error=unauthorized</code>. The allow-list lives in one DB table (<code>allowed_users</code>).</div>
+      </div>
+    </details>
+
+    <details class="route" id="login" style="--g:var(--muted)">
+      <summary><span class="r-path">/login</span> <span class="r-name">Sign in</span>
+        <span class="r-purpose">The only public screen. Google OAuth, then the allow-list check.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">Sign in with Google</span></span><span class="ctl-desc">Starts Google OAuth, redirecting back through <code>/auth/callback</code>.</span></li>
+            <li><span class="ctl-name"><span class="k k-modal">Unauthorized notice</span></span><span class="ctl-desc">Red banner "This Google account is not authorized." shown when <code>?error=unauthorized</code> is present.</span></li>
+          </ul>
+          <div class="note"><b>/auth/callback</b> — no UI. Exchanges the OAuth code, re-checks the allow-list, then sends you to the home hub (or back to login with an error).</div>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="home" style="--g:var(--muted)" open>
+      <summary><span class="r-path">/</span> <span class="r-name">Home hub</span>
+        <span class="r-purpose">The landing grid — one card per section, built from the same nav config as the header.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <p class="tab-desc">Four titled groups of cards. Each card is a link into its section with a one-line blurb:</p>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">Sales · Purchasing</span></span><span class="ctl-desc"><b>Sales</b> group → <code>/sales</code>, <code>/purchasing</code>.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Inbound · Outbound · Inventory</span></span><span class="ctl-desc"><b>Warehouse</b> group → <code>/inbound</code>, <code>/outbound</code>, <code>/inventory</code>.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Customer · Catalog</span></span><span class="ctl-desc"><b>Database</b> group → <code>/customers</code>, <code>/catalog</code>.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Data Health · Calculator · Stock Check · Settings</span></span><span class="ctl-desc"><b>Tools & Settings</b> group → the four tool routes.</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <!-- ============ SALES ============ -->
+    <section class="section-head" id="sales-group" style="--g:var(--g-sales)">
+      <h2>Sales</h2>
+      <p>The sell-side: turning enquiries into fulfilled, paid orders — and buying the stock to back them.</p>
+    </section>
+
+    <details class="route" id="sales" style="--g:var(--g-sales)" open>
+      <summary><span class="r-path">/sales</span> <span class="r-name">Sales pipeline</span>
+        <span class="r-purpose">One window over the sell-side. Three tabs plus the new-order form.</span></summary>
+      <div class="route-body">
+        <div class="flow">
+          <span class="node">Pending</span><span class="arw">→ send ready →</span>
+          <span class="node">Fulfill</span><span class="arw">→ to Outbound →</span>
+          <span class="node">History</span>
+        </div>
+        <div class="note"><b>Legacy redirects.</b> <code>/orders</code>, <code>/pending</code>, <code>/fulfill</code>, <code>/history</code> all forward here (preserving <code>?tab=</code> / <code>?order=</code>) for muscle memory and old links.</div>
+
+        <div class="tab">
+          <div class="tab-title"><h4>Shell chrome</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">Pending / Fulfill / History</span></span><span class="ctl-desc">Tab bar switches the active board; Pending & Fulfill show live count badges.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ New</span></span><span class="ctl-desc">Opens the create-order form (<code>/sales/new</code>) inside the window; hides the tab bar.</span></li>
+            <li><span class="ctl-name"><span class="k k-modal">Toast</span></span><span class="ctl-desc">Transient confirmation on stage-advance / save; auto-dismisses.</span></li>
+          </ul>
+        </div>
+
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · Pending</h4><span class="tab-badge">orders awaiting stock / payment</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">Filter by customer name, order id, or a SKU on the order.</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">All · <span class="s s-red">To order</span> · <span class="s s-amber">On the way</span> · <span class="s s-green">Ready</span></span></span><span class="ctl-desc">Readiness filter tabs, each with a live count.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Order row</span></span><span class="ctl-desc">Opens that order's detail (list → detail swap).</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Order detail <span class="mg-tag">bodyview</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-btn">← back</span></span><span class="ctl-desc">Returns to the queue.</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Line note</span></span><span class="ctl-desc">Per-line note (NoteEditor) backed by a datalist of common notes; saves on blur.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Mark as paid</span></span><span class="ctl-desc">Settles the full remaining balance (method "manual"); only when balance &gt; 0.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Send ready items (N)</span></span><span class="ctl-desc">Cuts the in-stock lines and advances them to Fulfill; blocked while unpaid.</span></li>
+              <li><span class="ctl-name"><span class="k k-link">Delete order</span></span><span class="ctl-desc">Opens the delete-confirm overlay.</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Delete order <span class="mg-tag">confirm modal</span></p>
+            <p class="mg-sub">Lists consequences (pending items removed, payments erased).</p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-btn">Delete order</span></span><span class="ctl-desc">Hard-deletes via <code>delete_order</code> RPC.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">← Back</span></span><span class="ctl-desc">Cancels.</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · Fulfill</h4><span class="tab-badge">cut & ready to hand to warehouse</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">Filter the to-send queue by customer or SKU.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Order row</span></span><span class="ctl-desc">Opens the fulfilment detail.</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Fulfilment detail <span class="mg-tag">bodyview</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-btn">← back</span></span><span class="ctl-desc">Clears the selection.</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">Ship-to address</span></span><span class="ctl-desc">Radio list of the customer's saved addresses; "Needs address" warning when unset.</span></li>
+              <li><span class="ctl-name"><span class="k k-drop">Courier</span></span><span class="ctl-desc">Pick a configured courier service (from Settings).</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Tracking</span></span><span class="ctl-desc">Optional tracking number.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Send to Outbound</span></span><span class="ctl-desc">Sets address + courier and moves the order to Outbound; needs both chosen.</span></li>
+              <li><span class="ctl-name"><span class="k k-link">↩ Send back to pending</span></span><span class="ctl-desc">Clears the cut and restores stock (confirm prompt first).</span></li>
+              <li><span class="ctl-name"><span class="k k-link">Delete order</span></span><span class="ctl-desc">Opens the delete-confirm overlay.</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · History</h4><span class="tab-badge">completed / cancelled — read-only</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">Query by name, order id, or date (YYYY-MM-DD).</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Order row</span></span><span class="ctl-desc">Opens the read-only summary (shipped items, boxes, address).</span></li>
+            <li><span class="ctl-name"><span class="k k-link">+ Add / Edit note</span></span><span class="ctl-desc">The one editable thing — opens an inline textarea (Cancel / Save note).</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Delete order</span></span><span class="ctl-desc">Delete-confirm overlay (logs a compensating stock adjustment).</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="sales-new" style="--g:var(--g-sales)">
+      <summary><span class="r-path">/sales/new</span> <span class="r-name">New order</span>
+        <span class="r-purpose">Five-panel create-order form with a sticky summary rail. Opened by "+ New".</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <div class="tab-title"><h4>Panel 1 · Customer</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search customer</span></span><span class="ctl-desc">By phone or name; results are selectable rows.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ New customer</span></span><span class="ctl-desc">Reveals a subform: Name, Phone, Channel dropdown → Create / Cancel.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Change</span></span><span class="ctl-desc">Clears the selected customer.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Panel 2 · Address</h4><span class="tab-badge">locked until customer picked</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">Confirm address later</span></span><span class="ctl-desc">Defers the address to Fulfill.</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">Saved addresses</span></span><span class="ctl-desc">Radio list of the customer's addresses.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ New address</span></span><span class="ctl-desc">Subform (recipient, phone, free-text address) → opens the tidy/confirm overlay.</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Tidy-address confirm <span class="mg-tag">overlay</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-drop">Postcode autofill</span></span><span class="ctl-desc">Type-ahead that fills province / city / kecamatan / kelurahan / postcode.</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Parsed fields</span></span><span class="ctl-desc">Editable recipient, phone, province, city, subdistrict, ward, postcode, street, note.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Save address</span></span><span class="ctl-desc">Persists and selects it. <span class="k k-btn">Back</span> / <span class="k k-btn">× Close</span> cancel.</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Panel 3 · Items</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">SKU search</span></span><span class="ctl-desc">By code, name or piece-count; results as cards.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">− / + qty · price · add</span></span><span class="ctl-desc">Per result: qty stepper, Rp price input, and <b>add</b> to place the line.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">remove</span></span><span class="ctl-desc">Drops a line from the order.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Panel 4 · Payment</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">None · DP · Full</span></span><span class="ctl-desc">Pay-mode toggle. DP reveals a deposit amount input (capped at subtotal).</span></li>
+            <li><span class="ctl-name"><span class="k k-drop">Payment method</span></span><span class="ctl-desc">From Settings methods; shown for DP/Full.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Panel 5 · Priority</h4><span class="tab-badge">optional</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">Low · Mid · High</span></span><span class="ctl-desc">Buy-priority urgency; tap the active one to clear.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Summary rail + save</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">Save order</span></span><span class="ctl-desc">Submits; server routes it to Fulfill (cut at save) or Pending. Needs customer + ≥1 line + address (or "confirm later").</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">New order</span></span><span class="ctl-desc">On the success screen — resets the form for another entry.</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="purchasing" style="--g:var(--g-sales)">
+      <summary><span class="r-path">/purchasing</span> <span class="r-name">Purchasing</span>
+        <span class="r-purpose">Enter & advance purchase orders, then group them into shipments. Four tabs.</span></summary>
+      <div class="route-body">
+        <div class="flow">
+          <span class="node">To buy</span><span class="arw">→ done →</span>
+          <span class="node">To forwarder</span><span class="arw">→ confirm →</span>
+          <span class="node">To ship</span><span class="arw">→ group →</span>
+          <span class="node">History</span>
+        </div>
+        <p class="tab-desc" style="margin-top:10px">Tab bar carries live counts; default tab on load is <b>To forwarder</b>.</p>
+
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · To buy</h4><span class="tab-badge">buy-list & preorder planner</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">Manual · From Sales · Out of Stock</span></span><span class="ctl-desc">Sub-tab filters. Manual = hand buy-list; From Sales = read-only preorders; OOS = sold-out SKUs.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ add item</span></span><span class="ctl-desc">(Manual) opens the Add-planned-item modal.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">− / + qty</span></span><span class="ctl-desc">Per-row qty stepper (manual rows; optimistic save).</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Buy</span></span><span class="ctl-desc">Opens the Buy overlay (product + catalogue source links).</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Done →</span></span><span class="ctl-desc">Advances the PO to Processing (moves it to To forwarder).</span></li>
+            <li><span class="ctl-name"><span class="k k-link">🗑 Cancel item</span></span><span class="ctl-desc">Opens the delete-confirm overlay (real POs only).</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Add planned item <span class="mg-tag">modal</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-input">SKU search</span></span><span class="ctl-desc">Pick a SKU, or type a brand-new one (stubbed as a draft).</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Qty · link · note</span></span><span class="ctl-desc">Qty stepper, optional product link, short note.</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">Low · Mid · High</span></span><span class="ctl-desc">Urgency toggle.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Add item</span></span><span class="ctl-desc">Creates the planned item (and draft SKU if new).</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Buy this item <span class="mg-tag">overlay</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-link">Source links</span></span><span class="ctl-desc">External catalogue/supplier links open in a new tab.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Mark as Out of Stock</span></span><span class="ctl-desc">Flags the SKU sold-out and closes.</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · To forwarder</h4><span class="tab-badge">Processing + On the way POs</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">PO card</span></span><span class="ctl-desc">Opens a detail form; every field auto-saves on blur (no Save button).</span></li>
+            <li><span class="ctl-name"><span class="k k-drop">Supplier</span></span><span class="ctl-desc">Pick supplier (Settings-managed; flag + name).</span></li>
+            <li><span class="ctl-name"><span class="k k-input">Item link · unit cost · courier · tracking · marketplace id · notes</span></span><span class="ctl-desc">PO detail fields; local courier has a datalist of Settings couriers.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Confirm → To ship</span></span><span class="ctl-desc">Saves and sets status "With Forwarder".</span></li>
+            <li><span class="ctl-name"><span class="k k-link">🗑 Delete order</span></span><span class="ctl-desc">Inline confirm (Cancel / Yes, delete).</span></li>
+          </ul>
+        </div>
+
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · To ship</h4><span class="tab-badge">group POs into shipments</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">Country sub-tabs</span></span><span class="ctl-desc">All / per-origin-country / Other filters (when &gt;1 country).</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">Row checkbox</span></span><span class="ctl-desc">Select POs; ticking the first opens the group panel.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">PO card</span></span><span class="ctl-desc">Opens a locked read-only PO detail.</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Group into shipment <span class="mg-tag">panel</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-btn">− / + ship qty</span></span><span class="ctl-desc">Split partial quantities per PO.</span></li>
+              <li><span class="ctl-name"><span class="k k-drop">Forwarder</span></span><span class="ctl-desc">Pick forwarder (flag + acronym); seeds its last ship id.</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Ship id</span></span><span class="ctl-desc">Editable, with a datalist of open shipments.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Group shipment</span></span><span class="ctl-desc">Groups the selected POs into the ship id. <span class="k k-btn">Cancel</span> clears.</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Locked PO detail <span class="mg-tag">bodyview</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-drop">Shipment</span></span><span class="ctl-desc">Attach to / detach from an open shipment; a shipment-note textarea shows to the warehouse on Inbound.</span></li>
+              <li><span class="ctl-name"><span class="k k-link">🗑 Delete order</span></span><span class="ctl-desc">Inline confirm.</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · History</h4><span class="tab-badge">shipments — read-only</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">Active · Completed</span></span><span class="ctl-desc">Sub-tabs: not-yet-received vs received shipments.</span></li>
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">By ship id, SKU, or item name.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Shipment card</span></span><span class="ctl-desc">Opens the detail (items, costs, courier).</span></li>
+            <li><span class="ctl-name"><span class="k k-drop">Courier</span></span><span class="ctl-desc">In detail: Settings shipment-courier picker (auto-saves).</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Edit note</span></span><span class="ctl-desc">Opens a shipment-note editor (Cancel / Save note).</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <!-- ============ WAREHOUSE ============ -->
+    <section class="section-head" id="warehouse-group" style="--g:var(--g-warehouse)">
+      <h2>Warehouse</h2>
+      <p>Goods physically in and out: receiving arrivals, boxing & shipping, and the live stock picture.</p>
+    </section>
+
+    <details class="route" id="inbound" style="--g:var(--g-warehouse)">
+      <summary><span class="r-path">/inbound</span> <span class="r-name">Inbound</span>
+        <span class="r-purpose">Check arrivals into stock — the only "+" side. Two tabs.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <div class="tab-title"><h4>Shell chrome</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">Active · History</span></span><span class="ctl-desc">Tab bar; Active shows an open-shipment count.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ Unmarked</span></span><span class="ctl-desc">Jumps to Active and starts an ad-hoc receive (no ship id).</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · Active</h4><span class="tab-badge">open shipments to receive</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Scan to find</span></span><span class="ctl-desc">Scan an item → suggests open ship-ids whose orders contain it.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">+ Receive as unmarked shipment</span></span><span class="ctl-desc">Shown when a scan finds no matching shipment.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Shipment row</span></span><span class="ctl-desc">Opens the receive detail.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Reverse this receipt</span></span><span class="ctl-desc">On the result banner — inline confirm undoes stock + restores PO lines.</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Receive detail <span class="mg-tag">bodyview</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-input">Items scan</span></span><span class="ctl-desc">Scan/type a barcode → +1 the matching line (collision → picker, unknown → stub).</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Manual add</span></span><span class="ctl-desc">Opens the Manual-add / Map-a-SKU modal.</span></li>
+              <li><span class="ctl-name"><span class="k k-input">received / expected qty</span></span><span class="ctl-desc">Editable per line.</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">exclude + reason</span></span><span class="ctl-desc">Per touched line: exclude checkbox, excl-qty, reason.</span></li>
+              <li><span class="ctl-name"><span class="k k-drop">label</span></span><span class="ctl-desc">Inbound-label picker (Settings) + dim/weight input, × remove line.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Mark received / Save inbound</span></span><span class="ctl-desc">Opens the Receive-confirm window.</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Manual add / Map a SKU <span class="mg-tag">modal</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-input">SKU search</span></span><span class="ctl-desc">By code, name, piece-count. Each hit adds a unit.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">+ Add "…" as new SKU</span></span><span class="ctl-desc">Reveals a stub form (code / name / brand prefix) → create + add / map.</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Receive confirm <span class="mg-tag">modal</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-drop">Staff</span></span><span class="ctl-desc">Who received (Settings staff).</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Receive date</span></span><span class="ctl-desc">Date of receipt.</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">Leave open / Close shipment</span></span><span class="ctl-desc">Real shipments only.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Confirm receive</span></span><span class="ctl-desc">Writes stock via <code>record_receipt</code>. <span class="k k-btn">← Back to scanning</span> cancels.</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · History</h4><span class="tab-badge">confirmed receipts — read-only</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">By ship id, SKU, or name.</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">Year sub-tabs</span></span><span class="ctl-desc">Filter by receive year.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Receipt row</span></span><span class="ctl-desc">Opens the read-only detail.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Edit ship id</span></span><span class="ctl-desc">Modal: new ship-id input + "close after moving" checkbox → Save.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Delete entry</span></span><span class="ctl-desc">Inline confirm; removes inbound rows (stock self-corrects).</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="outbound" style="--g:var(--g-warehouse)">
+      <summary><span class="r-path">/outbound</span> <span class="r-name">Outbound</span>
+        <span class="r-purpose">Box, weigh, and ship fulfilled orders. Two tabs + a monthly report.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <div class="tab-title"><h4>Shell chrome</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">Ready to ship · History</span></span><span class="ctl-desc">Tab bar; Ready shows a queue count.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Monthly report</span></span><span class="ctl-desc">Overlay listing months; each downloads that month's shipments as .xlsx.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · Ready to ship</h4><span class="tab-badge">fulfilled, awaiting despatch</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-drop">Staff on shift</span></span><span class="ctl-desc">StaffPicker (persisted per device; stamped on shipments).</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Order row</span></span><span class="ctl-desc">Opens the ship detail.</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Ship detail <span class="mg-tag">bodyview</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-btn">⧉ Copy</span></span><span class="ctl-desc">Copies the recipient / address / courier block to clipboard.</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Items scan</span></span><span class="ctl-desc">Scan-verify each line (+1; full line → "Barcode OK").</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">manual check</span></span><span class="ctl-desc">Per line: mark verified without scanning.</span></li>
+              <li><span class="ctl-name"><span class="k k-drop">Box preset</span></span><span class="ctl-desc">Per box: Settings preset or Custom (L/W/H + real-weight inputs).</span></li>
+              <li><span class="ctl-name"><span class="k k-link">+ box</span></span><span class="ctl-desc">Adds another box; × removes one.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Mark shipped</span></span><span class="ctl-desc">Records the shipment; enabled once all lines verified + box dims filled.</span></li>
+              <li><span class="ctl-name"><span class="k k-link">↩ Return to Fulfill</span></span><span class="ctl-desc">Clears courier and drops the order back to Fulfill (confirm first).</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · History</h4><span class="tab-badge">shipped log — read-only</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">By name, SKU, or courier.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Shipment row</span></span><span class="ctl-desc">Opens read-only detail (address, courier, boxes, per-line ✅ scanned / ○ checked).</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="inventory" style="--g:var(--g-warehouse)">
+      <summary><span class="r-path">/inventory</span> <span class="r-name">Inventory</span>
+        <span class="r-purpose">Stock per SKU — on order, being shipped, in warehouse. Single read-only board.</span></summary>
+      <div class="route-body">
+        <p class="tab-desc">A grid of SKU cards; each shows thumbnail, code/name, and three stat pills (<b>On order</b> · <b>Shipped</b> · <b>Warehouse</b>), plus an "On hold" badge when units are held for a customer.</p>
+        <div class="tab">
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">Live debounced search by SKU code or name.</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">All · On order · Shipped · Warehouse</span></span><span class="ctl-desc">State filter tabs with live counts.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">⟳ Refresh stock</span></span><span class="ctl-desc">Rebuilds the snapshot and reloads; tooltip shows "as of" timestamp.</span></li>
+          </ul>
+          <div class="note">Read-only board — no row actions, no dropdowns, no modals. Snapshot auto-refreshes once on open.</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ============ DATABASE ============ -->
+    <section class="section-head" id="database-group" style="--g:var(--g-database)">
+      <h2>Database</h2>
+      <p>The reference records everything else points at: customers and the SKU catalogue.</p>
+    </section>
+
+    <details class="route" id="customers" style="--g:var(--g-database)">
+      <summary><span class="r-path">/customers</span> <span class="r-name">Customer</span>
+        <span class="r-purpose">Browse customers A–Z; spend, tier, contact details & addresses. Two-pane.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <div class="tab-title"><h4>Left pane · directory</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">By name or phone (hides A–Z while active; first 300 shown).</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">A–Z + #</span></span><span class="ctl-desc">Per-letter tabs with counts; # bucket for blank/non-letter names.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Customer row</span></span><span class="ctl-desc">Loads that customer's detail into the right pane.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Find duplicates</span></span><span class="ctl-desc">Opens the Merge-duplicates modal in scan mode.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Right pane · detail</h4><span class="tab-badge">inline auto-save</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Name · 3× phone</span></span><span class="ctl-desc">Each saves on blur.</span></li>
+            <li><span class="ctl-name"><span class="k k-drop">Channels (3 slots)</span></span><span class="ctl-desc">Platform picker + handle input; saved as an array.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ add address / ✎ edit</span></span><span class="ctl-desc">Opens the address overlay (add / edit mode).</span></li>
+            <li><span class="ctl-name"><span class="k k-link">Delete customer ID</span></span><span class="ctl-desc">Two-step inline confirm; blocked server-side if orders exist.</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Address overlay <span class="mg-tag">add / edit modal</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-drop">Country</span></span><span class="ctl-desc">Searchable flag + country picker.</span></li>
+              <li><span class="ctl-name"><span class="k k-drop">Postcode autofill</span></span><span class="ctl-desc">Indonesia-only type-ahead filling province/city/kecamatan/kelurahan/postcode.</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Address fields</span></span><span class="ctl-desc">Recipient, phone, province, city, subdistrict, ward, postcode, street, note.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Save / Add / Save anyway</span></span><span class="ctl-desc">Persists (dup warning requires a second save). <span class="k k-link">Delete</span> in edit mode.</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Merge duplicate customers <span class="mg-tag">shared modal</span></p>
+            <p class="mg-sub">Also opened from Data Health. Folds duplicate records into one keeper.</p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-toggle">Scan database / By customer ID</span></span><span class="ctl-desc">Auto-find same-name strays, or manual search.</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">Keep radio · Merge checkbox</span></span><span class="ctl-desc">Choose the keeper and tick records to fold in.</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Keep name as</span></span><span class="ctl-desc">Editable keeper name.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Merge N into keeper</span></span><span class="ctl-desc">Re-points orders, folds phones/addresses, deletes folded rows (risky merge needs a 2nd click). <span class="k k-btn">Done</span> closes.</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="catalog" style="--g:var(--g-database)">
+      <summary><span class="r-path">/catalog</span> <span class="r-name">Catalog</span>
+        <span class="r-purpose">Edit SKUs & barcodes; needs-review & shared-barcode cleanup. Three tabs.</span></summary>
+      <div class="route-body">
+        <p class="tab-desc">Two-pane: left = tabs + list, right = SKU editor or barcode-collision resolver.</p>
+        <div class="tab">
+          <div class="tab-title"><h4>Tabs</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-toggle">All</span></span><span class="ctl-desc">Search-driven (code / name / barcode); rows open the SKU editor.</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">Needs review (N)</span></span><span class="ctl-desc">SKUs flagged incomplete (missing name / brand / type / piece count).</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">Shared barcodes (N)</span></span><span class="ctl-desc">Barcodes owned by more than one SKU (collisions).</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Right pane · SKU editor</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">SKU fields</span></span><span class="ctl-desc">Identity, classification, dimensions/weight, media/tags (code & dates read-only).</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">verified</span></span><span class="ctl-desc">Per barcode: toggle verified (immediate save).</span></li>
+            <li><span class="ctl-name"><span class="k k-link">unlink</span></span><span class="ctl-desc">Removes a barcode from the SKU.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ add</span></span><span class="ctl-desc">Links a typed barcode to the SKU.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Save changes</span></span><span class="ctl-desc">Writes only changed fields; refreshes the needs-review list.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Right pane · collision resolver</h4><span class="tab-badge">from Shared-barcodes</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-link">open</span></span><span class="ctl-desc">Opens an owning SKU in the editor.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">unlink</span></span><span class="ctl-desc">Unlinks a SKU from the barcode; clears the collision when one owner remains.</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <!-- ============ TOOLS ============ -->
+    <section class="section-head" id="tools-group" style="--g:var(--g-tools)">
+      <h2>Tools & Settings</h2>
+      <p>Maintenance, pricing, counting, and the pick-lists everything else draws from.</p>
+    </section>
+
+    <details class="route" id="data-health" style="--g:var(--g-tools)">
+      <summary><span class="r-path">/data-health</span> <span class="r-name">Data Health</span>
+        <span class="r-purpose">Spot duplicate / split customer records — shared numbers, blank names.</span></summary>
+      <div class="route-body">
+        <p class="tab-desc">A single scanning page: four stat cards (Customers · Shared number · Shared address · Empty records) over three fix sections.</p>
+        <div class="tab">
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">Refresh</span></span><span class="ctl-desc">Re-runs the integrity scan.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Add (code) to names</span></span><span class="ctl-desc">Maintenance banner — backfills the "(last4)" suffix into names that lack it.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Review & merge</span></span><span class="ctl-desc">Per shared-number / shared-address group — opens Merge-duplicates preloaded with that group.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Delete all</span></span><span class="ctl-desc">Empty-records section — inline confirm; deletes strays with no attached data.</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="calculator" style="--g:var(--g-tools)">
+      <summary><span class="r-path">/calculator</span> <span class="r-name">Calculator</span>
+        <span class="r-purpose">Import landed-cost & recommended sale price; FX rates, saved calcs. Three tabs.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · Calculator</h4><span class="tab-badge">landed cost → sale price</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-drop">Shipping method</span></span><span class="ctl-desc">Drives FX currency, rate/kg, warehouse fee, tax rules.</span></li>
+            <li><span class="ctl-name"><span class="k k-input">Item + tax inputs</span></span><span class="ctl-desc">SKU, purchase price, local shipping, real weight, box P×L×T, import tax rate.</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">Coefficient slider</span></span><span class="ctl-desc">Margin target (0–0.9); higher = higher rec price.</span></li>
+            <li><span class="ctl-name"><span class="k k-toggle">Direct / Marketplace</span></span><span class="ctl-desc">Apply a marketplace fee (reveals a fee-rate input).</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Save calculation</span></span><span class="ctl-desc">Saves and prepends to History.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Reset</span></span><span class="ctl-desc">Confirm, then clears the inputs to defaults.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · History</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">Filter saved calcs by SKU, route, currency.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Saved-calc row</span></span><span class="ctl-desc">Opens the detail modal.</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">Saved-calculation detail <span class="mg-tag">modal</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-btn">Duplicate to new</span></span><span class="ctl-desc">Loads its values into the Calculator tab.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Delete</span></span><span class="ctl-desc">Confirm, then deletes and closes.</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · Rates</h4><span class="tab-badge">FX + methods — read-only</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">Refresh live</span></span><span class="ctl-desc">Fetches fresh FX (Frankfurter) and updates the rate cards.</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="stock-check" style="--g:var(--g-tools)">
+      <summary><span class="r-path">/stock-check</span> <span class="r-name">Stock Check</span>
+        <span class="r-purpose">Count the shelf (presence / scan) & true stock up with adjustments. Two tabs.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · Counts</h4><span class="tab-badge">count sessions</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">+ New count</span></span><span class="ctl-desc">Opens the New-count modal.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Session row</span></span><span class="ctl-desc">Open session → Presence/Count UI; closed → read-only Snapshot.</span></li>
+          </ul>
+          <div class="modal-group">
+            <p class="mg-title">New count <span class="mg-tag">modal</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-input">Who is counting</span></span><span class="ctl-desc">Counter name (prefilled from last).</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">Checkbox / Scan</span></span><span class="ctl-desc">Mode — presence checklist vs scanner count (fixed for the session).</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">All active / By brand</span></span><span class="ctl-desc">Scope; By brand reveals a filterable brand checklist.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Start count</span></span><span class="ctl-desc">Opens the session.</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Presence session <span class="mg-tag">Checkbox mode</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-input">Filter</span></span><span class="ctl-desc">Narrow the checklist by code/name.</span></li>
+              <li><span class="ctl-name"><span class="k k-input">Add SKU</span></span><span class="ctl-desc">Add a present-but-unlisted SKU (offers a quick-add form on no match).</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">− / + qty · ✓ counted</span></span><span class="ctl-desc">Per row: qty steppers and a counted checkbox.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Close</span></span><span class="ctl-desc">Opens the close-confirm. <span class="k k-link">cancel</span> abandons the session.</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Count session <span class="mg-tag">Scan mode</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-input">Scan a barcode</span></span><span class="ctl-desc">Keyboard-wedge scanner; anomalies land in the review strip.</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">🔊 / 🔇 mute</span></span><span class="ctl-desc">Scan-sound toggle.</span></li>
+              <li><span class="ctl-name"><span class="k k-toggle">Unscanned / Scanned / scan log</span></span><span class="ctl-desc">Collapsible sections; per-row steppers + "= system" / "0" quick buttons.</span></li>
+              <li><span class="ctl-name"><span class="k k-modal">Review strip</span></span><span class="ctl-desc">Holds doubles (accept-as-2 / dismiss), garbled (dismiss), collisions (which-SKU picker), unknowns (quick-add).</span></li>
+            </ul>
+          </div>
+          <div class="modal-group">
+            <p class="mg-title">Close confirm <span class="mg-tag">both modes</span></p>
+            <ul class="ctls">
+              <li><span class="ctl-name"><span class="k k-toggle">set 0 / leave</span></span><span class="ctl-desc">Per not-counted row: zero it out or leave as-is.</span></li>
+              <li><span class="ctl-name"><span class="k k-btn">Confirm & close</span></span><span class="ctl-desc">Writes the adjustments. <span class="k k-btn">← Back to counting</span> cancels.</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Tab · Adjustments</h4><span class="tab-badge">signed-delta stock ledger</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-input">Search</span></span><span class="ctl-desc">By SKU code or name.</span></li>
+            <li><span class="ctl-name"><span class="k k-drop">Source</span></span><span class="ctl-desc">All / stock check / manual.</span></li>
+            <li><span class="ctl-name"><span class="k k-input">From / To dates</span></span><span class="ctl-desc">Date-range filter.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ Manual adjustment</span></span><span class="ctl-desc">Inline form: pick a SKU, ±qty, note → save.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">edit / delete</span></span><span class="ctl-desc">Per ledger row (delete is a direct write).</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+    <details class="route" id="settings" style="--g:var(--g-tools)">
+      <summary><span class="r-path">/settings</span> <span class="r-name">Settings</span>
+        <span class="r-purpose">Configurable pick-lists that feed every other screen. Category cards → per-list editors.</span></summary>
+      <div class="route-body">
+        <div class="tab">
+          <div class="tab-title"><h4>Landing · category cards</h4></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">Sales</span></span><span class="ctl-desc">Payment methods · Common notes.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Shipping</span></span><span class="ctl-desc">Couriers · Box sizes.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Inbound</span></span><span class="ctl-desc">Inbound labels · Warehouse staff.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Purchasing</span></span><span class="ctl-desc">Suppliers · Forwarders · Local couriers · Shipment couriers.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Customer</span></span><span class="ctl-desc">Channels.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>List editor</h4><span class="tab-badge">every pick-list</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-btn">+ add</span></span><span class="ctl-desc">Appends a new blank row.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">Sort A–Z</span></span><span class="ctl-desc">Sorts and persists the order.</span></li>
+            <li><span class="ctl-name"><span class="k k-input">Row fields</span></span><span class="ctl-desc">Label / dims / note etc., saved on blur.</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">▲ / ▼</span></span><span class="ctl-desc">Reorder a row up / down.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">✕ Remove</span></span><span class="ctl-desc">Soft-deletes the row (drops it from every picker).</span></li>
+            <li><span class="ctl-name"><span class="k k-modal">Icon picker</span></span><span class="ctl-desc">Per-row icon cell: emoji input / upload image / remove icon.</span></li>
+          </ul>
+        </div>
+        <div class="tab">
+          <div class="tab-title"><h4>Suppliers & Forwarders</h4><span class="tab-badge">Purchasing category</span></div>
+          <ul class="ctls">
+            <li><span class="ctl-name"><span class="k k-drop">Flag / country</span></span><span class="ctl-desc">Per row — sets flag + derived country (drives currency).</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">+ Add supplier / + Add forwarder</span></span><span class="ctl-desc">Inline add subform (flag + name; forwarder also has an immutable prefix).</span></li>
+            <li><span class="ctl-name"><span class="k k-btn">▲ / ▼ · Sort A–Z</span></span><span class="ctl-desc">Reorder / sort, persisted.</span></li>
+            <li><span class="ctl-name"><span class="k k-link">✕ Remove</span></span><span class="ctl-desc">Soft-delete the supplier / forwarder.</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
+
+  </main>
+
+  <footer class="foot">
+    <span>Jigzle Ops · apps/ops (Next.js 14 · Supabase)</span>
+    <span>Sitemap generated 2026-07-04</span>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var routes = Array.prototype.slice.call(document.querySelectorAll('details.route'));
+    document.getElementById('expand-all').addEventListener('click', function () {
+      routes.forEach(function (r) { r.open = true; });
+    });
+    document.getElementById('collapse-all').addEventListener('click', function () {
+      routes.forEach(function (r) { r.open = false; });
+    });
+    // open a route when its anchor is targeted from the TOC
+    function openTarget() {
+      var id = location.hash.slice(1);
+      if (!id) return;
+      var el = document.getElementById(id);
+      if (el && el.tagName === 'DETAILS') el.open = true;
+    }
+    window.addEventListener('hashchange', openTarget);
+    openTarget();
+  })();
+</script>
+
+</html>

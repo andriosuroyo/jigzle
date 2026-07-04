@@ -17,6 +17,10 @@ Code-coupled documentation. Notes that live alongside the code in git.
 
 Rule of thumb: if a future change to this repo's *code* depends on understanding it, document it here. If it's a design or operational reference, keep it in Drive.
 
+## App sitemap
+
+[`sitemap.html`](./sitemap.html) is a self-contained, offline-openable map of the whole ops app — every route, tab, button, dropdown, and modal, grouped the same way the app's own nav is. It's a shared reference for pointing at the exact part of the app under discussion. Open it in a browser (no build step); update it alongside UI changes — see the maintenance comment at the top of the file.
+
 ## ADR template
 
 When adding a decision record, name files `001-<short-slug>.md`, `002-<...>.md`, etc. Each should have:
