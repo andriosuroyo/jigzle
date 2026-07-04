@@ -9,6 +9,7 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import { IconOnOrder, IconShipped, IconWarehouse } from '@/components/StockStats';
 
 const ROW_LIMIT = 1000; // matches the server LIMIT — used only for the "refine your search" hint
 
@@ -20,23 +21,8 @@ const STATES: { key: InventoryState; label: string }[] = [
   { key: 'warehouse', label: 'Warehouse' },
 ];
 
-// compact stat icons (line style, inherit currentColor). On order = incoming order, Shipped = truck,
-// Warehouse = box. Kept tiny (14px) for the dense card.
-const IconOnOrder = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M6 2l1.5 3M18 2l-1.5 3M3 6h18l-1.6 8.5a2 2 0 0 1-2 1.6H8.1" /><circle cx="9" cy="20" r="1.4" /><circle cx="17" cy="20" r="1.4" />
-  </svg>
-);
-const IconShipped = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M1 5h13v11H1zM14 8h4l3 3v5h-7" /><circle cx="6" cy="18" r="1.6" /><circle cx="18" cy="18" r="1.6" />
-  </svg>
-);
-const IconWarehouse = () => (
-  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M3 21V8l9-5 9 5v13M3 21h18M9 21v-6h6v6" />
-  </svg>
-);
+// compact stat icons — extracted to the shared StockStats module (PR156) so Sales' item search shows
+// the same On order / Shipped / Warehouse glyphs.
 
 function fmtAsOf(iso: string | null): string {
   if (!iso) return '—';

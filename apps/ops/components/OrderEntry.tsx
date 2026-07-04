@@ -23,6 +23,7 @@ import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
 import PostcodeAutofill from '@/components/PostcodeAutofill';
 import SearchInput from '@/components/SearchInput';
+import StockStats from '@/components/StockStats';
 import { loadPostal, type PostalData } from '@/lib/idPostal';
 import { tidyAddress, validateAddress, type TidyResult } from '@/lib/tidyAddress';
 
@@ -178,16 +179,23 @@ export default function OrderEntry({
     }
   }
 
+  // PR156: session-local result cache — repeating/backspacing a query renders instantly instead of
+  // re-hitting the server (the roundtrip is what made the search feel heavy on mobile data).
+  const skuCache = useRef(new Map<string, SkuHit[]>());
+
   async function runSkuSearch() {
     const _id = ++skuSeq.current;
     const q = skuQuery.trim();
     // <3 matches searchSkus' real floor (the 0025 pg_trgm index needs ≥3) — short-circuit here
     // instead of round-tripping to a guaranteed [] and falsely showing "No results".
     if (q.length < 3) { setSkuResults([]); setSkuSearched(false); return; }
+    const cached = skuCache.current.get(q.toLowerCase());
+    if (cached) { setSkuResults(cached); setSkuSearching(false); setSkuSearched(true); return; }
     setSkuSearching(true);
     try {
       const hits = await searchSkus(q);
       if (skuSeq.current !== _id) return; // a newer keystroke superseded this request
+      skuCache.current.set(q.toLowerCase(), hits);
       setSkuResults(hits); setSkuSearching(false); setSkuSearched(true);
     } catch {
       if (skuSeq.current !== _id) return;
@@ -585,29 +593,38 @@ export default function OrderEntry({
               )}
               {skuResults.length > 0 && (
                 <ul className="result-list">
-                  {skuResults.map((s) => (
-                    <li key={s.item_code} className="sku-result">
-                      {/* Line 1: image + code + name */}
-                      <div className="sku-line">
-                        <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={SKU_IMG.sm} />
-                        <span className="sku-code">{s.item_code}</span>
-                        <span className="sku-name">{s.name}</span>
-                      </div>
-                      {/* Line 2: qty × price × add — free numeric qty on every viewport (SA-6, no 50 cap) */}
-                      <div className="sku-add">
-                        <input className="qty" type="number" inputMode="numeric" min={1} placeholder="qty"
-                          value={draftQty[s.item_code] ?? ''}
-                          onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))} />
-                        {/* price: text + thousands grouping; state stores digits only (PR24 §4) */}
-                        <input className="price" type="text" inputMode="numeric" placeholder="Rp price"
-                          value={fmtThousands(draftPrice[s.item_code] ?? '')}
-                          onChange={(e) => setDraftPrice((d) => ({ ...d, [s.item_code]: e.target.value.replace(/\D/g, '') }))} />
-                        <button className="btn-secondary" onClick={() => addLine(s)}>add</button>
-                      </div>
-                      {/* Line 3: availability only */}
-                      <span className="sku-avail">avail {s.available}</span>
-                    </li>
-                  ))}
+                  {/* PR156 card: md image left; beside it l1 = SKU + Inventory-style stat icons
+                      (on order · shipped · warehouse), l2 = name, l3 = qty stepper × price × add. */}
+                  {skuResults.map((s) => {
+                    const qtyNow = Math.max(1, parseInt(draftQty[s.item_code] || '1', 10) || 1);
+                    return (
+                      <li key={s.item_code} className="sku-result">
+                        <div className="sku-line">
+                          <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={SKU_IMG.md} />
+                          <div className="sku-main">
+                            <div className="sku-l1">
+                              <span className="sku-code">{s.item_code}</span>
+                              <StockStats pending={s.pending} onTheWay={s.on_the_way} warehouse={s.available} />
+                            </div>
+                            <div className="sku-name-line">{s.name}</div>
+                            <div className="sku-add">
+                              <span className="qty-step">
+                                <button type="button" onClick={() => setDraftQty((d) => ({ ...d, [s.item_code]: String(Math.max(1, qtyNow - 1)) }))} disabled={qtyNow <= 1} aria-label="decrease">−</button>
+                                <input type="number" inputMode="numeric" min={1} value={draftQty[s.item_code] ?? '1'}
+                                  onChange={(e) => setDraftQty((d) => ({ ...d, [s.item_code]: e.target.value }))} />
+                                <button type="button" onClick={() => setDraftQty((d) => ({ ...d, [s.item_code]: String(qtyNow + 1) }))} aria-label="increase">+</button>
+                              </span>
+                              {/* price: text + thousands grouping; state stores digits only (PR24 §4) */}
+                              <input className="price" type="text" inputMode="numeric" placeholder="Rp price"
+                                value={fmtThousands(draftPrice[s.item_code] ?? '')}
+                                onChange={(e) => setDraftPrice((d) => ({ ...d, [s.item_code]: e.target.value.replace(/\D/g, '') }))} />
+                              <button className="btn-secondary" onClick={() => addLine(s)}>add</button>
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
 
@@ -637,10 +654,11 @@ export default function OrderEntry({
           <section className={`panel ${!customer ? 'panel-locked' : ''}`}>
             <div className="panel-head"><span className="panel-num">4</span> Payment</div>
             <div className="panel-body">
+              {/* PR156: None → DP → Full (the payment progression), each with a fill glyph. */}
               <div className="pay-toggle">
-                <button className={payMode === 'none' ? 'active' : ''} onClick={() => setPayMode('none')}>None</button>
-                <button className={payMode === 'full' ? 'active' : ''} onClick={() => setPayMode('full')}>Full</button>
-                <button className={payMode === 'dp' ? 'active' : ''} onClick={() => setPayMode('dp')}>DP</button>
+                <button className={payMode === 'none' ? 'active' : ''} onClick={() => setPayMode('none')}>○ None</button>
+                <button className={payMode === 'dp' ? 'active' : ''} onClick={() => setPayMode('dp')}>◑ DP</button>
+                <button className={payMode === 'full' ? 'active' : ''} onClick={() => setPayMode('full')}>● Full</button>
               </div>
               {payMode === 'dp' && (
                 <>

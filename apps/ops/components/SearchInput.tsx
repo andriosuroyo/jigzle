@@ -12,6 +12,7 @@ type Props = {
   onChange: (v: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  autoFocus?: boolean;
   ariaLabel?: string;
   className?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
@@ -19,7 +20,7 @@ type Props = {
 };
 
 const SearchInput = forwardRef<HTMLInputElement, Props>(function SearchInput(
-  { value, onChange, placeholder, disabled, ariaLabel, className, onKeyDown, onClear },
+  { value, onChange, placeholder, disabled, autoFocus, ariaLabel, className, onKeyDown, onClear },
   ref
 ) {
   return (
@@ -36,6 +37,7 @@ const SearchInput = forwardRef<HTMLInputElement, Props>(function SearchInput(
         placeholder={placeholder}
         value={value}
         disabled={disabled}
+        autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
       />

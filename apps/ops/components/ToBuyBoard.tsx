@@ -37,6 +37,7 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import StockPills from '@/components/StockPills';
 import TrashButton from '@/components/TrashButton';
+import SearchInput from '@/components/SearchInput';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
@@ -426,12 +427,10 @@ export default function ToBuyBoard({
 
               {/* search — code / name / piece count / brand */}
               <div className="scan-row">
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder="search SKU by code / name / piece count / brand"
+                <SearchInput
                   value={skuQuery}
-                  onChange={(e) => { setSkuQuery(e.target.value); setSearched(false); setSkuHits([]); if (picked) { setPicked(null); setPickedStock(null); } }}
+                  onChange={(v) => { setSkuQuery(v); setSearched(false); setSkuHits([]); if (picked) { setPicked(null); setPickedStock(null); } }}
+                  placeholder="search SKU by code / name / piece count / brand"
                 />
               </div>
               {/* search results — quick-view rows (small picture, code + name, availability line) */}

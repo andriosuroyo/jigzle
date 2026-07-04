@@ -213,7 +213,19 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase.rpc('search_skus', { p_q: raw });
   if (error) return []; // search failures are non-fatal (same posture as before)
-  return (data ?? []) as SkuHit[];
+  // PR156: cap at 10 (the RPC returns up to 20; fewer cards = a lighter, faster result list) and
+  // enrich with `pending` ("on order") from the snapshot for the Inventory-style stat icons.
+  const hits = ((data ?? []) as Omit<SkuHit, 'pending'>[]).slice(0, 10).map((h) => ({ ...h, pending: 0 }));
+  if (hits.length) {
+    const { data: snap } = await supabase
+      .from('stock_snapshot')
+      .select('item_code,pending')
+      .in('item_code', hits.map((h) => h.item_code));
+    const p = new Map<string, number>();
+    for (const r of (snap ?? []) as { item_code: string; pending: number | null }[]) p.set(r.item_code, r.pending ?? 0);
+    for (const h of hits) h.pending = p.get(h.item_code) ?? 0;
+  }
+  return hits;
 }
 
 // ── Panel 4: save + route the order (SA-3) ── (types in ./types)

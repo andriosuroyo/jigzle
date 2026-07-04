@@ -177,8 +177,10 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-commit .btn-primary { flex-shrink: 0; }
 
 /* ── Panels ── */
-.panel { background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.panel-head { background: var(--paper); padding: 10px 14px; font-size: 13px; font-weight: 700; color: var(--brown-dark); display: flex; align-items: center; gap: 8px; }
+/* PR156: overflow VISIBLE (was hidden) — the Payment IconSelect dropdown opens past the panel edge;
+   overflow:hidden clipped it so no option could be tapped. The head rounds its own top corners. */
+.panel { background: white; border: 1px solid var(--line); border-radius: 12px; }
+.panel-head { background: var(--paper); padding: 10px 14px; font-size: 13px; font-weight: 700; color: var(--brown-dark); display: flex; align-items: center; gap: 8px; border-radius: 11px 11px 0 0; }
 .panel-num { width: 20px; height: 20px; background: var(--brown); color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
 .panel-opt { font-style: normal; font-weight: 400; color: var(--muted); }  /* PR144 — "(optional …)" tag in a panel head */
 .panel-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -377,13 +379,19 @@ button.po-pick-btn:active { background: var(--paper); }
 
 /* ── SKU results + lines ── */
 .sku-result { background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-.sku-line { display: flex; align-items: center; gap: 8px; }
+/* PR156 card: md image left; beside it l1 = SKU + stat icons, l2 = name, l3 = qty stepper/price/add */
+.sku-line { display: flex; align-items: flex-start; gap: 10px; }
+.sku-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.sku-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sku-code { font-size: 12px; font-weight: 700; color: var(--brown); }
 .sku-name { flex: 1; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sku-name-line { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-stats { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; flex-shrink: 0; }
 .sku-avail { font-size: 11px; color: var(--green); font-weight: 600; }
-.sku-add { display: flex; gap: 6px; }
-.sku-add .qty { width: 64px; } .sku-add .price { flex: 1; }
-.sku-add input, .sku-add select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
+.sku-add { display: flex; align-items: center; gap: 6px; }
+.sku-add .qty { width: 64px; } .sku-add .price { flex: 1; min-width: 0; }
+.sku-add input.price, .sku-add select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+.sku-add .btn-secondary { flex-shrink: 0; }
 /* SA-1: "Confirm address later" checkbox row in the Address panel */
 .addr-later { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin-bottom: 8px; cursor: pointer; }
 .addr-later input { width: 16px; height: 16px; }
@@ -654,6 +662,15 @@ img.sku-img { background: #e8e8e8; }
 .inv-wrap { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
 @media (max-width: 760px) {
   .btn-link, .rcv-close, .po-detach { min-height: 44px; }
+}
+
+/* PR156 — no iOS zoom-on-focus, app-wide: Safari auto-zooms any focused control whose font-size is
+   under 16px. Force 16px on every text control on phone widths (!important so per-component 13/14px
+   rules can't reintroduce the zoom); desktop keeps the denser sizes. */
+@media (max-width: 800px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea { font-size: 16px !important; }
 }
 
 /* ── Stock Check (docs/016): sessions, presence checklist, count scanner, adjustments, close window ── */

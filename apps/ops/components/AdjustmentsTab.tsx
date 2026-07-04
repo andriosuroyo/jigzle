@@ -15,6 +15,7 @@ import {
   updateAdjustment,
 } from '@/app/stock-check/actions';
 import type { AdjustmentFilter, AdjustmentRow, SkuHit } from '@/app/stock-check/types';
+import SearchInput from '@/components/SearchInput';
 
 function fmt(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
@@ -111,11 +112,10 @@ export default function AdjustmentsTab() {
   return (
     <div className="sc-adj">
       <div className="sc-adj-bar">
-        <input
-          type="text"
-          placeholder="search SKU code or name"
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
+          placeholder="search SKU code or name"
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyFilters(); } }}
         />
         <select value={source} onChange={(e) => setSource(e.target.value as typeof source)}>
@@ -231,11 +231,10 @@ function NewManual({
       ) : (
         <>
           <div className="sc-add">
-            <input
-              type="text"
-              placeholder="search a SKU to adjust"
+            <SearchInput
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={setQ}
+              placeholder="search a SKU to adjust"
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void doSearch(); } }}
             />
           </div>

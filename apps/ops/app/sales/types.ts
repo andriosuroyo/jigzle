@@ -52,6 +52,7 @@ export interface SkuHit {
   name: string;
   available: number;
   on_the_way: number;
+  pending: number; // PR156 — "on order" (Processing POs), for the Inventory-style stat icons
 }
 
 // ── Panel 5: save the order (atomic, via the create_order RPC) ──
