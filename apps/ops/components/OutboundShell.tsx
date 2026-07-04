@@ -9,7 +9,6 @@ import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import OutboundBoard from '@/components/OutboundBoard';
 import OutboundHistoryBoard from '@/components/OutboundHistoryBoard';
-import StaffPicker from '@/components/StaffPicker';
 import { getMonthlyShipmentsXlsx, getShipmentMonthRange } from '@/app/outbound/actions';
 import type { ShipQueueRow } from '@jigzle/db/types';
 import type { ShipmentHistoryRow } from '@/app/outbound/types';
@@ -37,6 +36,12 @@ export default function OutboundShell({
   const [tab, setTab] = useState<OutboundTab>('ready');
   const [readyCount, setReadyCount] = useState(initialQueue.length);
   const onReadyCount = useCallback((n: number) => setReadyCount(n), []);
+  // PR155: a board's bodyview DETAIL is open → hide the tab bar (breadcrumb stays). Tracked per tab
+  // because both boards stay mounted; the bar hides only when the ACTIVE tab's detail is open.
+  const [detailOpenBy, setDetailOpenBy] = useState<Record<OutboundTab, boolean>>({ ready: false, history: false });
+  const onReadyDetail = useCallback((open: boolean) => setDetailOpenBy((p) => (p.ready === open ? p : { ...p, ready: open })), []);
+  const onHistoryDetail = useCallback((open: boolean) => setDetailOpenBy((p) => (p.history === open ? p : { ...p, history: open })), []);
+  const detailOpen = detailOpenBy[tab];
 
   // Monthly report — list the COMPLETED months (current month excluded until it's over), latest first.
   // The span comes from the canonical log's earliest…latest ship_date (loaded when the overlay opens),
@@ -116,6 +121,7 @@ export default function OutboundShell({
       <AppHeader active="outbound" userEmail={userEmail} />
       <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Outbound', href: '/outbound' }, { label: TAB_LABELS[tab] }]} />
 
+      {!detailOpen && (
       <div className="orders-bar">
         <nav className="orders-tabs" role="tablist" aria-label="Outbound">
           <button
@@ -137,9 +143,9 @@ export default function OutboundShell({
         </nav>
         <button className="orders-new" onClick={() => setShowReport(true)}>Monthly report</button>
       </div>
+      )}
 
-      {staffOptions.length > 0 && <div className="staff-row"><StaffPicker options={staffOptions} /></div>}
-
+      {/* PR155: the staff picker moved INTO the Ready-to-ship tab body (History carries no staff). */}
       <div className="orders-panels">
         <div hidden={tab !== 'ready'}>
           <OutboundBoard
@@ -148,11 +154,13 @@ export default function OutboundShell({
             boxPresets={boxPresets}
             initialOrderId={initialOrderId}
             userEmail={userEmail}
+            staffOptions={staffOptions}
             onCountChange={onReadyCount}
+            onDetailOpenChange={onReadyDetail}
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <OutboundHistoryBoard initialOrders={shippedHistory} boxPresets={boxPresets} />
+          <OutboundHistoryBoard initialOrders={shippedHistory} boxPresets={boxPresets} onDetailOpenChange={onHistoryDetail} />
         </div>
       </div>
 

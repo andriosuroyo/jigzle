@@ -7,6 +7,7 @@
 // weight filled in; ✅ marks barcode-scanned items, ○ manually checked ones.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { volWeight } from '@jigzle/lib';
 import { getOutboundHistory } from '@/app/outbound/actions';
 import type { ShipmentHistoryRow, ShipmentHistoryBox } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
@@ -21,11 +22,14 @@ export default function OutboundHistoryBoard({
   initialOrders,
   boxPresets,
   onCountChange,
+  onDetailOpenChange,
   reloadKey = 0,
 }: {
   initialOrders: ShipmentHistoryRow[];
   boxPresets: BoxPreset[];
   onCountChange?: (n: number) => void;
+  // PR155: the shell hides the tab bar while a shipment detail bodyview is open (breadcrumb stays).
+  onDetailOpenChange?: (open: boolean) => void;
   reloadKey?: number;
 }) {
   const [orders, setOrders] = useState<ShipmentHistoryRow[]>(initialOrders);
@@ -77,18 +81,27 @@ export default function OutboundHistoryBoard({
 
   const courierLine = sel?.courier || null;
 
+  // PR155: bodyview — the shell hides the tab bar while a detail is open.
+  useEffect(() => { onDetailOpenChange?.(!!selKey); }, [selKey, onDetailOpenChange]);
+
+  // Shipped-to block: recipient name leads, phone ends (PR155).
+  const shippedTo = sel ? [sel.recipient, sel.address, sel.phone].filter(Boolean).join('\n') : '';
+
+  // PR155 — bodyview: the body shows EITHER the search + full-width shipped list OR the tapped
+  // shipment's detail with a ← back button; the shell hides the tab bar while the detail is open.
   return (
-    <div className="fulfill-layout">
+    <div className="bodyview">
       {/* ── List ── */}
-      <aside className="fq-pane">
-        <div className="search-row" style={{ padding: '8px' }}>
+      {!sel && (
+        <>
+        <div className="search-row" style={{ padding: '0 0 8px' }}>
           <SearchInput value={query} onChange={setQuery} placeholder="Search name, SKU, or courier…" />
         </div>
         {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No shipped orders.'}</div>}
         <ul className="fq-list">
           {orders.map((o) => (
             <li key={o.key}>
-              <button className={`fq-row ${selKey === o.key ? 'active' : ''}`} onClick={() => setSelKey(o.key)}>
+              <button className="fq-row" onClick={() => setSelKey(o.key)}>
                 <div className="fq-row-top">
                   <span className="fq-headline">{o.customer || '—'}</span>
                   <span className="fq-id-sub">{fmtDate(o.ship_date)}</span>
@@ -102,22 +115,24 @@ export default function OutboundHistoryBoard({
             </li>
           ))}
         </ul>
-      </aside>
+        </>
+      )}
 
       {/* ── Detail (read-only) ── */}
-      <main className="fd-pane">
-        {!sel && <div className="fd-empty">Pick an order to see what shipped.</div>}
-        {sel && (
-          <>
+      {sel && (
+        <>
+          <button className="btn-link bv-back" onClick={() => setSelKey(null)}>← back</button>
+          <div className="bv-detail">
+            {/* PR155 header: customer ID headline; "shipped <date> by <staff>" subtext */}
             <div className="fd-head">
               <div className="fd-title fd-title-plain">{sel.customer || '—'}</div>
-              <div className="fd-sub">shipped {fmtDate(sel.ship_date)}{sel.staff ? ` · by ${sel.staff}` : ''}</div>
+              <div className="fd-sub">shipped {fmtDate(sel.ship_date)}{sel.staff ? ` by ${sel.staff}` : ''}</div>
             </div>
 
-            {sel.address && (
+            {shippedTo && (
               <section className="fd-section">
                 <div className="fd-section-head">Shipped to</div>
-                <pre className="ob-addr-block">{sel.address}</pre>
+                <pre className="ob-addr-block">{shippedTo}</pre>
               </section>
             )}
 
@@ -164,12 +179,17 @@ export default function OutboundHistoryBoard({
                     const dims = b.dim_p != null && b.dim_l != null && b.dim_t != null
                       ? `${b.dim_p} x ${b.dim_l} x ${b.dim_t} cm`
                       : '— cm';
+                    // PR155: line 2 = real + vol (rounded to whole grams); the right side carries the
+                    // chargeable weight (= the bigger of the two), also whole grams.
+                    const vol = b.dim_p != null && b.dim_l != null && b.dim_t != null
+                      ? Math.round(volWeight(b.dim_p, b.dim_l, b.dim_t))
+                      : null;
                     return (
                       <li key={i} className="box-sum">
                         <span className="box-idx" aria-label={`Box ${i + 1}`}>{i + 1}</span>
                         <div className="box-sum-main">
                           <span className="box-sum-l1">{boxType(b)} · {dims}</span>
-                          <span className="box-sum-l2">real: {b.real_weight != null ? `${b.real_weight} g` : '—'}</span>
+                          <span className="box-sum-l2">real: {b.real_weight != null ? `${b.real_weight} g` : '—'} · vol: {vol != null ? `${vol} g` : '—'}</span>
                         </div>
                         <span className="ff-qty">{b.chargeable_weight != null ? `${Math.round(b.chargeable_weight)} g` : '—'}</span>
                       </li>
@@ -183,14 +203,14 @@ export default function OutboundHistoryBoard({
                       <span className="box-sum-l1">Custom · 1 x 1 x 1 cm</span>
                       <span className="box-sum-l2">real: {sel.real_weight != null ? `${sel.real_weight} g` : '—'} · assumed box</span>
                     </div>
-                    <span className="ff-qty">{sel.chargeable_g != null ? `${sel.chargeable_g} g` : '—'}</span>
+                    <span className="ff-qty">{sel.chargeable_g != null ? `${Math.round(sel.chargeable_g)} g` : '—'}</span>
                   </li>
                 )}
               </ul>
             </section>
-          </>
-        )}
-      </main>
+          </div>
+        </>
+      )}
     </div>
   );
 }

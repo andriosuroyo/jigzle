@@ -36,7 +36,9 @@ export default function StaffPicker({ options }: { options: StaffMember[] }) {
         onChange={(e) => change(e.target.value)}
         aria-label="Active warehouse staff"
       >
-        <option value="">— none —</option>
+        {/* PR155: no "— none —" option — a real name must be picked. The hidden placeholder only
+            shows while nothing is chosen yet, so an unset device still can't mis-attribute work. */}
+        {active == null && <option value="" disabled hidden>— pick staff —</option>}
         {options.map((s) => (
           <option key={s.id} value={s.label}>{s.icon ? `${s.icon} ` : ''}{s.label}</option>
         ))}

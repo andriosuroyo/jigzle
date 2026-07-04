@@ -6,7 +6,7 @@
 
 import ExcelJS from 'exceljs';
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { customerLabel } from '@jigzle/lib';
+import { customerIdLabel, customerLabel } from '@jigzle/lib';
 import type { ShipLine, ShipQueueRow } from '@jigzle/db/types';
 import type {
   ShipDetail,
@@ -155,11 +155,16 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
       boxesBySend.set(b.send_id, arr);
     }
   }
-  const custIds = [...new Set(items.filter((i) => i.send_id && i.customer_id != null).map((i) => i.customer_id as number))];
-  const custName = new Map<number, string>();
+  // PR155: resolve the customer identity (ID label + phone) for EVERY row that carries a customer_id,
+  // not just app ships — the History header leads with the customer ID, the address block with the
+  // recipient and ends with the phone.
+  const custIds = [...new Set(items.filter((i) => i.customer_id != null).map((i) => i.customer_id as number))];
+  const custById = new Map<number, { name: string | null; phone: string | null }>();
   if (custIds.length) {
-    const { data: cs } = await supabase.from('customers').select('customer_id,name').in('customer_id', custIds);
-    for (const c of (cs ?? []) as { customer_id: number; name: string | null }[]) if (c.name) custName.set(c.customer_id, c.name);
+    const { data: cs } = await supabase.from('customers').select('customer_id,name,phone').in('customer_id', custIds);
+    for (const c of (cs ?? []) as { customer_id: number; name: string | null; phone: string | null }[]) {
+      custById.set(c.customer_id, { name: c.name, phone: c.phone });
+    }
   }
 
   type Group = {
@@ -198,10 +203,15 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
     const boxes = g.send_id ? (boxesBySend.get(g.send_id) ?? []) : [];
     const realFromBoxes = boxes.reduce((s, b) => s + (b.real_weight ?? 0), 0);
     const chargeFromBoxes = boxes.reduce((s, b) => s + (b.chargeable_weight ?? 0), 0);
+    const cust = g.customer_id != null ? custById.get(g.customer_id) ?? null : null;
     return {
       key: g.key,
       ship_date: g.ship_date,
-      customer: g.customer || (g.customer_id != null ? custName.get(g.customer_id) ?? null : null),
+      // header identity: the customer ID label when the customer resolves; legacy rows fall back to
+      // the shipped-to name they carry
+      customer: cust ? customerIdLabel(cust.name, cust.phone) : g.customer,
+      recipient: g.customer || (cust ? customerLabel(cust.name, cust.phone) : null),
+      phone: cust?.phone ?? null,
       address: g.address,
       courier: g.courier,
       staff: g.staff,
