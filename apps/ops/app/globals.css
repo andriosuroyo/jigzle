@@ -430,6 +430,11 @@ button.po-pick-btn:active { background: var(--paper); }
   /* 44px tap targets on the primary order-entry controls (peripheral ones handled elsewhere) */
   .sku-add input, .sku-add select, .sku-add .btn-secondary { min-height: 44px; }
   .app-header .signout { min-height: 44px; }
+  /* PR160: those 44px controls make the three-line text column taller than the 72px md thumbnail, so
+     the qty/price/add row (pinned bottom via margin-top:auto) overhangs the image instead of lining up
+     with it. Grow the search-card thumbnail to clear the column so the row bottom-aligns to the image.
+     Scoped to .sku-line so the order-line (sm) and rail thumbnails are untouched. */
+  .sku-line .sku-img { width: 88px !important; height: 88px !important; min-width: 88px !important; }
 }
 
 /* ── Address ── */
