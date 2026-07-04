@@ -68,10 +68,17 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
     if (dateRange) {
       q = q.gte('order_date', dateRange[0]).lt('order_date', dateRange[1]);
     } else {
-      const { data: custs } = await supabase.from('customers').select('customer_id').ilike('name', `%${raw}%`).limit(500);
+      // Non-date query → match order id OR a customer name OR an item SKU on any of the order's lines
+      // (PR161: SKU search — the order_lines.item_code index makes the contains-lookup cheap).
+      const [{ data: custs }, { data: lineRows }] = await Promise.all([
+        supabase.from('customers').select('customer_id').ilike('name', `%${raw}%`).limit(500),
+        supabase.from('order_lines').select('sales_id').ilike('item_code', `%${raw}%`).limit(1000),
+      ]);
       const ids = ((custs ?? []) as { customer_id: number }[]).map((c) => c.customer_id);
+      const salesIds = Array.from(new Set(((lineRows ?? []) as { sales_id: string }[]).map((r) => r.sales_id)));
       const ors = [`sales_id.ilike.%${raw}%`];
       if (ids.length) ors.push(`customer_id.in.(${ids.join(',')})`);
+      if (salesIds.length) ors.push(`sales_id.in.(${salesIds.map((s) => `"${s}"`).join(',')})`);
       q = q.or(ors.join(','));
     }
   }
