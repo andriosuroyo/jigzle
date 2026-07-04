@@ -75,6 +75,30 @@ input, textarea, select, button { font-family: inherit; }
 .po-card.po-urg-high { border-left: 4px solid var(--red); }
 .po-card.po-urg-mid  { border-left: 4px solid var(--orange); }
 .po-card.po-urg-low  { border-left: 4px solid var(--green); }
+/* PR168 (Option B) — To-buy minimal card: the whole card is a button that opens the action overlay */
+.po-card-mini { width: 100%; align-items: center; text-align: left; cursor: pointer; }
+.po-card-mini .po-card-name { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-card-meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.po-card-meta > .po-card-cust { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-card-meta .po-card-qty { margin-left: auto; flex-shrink: 0; }
+.po-chev { flex-shrink: 0; align-self: center; color: var(--brown-light); font-size: 22px; font-weight: 700; line-height: 1; }
+/* the tap-to-act detail overlay: header, then qty (left) + stock icons (right), then the actions */
+.tobuy-detail { max-width: 440px; }
+.tobuy-detail .td-head { display: flex; gap: 12px; align-items: flex-start; }
+.tobuy-detail .td-head-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tobuy-detail .td-name { font-size: 15px; color: var(--ink); }
+.td-note { white-space: pre-wrap; word-break: break-word; }
+.td-prio { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--brown-dark); }
+.td-prio-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.td-prio-high .td-prio-dot { background: var(--red); }
+.td-prio-mid  .td-prio-dot { background: var(--orange); }
+.td-prio-low  .td-prio-dot { background: var(--green); }
+.td-qtyrow { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-top: 14px; }
+.td-qtyrow .fd-section-head { margin-bottom: 6px; }
+.td-stock { display: flex; align-items: flex-end; padding-bottom: 6px; }
+.td-stock .stock-pills { gap: 14px; }
+.tobuy-detail .td-actions { justify-content: flex-start; align-items: center; }
+.tobuy-detail .td-actions .btn-trash { margin-left: auto; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .po-card-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-card-l1 .ff-name { flex: 1; }
