@@ -128,59 +128,8 @@ export default function AdjustmentsTab() {
   }
 
   const sel = selId != null ? rows.find((r) => r.adjustment_id === selId) ?? null : null;
-
-  // ── bodyview: a single adjustment, with its note + edit / delete ──
-  if (sel) {
-    const editing = editId === sel.adjustment_id;
-    return (
-      <div className="sc-adj">
-        <button className="btn-link bv-back" onClick={() => { setSelId(null); setEditId(null); setConfirmDel(false); }}>← back</button>
-        {error && <div className="validation err" style={{ marginTop: 10 }}>{error}</div>}
-        <div className="adj-detail">
-          <div className="adj-detail-head">
-            <SkuImage status={imgMap[sel.item_code]?.status} displayUrl={imgMap[sel.item_code]?.displayUrl} name={sel.name} size={72} />
-            <div className="adj-detail-main">
-              <span className="ff-code">{sel.item_code}</span>
-              <span className="ff-name">{sel.name}</span>
-              <span className="adj-pills">
-                <span className={`sc-delta ${sel.delta >= 0 ? 'pos' : 'neg'}`}>{fmt(sel.delta)}</span>
-                <span className={`sc-src ${sel.source}`}>{srcLabel(sel.source)}</span>
-              </span>
-              <span className="hint">{fmtDate(sel.created_at)}</span>
-            </div>
-          </div>
-
-          {editing ? (
-            <div className="adj-edit">
-              <label className="adj-edit-f">Delta<input type="number" className="sc-qty" value={editDelta} onChange={(e) => setEditDelta(e.target.value)} /></label>
-              <label className="adj-edit-f adj-edit-note">Note<input type="text" value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="note" /></label>
-              <div className="fd-commit-actions" style={{ marginTop: 10 }}>
-                <button className="btn-secondary" onClick={() => setEditId(null)}>Cancel</button>
-                <button className="btn-primary" onClick={() => void saveEdit(sel.adjustment_id)}>Save</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="fd-section-head" style={{ marginTop: 14 }}>Note</div>
-              {sel.note ? <p className="order-note">{sel.note}</p> : <div className="hint">No note.</div>}
-              {!confirmDel ? (
-                <div className="adj-actions">
-                  <EditButton onClick={() => startEdit(sel)} />
-                  <TrashButton onClick={() => setConfirmDel(true)} ariaLabel="Delete adjustment" />
-                </div>
-              ) : (
-                <div className="adj-actions rcv-reverse-ask">
-                  Delete this adjustment? Stock will re-adjust.
-                  <button className="btn-secondary" onClick={() => setConfirmDel(false)}>Cancel</button>
-                  <button className="btn-primary danger" onClick={() => void remove(sel.adjustment_id)}>Yes, delete</button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const editing = sel != null && editId === sel.adjustment_id;
+  const closeDetail = () => { setSelId(null); setEditId(null); setConfirmDel(false); };
 
   return (
     <div className="sc-adj">
@@ -236,6 +185,64 @@ export default function AdjustmentsTab() {
           </button>
         ))}
       </div>
+
+      {/* PR174 — the adjustment detail as an OVERLAY (few fields; no full bodyview) */}
+      {sel && (
+        <div className="sc-modal-backdrop" onClick={closeDetail}>
+          <div className="sc-modal adj-modal" role="dialog" aria-modal="true" aria-label="Adjustment" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <span className="sc-modal-title">{sel.item_code}</span>
+              <button className="sc-modal-x" onClick={closeDetail} aria-label="Close">×</button>
+            </div>
+            <div className="sc-modal-body">
+              {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
+              <div className="adj-detail-head">
+                <SkuImage status={imgMap[sel.item_code]?.status} displayUrl={imgMap[sel.item_code]?.displayUrl} name={sel.name} size={72} />
+                <div className="adj-detail-main">
+                  <span className="ff-name">{sel.name}</span>
+                  <span className="adj-pills">
+                    <span className={`sc-delta ${sel.delta >= 0 ? 'pos' : 'neg'}`}>{fmt(sel.delta)}</span>
+                    <span className={`sc-src ${sel.source}`}>{srcLabel(sel.source)}</span>
+                  </span>
+                  <span className="hint">{fmtDate(sel.created_at)}</span>
+                </div>
+              </div>
+
+              {editing ? (
+                <div className="adj-edit">
+                  <label className="adj-edit-f">Delta<input type="number" className="sc-qty" value={editDelta} onChange={(e) => setEditDelta(e.target.value)} /></label>
+                  <label className="adj-edit-f adj-edit-note">Note<input type="text" value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="note" /></label>
+                </div>
+              ) : (
+                <>
+                  <div className="fd-section-head" style={{ marginTop: 14 }}>Note</div>
+                  {sel.note ? <p className="order-note">{sel.note}</p> : <div className="hint">No note.</div>}
+                </>
+              )}
+            </div>
+
+            <div className="sc-modal-foot adj-modal-foot">
+              {editing ? (
+                <>
+                  <button className="btn-secondary" onClick={() => setEditId(null)}>Cancel</button>
+                  <button className="btn-primary" onClick={() => void saveEdit(sel.adjustment_id)}>Save</button>
+                </>
+              ) : confirmDel ? (
+                <span className="rcv-reverse-ask">
+                  Delete this adjustment? Stock will re-adjust.
+                  <button className="btn-secondary" onClick={() => setConfirmDel(false)}>Cancel</button>
+                  <button className="btn-primary danger" onClick={() => void remove(sel.adjustment_id)}>Yes, delete</button>
+                </span>
+              ) : (
+                <div className="adj-actions">
+                  <EditButton onClick={() => startEdit(sel)} />
+                  <TrashButton onClick={() => setConfirmDel(true)} ariaLabel="Delete adjustment" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
