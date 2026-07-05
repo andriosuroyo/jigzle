@@ -38,6 +38,7 @@ export default function HistoryBoard({
   boxPresets,
   userEmail,
   embedded = false,
+  active = true,
   onCountChange,
   reloadKey = 0,
 }: {
@@ -48,6 +49,9 @@ export default function HistoryBoard({
   // Settling payment is intentionally NOT here — Pending is the single gateway for that (avoids two
   // places that can drift out of sync).
   embedded?: boolean;
+  // PR179: whether the History tab is the one on screen. The Sales shell no longer preloads the (huge)
+  // history server-side; when this first turns true we fetch it once, so Sales opens fast on Pending.
+  active?: boolean;
   onCountChange?: (n: number) => void;
   reloadKey?: number;
 }) {
@@ -72,6 +76,7 @@ export default function HistoryBoard({
   const sumReqRef = useRef(0);
   const searchSeq = useRef(0);   // stale-response guard for the live search
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
+  const loadedRef = useRef(initialOrders.length > 0); // PR179: false until the deferred first load lands
   const selId = selRow?.sales_id ?? null;
 
   // Reverse-map a shipped box's stored dims → a SETTINGS preset code (XS/M2/…); 'Custom' if no exact
@@ -131,6 +136,7 @@ export default function HistoryBoard({
 
   async function runSearch() {
     const _id = ++searchSeq.current;
+    loadedRef.current = true; // any fetch (deferred load, search, reload) counts as loaded
     setSearching(true);
     try {
       const rows = await getHistory(query.trim());
@@ -143,10 +149,17 @@ export default function HistoryBoard({
     }
   }
 
+  // PR179: deferred first load — the shell hands us an empty list and only flips `active` true when the
+  // History tab is opened; fetch the full log once at that point (or on mount if it starts active).
+  useEffect(() => {
+    if (active && !loadedRef.current) runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   // JZ-001: live count badge + external reload (re-runs the current search; see PendingBoard).
   useEffect(() => { onCountChange?.(orders.length); }, [orders, onCountChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
+  useEffect(() => { if (reloadKey && loadedRef.current) runSearch(); }, [reloadKey]);
   // live search: re-query as you type (empty query = recent orders), debounced. Skip the mount run —
   // initialOrders is already loaded — so we only refetch once the user actually types.
   useEffect(() => {
@@ -256,7 +269,7 @@ export default function HistoryBoard({
               ))}
             </div>
           )}
-          {visibleRows.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No orders.'}</div>}
+          {visibleRows.length === 0 && <div className="hint fq-empty">{searching ? (query.trim() ? 'Searching…' : 'Loading history…') : 'No orders.'}</div>}
           <ul className="fq-list">
             {visibleRows.map((o) => (
               <li key={o.sales_id}>
