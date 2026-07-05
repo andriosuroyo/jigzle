@@ -156,12 +156,26 @@ export default function AdjustmentsTab() {
             {!to && <span className="sc-adj-dateph">To date</span>}
           </span>
         </div>
-        <button className="btn-primary sc-adj-newbtn" onClick={() => setShowNew((v) => !v)}>+ Manual adjustment</button>
+        <button className="btn-primary sc-adj-newbtn" onClick={() => { setError(null); setShowNew(true); }}>+ Manual adjustment</button>
       </div>
 
-      {showNew && <NewManual imgMap={imgMap} onDone={() => { setShowNew(false); void load(); }} onError={setError} />}
+      {/* PR175 — the whole new-adjustment flow (search SKU → set delta/note → save) lives in an overlay */}
+      {showNew && (
+        <div className="sc-modal-backdrop" onClick={() => setShowNew(false)}>
+          <div className="sc-modal adj-modal" role="dialog" aria-modal="true" aria-label="New manual adjustment" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <span className="sc-modal-title">Manual adjustment</span>
+              <button className="sc-modal-x" onClick={() => setShowNew(false)} aria-label="Close">×</button>
+            </div>
+            <div className="sc-modal-body">
+              {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
+              <NewManual imgMap={imgMap} onDone={() => { setShowNew(false); void load(); }} onError={setError} />
+            </div>
+          </div>
+        </div>
+      )}
 
-      {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
+      {!showNew && error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
 
       {/* PR173: compact 2-line quickview cards; tap for the bodyview (note + edit/delete) */}
       <div className="adj-cards">
