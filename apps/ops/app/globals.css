@@ -711,8 +711,12 @@ button.po-pick-btn:active { background: var(--paper); }
 /* ── Catalogue (SKU editor): grouped form + barcode manager ── */
 .cat-grp { margin-top: 14px; }
 .cat-grp-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
-.cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
-@media (max-width: 560px) { .cat-grid { grid-template-columns: 1fr; } }
+/* PR188 — 12-col field grid so L/W/H can sit three across (pf-third) while most fields are halves */
+.cat-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px 12px; }
+.cat-grid .pf-full { grid-column: 1 / -1; }
+.cat-grid .pf-half { grid-column: span 6; }
+.cat-grid .pf-third { grid-column: span 4; }
+@media (max-width: 560px) { .cat-grid .pf-half { grid-column: 1 / -1; } }
 .cat-bc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .cat-bc { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .cat-bc .bc-code { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--brown); }
@@ -783,7 +787,15 @@ img.sku-img { background: #e8e8e8; }
 /* PR185 — Catalog shell: Search | Browse | Fix, single-column with a full-width item bodyview */
 .cat-wrap { max-width: 900px; margin: 0 auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
 .cat-search { display: flex; flex-direction: column; gap: 10px; }
-.cat-subtabs { margin: 14px 0 12px; overflow-x: auto; overflow-y: hidden; }
+/* PR188 — compact field sub-tabs */
+.cat-subtabs { margin: 12px 0 10px; overflow-x: auto; overflow-y: hidden; gap: 2px; }
+.cat-subtabs .sc-tab { padding: 7px 11px; font-size: 13px; white-space: nowrap; }
+/* PR188 — big square hero image (height-capped so panoramas stay bounded), SKU + name beneath */
+.cat-hero { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 12px; }
+.cat-hero-img, .cat-hero-ph { width: 100%; max-width: 600px; aspect-ratio: 1 / 1; max-height: 600px; object-fit: contain; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
+.cat-hero-ph { display: flex; align-items: center; justify-content: center; }
+.cat-hero-code { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--brown); font-size: 15px; margin-top: 4px; }
+.cat-hero-name { font-size: 16px; font-weight: 700; color: var(--brown-dark); text-align: center; max-width: 600px; }
 .cat-detail .fd-head { margin-bottom: 4px; }
 .cat-fix { display: flex; flex-direction: column; gap: 20px; }
 .cat-fix-sec .cat-grp-title { margin-bottom: 8px; }

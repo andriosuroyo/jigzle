@@ -144,6 +144,35 @@ export async function getCatalogFacetData(): Promise<{ skus: BrowseSku[]; brands
   return { skus, brands };
 }
 
+// ── PR188: distinct existing values per field, for the item editor's dropdowns (datalists). One paged
+// scan of the relevant columns (no GROUP BY over PostgREST); the response is just the sorted distinct
+// value lists (small). The client caches it for the session. ──
+const OPTION_FIELDS = ['product_type', 'sub_type', 'piece_type', 'piece_size', 'material', 'effect', 'image_type', 'theme', 'location', 'artist'] as const;
+export async function getCatalogFieldOptions(): Promise<Record<string, string[]>> {
+  const supabase = createSupabaseServerClient();
+  const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true });
+  const total = count ?? 0;
+  const PAGE = 1000;
+  const pages = Math.ceil(total / PAGE);
+  const CONC = 8;
+  const sets: Record<string, Set<string>> = {};
+  for (const f of OPTION_FIELDS) sets[f] = new Set();
+  for (let start = 0; start < pages; start += CONC) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(CONC, pages - start) }, (_, k) => {
+        const from = (start + k) * PAGE;
+        return supabase.from('catalogue').select(OPTION_FIELDS.join(',')).order('item_code').range(from, from + PAGE - 1);
+      }),
+    );
+    for (const { data } of batch)
+      for (const r of (data ?? []) as unknown as Record<string, unknown>[])
+        for (const f of OPTION_FIELDS) { const v = r[f]; if (typeof v === 'string' && v.trim()) sets[f].add(v.trim()); }
+  }
+  const out: Record<string, string[]> = {};
+  for (const f of OPTION_FIELDS) out[f] = [...sets[f]].sort((a, b) => a.localeCompare(b));
+  return out;
+}
+
 // ── the edit pane: full SKU + its barcode links (with shared flags) ──
 export async function getSku(itemCode: string): Promise<SkuDetail | null> {
   const supabase = createSupabaseServerClient();

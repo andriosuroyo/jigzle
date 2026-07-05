@@ -6,6 +6,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import {
   addBarcode,
+  getCatalogFieldOptions,
   getNeedsReview,
   getSharedBarcodes,
   getSku,
@@ -22,7 +23,9 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
 type FieldKind = 'text' | 'textarea' | 'number' | 'bool';
-type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind };
+// PR188 — `list` = a datalist of existing values for this column (a dropdown you can also type into);
+// `w` = grid width (third → three across, for L/W/H rows). Defaults to half.
+type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind; list?: string; w?: 'full' | 'half' | 'third' };
 
 // every catalogue column is editable EXCEPT item_code (identity, read-only) and created_at/updated_at
 // (system). updated_at is stamped server-side on save.
@@ -40,29 +43,29 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
   {
     title: 'Classification',
     fields: [
-      { key: 'product_type', label: 'Product type', kind: 'text' },
-      { key: 'sub_type', label: 'Sub type', kind: 'text' },
-      { key: 'piece_count', label: 'Piece count (raw)', kind: 'text' },
-      { key: 'piece_count_n', label: 'Piece count #', kind: 'number' },
-      { key: 'piece_type', label: 'Piece type', kind: 'text' },
-      { key: 'piece_size', label: 'Piece size', kind: 'text' },
-      { key: 'material', label: 'Material', kind: 'text' },
-      { key: 'effect', label: 'Effect', kind: 'text' },
-      { key: 'image_type', label: 'Image type', kind: 'text' },
-      { key: 'theme', label: 'Theme', kind: 'text' },
-      { key: 'location', label: 'Location', kind: 'text' },
-      { key: 'artist', label: 'Artist', kind: 'text' },
+      { key: 'product_type', label: 'Product type', kind: 'text', list: 'product_type' },
+      { key: 'sub_type', label: 'Sub type', kind: 'text', list: 'sub_type' },
+      { key: 'piece_count', label: 'Piece count (as scraped)', kind: 'text' },
+      { key: 'piece_count_n', label: 'Piece count (number)', kind: 'number' },
+      { key: 'piece_type', label: 'Piece type', kind: 'text', list: 'piece_type' },
+      { key: 'piece_size', label: 'Piece size', kind: 'text', list: 'piece_size' },
+      { key: 'material', label: 'Material', kind: 'text', list: 'material' },
+      { key: 'effect', label: 'Effect', kind: 'text', list: 'effect' },
+      { key: 'image_type', label: 'Image type', kind: 'text', list: 'image_type' },
+      { key: 'theme', label: 'Theme', kind: 'text', list: 'theme' },
+      { key: 'location', label: 'Location (depicted)', kind: 'text', list: 'location' },
+      { key: 'artist', label: 'Artist', kind: 'text', list: 'artist' },
     ],
   },
   {
     title: 'Dimensions & weight',
     fields: [
-      { key: 'size_p', label: 'Size P (cm)', kind: 'number' },
-      { key: 'size_l', label: 'Size L (cm)', kind: 'number' },
-      { key: 'size_t', label: 'Size T (cm)', kind: 'number' },
-      { key: 'dim_p', label: 'Box P (cm)', kind: 'number' },
-      { key: 'dim_l', label: 'Box L (cm)', kind: 'number' },
-      { key: 'dim_t', label: 'Box T (cm)', kind: 'number' },
+      { key: 'size_p', label: 'Product L (cm)', kind: 'number', w: 'third' },
+      { key: 'size_l', label: 'Product W (cm)', kind: 'number', w: 'third' },
+      { key: 'size_t', label: 'Product H (cm)', kind: 'number', w: 'third' },
+      { key: 'dim_p', label: 'Box L (cm)', kind: 'number', w: 'third' },
+      { key: 'dim_l', label: 'Box W (cm)', kind: 'number', w: 'third' },
+      { key: 'dim_t', label: 'Box H (cm)', kind: 'number', w: 'third' },
       { key: 'real_weight', label: 'Real weight (g)', kind: 'number' },
     ],
   },
@@ -70,12 +73,11 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
     title: 'Media & tags',
     fields: [
       { key: 'image', label: 'Image URL', kind: 'text' },
-      { key: 'has_image', label: 'Has image', kind: 'bool' },
       { key: 'tags', label: 'Tags', kind: 'textarea' },
       { key: 'article_number', label: 'Article number', kind: 'text' },
-      { key: 'release_date', label: 'Release date (raw)', kind: 'text' },
-      { key: 'release_year', label: 'Release year', kind: 'number' },
-      { key: 'release_month', label: 'Release month', kind: 'number' },
+      { key: 'release_date', label: 'Release date (scraped — not the input date)', kind: 'text' },
+      { key: 'release_year', label: 'Release year', kind: 'number', w: 'half' },
+      { key: 'release_month', label: 'Release month', kind: 'number', w: 'half' },
     ],
   },
   // needs_review is no longer a manual toggle — it's DERIVED by the completion gate on every save
@@ -128,6 +130,10 @@ type Tab = 'search' | 'browse' | 'fix';
 const GROUP_TABS = ['Identity', 'Classification', 'Dimensions', 'Media'];
 type RightMode = 'sku' | 'collision' | null;
 
+// PR188 — the field dropdowns' option lists (distinct existing values). Loaded once per session, lazily,
+// the first time an item is opened.
+let OPTIONS_CACHE: Record<string, string[]> | null = null;
+
 export default function CatalogBoard({
   initialNeedsReview,
   initialShared,
@@ -146,6 +152,7 @@ export default function CatalogBoard({
   const [results, setResults] = useState<CatalogueListRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
+  const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
 
   const [mode, setMode] = useState<RightMode>(null);
   const [detail, setDetail] = useState<SkuDetail | null>(null);
@@ -241,6 +248,7 @@ export default function CatalogBoard({
 
   async function openSku(code: string) {
     if (tab === 'search') recordSearch(search); // remember the query that led here
+    if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
     resetMsg();
     setMode('sku');
     setDetailTab(0);
@@ -398,21 +406,21 @@ export default function CatalogBoard({
 
           {mode === 'sku' && detail && (
             <div className="cat-detail">
-              <div className="fd-head">
-                <div className="fd-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={SKU_IMG.lg} />
-                  {detail.sku.item_code}
-                </div>
-                <div className="fd-sub">
-                  item_code is the identity (read-only)
-                  {detail.sku.created_at ? ` · added ${detail.sku.created_at.slice(0, 10)}` : ''}
-                  {detail.sku.updated_at ? ` · updated ${detail.sku.updated_at.slice(0, 10)}` : ''}
-                  {detail.sku.needs_review && (
-                    <span className="po-status processing" style={{ marginLeft: 8 }}>
-                      needs review{(() => { const m = missingForComplete(detail.sku); return m.length ? ` — missing ${m.join(', ')}` : ''; })()}
-                    </span>
-                  )}
-                </div>
+              {/* PR188 — big square hero (height-capped so panoramas don't blow up), then SKU + name */}
+              <div className="cat-hero">
+                {imgMap[detail.sku.item_code]?.status === 'has_image' && imgMap[detail.sku.item_code]?.displayUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- static CDN image, off the data path
+                  <img className="cat-hero-img" src={imgMap[detail.sku.item_code]!.displayUrl!} alt={detail.sku.translate_name || detail.sku.item_code} />
+                ) : (
+                  <div className="cat-hero-ph"><SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={SKU_IMG.lg} /></div>
+                )}
+                <div className="cat-hero-code">{detail.sku.item_code}</div>
+                <div className="cat-hero-name">{detail.sku.translate_name || detail.sku.original_name || detail.sku.item_code}</div>
+                {detail.sku.needs_review && (
+                  <span className="po-status processing">
+                    needs review{(() => { const m = missingForComplete(detail.sku); return m.length ? ` — missing ${m.join(', ')}` : ''; })()}
+                  </span>
+                )}
               </div>
 
               {/* PR185 — the many fields grouped into sub-tabs (styled like the system tab lists) */}
@@ -430,9 +438,11 @@ export default function CatalogBoard({
                   <div className="cat-grid">
                     {GROUPS[detailTab].fields.map((fld) => {
                       const k = fld.key as string;
-                      const full = fld.kind === 'textarea' || fld.kind === 'bool';
+                      const w = fld.kind === 'textarea' || fld.kind === 'bool' ? 'full' : fld.w ?? 'half';
+                      const opts = fld.list ? fieldOptions[fld.list] : undefined;
+                      const listId = fld.list ? `dl-${fld.list}` : undefined;
                       return (
-                        <div className="po-field" key={k} style={full ? { gridColumn: '1 / -1', marginBottom: 0 } : { marginBottom: 0 }}>
+                        <div className={`po-field pf-${w}`} key={k} style={{ marginBottom: 0 }}>
                           {fld.kind === 'bool' ? (
                             <label className="rcv-close">
                               <input type="checkbox" checked={!!form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.checked }))} />
@@ -447,9 +457,15 @@ export default function CatalogBoard({
                                 <input
                                   type={fld.kind === 'number' ? 'number' : 'text'}
                                   step={fld.kind === 'number' ? 'any' : undefined}
+                                  list={listId}
                                   value={String(form[k] ?? '')}
                                   onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}
                                 />
+                              )}
+                              {opts && opts.length > 0 && (
+                                <datalist id={listId}>
+                                  {opts.map((o) => <option key={o} value={o} />)}
+                                </datalist>
                               )}
                             </>
                           )}
@@ -490,7 +506,6 @@ export default function CatalogBoard({
               )}
 
               <div className="fd-commit">
-                <div className="fd-commit-info">Edits write only the changed fields; item_code can't change.</div>
                 <button className="btn-primary" onClick={saveSku} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
               </div>
             </div>
