@@ -16,6 +16,7 @@ import {
 } from '@/app/stock-check/actions';
 import type { AdjustmentFilter, AdjustmentRow, SkuHit } from '@/app/stock-check/types';
 import SearchInput from '@/components/SearchInput';
+import TrashButton from '@/components/TrashButton';
 
 function fmt(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
@@ -24,6 +25,20 @@ function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+const fmtDay = (iso: string): string => (iso || '').slice(0, 10) || '—'; // YYYY-MM-DD
+const srcLabel = (s: AdjustmentRow['source']): string => (s === 'manual' ? 'manual' : s === 'reverse' ? 'reverse' : 'count');
+
+// PR173 — brown pencil (edit) button, mirroring TrashButton's shape
+function EditButton({ onClick, ariaLabel = 'Edit' }: { onClick: () => void; ariaLabel?: string }) {
+  return (
+    <button type="button" className="btn-edit" onClick={onClick} aria-label={ariaLabel} title={ariaLabel}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+      </svg>
+    </button>
+  );
 }
 
 export default function AdjustmentsTab() {
@@ -38,6 +53,8 @@ export default function AdjustmentsTab() {
 
   const [showNew, setShowNew] = useState(false);
 
+  const [selId, setSelId] = useState<number | null>(null); // PR173: open bodyview
+  const [confirmDel, setConfirmDel] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [editDelta, setEditDelta] = useState('');
   const [editNote, setEditNote] = useState('');
@@ -103,10 +120,66 @@ export default function AdjustmentsTab() {
     setError(null);
     try {
       await deleteAdjustment(id);
+      setSelId(null); setConfirmDel(false); setEditId(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed.');
     }
+  }
+
+  const sel = selId != null ? rows.find((r) => r.adjustment_id === selId) ?? null : null;
+
+  // ── bodyview: a single adjustment, with its note + edit / delete ──
+  if (sel) {
+    const editing = editId === sel.adjustment_id;
+    return (
+      <div className="sc-adj">
+        <button className="btn-link bv-back" onClick={() => { setSelId(null); setEditId(null); setConfirmDel(false); }}>← back</button>
+        {error && <div className="validation err" style={{ marginTop: 10 }}>{error}</div>}
+        <div className="adj-detail">
+          <div className="adj-detail-head">
+            <SkuImage status={imgMap[sel.item_code]?.status} displayUrl={imgMap[sel.item_code]?.displayUrl} name={sel.name} size={72} />
+            <div className="adj-detail-main">
+              <span className="ff-code">{sel.item_code}</span>
+              <span className="ff-name">{sel.name}</span>
+              <span className="adj-pills">
+                <span className={`sc-delta ${sel.delta >= 0 ? 'pos' : 'neg'}`}>{fmt(sel.delta)}</span>
+                <span className={`sc-src ${sel.source}`}>{srcLabel(sel.source)}</span>
+              </span>
+              <span className="hint">{fmtDate(sel.created_at)}</span>
+            </div>
+          </div>
+
+          {editing ? (
+            <div className="adj-edit">
+              <label className="adj-edit-f">Delta<input type="number" className="sc-qty" value={editDelta} onChange={(e) => setEditDelta(e.target.value)} /></label>
+              <label className="adj-edit-f adj-edit-note">Note<input type="text" value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="note" /></label>
+              <div className="fd-commit-actions" style={{ marginTop: 10 }}>
+                <button className="btn-secondary" onClick={() => setEditId(null)}>Cancel</button>
+                <button className="btn-primary" onClick={() => void saveEdit(sel.adjustment_id)}>Save</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="fd-section-head" style={{ marginTop: 14 }}>Note</div>
+              {sel.note ? <p className="order-note">{sel.note}</p> : <div className="hint">No note.</div>}
+              {!confirmDel ? (
+                <div className="adj-actions">
+                  <EditButton onClick={() => startEdit(sel)} />
+                  <TrashButton onClick={() => setConfirmDel(true)} ariaLabel="Delete adjustment" />
+                </div>
+              ) : (
+                <div className="adj-actions rcv-reverse-ask">
+                  Delete this adjustment? Stock will re-adjust.
+                  <button className="btn-secondary" onClick={() => setConfirmDel(false)}>Cancel</button>
+                  <button className="btn-primary danger" onClick={() => void remove(sel.adjustment_id)}>Yes, delete</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -118,46 +191,50 @@ export default function AdjustmentsTab() {
           placeholder="search SKU code or name"
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyFilters(); } }}
         />
-        <select value={source} onChange={(e) => setSource(e.target.value as typeof source)}>
-          <option value="all">all sources</option>
-          <option value="stock_check">stock check</option>
-          <option value="manual">manual</option>
-        </select>
-        <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} title="from" />
-        <input type="date" value={to} onChange={(e) => setTo(e.target.value)} title="to" />
-        <button className="btn-primary" onClick={() => setShowNew((v) => !v)}>+ Manual adjustment</button>
+        {/* PR173: source + from + to on one row */}
+        <div className="sc-adj-filters">
+          <select value={source} onChange={(e) => setSource(e.target.value as typeof source)}>
+            <option value="all">all sources</option>
+            <option value="stock_check">stock check</option>
+            <option value="manual">manual</option>
+          </select>
+          <span className="sc-adj-datewrap">
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" />
+            {!from && <span className="sc-adj-dateph">From date</span>}
+          </span>
+          <span className="sc-adj-datewrap">
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" />
+            {!to && <span className="sc-adj-dateph">To date</span>}
+          </span>
+        </div>
+        <button className="btn-primary sc-adj-newbtn" onClick={() => setShowNew((v) => !v)}>+ Manual adjustment</button>
       </div>
 
       {showNew && <NewManual imgMap={imgMap} onDone={() => { setShowNew(false); void load(); }} onError={setError} />}
 
       {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
 
-      <div className="sc-adj-list">
+      {/* PR173: compact 2-line quickview cards; tap for the bodyview (note + edit/delete) */}
+      <div className="adj-cards">
         {!loading && rows.length === 0 && <div className="sc-empty">No adjustments match.</div>}
-        {rows.map((r) =>
-          editId === r.adjustment_id ? (
-            <div key={r.adjustment_id} className="sc-adj-row editing">
-              <span className="ff-code">{r.item_code}</span>
-              <span className="ff-name">{r.name}</span>
-              <input type="number" className="sc-qty" value={editDelta} onChange={(e) => setEditDelta(e.target.value)} />
-              <input type="text" className="sc-note" placeholder="note" value={editNote} onChange={(e) => setEditNote(e.target.value)} />
-              <button className="btn-primary sc-mini" onClick={() => void saveEdit(r.adjustment_id)}>save</button>
-              <button className="btn-secondary sc-mini" onClick={() => setEditId(null)}>cancel</button>
+        {rows.map((r) => (
+          <button key={r.adjustment_id} className="adj-card" onClick={() => setSelId(r.adjustment_id)}>
+            <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={44} />
+            <div className="adj-card-main">
+              <div className="adj-card-l1">
+                <span className="ff-code">{r.item_code}</span>
+                <span className="adj-card-date">{fmtDay(r.created_at)}</span>
+              </div>
+              <div className="adj-card-l2">
+                <span className="ff-name">{r.name}</span>
+                <span className="adj-pills">
+                  <span className={`sc-delta ${r.delta >= 0 ? 'pos' : 'neg'}`}>{fmt(r.delta)}</span>
+                  <span className={`sc-src ${r.source}`}>{srcLabel(r.source)}</span>
+                </span>
+              </div>
             </div>
-          ) : (
-            <div key={r.adjustment_id} className="sc-adj-row">
-              <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={28} />
-              <span className="ff-code">{r.item_code}</span>
-              <span className="ff-name">{r.name}</span>
-              <span className={`sc-delta ${r.delta >= 0 ? 'pos' : 'neg'}`}>{fmt(r.delta)}</span>
-              <span className={`sc-src ${r.source}`}>{r.source === 'manual' ? 'manual' : 'count'}</span>
-              <span className="sc-exp">{fmtDate(r.created_at)}</span>
-              {r.note && <span className="sc-note-txt">{r.note}</span>}
-              <button className="btn-link" onClick={() => startEdit(r)}>edit</button>
-              <button className="btn-link sc-danger" onClick={() => void remove(r.adjustment_id)}>delete</button>
-            </div>
-          )
-        )}
+          </button>
+        ))}
       </div>
     </div>
   );

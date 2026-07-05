@@ -603,7 +603,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .inv-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .inv-search { flex: 1; min-width: 220px; display: flex; gap: 8px; }
 .inv-search input { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
-.inv-search-row { margin-bottom: 12px; }
+.inv-search-row { margin-top: 14px; margin-bottom: 12px; }  /* PR173: gap below the Browse/Adjustments tabs */
 .inv-wrap .fq-filters { margin-bottom: 14px; }
 /* refresh + timestamp folded into the right edge of the search row (reclaims the old as-of line) */
 .inv-asof-inline { font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
@@ -893,17 +893,45 @@ img.sku-img { background: #e8e8e8; }
 .sc-neg { color: #993525; }
 
 /* adjustments ledger */
-.sc-adj { margin-top: 12px; }
-.sc-adj-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.sc-adj-bar input[type="text"] { flex: 1; min-width: 160px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: white; }
-.sc-adj-bar select, .sc-adj-bar input[type="date"] { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: white; }
-.sc-adj-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
-.sc-adj-row { display: flex; align-items: center; gap: 8px; background: white; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; flex-wrap: wrap; }
-.sc-adj-row.editing { background: var(--cream); }
-.sc-src { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; }
+.sc-adj { margin-top: 14px; }
+/* PR173 — filter bar stacks: search · (source + from + to on one row) · full-width new button */
+.sc-adj-bar { display: flex; flex-direction: column; gap: 8px; }
+.sc-adj-bar select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: white; }
+.sc-adj-filters { display: flex; gap: 8px; }
+.sc-adj-filters > * { flex: 1 1 0; min-width: 0; }
+.sc-adj-filters select { width: 100%; }
+.sc-adj-datewrap { position: relative; display: flex; }
+.sc-adj-datewrap input[type="date"] { width: 100%; min-width: 0; padding: 8px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: white; }
+/* cover the native mm/dd/yyyy text with the placeholder label when empty (calendar icon stays clear) */
+.sc-adj-dateph { position: absolute; left: 1px; right: 24px; top: 1px; bottom: 1px; display: flex; align-items: center; padding-left: 10px; color: var(--muted); font-size: 13px; pointer-events: none; background: white; border-radius: 8px; }
+.sc-adj-newbtn { width: 100%; }
+.sc-src { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 20px; white-space: nowrap; }
 .sc-src.manual { background: var(--orange-tint); color: #8A5A1A; }
 .sc-src.stock_check { background: var(--paper); color: var(--muted); }
-.sc-note-txt { font-size: 12px; color: var(--muted); font-style: italic; }
+.sc-src.reverse { background: var(--yellow-tint); color: #9C6F1C; }
+/* compact 2-line quickview cards (tap → bodyview) */
+.adj-cards { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.adj-card { width: 100%; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 12px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.adj-card:active { background: var(--paper); }
+.adj-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.adj-card-l1 { display: flex; align-items: center; gap: 8px; }
+.adj-card-l1 .ff-code { flex: 1; min-width: 0; }
+.adj-card-date { flex-shrink: 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.adj-card-l2 { display: flex; align-items: center; gap: 8px; }
+.adj-card-l2 .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adj-pills { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+/* bodyview */
+.adj-detail { margin-top: 6px; }
+.adj-detail-head { display: flex; align-items: flex-start; gap: 12px; }
+.adj-detail-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.adj-edit { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.adj-edit-f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.adj-edit-f input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; }
+.adj-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+/* brown pencil edit button (mirror .btn-trash) */
+.btn-edit { flex-shrink: 0; width: 34px; height: 30px; border: none; border-radius: 8px; background: var(--brown); color: white; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.btn-edit svg { width: 15px; height: 15px; }
+.btn-edit:active { filter: brightness(0.9); }
 .sc-danger { color: var(--red); }
 .sc-newadj { margin-top: 10px; background: var(--cream); border: 1px dashed var(--line); border-radius: 8px; padding: 10px; }
 .sc-newadj-picked { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
