@@ -196,7 +196,10 @@ export async function getSkuLedger(itemCode: string): Promise<SkuLedger | null> 
   });
 
   let bal = 0;
-  const entries: LedgerEntry[] = raw.map(({ pin: _pin, ...e }) => { bal += e.delta; return { ...e, balance: bal }; });
+  const chron: LedgerEntry[] = raw.map(({ pin: _pin, ...e }) => { bal += e.delta; return { ...e, balance: bal }; });
+  // display newest first (like a bank statement): the running balance is already computed oldest →
+  // newest, so each row's balance stands after the reverse and the top row shows current stock.
+  const entries = chron.reverse();
 
   const stock = sc as { physical: number | null; available: number | null } | null;
   return { item_code: code, name, physical: stock?.physical ?? bal, available: stock?.available ?? bal, entries };
