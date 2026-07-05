@@ -140,6 +140,7 @@ export default function CatalogBoard({
   const [results, setResults] = useState<CatalogueListRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [catSearched, setCatSearched] = useState(false); // true after a real search → drives "No results" (C1)
+  const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
 
   const [mode, setMode] = useState<RightMode>(null);
   const [detail, setDetail] = useState<SkuDetail | null>(null);
@@ -173,6 +174,28 @@ export default function CatalogBoard({
       /* keep current */
     }
   }
+
+  // PR182 — per-device search history (localStorage, newest first, deduped, capped). A personal
+  // convenience log; recorded on an explicit Enter or when a result is opened, not on every keystroke.
+  const HISTORY_KEY = 'jz.catalog.searchHistory';
+  const HISTORY_MAX = 15;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (raw) setHistory((JSON.parse(raw) as string[]).slice(0, HISTORY_MAX));
+    } catch { /* ignore unavailable/corrupt storage */ }
+  }, []);
+  function persistHistory(next: string[]) {
+    setHistory(next);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }
+  function recordSearch(q: string) {
+    const v = q.trim();
+    if (v.length < 2) return;
+    persistHistory([v, ...history.filter((x) => x.toLowerCase() !== v.toLowerCase())].slice(0, HISTORY_MAX));
+  }
+  function removeSearch(v: string) { persistHistory(history.filter((x) => x !== v)); }
+  function clearHistory() { persistHistory([]); }
 
   async function runSearch() {
     const _id = ++searchSeq.current;
@@ -211,6 +234,7 @@ export default function CatalogBoard({
   }
 
   async function openSku(code: string) {
+    if (tab === 'all') recordSearch(search); // remember the query that led here
     resetMsg();
     setMode('sku');
     setCollision(null);
@@ -362,9 +386,10 @@ export default function CatalogBoard({
               <div className="scan-row" style={{ marginBottom: 0 }}>
                 <input
                   type="text"
-                  placeholder="search SKU code / name / barcode"
+                  placeholder="search SKU, brand, name, or piece count"
                   value={search}
                   onChange={(e) => { setSearch(e.target.value); setCatSearched(false); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); recordSearch(search); runSearch(); } }}
                 />
               </div>
             </div>
@@ -401,6 +426,27 @@ export default function CatalogBoard({
                 </li>
               ))}
             </ul>
+          )}
+
+          {/* PR182 — recent searches (per-device), newest first: tap to re-run, × to forget one, Clear to wipe */}
+          {tab === 'all' && history.length > 0 && (
+            <div className="cat-history">
+              <div className="cat-history-head">
+                <span>Recent searches</span>
+                <button type="button" className="btn-link" onClick={clearHistory}>Clear</button>
+              </div>
+              <ul className="cat-history-list">
+                {history.map((h) => (
+                  <li key={h} className="cat-history-row">
+                    <button type="button" className="cat-history-q" onClick={() => { setSearch(h); recordSearch(h); }}>
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 8v4l3 2" /><circle cx="12" cy="12" r="9" /></svg>
+                      <span>{h}</span>
+                    </button>
+                    <button type="button" className="cat-history-x" aria-label={`Forget "${h}"`} onClick={() => removeSearch(h)}>×</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {tab === 'shared' && (
