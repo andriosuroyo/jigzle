@@ -121,7 +121,11 @@ function buildPatch(orig: CatalogueRow, form: FormState): Partial<CatalogueRow> 
   return patch as Partial<CatalogueRow>;
 }
 
-type Tab = 'all' | 'browse' | 'needs' | 'shared';
+type Tab = 'search' | 'browse' | 'fix';
+
+// PR185 — the item bodyview groups every field into sub-tabs (GROUPS) + a Barcodes tab, styled like the
+// system's tab lists. Short labels for the sub-tab row.
+const GROUP_TABS = ['Identity', 'Classification', 'Dimensions', 'Media'];
 type RightMode = 'sku' | 'collision' | null;
 
 export default function CatalogBoard({
@@ -133,14 +137,14 @@ export default function CatalogBoard({
   initialShared: CollisionRow[];
   userEmail: string;
 }) {
-  const [tab, setTab] = useState<Tab>('all');
+  const [tab, setTab] = useState<Tab>('search');
+  const [detailTab, setDetailTab] = useState(0); // PR185: which field sub-tab of the item bodyview
   const [needsReview, setNeedsReview] = useState<CatalogueListRow[]>(initialNeedsReview);
   const [shared, setShared] = useState<CollisionRow[]>(initialShared);
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogueListRow[]>([]);
   const [searching, setSearching] = useState(false);
-  const [catSearched, setCatSearched] = useState(false); // true after a real search → drives "No results" (C1)
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
 
   const [mode, setMode] = useState<RightMode>(null);
@@ -201,11 +205,7 @@ export default function CatalogBoard({
   async function runSearch() {
     const _id = ++searchSeq.current;
     const q = search.trim();
-    if (q.length < 2) {
-      setResults([]);
-      setCatSearched(false);
-      return;
-    }
+    if (q.length < 2) { setResults([]); return; }
     setSearching(true);
     let rows: CatalogueListRow[] = [];
     try {
@@ -216,28 +216,34 @@ export default function CatalogBoard({
     if (searchSeq.current !== _id) return; // a newer search superseded this one
     setResults(rows);
     setSearching(false);
-    setCatSearched(true);
   }
 
   // live search — debounce keystrokes; clear below the 2-char floor (no stale results / spinner)
   useEffect(() => {
     const q = search.trim();
-    if (q.length < 2) { setResults([]); setCatSearched(false); setSearching(false); return; }
+    if (q.length < 2) { setResults([]); setSearching(false); return; }
     const t = setTimeout(() => { runSearch(); }, 220);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // C1: tab switch resets the "searched" flag so the empty hint reverts to the prompt, not "No results".
   function switchTab(t: Tab) {
     setTab(t);
-    setCatSearched(false);
+  }
+
+  // PR185 — leave the item/collision bodyview back to the tab list
+  function closeDetail() {
+    setMode(null);
+    setDetail(null);
+    setCollision(null);
+    resetMsg();
   }
 
   async function openSku(code: string) {
-    if (tab === 'all') recordSearch(search); // remember the query that led here
+    if (tab === 'search') recordSearch(search); // remember the query that led here
     resetMsg();
     setMode('sku');
+    setDetailTab(0);
     setCollision(null);
     setDetail(null);
     setNewBarcode('');
@@ -357,126 +363,33 @@ export default function CatalogBoard({
     }
   }
 
-  const listForTab: CatalogueListRow[] = tab === 'needs' ? needsReview : results;
+  const fixCount = needsReview.length + shared.length;
 
-  // SKU images for the visible list + the open SKU — one batch read, lazy.
+  // SKU images for the visible lists + the open SKU — one batch read, lazy.
   const imgCodes = useMemo(() => {
     const set = new Set<string>();
-    listForTab.forEach((r) => set.add(r.item_code));
+    results.forEach((r) => set.add(r.item_code));
+    needsReview.forEach((r) => set.add(r.item_code));
     if (detail) set.add(detail.sku.item_code);
     return [...set];
-  }, [listForTab, detail]);
+  }, [results, needsReview, detail]);
   const imgMap = useSkuImages(imgCodes);
+
+  const showBody = mode !== null;
+  const BARCODE_TAB = GROUPS.length;
+  const crumbLabel = showBody
+    ? (mode === 'collision' ? (collision?.barcode ?? 'Barcode') : (detail?.sku.item_code ?? 'Item'))
+    : (tab === 'browse' ? 'Browse' : tab === 'fix' ? 'Fix' : 'Search');
 
   return (
     <div className="ops">
       <AppHeader active="catalog" userEmail={userEmail} />
-      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: tab === 'browse' ? 'Browse' : tab === 'needs' ? 'Needs review' : tab === 'shared' ? 'Shared barcodes' : 'All' }]} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: crumbLabel }]} />
 
-      <div className="fulfill-layout">
-        {/* ── Left: tabs + list ── */}
-        <aside className="fq-pane">
-          <div className="inv-states" style={{ padding: '8px 8px 0', marginTop: 0 }}>
-            <button className={`inv-state ${tab === 'all' ? 'active' : ''}`} onClick={() => switchTab('all')}>All</button>
-            <button className={`inv-state ${tab === 'browse' ? 'active' : ''}`} onClick={() => switchTab('browse')}>Browse</button>
-            <button className={`inv-state ${tab === 'needs' ? 'active' : ''}`} onClick={() => switchTab('needs')}>Needs review ({needsReview.length})</button>
-            <button className={`inv-state ${tab === 'shared' ? 'active' : ''}`} onClick={() => switchTab('shared')}>Shared barcodes ({shared.length})</button>
-          </div>
-
-          {tab === 'all' && (
-            <div className="po-newbtn">
-              <div className="scan-row" style={{ marginBottom: 0 }}>
-                <input
-                  type="text"
-                  placeholder="search SKU, brand, name, or piece count"
-                  value={search}
-                  onChange={(e) => { setSearch(e.target.value); setCatSearched(false); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); recordSearch(search); runSearch(); } }}
-                />
-              </div>
-            </div>
-          )}
-
-          {(tab === 'all' || tab === 'needs') && (
-            <ul className="fq-list">
-              {listForTab.length === 0 && (
-                <li><div className="hint fq-empty">
-                  {tab === 'needs'
-                    ? 'No SKUs need review.'
-                    : catSearched
-                      ? <em>No results</em>
-                      : 'Search to find a SKU.'}
-                </div></li>
-              )}
-              {listForTab.map((r) => (
-                <li key={r.item_code}>
-                  <button className={`fq-row ${detail?.sku.item_code === r.item_code ? 'active' : ''}`} onClick={() => openSku(r.item_code)} disabled={busy}>
-                    <div className="cat-row">
-                      <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
-                      <div className="cat-row-main">
-                        <div className="fq-row-top">
-                          <span className="fq-id">{r.item_code}</span>
-                          <span className="fq-cust">{r.name}</span>
-                        </div>
-                        <div className="fq-row-bot">
-                          <span>{r.brand_prefix || '—'}</span>
-                          {r.needs_review && <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {/* PR182 — recent searches (per-device), newest first: tap to re-run, × to forget one, Clear to wipe */}
-          {tab === 'all' && history.length > 0 && (
-            <div className="cat-history">
-              <div className="cat-history-head">
-                <span>Recent searches</span>
-                <button type="button" className="btn-link" onClick={clearHistory}>Clear</button>
-              </div>
-              <ul className="cat-history-list">
-                {history.map((h) => (
-                  <li key={h} className="cat-history-row">
-                    <button type="button" className="cat-history-q" onClick={() => { setSearch(h); recordSearch(h); }}>
-                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 8v4l3 2" /><circle cx="12" cy="12" r="9" /></svg>
-                      <span>{h}</span>
-                    </button>
-                    <button type="button" className="cat-history-x" aria-label={`Forget "${h}"`} onClick={() => removeSearch(h)}>×</button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* PR183 — Browse: Region → Country → Brand → facets; tapping a result opens the edit pane */}
-          {tab === 'browse' && (
-            <CatalogBrowse active={tab === 'browse'} onOpenSku={openSku} selectedCode={detail?.sku.item_code ?? null} />
-          )}
-
-          {tab === 'shared' && (
-            <ul className="fq-list">
-              {shared.length === 0 && <li><div className="hint fq-empty">No shared barcodes.</div></li>}
-              {shared.map((c) => (
-                <li key={c.barcode}>
-                  <button className={`fq-row ${collision?.barcode === c.barcode ? 'active' : ''}`} onClick={() => openCollision(c)} disabled={busy}>
-                    <div className="fq-row-top">
-                      <span className="fq-id">{c.barcode}</span>
-                      <span className="po-status forwarder">{c.n} SKUs</span>
-                    </div>
-                    <div className="fq-row-bot"><span>{c.item_codes.join(', ')}</span></div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
-
-        {/* ── Right: edit pane / collision resolution ── */}
-        <main className="fd-pane">
-          {!mode && <div className="fd-empty">Pick a SKU to edit, or a shared barcode to resolve.</div>}
+      {/* ── item / collision bodyview (full width; ← back to the tabs) ── */}
+      {showBody ? (
+        <div className="cat-wrap">
+          <button className="btn-link bv-back" onClick={closeDetail}>← back</button>
           {error && <div className="validation err">{error}</div>}
           {success && <div className="validation ok">{success}</div>}
 
@@ -484,7 +397,7 @@ export default function CatalogBoard({
           {mode === 'sku' && !loadingDetail && !detail && <div className="fd-empty">SKU not found.</div>}
 
           {mode === 'sku' && detail && (
-            <>
+            <div className="cat-detail">
               <div className="fd-head">
                 <div className="fd-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={SKU_IMG.lg} />
@@ -502,11 +415,20 @@ export default function CatalogBoard({
                 </div>
               </div>
 
-              {GROUPS.map((g) => (
-                <section className="cat-grp" key={g.title}>
-                  <div className="cat-grp-title">{g.title}</div>
+              {/* PR185 — the many fields grouped into sub-tabs (styled like the system tab lists) */}
+              <div className="sc-tabs cat-subtabs">
+                {GROUP_TABS.map((label, i) => (
+                  <button key={label} className={`sc-tab ${detailTab === i ? 'active' : ''}`} onClick={() => setDetailTab(i)}>{label}</button>
+                ))}
+                <button className={`sc-tab ${detailTab === BARCODE_TAB ? 'active' : ''}`} onClick={() => setDetailTab(BARCODE_TAB)}>
+                  Barcodes{detail.barcodes.length ? ` (${detail.barcodes.length})` : ''}
+                </button>
+              </div>
+
+              {detailTab < GROUPS.length ? (
+                <section className="cat-grp">
                   <div className="cat-grid">
-                    {g.fields.map((fld) => {
+                    {GROUPS[detailTab].fields.map((fld) => {
                       const k = fld.key as string;
                       const full = fld.kind === 'textarea' || fld.kind === 'bool';
                       return (
@@ -536,48 +458,46 @@ export default function CatalogBoard({
                     })}
                   </div>
                 </section>
-              ))}
-
-              {/* Barcode manager */}
-              <section className="cat-grp">
-                <div className="cat-grp-title">Barcodes</div>
-                <ul className="cat-bc-list">
-                  {detail.barcodes.length === 0 && <li className="hint">No barcodes linked.</li>}
-                  {detail.barcodes.map((b) => (
-                    <li className="cat-bc" key={b.barcode}>
-                      <span className="bc-code">{b.barcode}</span>
-                      {b.shared && <span className="bc-shared">shared</span>}
-                      <div className="bc-actions">
-                        <label className="rcv-ctl">
-                          <input type="checkbox" checked={b.is_verified} onChange={(e) => doToggleVerified(b.barcode, e.target.checked)} disabled={busy} />
-                          <span>verified</span>
-                        </label>
-                        <button className="btn-link" onClick={() => doUnlink(detail.sku.item_code, b.barcode)} disabled={busy}>unlink</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <div className="scan-row" style={{ marginTop: 8 }}>
-                  <input
-                    type="text"
-                    placeholder="add a barcode (links / shares it)"
-                    value={newBarcode}
-                    onChange={(e) => setNewBarcode(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doAddBarcode(); } }}
-                  />
-                  <button className="btn-secondary" onClick={doAddBarcode} disabled={busy || !newBarcode.trim()}>+ add</button>
-                </div>
-              </section>
+              ) : (
+                <section className="cat-grp">
+                  <ul className="cat-bc-list">
+                    {detail.barcodes.length === 0 && <li className="hint">No barcodes linked.</li>}
+                    {detail.barcodes.map((b) => (
+                      <li className="cat-bc" key={b.barcode}>
+                        <span className="bc-code">{b.barcode}</span>
+                        {b.shared && <span className="bc-shared">shared</span>}
+                        <div className="bc-actions">
+                          <label className="rcv-ctl">
+                            <input type="checkbox" checked={b.is_verified} onChange={(e) => doToggleVerified(b.barcode, e.target.checked)} disabled={busy} />
+                            <span>verified</span>
+                          </label>
+                          <button className="btn-link" onClick={() => doUnlink(detail.sku.item_code, b.barcode)} disabled={busy}>unlink</button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="scan-row" style={{ marginTop: 8 }}>
+                    <input
+                      type="text"
+                      placeholder="add a barcode (links / shares it)"
+                      value={newBarcode}
+                      onChange={(e) => setNewBarcode(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doAddBarcode(); } }}
+                    />
+                    <button className="btn-secondary" onClick={doAddBarcode} disabled={busy || !newBarcode.trim()}>+ add</button>
+                  </div>
+                </section>
+              )}
 
               <div className="fd-commit">
                 <div className="fd-commit-info">Edits write only the changed fields; item_code can't change.</div>
                 <button className="btn-primary" onClick={saveSku} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
               </div>
-            </>
+            </div>
           )}
 
           {mode === 'collision' && (
-            <>
+            <div className="cat-detail">
               <div className="fd-head">
                 <div className="fd-title">{collision ? collision.barcode : 'Resolved'}</div>
                 <div className="fd-sub">{collision ? `shared by ${collision.n} SKUs` : 'no longer a shared barcode'}</div>
@@ -607,10 +527,133 @@ export default function CatalogBoard({
               ) : (
                 <div className="fd-empty">That barcode is no longer shared.</div>
               )}
-            </>
+            </div>
           )}
-        </main>
-      </div>
+        </div>
+      ) : (
+        <>
+          {/* ── the three main tabs (system pill style) ── */}
+          <div className="orders-bar">
+            <nav className="orders-tabs" role="tablist" aria-label="Catalog">
+              <button role="tab" aria-selected={tab === 'search'} className={`orders-tab ${tab === 'search' ? 'active' : ''}`} onClick={() => switchTab('search')}>Search</button>
+              <button role="tab" aria-selected={tab === 'browse'} className={`orders-tab ${tab === 'browse' ? 'active' : ''}`} onClick={() => switchTab('browse')}>Browse</button>
+              <button role="tab" aria-selected={tab === 'fix'} className={`orders-tab ${tab === 'fix' ? 'active' : ''}`} onClick={() => switchTab('fix')}>
+                Fix{fixCount > 0 && <span className="orders-tab-count">{fixCount}</span>}
+              </button>
+            </nav>
+          </div>
+
+          <div className="cat-wrap">
+            {/* SEARCH — just a search bar; results while typing, otherwise the recent-search log */}
+            {tab === 'search' && (
+              <div className="cat-search">
+                <div className="scan-row">
+                  <input
+                    type="text"
+                    placeholder="search SKU, brand, name, or piece count"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); recordSearch(search); runSearch(); } }}
+                  />
+                </div>
+
+                {search.trim().length >= 2 ? (
+                  <ul className="fq-list">
+                    {results.length === 0 && <li><div className="hint fq-empty">{searching ? 'Searching…' : 'No results'}</div></li>}
+                    {results.map((r) => (
+                      <li key={r.item_code}>
+                        <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
+                          <div className="cat-row">
+                            <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                            <div className="cat-row-main">
+                              <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
+                              <div className="fq-row-bot">
+                                <span>{r.brand_prefix || '—'}</span>
+                                {r.needs_review && <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : history.length > 0 ? (
+                  <div className="cat-history">
+                    <div className="cat-history-head">
+                      <span>Recent searches</span>
+                      <button type="button" className="btn-link" onClick={clearHistory}>Clear</button>
+                    </div>
+                    <ul className="cat-history-list">
+                      {history.map((h) => (
+                        <li key={h} className="cat-history-row">
+                          <button type="button" className="cat-history-q" onClick={() => setSearch(h)}>
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 8v4l3 2" /><circle cx="12" cy="12" r="9" /></svg>
+                            <span>{h}</span>
+                          </button>
+                          <button type="button" className="cat-history-x" aria-label={`Forget "${h}"`} onClick={() => removeSearch(h)}>×</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="hint fq-empty">Search by SKU code, brand, item name, or piece count.</div>
+                )}
+              </div>
+            )}
+
+            {/* BROWSE — the multi-step explorer */}
+            {tab === 'browse' && (
+              <CatalogBrowse active={tab === 'browse'} onOpenSku={openSku} selectedCode={detail?.sku.item_code ?? null} />
+            )}
+
+            {/* FIX — the two maintenance queues (resolve until each hits 0) */}
+            {tab === 'fix' && (
+              <div className="cat-fix">
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Needs review ({needsReview.length})</div>
+                  <ul className="fq-list">
+                    {needsReview.length === 0 && <li><div className="hint fq-empty">All clear — nothing needs review.</div></li>}
+                    {needsReview.map((r) => (
+                      <li key={r.item_code}>
+                        <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
+                          <div className="cat-row">
+                            <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                            <div className="cat-row-main">
+                              <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
+                              <div className="fq-row-bot">
+                                <span>{r.brand_prefix || '—'}</span>
+                                <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Shared barcodes ({shared.length})</div>
+                  <ul className="fq-list">
+                    {shared.length === 0 && <li><div className="hint fq-empty">No shared barcodes.</div></li>}
+                    {shared.map((c) => (
+                      <li key={c.barcode}>
+                        <button className="fq-row" onClick={() => openCollision(c)} disabled={busy}>
+                          <div className="fq-row-top">
+                            <span className="fq-id">{c.barcode}</span>
+                            <span className="po-status forwarder">{c.n} SKUs</span>
+                          </div>
+                          <div className="fq-row-bot"><span>{c.item_codes.join(', ')}</span></div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
