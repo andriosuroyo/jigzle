@@ -796,6 +796,17 @@ img.sku-img { background: #e8e8e8; }
 .cat-hero-ph { display: flex; align-items: center; justify-content: center; }
 .cat-hero-code { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--brown); font-size: 15px; margin-top: 4px; }
 .cat-hero-name { font-size: 16px; font-weight: 700; color: var(--brown-dark); text-align: center; max-width: 600px; }
+/* PR189 — hero thumbnail strip + Media-tab image URL editor */
+.cat-hero-strip { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 600px; }
+.cat-hero-thumb { width: 52px; height: 52px; padding: 0; border: 2px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--paper); cursor: pointer; }
+.cat-hero-thumb.on { border-color: var(--orange); }
+.cat-hero-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cat-imgedit { margin-bottom: 14px; }
+.cat-imgrow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cat-imgrow-thumb { flex-shrink: 0; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--paper); display: flex; align-items: center; justify-content: center; }
+.cat-imgrow-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.cat-imgrow-ph { color: var(--muted); font-size: 13px; font-weight: 700; }
+.cat-imgrow input { flex: 1; min-width: 0; }
 .cat-detail .fd-head { margin-bottom: 4px; }
 .cat-fix { display: flex; flex-direction: column; gap: 20px; }
 .cat-fix-sec .cat-grp-title { margin-bottom: 8px; }
