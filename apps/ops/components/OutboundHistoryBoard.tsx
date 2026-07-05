@@ -21,12 +21,16 @@ const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 export default function OutboundHistoryBoard({
   initialOrders,
   boxPresets,
+  active = true,
   onCountChange,
   onDetailOpenChange,
   reloadKey = 0,
 }: {
   initialOrders: ShipmentHistoryRow[];
   boxPresets: BoxPreset[];
+  // PR181: whether the History tab is on screen. The shell no longer preloads shipped history; we fetch
+  // it once the first time this turns true, so Outbound opens fast on Ready to ship.
+  active?: boolean;
   onCountChange?: (n: number) => void;
   // PR155: the shell hides the tab bar while a shipment detail bodyview is open (breadcrumb stays).
   onDetailOpenChange?: (open: boolean) => void;
@@ -38,6 +42,7 @@ export default function OutboundHistoryBoard({
   const [selKey, setSelKey] = useState<string | null>(null);
   const reqRef = useRef(0);
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
+  const loadedRef = useRef(initialOrders.length > 0); // PR181: false until the deferred first load lands
 
   const sel = useMemo(() => orders.find((o) => o.key === selKey) ?? null, [orders, selKey]);
 
@@ -56,6 +61,7 @@ export default function OutboundHistoryBoard({
 
   async function runSearch() {
     setSearching(true);
+    loadedRef.current = true; // any fetch (deferred load, search, reload) counts as loaded
     const myReq = ++reqRef.current;
     try {
       const rows = await getOutboundHistory(query.trim());
@@ -67,9 +73,15 @@ export default function OutboundHistoryBoard({
     }
   }
 
+  // PR181: deferred first load — fetch the shipped history the first time the History tab is shown.
+  useEffect(() => {
+    if (active && !loadedRef.current) runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   useEffect(() => { onCountChange?.(orders.length); }, [orders, onCountChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
+  useEffect(() => { if (reloadKey && loadedRef.current) runSearch(); }, [reloadKey]);
   // live search: re-query as you type (empty = recent), debounced. Skip the mount run — initialOrders
   // is already loaded — so we only refetch once the user types.
   useEffect(() => {
@@ -97,7 +109,7 @@ export default function OutboundHistoryBoard({
         <div className="search-row" style={{ padding: '0 0 8px' }}>
           <SearchInput value={query} onChange={setQuery} placeholder="Search name, SKU, or courier…" />
         </div>
-        {orders.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No shipped orders.'}</div>}
+        {orders.length === 0 && <div className="hint fq-empty">{searching ? (query.trim() ? 'Searching…' : 'Loading history…') : 'No shipped orders.'}</div>}
         <ul className="fq-list">
           {orders.map((o) => (
             <li key={o.key}>

@@ -160,7 +160,7 @@ export default function OutboundShell({
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <OutboundHistoryBoard initialOrders={shippedHistory} boxPresets={boxPresets} onDetailOpenChange={onHistoryDetail} />
+          <OutboundHistoryBoard active={tab === 'history'} initialOrders={shippedHistory} boxPresets={boxPresets} onDetailOpenChange={onHistoryDetail} />
         </div>
       </div>
 

@@ -6,8 +6,8 @@
 // One quickview card per shipment; tap to see its items. The search bar matches ship_id OR any SKU in
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
-import { useEffect, useMemo, useState } from 'react';
-import { getShipmentItems, setShipmentNote, setShipmentCourier } from '@/app/purchasing/actions';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -25,17 +25,24 @@ const costLabel = (s: { total_cost: number | null; currency: string | null }): s
 export default function PurchasingHistoryBoard({
   initialShipments,
   shipmentCouriers = [],
+  active = true,
   onDetailOpenChange,
 }: {
   initialShipments: ShipmentHistoryRow[];
   // 0056 — the Settings-managed international courier pick-list (DHL, FedEx, MTE…)
   shipmentCouriers?: string[];
+  // PR181: whether the History tab is on screen. The shell no longer preloads the shipment history (a
+  // paged PO scan + subqueries); we fetch it once the first time this turns true, so Purchasing opens
+  // fast on To forwarder.
+  active?: boolean;
   // PR153: the shell hides the pipeline tabs while a shipment detail is open (breadcrumb stays)
   onDetailOpenChange?: (open: boolean) => void;
 }) {
   const [sub, setSub] = useState<'active' | 'completed'>('active');
   const [ships, setShips] = useState<ShipmentHistoryRow[]>(initialShipments);
   const [query, setQuery] = useState('');
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const loadedRef = useRef(initialShipments.length > 0); // PR181: false until the deferred first load lands
 
   // shipment detail: the selected shipment + its item lines
   const [openShip, setOpenShip] = useState<ShipmentHistoryRow | null>(null);
@@ -81,6 +88,25 @@ export default function PurchasingHistoryBoard({
 
   // clear any open detail when flipping sub-lists
   useEffect(() => { setOpenShip(null); }, [sub]);
+
+  // PR181: deferred first load — fetch the full shipment history the first time the History tab is
+  // shown (search + active/completed split stay client-side over this loaded set, as before).
+  async function loadHistory() {
+    setLoadingHistory(true);
+    loadedRef.current = true;
+    try {
+      const rows = await getShipmentHistory('');
+      setShips(rows);
+    } catch {
+      /* keep current on transient error */
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+  useEffect(() => {
+    if (active && !loadedRef.current) loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   async function selectShip(s: ShipmentHistoryRow) {
     setOpenShip(s);
@@ -241,7 +267,7 @@ export default function PurchasingHistoryBoard({
 
       <ul className="po-cards po-cards-compact">
         {visible.length === 0 && (
-          <li className="hint fq-empty">{sub === 'active' ? 'No active shipments.' : 'No completed shipments.'}</li>
+          <li className="hint fq-empty">{loadingHistory ? 'Loading history…' : sub === 'active' ? 'No active shipments.' : 'No completed shipments.'}</li>
         )}
         {visible.map((s) => {
           const cost = costLabel(s);
