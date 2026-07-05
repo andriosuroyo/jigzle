@@ -6,7 +6,9 @@
 // The service-role key is never used here. No stock-mutating writes live on this screen.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
+import { customerIdLabel } from '@jigzle/lib';
 import type { InventoryCounts, InventoryFilter, InventorySortColumn, StockRow } from '@jigzle/db/types';
+import type { LedgerEntry, SkuLedger } from './types';
 
 const LIMIT = 1000; // PostgREST caps responses at max_rows (1000); the operator narrows with search.
 
@@ -131,6 +133,73 @@ export async function getInventoryCounts(): Promise<InventoryCounts> {
     countWhere('physical'),
   ]);
   return { all, on_order, shipping, warehouse };
+}
+
+// ── per-SKU stock ledger (PR172): every in/out movement with a running balance. Sources mirror the
+//    stock_check view — inbound (not excluded), shipped order_lines, adjustments — so the final running
+//    balance equals stock_check.physical. Opening-balance receipts are pinned first (they're dated
+//    2023-12-31 but represent all pre-2024 receipts), then everything else in date order. ──
+export async function getSkuLedger(itemCode: string): Promise<SkuLedger | null> {
+  const supabase = createSupabaseServerClient();
+  const code = itemCode.trim();
+  if (!code) return null;
+
+  const [{ data: sc }, { data: cat }, { data: inb }, { data: sold }, { data: adj }] = await Promise.all([
+    supabase.from('stock_check').select('physical,available').eq('item_code', code).maybeSingle(),
+    supabase.from('catalogue').select('translate_name,original_name,self_code').eq('item_code', code).maybeSingle(),
+    supabase.from('inbound').select('qty,receive_date,ship_id,is_opening_balance,excluded').eq('item_code', code),
+    supabase.from('order_lines').select('qty,shipped_at,sales_id').eq('item_code', code).not('shipped_at', 'is', null).eq('is_cancelled', false),
+    supabase.from('adjustments').select('delta,created_at,source,note').eq('item_code', code),
+  ]);
+
+  const c = cat as { translate_name: string | null; original_name: string | null; self_code: string | null } | null;
+  const name = c ? (c.translate_name || c.original_name || c.self_code || code) : code;
+
+  // resolve a customer label per sale so a row reads "Sale — Name (last4)" instead of a bare order id
+  const soldRows = (sold ?? []) as { qty: number; shipped_at: string | null; sales_id: string }[];
+  const saleIds = [...new Set(soldRows.map((s) => s.sales_id))];
+  const custBySale = new Map<string, string>();
+  for (let i = 0; i < saleIds.length; i += 200) {
+    const { data: ords } = await supabase
+      .from('orders')
+      .select('sales_id,customers(name,phone)')
+      .in('sales_id', saleIds.slice(i, i + 200));
+    for (const o of (ords ?? []) as { sales_id: string; customers: { name: string | null; phone: string | null } | { name: string | null; phone: string | null }[] | null }[]) {
+      const cu = Array.isArray(o.customers) ? o.customers[0] : o.customers;
+      if (cu) custBySale.set(o.sales_id, customerIdLabel(cu.name, cu.phone));
+    }
+  }
+
+  type Raw = LedgerEntry & { pin: boolean };
+  const raw: Raw[] = [];
+  for (const r of (inb ?? []) as { qty: number; receive_date: string | null; ship_id: string | null; is_opening_balance: boolean; excluded: boolean }[]) {
+    if (r.excluded) continue; // excluded (damaged) units never entered sellable stock
+    const opening = r.is_opening_balance;
+    raw.push({
+      date: r.receive_date, kind: opening ? 'opening' : 'inbound', delta: r.qty, ref: r.ship_id,
+      label: opening ? 'Opening balance (received through 2023)' : `Received${r.ship_id ? ` · ${r.ship_id}` : ''}`,
+      balance: 0, pin: opening,
+    });
+  }
+  for (const r of soldRows) {
+    raw.push({ date: r.shipped_at, kind: 'sale', delta: -(r.qty || 0), ref: r.sales_id, label: `Sale — ${custBySale.get(r.sales_id) ?? r.sales_id}`, balance: 0, pin: false });
+  }
+  for (const r of (adj ?? []) as { delta: number; created_at: string | null; source: string | null; note: string | null }[]) {
+    raw.push({ date: r.created_at, kind: 'adjustment', delta: r.delta || 0, ref: null, balance: 0, pin: false, label: `Adjustment${r.note ? ` — ${r.note}` : r.source ? ` (${r.source})` : ''}` });
+  }
+
+  // opening-balance receipts first (pinned), then oldest → newest by date
+  raw.sort((a, b) => {
+    if (a.pin !== b.pin) return a.pin ? -1 : 1;
+    const da = a.date ?? '', db = b.date ?? '';
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
+
+  let bal = 0;
+  const entries: LedgerEntry[] = raw.map(({ pin: _pin, ...e }) => { bal += e.delta; return { ...e, balance: bal }; });
+
+  const stock = sc as { physical: number | null; available: number | null } | null;
+  return { item_code: code, name, physical: stock?.physical ?? bal, available: stock?.available ?? bal, entries };
 }
 
 // ── recompute the snapshot now (the Refresh button) → the new "as of" timestamp ──

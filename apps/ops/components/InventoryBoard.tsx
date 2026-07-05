@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import type { InventoryCounts, InventoryFilter, InventoryState, StockRow } from '@jigzle/db/types';
-import { getInventory, getInventoryCounts, refreshSnapshot } from '@/app/inventory/actions';
+import { getInventory, getInventoryCounts, refreshSnapshot, getSkuLedger } from '@/app/inventory/actions';
+import type { SkuLedger } from '@/app/inventory/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -67,6 +68,17 @@ export default function InventoryBoard({
   const [counts, setCounts] = useState<InventoryCounts>(initialCounts);
   const [view, setView] = useState<'browse' | 'adjustments'>('browse'); // PR170: adjustments moved here from Stock Check
   const [countMode, setCountMode] = useState(false); // PR171: Stock Count mode (embedded StockCheckBoard)
+  const [ledger, setLedger] = useState<SkuLedger | null>(null); // PR172: per-SKU stock ledger drill-down
+  const [ledgerCode, setLedgerCode] = useState<string | null>(null); // the SKU whose ledger is open (loading gate)
+
+  async function openLedger(code: string) {
+    setLedgerCode(code); setLedger(null);
+    try {
+      const l = await getSkuLedger(code);
+      setLedgerCode((cur) => { if (cur === code) setLedger(l); return cur; }); // commit only if still the open SKU
+    } catch { setLedgerCode((cur) => (cur === code ? null : cur)); }
+  }
+  function closeLedger() { setLedgerCode(null); setLedger(null); }
   const [search, setSearch] = useState('');
   const [state, setState] = useState<InventoryState>('all');
   const [refreshedAt, setRefreshedAt] = useState<string | null>(initialRefreshedAt);
@@ -160,13 +172,41 @@ export default function InventoryBoard({
             Stock Count launcher on the right of the tab row. */}
         <div className="inv-tabrow">
           <div className="sc-tabs">
-            <button className={`sc-tab ${view === 'browse' ? 'active' : ''}`} onClick={() => setView('browse')}>Browse</button>
-            <button className={`sc-tab ${view === 'adjustments' ? 'active' : ''}`} onClick={() => setView('adjustments')}>Adjustments</button>
+            <button className={`sc-tab ${view === 'browse' ? 'active' : ''}`} onClick={() => { setView('browse'); closeLedger(); }}>Browse</button>
+            <button className={`sc-tab ${view === 'adjustments' ? 'active' : ''}`} onClick={() => { setView('adjustments'); closeLedger(); }}>Adjustments</button>
           </div>
           <button className="btn-secondary inv-count-btn" onClick={() => setCountMode(true)}>Stock Count</button>
         </div>
 
-        {view === 'adjustments' ? <AdjustmentsTab /> : (
+        {view === 'adjustments' ? <AdjustmentsTab /> : ledgerCode ? (
+          /* PR172 — per-SKU stock ledger drill-down (tap a Browse card) */
+          <div className="inv-ledger">
+            <button className="btn-link bv-back" onClick={closeLedger}>← back</button>
+            {!ledger ? <div className="hint">Loading ledger…</div> : (
+              <>
+                <div className="ledg-head">
+                  <SkuImage status={imgMap[ledger.item_code]?.status} displayUrl={imgMap[ledger.item_code]?.displayUrl} name={ledger.name || ''} size={SKU_IMG.md} />
+                  <div className="ledg-head-main">
+                    <div className="inv-card-code">{ledger.item_code}</div>
+                    <div className="inv-card-name">{ledger.name || '—'}</div>
+                    <div className="ledg-now">In stock <b>{ledger.physical}</b>{ledger.available !== ledger.physical ? ` · available ${ledger.available}` : ''}</div>
+                  </div>
+                </div>
+                <ul className="ledg-list">
+                  {ledger.entries.length === 0 && <li className="hint">No stock movements on record.</li>}
+                  {ledger.entries.map((e, i) => (
+                    <li key={i} className={`ledg-row ledg-${e.kind}`}>
+                      <span className="ledg-date">{e.date ? e.date.slice(0, 10) : '—'}</span>
+                      <span className="ledg-label">{e.label}</span>
+                      <span className={`ledg-delta ${e.delta >= 0 ? 'in' : 'out'}`}>{e.delta > 0 ? `+${e.delta}` : e.delta}</span>
+                      <span className="ledg-bal">{e.balance}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        ) : (
         <>
         {/* autocomplete-style search bar; the refresh + "as of" timestamp fold into its right edge to
             reclaim the row they used to occupy. */}
@@ -210,7 +250,8 @@ export default function InventoryBoard({
         <div className="inv-cards">
           {rows.length === 0 && <div className="inv-empty">{loading ? 'Loading…' : 'No matching SKUs.'}</div>}
           {rows.map((r) => (
-            <div key={r.item_code} className="inv-card">
+            /* PR172 — tap a card to open its stock ledger */
+            <button key={r.item_code} className="inv-card inv-card-btn" onClick={() => openLedger(r.item_code)}>
               <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={SKU_IMG.sm} />
               <div className="inv-card-main">
                 <div className="inv-card-code">{r.item_code}</div>
@@ -222,7 +263,7 @@ export default function InventoryBoard({
                 <span className={`inv-stat ${r.physical ? '' : 'zero'}`} title="Warehouse"><IconWarehouse />{r.physical}</span>
                 {r.on_hold > 0 && <span className="inv-hold" title="Held for a customer">On hold: {r.on_hold}</span>}
               </div>
-            </div>
+            </button>
           ))}
         </div>
 
