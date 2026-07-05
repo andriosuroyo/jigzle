@@ -18,7 +18,7 @@ export interface SkuLedger {
   name: string | null;
   physical: number; // current on-shelf (should equal the last entry's running balance)
   available: number; // current free-to-sell
-  entries: LedgerEntry[]; // oldest → newest (opening balance first)
+  entries: LedgerEntry[]; // newest → oldest for display (running balance computed oldest → newest)
 }
 
 // PR176 — History tab quickview row: a SKU that has moved (received at least once), so it has a
