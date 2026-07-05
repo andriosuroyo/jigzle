@@ -16,6 +16,7 @@ import {
 } from '@/app/catalog/actions';
 import { missingForComplete } from '@/app/catalog/types';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
+import CatalogBrowse from '@/components/CatalogBrowse';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -120,7 +121,7 @@ function buildPatch(orig: CatalogueRow, form: FormState): Partial<CatalogueRow> 
   return patch as Partial<CatalogueRow>;
 }
 
-type Tab = 'all' | 'needs' | 'shared';
+type Tab = 'all' | 'browse' | 'needs' | 'shared';
 type RightMode = 'sku' | 'collision' | null;
 
 export default function CatalogBoard({
@@ -370,13 +371,14 @@ export default function CatalogBoard({
   return (
     <div className="ops">
       <AppHeader active="catalog" userEmail={userEmail} />
-      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: tab === 'needs' ? 'Needs review' : tab === 'shared' ? 'Shared barcodes' : 'All' }]} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: tab === 'browse' ? 'Browse' : tab === 'needs' ? 'Needs review' : tab === 'shared' ? 'Shared barcodes' : 'All' }]} />
 
       <div className="fulfill-layout">
         {/* ── Left: tabs + list ── */}
         <aside className="fq-pane">
           <div className="inv-states" style={{ padding: '8px 8px 0', marginTop: 0 }}>
             <button className={`inv-state ${tab === 'all' ? 'active' : ''}`} onClick={() => switchTab('all')}>All</button>
+            <button className={`inv-state ${tab === 'browse' ? 'active' : ''}`} onClick={() => switchTab('browse')}>Browse</button>
             <button className={`inv-state ${tab === 'needs' ? 'active' : ''}`} onClick={() => switchTab('needs')}>Needs review ({needsReview.length})</button>
             <button className={`inv-state ${tab === 'shared' ? 'active' : ''}`} onClick={() => switchTab('shared')}>Shared barcodes ({shared.length})</button>
           </div>
@@ -447,6 +449,11 @@ export default function CatalogBoard({
                 ))}
               </ul>
             </div>
+          )}
+
+          {/* PR183 — Browse: Region → Country → Brand → facets; tapping a result opens the edit pane */}
+          {tab === 'browse' && (
+            <CatalogBrowse active={tab === 'browse'} onOpenSku={openSku} selectedCode={detail?.sku.item_code ?? null} />
           )}
 
           {tab === 'shared' && (
