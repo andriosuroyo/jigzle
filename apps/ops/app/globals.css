@@ -32,6 +32,15 @@ input, textarea, select, button { font-family: inherit; }
 .login-card button:active { background: var(--paper); }
 .login-card .err { background: var(--red-tint); color: #993525; font-size: 12px; padding: 8px 10px; border-radius: 6px; margin-bottom: 14px; }
 
+/* ── Global route-transition progress bar (PR180) — a slim bar pinned to the very top that trickles
+   toward 90% while the next screen renders, then snaps to 100% and fades when the route lands. Sits
+   above the sticky header (z-index) so it's visible during the wait from any screen. ── */
+.navprog { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 100; pointer-events: none; padding-top: env(safe-area-inset-top); }
+.navprog-bar { height: 3px; width: 0; background: var(--orange); box-shadow: 0 0 8px rgba(244, 161, 54, 0.7); border-radius: 0 2px 2px 0; }
+.navprog-grow .navprog-bar { width: 90%; transition: width 10s cubic-bezier(0.12, 0.86, 0.2, 1); }
+.navprog-done .navprog-bar { width: 100%; transition: width 0.2s ease; }
+.navprog-done { opacity: 0; transition: opacity 0.3s ease 0.12s; }
+
 /* ── App header ── */
 .app-header { background: var(--brown); color: white; padding: 14px 18px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50; }
 .app-header .logo { width: 28px; height: 28px; background: var(--orange); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 14px; flex-shrink: 0; }
