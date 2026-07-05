@@ -8,7 +8,7 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import { isComplete } from './types';
-import type { BarcodeOwner, CatalogueListRow, QuickAddResult, SkuDetail } from './types';
+import type { BarcodeOwner, BrowseBrand, BrowseSku, CatalogueListRow, QuickAddResult, SkuDetail } from './types';
 
 const LIMIT = 200;
 
@@ -98,6 +98,64 @@ export async function searchCatalogue(q: string): Promise<CatalogueListRow[]> {
     const r = c as CatNameRow;
     return { item_code: r.item_code, name: nameOf(r), brand_prefix: r.brand_prefix ?? null, needs_review: !!r.needs_review };
   });
+}
+
+// ── Browse tab (PR183): the geography scaffold — every brand with name + country + its live SKU count.
+// The client folds country → region and aggregates. No GROUP BY over PostgREST and (per this module's
+// convention) no RPC/migration, so per-brand counts come from a parallel paged scan of brand_prefix
+// (stable order so page ranges partition cleanly). Runs once when Browse is first opened. ──
+export async function getBrowseTree(): Promise<BrowseBrand[]> {
+  const supabase = createSupabaseServerClient();
+
+  const { data: br } = await supabase.from('brands').select('prefix,name,country').order('name');
+  const brands = (br ?? []) as { prefix: string; name: string | null; country: string | null }[];
+
+  const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true });
+  const total = count ?? 0;
+  const PAGE = 1000;
+  const pages = Math.ceil(total / PAGE);
+  const CONC = 8; // fire page ranges in bounded-concurrency batches (avoid a 48-wide fan-out)
+  const counts = new Map<string, number>();
+  for (let start = 0; start < pages; start += CONC) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(CONC, pages - start) }, (_, k) => {
+        const from = (start + k) * PAGE;
+        return supabase.from('catalogue').select('brand_prefix').order('item_code').range(from, from + PAGE - 1);
+      }),
+    );
+    for (const { data } of batch)
+      for (const r of (data ?? []) as { brand_prefix: string | null }[])
+        if (r.brand_prefix) counts.set(r.brand_prefix, (counts.get(r.brand_prefix) ?? 0) + 1);
+  }
+
+  return brands.map((b) => ({ prefix: b.prefix, name: b.name || b.prefix, country: b.country, count: counts.get(b.prefix) ?? 0 }));
+}
+
+// ── Browse tab: one brand's SKUs with the facet columns, for client-side faceting + the result list.
+// Paged (a big brand exceeds PostgREST's 1000 cap) up to a generous safety ceiling. ──
+export async function getBrandSkus(prefix: string): Promise<BrowseSku[]> {
+  const supabase = createSupabaseServerClient();
+  const p = (prefix || '').trim();
+  if (!p) return [];
+  const COLS =
+    'item_code,brand_prefix,translate_name,original_name,self_code,needs_review,product_type,piece_count_n,material,effect,theme,artist';
+  const PAGE = 1000;
+  const out: BrowseSku[] = [];
+  for (let from = 0; from < 12000; from += PAGE) {
+    const { data } = await supabase.from('catalogue').select(COLS).eq('brand_prefix', p).order('item_code').range(from, from + PAGE - 1);
+    const rows = (data ?? []) as (CatNameRow & {
+      product_type: string | null; piece_count_n: number | null; material: string | null;
+      effect: string | null; theme: string | null; artist: string | null;
+    })[];
+    for (const r of rows)
+      out.push({
+        item_code: r.item_code, name: nameOf(r), brand_prefix: r.brand_prefix ?? null, needs_review: !!r.needs_review,
+        product_type: r.product_type ?? null, piece_count_n: r.piece_count_n ?? null, material: r.material ?? null,
+        effect: r.effect ?? null, theme: r.theme ?? null, artist: r.artist ?? null,
+      });
+    if (rows.length < PAGE) break;
+  }
+  return out;
 }
 
 // ── the edit pane: full SKU + its barcode links (with shared flags) ──

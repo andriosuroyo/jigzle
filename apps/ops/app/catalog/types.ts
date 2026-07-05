@@ -75,3 +75,26 @@ export interface BarcodeOwner {
   item_code: string;
   name: string;
 }
+
+// ── Browse tab (PR183): the geography scaffold + a brand's SKUs for client-side faceting ──
+// One brand in the Region → Country → Brand tree, with its live SKU count.
+export interface BrowseBrand {
+  prefix: string;
+  name: string;
+  country: string | null;
+  count: number;
+}
+
+// One SKU under a brand, carrying just the columns the facet panel needs (plus the list fields).
+export interface BrowseSku {
+  item_code: string;
+  name: string;
+  brand_prefix: string | null;
+  needs_review: boolean;
+  product_type: string | null;
+  piece_count_n: number | null;
+  material: string | null;
+  effect: string | null;
+  theme: string | null;
+  artist: string | null;
+}
