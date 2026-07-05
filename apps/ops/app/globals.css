@@ -768,6 +768,10 @@ img.sku-img { background: #e8e8e8; }
 .cat-results-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 700; color: var(--muted); border-top: 1px solid var(--line); margin-top: 8px; padding: 10px 2px 8px; }
 .cat-narrow { margin-top: 2px; }
 .cat-optlist { margin-top: 4px; }
+/* PR187 — theme accordion inside the dimension list: left-padded nested rows */
+.cat-tree-nest1 { padding-left: 28px; }
+.cat-tree-nest2 { padding-left: 46px; }
+.cat-tree-nest1 .cat-tree-label, .cat-tree-nest2 .cat-tree-label { font-weight: 500; }
 /* PR184 — theme drill-down tree */
 .cat-theme-tree { display: flex; flex-direction: column; gap: 3px; }
 .cat-theme-row { display: flex; align-items: center; gap: 4px; }
