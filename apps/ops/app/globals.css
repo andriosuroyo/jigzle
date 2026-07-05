@@ -775,6 +775,14 @@ img.sku-img { background: #e8e8e8; }
 .cat-theme-chip { max-width: 100%; }
 .cat-theme-chip > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* PR185 — Catalog shell: Search | Browse | Fix, single-column with a full-width item bodyview */
+.cat-wrap { max-width: 900px; margin: 0 auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
+.cat-search { display: flex; flex-direction: column; gap: 10px; }
+.cat-subtabs { margin: 14px 0 12px; overflow-x: auto; overflow-y: hidden; }
+.cat-detail .fd-head { margin-bottom: 4px; }
+.cat-fix { display: flex; flex-direction: column; gap: 20px; }
+.cat-fix-sec .cat-grp-title { margin-bottom: 8px; }
+
 /* ── Success ── */
 .success-wrap { display: flex; justify-content: center; padding: 40px 18px; }
 .success-card { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 28px; max-width: 360px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
