@@ -923,6 +923,8 @@ img.sku-img { background: #e8e8e8; }
 /* PR174 — detail overlay (few fields → modal, not a full bodyview) */
 .adj-modal { max-width: 440px; }
 .adj-modal-foot { justify-content: flex-start; }
+/* PR175 — the new-adjustment form drops its inline cream box when it lives inside the overlay */
+.adj-modal .sc-newadj { margin: 0; padding: 0; background: transparent; border: none; }
 .adj-detail-head { display: flex; align-items: flex-start; gap: 12px; }
 .adj-detail-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .adj-edit { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
