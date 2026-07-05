@@ -648,6 +648,8 @@ button.po-pick-btn:active { background: var(--paper); }
 /* PR172 — tappable card (opens the SKU ledger) + the per-SKU stock ledger view */
 .inv-card-btn { width: 100%; text-align: left; cursor: pointer; font: inherit; }
 .inv-card-btn:active { background: var(--paper); }
+/* PR176 — History card: no stats, just a chevron affordance into the SKU's ledger */
+.inv-card-chev { flex-shrink: 0; color: var(--muted); }
 .inv-ledger { max-width: 900px; margin: 0 auto; padding-top: 8px; }
 .ledg-head { display: flex; align-items: flex-start; gap: 12px; margin: 8px 0 14px; }
 .ledg-head-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }

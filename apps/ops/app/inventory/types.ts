@@ -20,3 +20,10 @@ export interface SkuLedger {
   available: number; // current free-to-sell
   entries: LedgerEntry[]; // oldest → newest (opening balance first)
 }
+
+// PR176 — History tab quickview row: a SKU that has moved (received at least once), so it has a
+// ledger worth opening. Zero-in SKUs are excluded from the list (their ledger would be empty).
+export interface LedgerSku {
+  item_code: string;
+  name: string | null;
+}
