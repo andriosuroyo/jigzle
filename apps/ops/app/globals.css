@@ -766,6 +766,14 @@ img.sku-img { background: #e8e8e8; }
 .cat-chip.on .cat-chip-n { color: #8A5A1A; }
 .cat-chip-more { border-style: dashed; color: var(--muted); }
 .cat-results-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 700; color: var(--muted); border-top: 1px solid var(--line); margin-top: 8px; padding: 10px 2px 8px; }
+.cat-narrow { margin-top: 2px; }
+/* PR184 — theme drill-down tree */
+.cat-theme-tree { display: flex; flex-direction: column; gap: 3px; }
+.cat-theme-row { display: flex; align-items: center; gap: 4px; }
+.cat-theme-caret { flex-shrink: 0; width: 18px; height: 24px; background: none; border: none; color: var(--muted); font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.cat-theme-caret-none { cursor: default; }
+.cat-theme-chip { max-width: 100%; }
+.cat-theme-chip > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Success ── */
 .success-wrap { display: flex; justify-content: center; padding: 40px 18px; }
