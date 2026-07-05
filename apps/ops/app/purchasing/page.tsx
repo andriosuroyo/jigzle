@@ -6,7 +6,6 @@ import {
   getOpenShipments,
   getPlannedItems,
   getPreorders,
-  getShipmentHistory,
   getSoldOutItems,
   getSuppliers,
 } from '@/app/purchasing/actions';
@@ -15,8 +14,9 @@ import { getLocalCouriers, getShipmentCouriers } from '@/app/settings/actions';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Server shell: load the open-PO queue + form dropdown lists, plus the read-only To-buy (preorder) and
-// History (per item / per shipment) data, and render the four-tab board.
+// Server shell: load the open-PO queue + form dropdown lists and the read-only To-buy (preorder) data,
+// then render the four-tab board. PERF (PR181): the shipment History (a paged PO scan + subqueries) is
+// loaded lazily by PurchasingHistoryBoard on first open, not here — Purchasing opens on To forwarder.
 export default async function OrderPage() {
   const supabase = createSupabaseServerClient();
   const [
@@ -28,7 +28,6 @@ export default async function OrderPage() {
     planned,
     preorders,
     soldOut,
-    shipmentHistory,
     localCouriers,
     shipmentCouriers,
   ] = await Promise.all([
@@ -40,7 +39,6 @@ export default async function OrderPage() {
     getPlannedItems(),
     getPreorders(),
     getSoldOutItems(),
-    getShipmentHistory(''),
     getLocalCouriers(),
     getShipmentCouriers(),
   ]);
@@ -54,7 +52,7 @@ export default async function OrderPage() {
       planned={planned}
       preorders={preorders}
       soldOut={soldOut}
-      shipmentHistory={shipmentHistory}
+      shipmentHistory={[]}
       localCouriers={localCouriers.map((c) => c.label)}
       shipmentCouriers={shipmentCouriers.map((c) => c.label)}
       userEmail={user?.email || ''}

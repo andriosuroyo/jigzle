@@ -29,11 +29,15 @@ function fmtDateTime(iso: string | null, fallbackDate: string | null): string {
 
 export default function InboundHistoryBoard({
   initialRows,
+  active = true,
   onCountChange,
   onDetailOpenChange,
   reloadKey = 0,
 }: {
   initialRows: InboundHistoryRow[];
+  // PR181: whether the History tab is on screen. The shell no longer preloads the (paged full-scan)
+  // received history; we fetch it once the first time this turns true, so Inbound opens fast on Active.
+  active?: boolean;
   onCountChange?: (n: number) => void;
   // PR154: the shell hides the tab bar while a receipt detail bodyview is open (breadcrumb stays).
   onDetailOpenChange?: (open: boolean) => void;
@@ -54,6 +58,7 @@ export default function InboundHistoryBoard({
   const [editErr, setEditErr] = useState<string | null>(null);
   const reqRef = useRef(0);
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialRows already loaded)
+  const loadedRef = useRef(initialRows.length > 0); // PR181: false until the deferred first load lands
 
   // year sub-tabs (newest first; null-date receipts bucket under '—' at the end), each with a count.
   const yearOf = (r: InboundHistoryRow): string => (r.receive_date ? r.receive_date.slice(0, 4) : '—');
@@ -88,6 +93,7 @@ export default function InboundHistoryBoard({
 
   async function runSearch() {
     setSearching(true);
+    loadedRef.current = true; // any fetch (deferred load, search, reload) counts as loaded
     const myReq = ++reqRef.current;
     try {
       const r = await getReceiveHistory(query.trim());
@@ -98,6 +104,12 @@ export default function InboundHistoryBoard({
       if (reqRef.current === myReq) setSearching(false);
     }
   }
+
+  // PR181: deferred first load — fetch the received history the first time the History tab is shown.
+  useEffect(() => {
+    if (active && !loadedRef.current) runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   // delete this received entry — removes its inbound rows (stock self-corrects via the stock_check
   // view). Destructive, so it's behind an inline confirm.
@@ -149,7 +161,7 @@ export default function InboundHistoryBoard({
   // PR154: bodyview — the shell hides the tab bar while a detail is open.
   useEffect(() => { onDetailOpenChange?.(!!selKey); }, [selKey, onDetailOpenChange]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (reloadKey) runSearch(); }, [reloadKey]);
+  useEffect(() => { if (reloadKey && loadedRef.current) runSearch(); }, [reloadKey]);
   // live search: re-query as you type (empty = recent), debounced. Skip the mount run — initialRows
   // is already loaded — so we only refetch once the user types.
   useEffect(() => {
@@ -185,7 +197,7 @@ export default function InboundHistoryBoard({
             ))}
           </div>
         )}
-        {visibleRows.length === 0 && <div className="hint fq-empty">{searching ? 'Searching…' : 'No received shipments.'}</div>}
+        {visibleRows.length === 0 && <div className="hint fq-empty">{searching ? (query.trim() ? 'Searching…' : 'Loading history…') : 'No received shipments.'}</div>}
         <ul className="fq-list">
           {visibleRows.map((r) => (
             <li key={r.ship_id}>

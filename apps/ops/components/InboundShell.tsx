@@ -89,7 +89,7 @@ export default function InboundShell({
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <InboundHistoryBoard initialRows={historyRows} onDetailOpenChange={onHistoryDetail} />
+          <InboundHistoryBoard active={tab === 'history'} initialRows={historyRows} onDetailOpenChange={onHistoryDetail} />
         </div>
       </div>
     </div>
