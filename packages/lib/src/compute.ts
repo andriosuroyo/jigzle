@@ -75,6 +75,11 @@ export function compute(input: ComputeInputs): ComputeResult {
   };
 }
 
+// Volumetric weight for the shipping-cost Calculator. Dims in cm → result in GRAMS.
+//   INTERNATIONAL courier convention (UPS, DHL, FedEx, Repack, …): L·W·H(cm) / 5000 (kg) = / 5 (g).
+// The Calculator prices international freight, so it uses the /5000 (→ /5 g) divisor here.
+// NOTE: LOCAL Indonesian couriers (TIKI, JNE, JNT, SiCepat, …) use / 6000 (kg) = / 6 (g) instead —
+// that's the Outbound ship path (packages/lib/src/weight.ts · volWeight), which is separate.
 export function volumeWeight(box_p: number, box_l: number, box_t: number): number {
   return (box_p * box_l * box_t) / 5;
 }
