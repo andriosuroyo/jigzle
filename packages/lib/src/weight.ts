@@ -7,6 +7,11 @@
 //
 // GRAMS everywhere (PR26 fix — was /6000/kg): real_weight is entered in grams, so vol must be
 // grams too for chargeable = max(real, vol) to compare like units.
+//
+// The /6 here is the LOCAL Indonesian courier convention (TIKI, JNE, JNT, SiCepat, …):
+// L·W·H(cm) / 6000 (kg) = / 6 (g). INTERNATIONAL couriers (UPS, DHL, FedEx, Repack, …) use / 5000
+// (kg) = / 5 (g) instead — see the Calculator's volumeWeight in compute.ts. Most outbound is local,
+// so the ship screen bills at / 6.
 
 export function volWeight(p: number, l: number, t: number): number {
   return (Math.ceil(p) * Math.ceil(l) * Math.ceil(t)) / 6;
