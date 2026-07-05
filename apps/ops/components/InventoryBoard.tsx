@@ -156,10 +156,23 @@ export default function InventoryBoard({
 
   const countFor = (k: InventoryState) => counts[k];
 
+  // Breadcrumb: Home › Inventory › <tab> [› <state/SKU> for Browse] (PR173).
+  const stateLabel = STATES.find((s) => s.key === state)?.label ?? 'All';
+  const crumbs: { label: string; href?: string; onClick?: () => void }[] = [
+    { label: 'Home', href: '/' },
+    { label: 'Inventory', href: '/inventory' },
+  ];
+  if (countMode) crumbs.push({ label: 'Stock Count' });
+  else if (view === 'adjustments') crumbs.push({ label: 'Adjustments' });
+  else {
+    crumbs.push({ label: 'Browse', onClick: closeLedger });
+    crumbs.push({ label: ledgerCode ? (ledger?.item_code ?? ledgerCode) : stateLabel });
+  }
+
   return (
     <div className="ops">
       <AppHeader active="inventory" userEmail={userEmail} />
-      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: countMode ? 'Stock Count' : (view === 'adjustments' ? 'Adjustments' : (STATES.find((s) => s.key === state)?.label ?? 'All')) }]} />
+      <Breadcrumbs items={crumbs} />
 
       {/* PR171 — Stock Count is a MODE of Inventory (its own nav item retired); the count workspace
           renders embedded, with its own "← back to Inventory". */}
