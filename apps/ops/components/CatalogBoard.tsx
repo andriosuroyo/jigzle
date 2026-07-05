@@ -386,8 +386,8 @@ export default function CatalogBoard({
       <AppHeader active="catalog" userEmail={userEmail} />
       <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: crumbLabel }]} />
 
-      {/* ── item / collision bodyview (full width; ← back to the tabs) ── */}
-      {showBody ? (
+      {/* ── item / collision bodyview (full width; ← back to the tab you came from) ── */}
+      {showBody && (
         <div className="cat-wrap">
           <button className="btn-link bv-back" onClick={closeDetail}>← back</button>
           {error && <div className="validation err">{error}</div>}
@@ -530,20 +530,23 @@ export default function CatalogBoard({
             </div>
           )}
         </div>
-      ) : (
-        <>
-          {/* ── the three main tabs (system pill style) ── */}
-          <div className="orders-bar">
-            <nav className="orders-tabs" role="tablist" aria-label="Catalog">
-              <button role="tab" aria-selected={tab === 'search'} className={`orders-tab ${tab === 'search' ? 'active' : ''}`} onClick={() => switchTab('search')}>Search</button>
-              <button role="tab" aria-selected={tab === 'browse'} className={`orders-tab ${tab === 'browse' ? 'active' : ''}`} onClick={() => switchTab('browse')}>Browse</button>
-              <button role="tab" aria-selected={tab === 'fix'} className={`orders-tab ${tab === 'fix' ? 'active' : ''}`} onClick={() => switchTab('fix')}>
-                Fix{fixCount > 0 && <span className="orders-tab-count">{fixCount}</span>}
-              </button>
-            </nav>
-          </div>
+      )}
 
-          <div className="cat-wrap">
+      {/* ── the three main tabs (system pill style); hidden while a bodyview is open ── */}
+      {!showBody && (
+        <div className="orders-bar">
+          <nav className="orders-tabs" role="tablist" aria-label="Catalog">
+            <button role="tab" aria-selected={tab === 'search'} className={`orders-tab ${tab === 'search' ? 'active' : ''}`} onClick={() => switchTab('search')}>Search</button>
+            <button role="tab" aria-selected={tab === 'browse'} className={`orders-tab ${tab === 'browse' ? 'active' : ''}`} onClick={() => switchTab('browse')}>Browse</button>
+            <button role="tab" aria-selected={tab === 'fix'} className={`orders-tab ${tab === 'fix' ? 'active' : ''}`} onClick={() => switchTab('fix')}>
+              Fix{fixCount > 0 && <span className="orders-tab-count">{fixCount}</span>}
+            </button>
+          </nav>
+        </div>
+      )}
+
+      {/* ── tab content stays MOUNTED (hidden under a bodyview) so Browse keeps its drill position ── */}
+      <div className="cat-wrap" hidden={showBody}>
             {/* SEARCH — just a search bar; results while typing, otherwise the recent-search log */}
             {tab === 'search' && (
               <div className="cat-search">
@@ -651,9 +654,7 @@ export default function CatalogBoard({
                 </section>
               </div>
             )}
-          </div>
-        </>
-      )}
+      </div>
     </div>
   );
 }
