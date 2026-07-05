@@ -6,7 +6,7 @@
 // read-only snapshot. The cosmetic batch will re-home the nav entry under SYSTEM; here it's added to
 // the current flat AppHeader.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import PresenceSession from '@/components/PresenceSession';
@@ -33,10 +33,15 @@ export default function StockCheckBoard({
   initialSessions,
   brands,
   userEmail,
+  embedded = false,
+  onExitEmbed,
 }: {
   initialSessions: SessionRow[];
   brands: BrandOption[];
   userEmail: string;
+  // PR171: rendered as a MODE inside Inventory (no own page chrome; a "← back to Inventory" on the list)
+  embedded?: boolean;
+  onExitEmbed?: () => void;
 }) {
   const [sessions, setSessions] = useState<SessionRow[]>(initialSessions);
   const [detail, setDetail] = useState<SessionRow | null>(null);
@@ -95,72 +100,64 @@ export default function StockCheckBoard({
     if (fresh) setDetail(fresh);
   }
 
-  // ── detail (a single open/closed session) ──
-  if (detail) {
-    if (detail.status === 'open' && detail.mode === 'presence') {
-      return (
-        <div className="ops">
-          <AppHeader active="stock-check" userEmail={userEmail} />
-          <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: 'Presence count' }]} />
-          <PresenceSession session={detail} onExit={exitDetail} onClosed={() => onClosed(detail.stock_check_id)} />
-        </div>
-      );
-    }
-    if (detail.status === 'open' && detail.mode === 'count') {
-      return (
-        <div className="ops">
-          <AppHeader active="stock-check" userEmail={userEmail} />
-          <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: 'Count' }]} />
-          <CountSession session={detail} onExit={exitDetail} onClosed={() => onClosed(detail.stock_check_id)} />
-        </div>
-      );
-    }
-    return (
-      <div className="ops">
-        <AppHeader active="stock-check" userEmail={userEmail} />
-        <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: 'Snapshot' }]} />
-        <SnapshotView session={detail} onExit={exitDetail} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="ops">
-      <AppHeader active="stock-check" userEmail={userEmail} />
-      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: 'Counts' }]} />
-
+  // ── the active content: a session detail (presence / count / snapshot), or the counts list ──
+  let crumb = 'Counts';
+  let content: ReactNode;
+  if (detail?.status === 'open' && detail.mode === 'presence') {
+    crumb = 'Presence count';
+    content = <PresenceSession session={detail} onExit={exitDetail} onClosed={() => onClosed(detail.stock_check_id)} />;
+  } else if (detail?.status === 'open' && detail.mode === 'count') {
+    crumb = 'Count';
+    content = <CountSession session={detail} onExit={exitDetail} onClosed={() => onClosed(detail.stock_check_id)} />;
+  } else if (detail) {
+    crumb = 'Snapshot';
+    content = <SnapshotView session={detail} onExit={exitDetail} />;
+  } else {
+    content = (
       <div className="sc-wrap">
+        {embedded && onExitEmbed && <button className="btn-link bv-back" onClick={onExitEmbed}>← back to Inventory</button>}
         {error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
-
         <div className="sc-bar">
           <button className="btn-primary" onClick={() => setShowNew(true)}>+ New count</button>
         </div>
         <div className="sc-sess-list">
-              {sessions.length === 0 && <div className="sc-empty">No counts yet. Start one with “New count”.</div>}
-              {sessions.map((s) => (
-                <button key={s.stock_check_id} className="sc-sess" onClick={() => setDetail(s)}>
-                  <div className="sc-sess-l1">
-                    <span className={`sc-badge ${s.status}`}>{s.status}</span>
-                    <span className="sc-sess-mode">{modeLabel(s.mode)}</span>
-                    <span className="sc-sess-scope">{scopeLabel(s)}</span>
-                    <span className="sc-sess-date">{fmtDate(s.started_at)}</span>
-                  </div>
-                  <div className="sc-sess-l2">
-                    <span className="sc-sess-by">{s.counted_by}</span>
-                    <span className="sc-sess-meta">
-                      {s.status === 'open'
-                        ? `${s.confirmed_count}/${s.line_count} ${s.mode === 'count' ? 'counted' : 'checked'}`
-                        : `${s.changed_count} changed`}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
+          {sessions.length === 0 && <div className="sc-empty">No counts yet. Start one with “New count”.</div>}
+          {sessions.map((s) => (
+            <button key={s.stock_check_id} className="sc-sess" onClick={() => setDetail(s)}>
+              <div className="sc-sess-l1">
+                <span className={`sc-badge ${s.status}`}>{s.status}</span>
+                <span className="sc-sess-mode">{modeLabel(s.mode)}</span>
+                <span className="sc-sess-scope">{scopeLabel(s)}</span>
+                <span className="sc-sess-date">{fmtDate(s.started_at)}</span>
+              </div>
+              <div className="sc-sess-l2">
+                <span className="sc-sess-by">{s.counted_by}</span>
+                <span className="sc-sess-meta">
+                  {s.status === 'open'
+                    ? `${s.confirmed_count}/${s.line_count} ${s.mode === 'count' ? 'counted' : 'checked'}`
+                    : `${s.changed_count} changed`}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
+    );
+  }
 
-      {showNew && (
-        <NewCountModal brands={brands} defaultBy={lastBy} onCreate={createCount} onCancel={() => setShowNew(false)} />
-      )}
+  const modal = showNew && (
+    <NewCountModal brands={brands} defaultBy={lastBy} onCreate={createCount} onCancel={() => setShowNew(false)} />
+  );
+
+  // PR171: embedded in Inventory → no page chrome; Inventory supplies the header + breadcrumb.
+  if (embedded) return <>{content}{modal}</>;
+
+  return (
+    <div className="ops">
+      <AppHeader active="stock-check" userEmail={userEmail} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Stock Check', href: '/stock-check' }, { label: crumb }]} />
+      {content}
+      {modal}
     </div>
   );
 }
