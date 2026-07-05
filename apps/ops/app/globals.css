@@ -596,6 +596,10 @@ button.po-pick-btn:active { background: var(--paper); }
 
 /* ── Inventory (Stock Check) — single pane: filter bar + sortable table ── */
 .inv-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+/* PR171 — Browse/Adjustments tabs (left) + the Stock Count launcher (right), on one row */
+.inv-tabrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+.inv-tabrow .sc-tabs { border-bottom: none; }
+.inv-count-btn { flex-shrink: 0; height: 34px; padding: 0 14px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; }
 .inv-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .inv-search { flex: 1; min-width: 220px; display: flex; gap: 8px; }
 .inv-search input { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }

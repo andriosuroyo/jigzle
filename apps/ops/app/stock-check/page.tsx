@@ -1,20 +1,7 @@
-import { createSupabaseServerClient } from '@jigzle/db/server';
-import StockCheckBoard from '@/components/StockCheckBoard';
-import { getBrands, getSessions } from '@/app/stock-check/actions';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-// Server shell: load the session list (open + history/snapshots) + the brand options for the
-// New-count scope picker, then render the single-pane board (Counts ▸ Adjustments tabs).
-export default async function StockCheckPage() {
-  const supabase = createSupabaseServerClient();
-  const [
-    {
-      data: { user },
-    },
-    sessions,
-    brands,
-  ] = await Promise.all([supabase.auth.getUser(), getSessions(), getBrands()]);
-  return <StockCheckBoard initialSessions={sessions} brands={brands} userEmail={user?.email || ''} />;
+// PR171 — Stock Count is now a mode inside Inventory (the standalone Stock Check nav entry was retired).
+// Keep the old route working: redirect any bookmarked / cached-PWA /stock-check link to /inventory.
+export default function StockCheckPage() {
+  redirect('/inventory');
 }

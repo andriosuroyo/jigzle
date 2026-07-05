@@ -11,6 +11,8 @@ import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
 import { IconOnOrder, IconShipped, IconWarehouse } from '@/components/StockStats';
 import AdjustmentsTab from '@/components/AdjustmentsTab';
+import StockCheckBoard from '@/components/StockCheckBoard';
+import type { BrandOption, SessionRow } from '@/app/stock-check/types';
 
 const ROW_LIMIT = 1000; // matches the server LIMIT — used only for the "refine your search" hint
 
@@ -50,15 +52,21 @@ export default function InventoryBoard({
   initialCounts,
   refreshedAt: initialRefreshedAt,
   userEmail,
+  stockSessions,
+  brands,
 }: {
   initialRows: StockRow[];
   initialCounts: InventoryCounts;
   refreshedAt: string | null;
   userEmail: string;
+  // PR171: Stock Count folded into Inventory as a mode (Stock Check nav item retired)
+  stockSessions: SessionRow[];
+  brands: BrandOption[];
 }) {
   const [rows, setRows] = useState<StockRow[]>(initialRows);
   const [counts, setCounts] = useState<InventoryCounts>(initialCounts);
   const [view, setView] = useState<'browse' | 'adjustments'>('browse'); // PR170: adjustments moved here from Stock Check
+  const [countMode, setCountMode] = useState(false); // PR171: Stock Count mode (embedded StockCheckBoard)
   const [search, setSearch] = useState('');
   const [state, setState] = useState<InventoryState>('all');
   const [refreshedAt, setRefreshedAt] = useState<string | null>(initialRefreshedAt);
@@ -139,14 +147,23 @@ export default function InventoryBoard({
   return (
     <div className="ops">
       <AppHeader active="inventory" userEmail={userEmail} />
-      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: view === 'adjustments' ? 'Adjustments' : (STATES.find((s) => s.key === state)?.label ?? 'All') }]} />
+      <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Inventory', href: '/inventory' }, { label: countMode ? 'Stock Count' : (view === 'adjustments' ? 'Adjustments' : (STATES.find((s) => s.key === state)?.label ?? 'All')) }]} />
 
+      {/* PR171 — Stock Count is a MODE of Inventory (its own nav item retired); the count workspace
+          renders embedded, with its own "← back to Inventory". */}
+      {countMode ? (
+        <StockCheckBoard embedded onExitEmbed={() => setCountMode(false)} initialSessions={stockSessions} brands={brands} userEmail={userEmail} />
+      ) : (
       <div className="inv-wrap">
         {/* PR170 — Inventory owns the two-way stock views: Browse (read-only levels) + Adjustments
-            (the signed ± ledger, moved here from Stock Check since Inbound is +only). */}
-        <div className="sc-tabs">
-          <button className={`sc-tab ${view === 'browse' ? 'active' : ''}`} onClick={() => setView('browse')}>Browse</button>
-          <button className={`sc-tab ${view === 'adjustments' ? 'active' : ''}`} onClick={() => setView('adjustments')}>Adjustments</button>
+            (the signed ± ledger, moved here from Stock Check since Inbound is +only). PR171 adds the
+            Stock Count launcher on the right of the tab row. */}
+        <div className="inv-tabrow">
+          <div className="sc-tabs">
+            <button className={`sc-tab ${view === 'browse' ? 'active' : ''}`} onClick={() => setView('browse')}>Browse</button>
+            <button className={`sc-tab ${view === 'adjustments' ? 'active' : ''}`} onClick={() => setView('adjustments')}>Adjustments</button>
+          </div>
+          <button className="btn-secondary inv-count-btn" onClick={() => setCountMode(true)}>Stock Count</button>
         </div>
 
         {view === 'adjustments' ? <AdjustmentsTab /> : (
@@ -217,6 +234,7 @@ export default function InventoryBoard({
         </>
         )}
       </div>
+      )}
     </div>
   );
 }

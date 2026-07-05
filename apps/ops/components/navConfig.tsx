@@ -84,15 +84,6 @@ const iconCatalog = svg(
   </>
 );
 
-// Stock Check — clipboard with a check (count / reconcile)
-const iconStockCheck = svg(
-  <>
-    <path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" />
-    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-    <polyline points="9 14 11 16 15 12" />
-  </>
-);
-
 // Settings — gear (configurable pick-lists)
 const iconSettings = svg(
   <>
@@ -150,7 +141,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { key: 'inbound', href: '/inbound', label: 'Inbound', icon: iconInbound, sub: 'Check arrivals into stock — the only "+" side.' },
       // Outbound (goods out) is the shipping screen the warehouse runs once Sales has fulfilled an order.
       { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound, sub: 'Box, weigh, and ship fulfilled orders.' },
-      { key: 'inventory', href: '/inventory', label: 'Inventory', icon: iconInventory, sub: 'Stock per SKU — on order, being shipped, in warehouse.' },
+      { key: 'inventory', href: '/inventory', label: 'Inventory', icon: iconInventory, sub: 'Stock per SKU — browse levels, adjust (±), and run a stock count.' },
     ],
   },
   {
@@ -165,7 +156,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'data-health', href: '/data-health', label: 'Data Health', icon: iconDataHealth, sub: 'Spot duplicate / split customer records — shared numbers, blank names.' },
       { key: 'calculator', href: '/calculator', label: 'Calculator', icon: iconCalculator, sub: 'Import landed-cost & recommended sale price; FX rates, saved calcs.' },
-      { key: 'stock-check', href: '/stock-check', label: 'Stock Check', icon: iconStockCheck, sub: 'Count the shelf (presence / scan) & true stock up with adjustments.' },
       { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings, sub: 'Configurable lists — payment, courier, box, inbound labels.' },
     ],
   },
