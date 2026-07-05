@@ -2,7 +2,6 @@ import { createSupabaseServerClient } from '@jigzle/db/server';
 import OrdersShell, { type OrdersTab } from '@/components/OrdersShell';
 import { getPending } from '@/app/pending/actions';
 import { getToSendQueue } from '@/app/fulfill/actions';
-import { getHistory } from '@/app/history/actions';
 import { getPaymentMethods, getCourierServices, getBoxPresets, getCommonNotes, getChannelOptions } from '@/app/settings/actions';
 
 export const dynamic = 'force-dynamic';
@@ -11,9 +10,13 @@ export const revalidate = 0;
 const TABS: OrdersTab[] = ['pending', 'fulfill', 'history'];
 
 // JZ-001 — server shell for the Sales pipeline window (canonical route: /sales). Loads the Pending +
-// Fulfill queues, the recent History, and the SETTINGS lists they need, then hands them to the client
-// OrdersShell. ?tab= picks the open tab (default Pending); ?order= deep-links a Fulfill order. The
-// create-order form is the sibling route /sales/new (opened by the window's "+ New" button).
+// Fulfill queues and the SETTINGS lists they need, then hands them to the client OrdersShell. ?tab=
+// picks the open tab (default Pending); ?order= deep-links a Fulfill order. The create-order form is
+// the sibling route /sales/new (opened by the window's "+ New" button).
+//
+// PERF (PR179): History (17k+ terminal orders, ~18 paged round-trips) is NO LONGER loaded here — it
+// used to block the whole page even though Sales opens on Pending. HistoryBoard now fetches it lazily
+// the first time the History tab is shown, so the initial Sales render only waits on the fast queues.
 export default async function SalesPage({
   searchParams,
 }: {
@@ -24,7 +27,6 @@ export default async function SalesPage({
     { data: { user } },
     pending,
     toSend,
-    history,
     paymentMethods,
     courierServices,
     boxPresets,
@@ -34,7 +36,6 @@ export default async function SalesPage({
     supabase.auth.getUser(),
     getPending(),
     getToSendQueue(),
-    getHistory(''),
     getPaymentMethods(),
     getCourierServices(),
     getBoxPresets(),
@@ -53,7 +54,7 @@ export default async function SalesPage({
       initialOrderId={initialOrderId}
       pending={pending}
       toSend={toSend}
-      history={history}
+      history={[]}
       paymentMethods={paymentMethods}
       courierServices={courierServices}
       boxPresets={boxPresets}

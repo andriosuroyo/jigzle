@@ -163,6 +163,7 @@ export default function OrdersShell({
         <div hidden={tab !== 'history'}>
           <HistoryBoard
             embedded
+            active={tab === 'history'}
             initialOrders={history}
             boxPresets={boxPresets}
             userEmail={userEmail}
