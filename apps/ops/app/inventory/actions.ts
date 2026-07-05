@@ -8,7 +8,7 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import { customerIdLabel } from '@jigzle/lib';
 import type { InventoryCounts, InventoryFilter, InventorySortColumn, StockRow } from '@jigzle/db/types';
-import type { LedgerEntry, SkuLedger } from './types';
+import type { LedgerEntry, LedgerSku, SkuLedger } from './types';
 
 const LIMIT = 1000; // PostgREST caps responses at max_rows (1000); the operator narrows with search.
 
@@ -200,6 +200,64 @@ export async function getSkuLedger(itemCode: string): Promise<SkuLedger | null> 
 
   const stock = sc as { physical: number | null; available: number | null } | null;
   return { item_code: code, name, physical: stock?.physical ?? bal, available: stock?.available ?? bal, entries };
+}
+
+// ── History tab (PR176): the browsable A-Z list of SKUs that have movement, so the operator can open
+//    any SKU's in/out ledger — including SKUs that were received and then fully sold (physical 0), which
+//    the Browse snapshot excludes. "Moved" = received at least once (stock_check.last_receive not null);
+//    a SKU with zero in has an empty ledger and is left out. Searchable by code or name, capped at LIMIT. ──
+export async function getLedgerSkus(search?: string): Promise<LedgerSku[]> {
+  const supabase = createSupabaseServerClient();
+  const raw = search ? sanitize(search) : '';
+
+  const codes = new Set<string>();
+
+  // (1) code matches — or the full A-Z list when there's no search term
+  let q = supabase
+    .from('stock_check')
+    .select('item_code,last_receive')
+    .not('last_receive', 'is', null)
+    .order('item_code', { ascending: true })
+    .limit(LIMIT);
+  if (raw) q = q.ilike('item_code', `%${raw}%`);
+  const { data: byCode } = await q;
+  for (const r of (byCode ?? []) as { item_code: string }[]) codes.add(r.item_code);
+
+  // (2) name matches (search only): catalogue name/code ilike → keep only the ones that have moved
+  if (raw) {
+    const { data: cat } = await supabase
+      .from('catalogue')
+      .select('item_code')
+      .or(`translate_name.ilike.%${raw}%,original_name.ilike.%${raw}%`)
+      .limit(LIMIT);
+    const nameCodes = (cat ?? []).map((c) => (c as { item_code: string }).item_code);
+    if (nameCodes.length) {
+      const { data: moved } = await supabase
+        .from('stock_check')
+        .select('item_code')
+        .in('item_code', nameCodes)
+        .not('last_receive', 'is', null)
+        .limit(LIMIT);
+      for (const r of (moved ?? []) as { item_code: string }[]) codes.add(r.item_code);
+    }
+  }
+
+  const list = [...codes].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).slice(0, LIMIT);
+  if (!list.length) return [];
+
+  // names (batched — the display label; falls back to the raw code)
+  const nameByCode = new Map<string, string | null>();
+  for (let i = 0; i < list.length; i += 500) {
+    const { data } = await supabase
+      .from('catalogue')
+      .select('item_code,translate_name,original_name,self_code')
+      .in('item_code', list.slice(i, i + 500));
+    for (const c of (data ?? []) as { item_code: string; translate_name: string | null; original_name: string | null; self_code: string | null }[]) {
+      nameByCode.set(c.item_code, c.translate_name || c.original_name || c.self_code || null);
+    }
+  }
+
+  return list.map((item_code) => ({ item_code, name: nameByCode.get(item_code) ?? null }));
 }
 
 // ── recompute the snapshot now (the Refresh button) → the new "as of" timestamp ──

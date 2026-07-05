@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import type { InventoryCounts, InventoryFilter, InventoryState, StockRow } from '@jigzle/db/types';
-import { getInventory, getInventoryCounts, refreshSnapshot, getSkuLedger } from '@/app/inventory/actions';
-import type { SkuLedger } from '@/app/inventory/types';
+import { getInventory, getInventoryCounts, refreshSnapshot, getSkuLedger, getLedgerSkus } from '@/app/inventory/actions';
+import type { SkuLedger, LedgerSku } from '@/app/inventory/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -66,10 +66,38 @@ export default function InventoryBoard({
 }) {
   const [rows, setRows] = useState<StockRow[]>(initialRows);
   const [counts, setCounts] = useState<InventoryCounts>(initialCounts);
-  const [view, setView] = useState<'browse' | 'adjustments'>('browse'); // PR170: adjustments moved here from Stock Check
+  const [view, setView] = useState<'browse' | 'adjustments' | 'history'>('browse'); // PR170: adjustments; PR176: history
   const [countMode, setCountMode] = useState(false); // PR171: Stock Count mode (embedded StockCheckBoard)
   const [ledger, setLedger] = useState<SkuLedger | null>(null); // PR172: per-SKU stock ledger drill-down
   const [ledgerCode, setLedgerCode] = useState<string | null>(null); // the SKU whose ledger is open (loading gate)
+
+  // PR176 — History tab: the A-Z list of SKUs that have moved; tap one to open its in/out ledger.
+  const [histSearch, setHistSearch] = useState('');
+  const [histRows, setHistRows] = useState<LedgerSku[]>([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const histReq = useRef(0);
+  const histLoaded = useRef(false);
+
+  async function loadHist(term: string) {
+    const myReq = ++histReq.current;
+    setHistLoading(true);
+    try {
+      const r = await getLedgerSkus(term || undefined);
+      if (histReq.current === myReq) setHistRows(r);
+    } catch {
+      if (histReq.current === myReq) setHistRows([]);
+    } finally {
+      if (histReq.current === myReq) setHistLoading(false);
+    }
+  }
+  // load the History list when the tab is first opened, then refresh on debounced search
+  useEffect(() => {
+    if (view !== 'history') return;
+    if (!histLoaded.current) { histLoaded.current = true; void loadHist(histSearch); return; }
+    const t = setTimeout(() => { void loadHist(histSearch); }, 220);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, histSearch]);
 
   async function openLedger(code: string) {
     setLedgerCode(code); setLedger(null);
@@ -151,7 +179,8 @@ export default function InventoryBoard({
   const truncated = rows.length >= ROW_LIMIT;
 
   // SKU images for the visible rows — lazy; only on-screen rows fetch (browser/CDN handles it).
-  const imgCodes = useMemo(() => rows.map((r) => r.item_code), [rows]);
+  // cover both the Browse rows and the History list so a ledger opened from either tab has its image
+  const imgCodes = useMemo(() => [...rows.map((r) => r.item_code), ...histRows.map((h) => h.item_code)], [rows, histRows]);
   const imgMap = useSkuImages(imgCodes);
 
   const countFor = (k: InventoryState) => counts[k];
@@ -164,7 +193,14 @@ export default function InventoryBoard({
   ];
   if (countMode) crumbs.push({ label: 'Stock Count' });
   else if (view === 'adjustments') crumbs.push({ label: 'Adjustments' });
-  else {
+  else if (view === 'history') {
+    if (ledgerCode) {
+      crumbs.push({ label: 'History', onClick: closeLedger });
+      crumbs.push({ label: ledger?.item_code ?? ledgerCode });
+    } else {
+      crumbs.push({ label: 'History' });
+    }
+  } else {
     crumbs.push({ label: 'Browse', onClick: closeLedger });
     crumbs.push({ label: ledgerCode ? (ledger?.item_code ?? ledgerCode) : stateLabel });
   }
@@ -187,6 +223,7 @@ export default function InventoryBoard({
           <div className="sc-tabs">
             <button className={`sc-tab ${view === 'browse' ? 'active' : ''}`} onClick={() => { setView('browse'); closeLedger(); }}>Browse</button>
             <button className={`sc-tab ${view === 'adjustments' ? 'active' : ''}`} onClick={() => { setView('adjustments'); closeLedger(); }}>Adjustments</button>
+            <button className={`sc-tab ${view === 'history' ? 'active' : ''}`} onClick={() => { setView('history'); closeLedger(); }}>History</button>
           </div>
           <button className="btn-secondary inv-count-btn" onClick={() => setCountMode(true)}>Stock Count</button>
         </div>
@@ -219,6 +256,41 @@ export default function InventoryBoard({
               </>
             )}
           </div>
+        ) : view === 'history' ? (
+          /* PR176 — History: browse every SKU that has moved (A-Z), tap for its in/out ledger */
+          <>
+            <div className="search-row inv-search-row">
+              <SearchInput
+                value={histSearch}
+                onChange={setHistSearch}
+                placeholder="search any SKU to see its in/out log"
+              />
+            </div>
+            <div className="inv-cards">
+              {histRows.length === 0 && (
+                <div className="inv-empty">
+                  {histLoading ? 'Loading…' : histSearch ? 'No SKU with movement matches — nothing received under that code.' : 'No SKUs with movement yet.'}
+                </div>
+              )}
+              {histRows.map((r) => (
+                <button key={r.item_code} className="inv-card inv-card-btn inv-card-hist" onClick={() => openLedger(r.item_code)}>
+                  <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={SKU_IMG.sm} />
+                  <div className="inv-card-main">
+                    <div className="inv-card-code">{r.item_code}</div>
+                    <div className="inv-card-name">{r.name || '—'}</div>
+                  </div>
+                  <svg className="inv-card-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+            {histRows.length > 0 && (
+              <div className="inv-count">
+                {histRows.length}{histRows.length >= ROW_LIMIT ? '+' : ''} SKU{histRows.length === 1 ? '' : 's'} with movement{histRows.length >= ROW_LIMIT ? ' — refine your search to narrow' : ''} · tap for the in/out log
+              </div>
+            )}
+          </>
         ) : (
         <>
         {/* autocomplete-style search bar; the refresh + "as of" timestamp fold into its right edge to
