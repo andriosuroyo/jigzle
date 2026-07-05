@@ -189,6 +189,7 @@ export type Catalogue = {
   location: string | null;
   image: string | null;
   has_image: boolean;
+  image_urls: string[] | null;       // 0058 — up to 5 manually-entered Google-Drive image URLs (ordered)
   needs_review: boolean;             // 0015 — receive-time SKU stubs flagged for admin review
   created_at: string;
   updated_at: string;

@@ -72,7 +72,6 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
   {
     title: 'Media & tags',
     fields: [
-      { key: 'image', label: 'Image URL', kind: 'text' },
       { key: 'tags', label: 'Tags', kind: 'textarea' },
       { key: 'article_number', label: 'Article number', kind: 'text' },
       { key: 'release_date', label: 'Release date (scraped — not the input date)', kind: 'text' },
@@ -134,6 +133,17 @@ type RightMode = 'sku' | 'collision' | null;
 // the first time an item is opened.
 let OPTIONS_CACHE: Record<string, string[]> | null = null;
 
+const MAX_IMAGE_URLS = 5;
+// PR189 — turn a Google-Drive share link into a direct-render image URL. Handles /file/d/ID/…, ?id=ID,
+// /thumbnail?id=ID, /uc?…id=ID. Falls back to the raw string if no Drive file id is found. The file must
+// be shared "anyone with the link" to render.
+function driveDirect(url: string): string {
+  const u = (url || '').trim();
+  if (!u) return '';
+  const id = u.match(/\/d\/([-\w]{10,})/)?.[1] ?? u.match(/[?&]id=([-\w]{10,})/)?.[1];
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1000` : u;
+}
+
 export default function CatalogBoard({
   initialNeedsReview,
   initialShared,
@@ -153,6 +163,8 @@ export default function CatalogBoard({
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
   const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
+  const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: up to 5 manual Google-Drive image URLs
+  const [heroIdx, setHeroIdx] = useState(0); // PR189: which manual image the hero shows
 
   const [mode, setMode] = useState<RightMode>(null);
   const [detail, setDetail] = useState<SkuDetail | null>(null);
@@ -252,6 +264,7 @@ export default function CatalogBoard({
     resetMsg();
     setMode('sku');
     setDetailTab(0);
+    setHeroIdx(0);
     setCollision(null);
     setDetail(null);
     setNewBarcode('');
@@ -261,7 +274,7 @@ export default function CatalogBoard({
       const d = await getSku(code);
       if (reqRef.current !== myReq) return;
       setDetail(d);
-      if (d) setForm(initForm(d.sku));
+      if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); }
     } catch (e) {
       if (reqRef.current !== myReq) return;
       setError(e instanceof Error ? e.message : 'Failed to load SKU.');
@@ -278,7 +291,7 @@ export default function CatalogBoard({
     const d = await getSku(code);
     if (reqRef.current !== myReq) return;
     setDetail(d);
-    if (d) setForm(initForm(d.sku));
+    if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); }
   }
 
   // Barcode-only refresh — update just the barcode list (+ shared flags), preserving any
@@ -303,6 +316,13 @@ export default function CatalogBoard({
     setBusy(true);
     try {
       const patch = buildPatch(detail.sku, form);
+      // PR189 — the manual image URLs edit outside `form` (it's an array). Trim blanks, cap at 5, and
+      // include only when actually changed. Empty → null (clears the column).
+      const cleaned = imageUrls.map((u) => u.trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS);
+      const orig = detail.sku.image_urls ?? [];
+      if (JSON.stringify(cleaned) !== JSON.stringify(orig)) {
+        (patch as Record<string, unknown>).image_urls = cleaned.length ? cleaned : null;
+      }
       await updateSku(detail.sku.item_code, patch);
       const n = Object.keys(patch).length;
       await reloadDetail(detail.sku.item_code);
@@ -406,22 +426,40 @@ export default function CatalogBoard({
 
           {mode === 'sku' && detail && (
             <div className="cat-detail">
-              {/* PR188 — big square hero (height-capped so panoramas don't blow up), then SKU + name */}
-              <div className="cat-hero">
-                {imgMap[detail.sku.item_code]?.status === 'has_image' && imgMap[detail.sku.item_code]?.displayUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- static CDN image, off the data path
-                  <img className="cat-hero-img" src={imgMap[detail.sku.item_code]!.displayUrl!} alt={detail.sku.translate_name || detail.sku.item_code} />
-                ) : (
-                  <div className="cat-hero-ph"><SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={SKU_IMG.lg} /></div>
-                )}
-                <div className="cat-hero-code">{detail.sku.item_code}</div>
-                <div className="cat-hero-name">{detail.sku.translate_name || detail.sku.original_name || detail.sku.item_code}</div>
-                {detail.sku.needs_review && (
-                  <span className="po-status processing">
-                    needs review{(() => { const m = missingForComplete(detail.sku); return m.length ? ` — missing ${m.join(', ')}` : ''; })()}
-                  </span>
-                )}
-              </div>
+              {/* PR188/PR189 — big square hero (height-capped so panoramas don't blow up), then SKU + name.
+                  Manual Google-Drive URLs drive the hero + thumbnail strip; otherwise the pipeline image. */}
+              {(() => {
+                const gallery = imageUrls.map((u) => u.trim()).filter(Boolean).map(driveDirect);
+                const idx = Math.min(heroIdx, Math.max(0, gallery.length - 1));
+                return (
+                  <div className="cat-hero">
+                    {gallery.length > 0 ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- external Google-Drive image, off the data path
+                      <img className="cat-hero-img" src={gallery[idx]} alt={detail.sku.translate_name || detail.sku.item_code} />
+                    ) : imgMap[detail.sku.item_code]?.status === 'has_image' && imgMap[detail.sku.item_code]?.displayUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- static CDN image, off the data path
+                      <img className="cat-hero-img" src={imgMap[detail.sku.item_code]!.displayUrl!} alt={detail.sku.translate_name || detail.sku.item_code} />
+                    ) : (
+                      <div className="cat-hero-ph"><SkuImage status={imgMap[detail.sku.item_code]?.status} displayUrl={imgMap[detail.sku.item_code]?.displayUrl} name={detail.sku.translate_name || detail.sku.item_code} size={SKU_IMG.lg} /></div>
+                    )}
+                    {gallery.length > 1 && (
+                      <div className="cat-hero-strip">
+                        {gallery.map((src, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element -- external Google-Drive image, off the data path
+                          <button key={i} className={`cat-hero-thumb ${i === idx ? 'on' : ''}`} onClick={() => setHeroIdx(i)}><img src={src} alt={`Image ${i + 1}`} /></button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="cat-hero-code">{detail.sku.item_code}</div>
+                    <div className="cat-hero-name">{detail.sku.translate_name || detail.sku.original_name || detail.sku.item_code}</div>
+                    {detail.sku.needs_review && (
+                      <span className="po-status processing">
+                        needs review{(() => { const m = missingForComplete(detail.sku); return m.length ? ` — missing ${m.join(', ')}` : ''; })()}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* PR185 — the many fields grouped into sub-tabs (styled like the system tab lists) */}
               <div className="sc-tabs cat-subtabs">
@@ -435,6 +473,33 @@ export default function CatalogBoard({
 
               {detailTab < GROUPS.length ? (
                 <section className="cat-grp">
+                  {/* PR189 — the Media tab leads with the up-to-5 Google-Drive image URL editor */}
+                  {GROUPS[detailTab].title === 'Media & tags' && (
+                    <div className="cat-imgedit">
+                      <div className="cat-grp-title">Images — Google Drive, up to {MAX_IMAGE_URLS} (first is primary)</div>
+                      {imageUrls.map((u, i) => (
+                        <div className="cat-imgrow" key={i}>
+                          <span className="cat-imgrow-thumb">
+                            {driveDirect(u)
+                              // eslint-disable-next-line @next/next/no-img-element -- external Google-Drive image
+                              ? <img src={driveDirect(u)} alt={`Image ${i + 1}`} />
+                              : <span className="cat-imgrow-ph">{i + 1}</span>}
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Google Drive share link"
+                            value={u}
+                            onChange={(e) => setImageUrls((a) => a.map((x, j) => (j === i ? e.target.value : x)))}
+                          />
+                          <button className="btn-link" onClick={() => setImageUrls((a) => a.filter((_, j) => j !== i))}>remove</button>
+                        </div>
+                      ))}
+                      {imageUrls.length < MAX_IMAGE_URLS && (
+                        <button className="btn-secondary sc-mini" onClick={() => setImageUrls((a) => [...a, ''])}>+ add image URL</button>
+                      )}
+                      <div className="hint" style={{ marginTop: 6 }}>Each file must be shared “anyone with the link can view”. Save to apply.</div>
+                    </div>
+                  )}
                   <div className="cat-grid">
                     {GROUPS[detailTab].fields.map((fld) => {
                       const k = fld.key as string;
