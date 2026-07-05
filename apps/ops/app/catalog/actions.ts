@@ -53,7 +53,10 @@ async function deriveBrandPrefix(supabase: Supabase, itemCode: string): Promise<
   return null;
 }
 
-// ── All tab: search by item_code / name / barcode → list rows ──
+// ── All tab: search by SKU code / brand (name or prefix) / item name / piece count / barcode → list
+// rows. A numeric 1–5 digit token is a piece count; 6+ digits a barcode; everything else is a text
+// term matched against the item code, self code, both names, AND any brand whose NAME contains the
+// term (so "Tenyo" surfaces every TEN-… SKU). Multiple tokens AND together. ──
 export async function searchCatalogue(q: string): Promise<CatalogueListRow[]> {
   const raw = sanitize(q);
   if (raw.length < 2) return [];
@@ -74,7 +77,18 @@ export async function searchCatalogue(q: string): Promise<CatalogueListRow[]> {
 
   let query = supabase.from('catalogue').select(LIST_COLS);
   for (const t of textTerms) {
-    query = query.or(`item_code.ilike.%${t}%,self_code.ilike.%${t}%,original_name.ilike.%${t}%,translate_name.ilike.%${t}%`);
+    const ors = [
+      `item_code.ilike.%${t}%`,
+      `self_code.ilike.%${t}%`,
+      `original_name.ilike.%${t}%`,
+      `translate_name.ilike.%${t}%`,
+    ];
+    // brands whose NAME matches this term → include their SKUs by prefix (prefixes are alnum/dashes,
+    // safe to inline in the in-list). Lets a brand-name query like "Tenyo" or "Epoch" resolve.
+    const { data: br } = await supabase.from('brands').select('prefix').ilike('name', `%${t}%`).limit(500);
+    const prefixes = [...new Set(((br ?? []) as { prefix: string }[]).map((b) => b.prefix))];
+    if (prefixes.length) ors.push(`brand_prefix.in.(${prefixes.join(',')})`);
+    query = query.or(ors.join(','));
   }
   for (const n of pieceTerms) query = query.eq('piece_count_n', n);
   if (barcodeCodes !== null) query = query.in('item_code', barcodeCodes);

@@ -729,6 +729,19 @@ img.sku-img { background: #e8e8e8; }
 .cat-row { display: flex; align-items: center; gap: 8px; }
 .cat-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
+/* PR182 — recent-searches log under the All-tab results */
+.cat-history { border-top: 1px solid var(--line); margin-top: 4px; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
+.cat-history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.cat-history-head > span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.cat-history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.cat-history-row { display: flex; align-items: center; gap: 4px; }
+.cat-history-q { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left; background: none; border: none; cursor: pointer; padding: 7px 8px; border-radius: 8px; color: var(--ink); font-size: 13px; }
+.cat-history-q:active { background: var(--paper); }
+.cat-history-q svg { flex-shrink: 0; color: var(--muted); }
+.cat-history-q > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-history-x { flex-shrink: 0; width: 28px; height: 28px; background: none; border: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 8px; }
+.cat-history-x:active { background: var(--paper); }
+
 /* ── Success ── */
 .success-wrap { display: flex; justify-content: center; padding: 40px 18px; }
 .success-card { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 28px; max-width: 360px; width: 100%; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
