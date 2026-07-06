@@ -28,40 +28,24 @@ function sanitize(q: string): string {
   return q.replace(/[,()*\\]/g, ' ').trim();
 }
 
-// ── lifetime spend (Σ payments.amount_idr) per customer. Two plain, embed-free queries (the customer's
-// orders, then the payments for those sales_ids) — the previous version filtered on an embedded resource
-// (`orders!inner(customer_id)`), which is brittle across PostgREST versions and, on any error, silently
-// read as Rp 0 for everyone. Errors are now logged (visible in the server logs), not swallowed. ──
+// ── lifetime spend per customer = Σ orders.paid_idr over their non-cancelled orders. This is the SAME
+// source the Customer directory uses (getCustomerDetail / the customer_lifetime view, 0037). PR192 —
+// the previous version summed the `payments` table, which is EMPTY for legacy orders (where orders.paid_idr
+// is the only paid record), so long-time customers (e.g. Ida #7000) read as Rp 0 → No tier here while the
+// Customer nav correctly showed them Platinum. Summing orders.paid_idr fixes the tier/spend drift. ──
 async function lifetimeSpend(supabase: Supabase, customerIds: number[]): Promise<Map<number, number>> {
   const out = new Map<number, number>();
   if (!customerIds.length) return out;
 
   const { data: ords, error: oErr } = await supabase
     .from('orders')
-    .select('sales_id, customer_id')
+    .select('customer_id, paid_idr, status')
     .in('customer_id', customerIds);
   if (oErr) { console.error('lifetimeSpend(orders):', oErr.message); return out; }
 
-  const customerBySales = new Map<string, number>();
-  for (const o of (ords ?? []) as { sales_id: string; customer_id: number | null }[]) {
-    if (o.customer_id != null) customerBySales.set(o.sales_id, o.customer_id);
-  }
-  const salesIds = [...customerBySales.keys()];
-  if (!salesIds.length) return out;
-
-  // chunk the sales_id list to stay under PostgREST URL limits for customers with many orders
-  const CHUNK = 300;
-  for (let i = 0; i < salesIds.length; i += CHUNK) {
-    const { data: pays, error: pErr } = await supabase
-      .from('payments')
-      .select('sales_id, amount_idr')
-      .in('sales_id', salesIds.slice(i, i + CHUNK));
-    if (pErr) { console.error('lifetimeSpend(payments):', pErr.message); return out; }
-    for (const p of (pays ?? []) as { sales_id: string; amount_idr: number | null }[]) {
-      const cid = customerBySales.get(p.sales_id);
-      if (cid == null) continue;
-      out.set(cid, (out.get(cid) ?? 0) + (p.amount_idr ?? 0));
-    }
+  for (const o of (ords ?? []) as { customer_id: number | null; paid_idr: number | null; status: string | null }[]) {
+    if (o.customer_id == null || o.status === 'Cancelled') continue;
+    out.set(o.customer_id, (out.get(o.customer_id) ?? 0) + (o.paid_idr ?? 0));
   }
   return out;
 }
@@ -78,11 +62,16 @@ export async function searchCustomers(q: string): Promise<CustomerHit[]> {
   if (norm) filters.push(`phone.ilike.%${norm}%`);
   else if (digits.length >= 3) filters.push(`phone.ilike.%${digits}%`);
 
+  // PR192 — order by name and take a generous window. The old `.limit(20)` with NO order let PostgREST
+  // return an arbitrary 20 of the matches (then sorted client-side), so a valid match like "Ida" #7000
+  // could be dropped entirely — the Customer nav (which scans every customer) still found it. Ordering
+  // first makes the cut alphabetical and deterministic, and 200 comfortably covers a typed query.
   const { data, error } = await supabase
     .from('customers')
     .select('customer_id,name,phone')
     .or(filters.join(','))
-    .limit(20);
+    .order('name', { ascending: true })
+    .limit(200);
   if (error || !data?.length) return [];
 
   const ids = data.map((c) => c.customer_id as number);
