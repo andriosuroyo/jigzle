@@ -25,7 +25,8 @@ input, textarea, select, button { font-family: inherit; }
 /* ── Login (copied screen) ── */
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(180deg, var(--cream) 0%, var(--paper) 100%); }
 .login-card { width: 100%; max-width: 360px; background: white; border-radius: 16px; padding: 28px 24px; box-shadow: 0 4px 24px rgba(74,51,32,0.08); text-align: center; }
-.login-card .logo-big { width: 56px; height: 56px; background: var(--brown); color: var(--orange); font-weight: 800; font-size: 30px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+.login-card .logo-big { width: 72px; height: 72px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; overflow: hidden; }
+.login-card .logo-big img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .login-card h1 { font-size: 18px; margin: 0 0 4px; color: var(--brown-dark); }
 .login-card p { font-size: 12px; color: var(--muted); margin: 0 0 20px; }
 .login-card button { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -43,7 +44,8 @@ input, textarea, select, button { font-family: inherit; }
 
 /* ── App header ── */
 .app-header { background: var(--brown); color: white; padding: 14px 18px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50; }
-.app-header .logo { width: 28px; height: 28px; background: var(--orange); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 14px; flex-shrink: 0; }
+.app-header .logo { width: 30px; height: 30px; background: white; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; padding: 1px; }
+.app-header .logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .app-header .title { flex: 1; font-size: 15px; font-weight: 700; }
 .app-header .signout { background: rgba(255,255,255,0.15); border: none; color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; }
 .app-header .signout:active { background: rgba(255,255,255,0.25); }
@@ -251,12 +253,18 @@ button.po-pick-btn:active { background: var(--paper); }
 .validation.warn { background: var(--yellow-tint); color: #9C6F1C; }
 .validation.ok   { background: var(--green-tint); color: #3D6B26; }
 
-/* ── Header nav (one config, two layouts: desktop grouped bar + mobile drawer) ── */
-.topnav { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
-.nav-group { display: flex; align-items: center; gap: 4px; }
-.nav-divider { width: 1px; align-self: stretch; min-height: 20px; background: rgba(255,255,255,0.22); margin: 0 4px; }
-.topnav a { display: inline-flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.8); text-decoration: none; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
-.topnav a.active, .topnav a:hover { background: rgba(255,255,255,0.15); color: white; }
+/* ── Header nav (one config, two layouts: desktop grouped hover menu + mobile drawer) ── */
+.topnav { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+/* each category is a hover/focus dropdown: a label button + a panel of its items */
+.nav-group { position: relative; }
+.nav-group-btn { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: none; cursor: pointer; color: rgba(255,255,255,0.82); font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px; white-space: nowrap; font-family: inherit; }
+.nav-group-btn:hover, .nav-group-btn.active, .nav-group:hover .nav-group-btn, .nav-group:focus-within .nav-group-btn { background: rgba(255,255,255,0.15); color: white; }
+.nav-caret { font-size: 9px; opacity: 0.75; }
+.nav-dropdown { position: absolute; top: 100%; left: 0; z-index: 60; min-width: 190px; padding: 6px; margin-top: 4px; background: white; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 28px rgba(40,28,18,0.22); opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity 0.12s ease, transform 0.12s ease; }
+.nav-group:hover .nav-dropdown, .nav-group:focus-within .nav-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+.nav-dropdown a { display: flex; align-items: center; gap: 9px; color: var(--brown-dark); text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 10px; border-radius: 7px; white-space: nowrap; }
+.nav-dropdown a:hover, .nav-dropdown a.active { background: var(--cream); color: var(--brown-dark); }
+.nav-dropdown .nav-icon { width: 16px; height: 16px; }
 /* icons inherit currentColor → match the (white) nav text on the brown bar, brown in the drawer */
 .nav-icon-wrap { display: inline-flex; }
 .nav-icon { width: 16px; height: 16px; display: block; }
@@ -289,16 +297,28 @@ button.po-pick-btn:active { background: var(--paper); }
 }
 @keyframes navDrawerDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ── Home hub (grouped to match the nav's 3 groups) ── */
-.hub { display: flex; flex-direction: column; gap: 22px; max-width: 760px; margin: 0 auto; padding: 24px 18px calc(24px + env(safe-area-inset-bottom)); }
-.hub-group-title { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
-.hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
-.hub-card { display: block; background: white; border: 1px solid var(--line); border-radius: 12px; padding: 20px; text-decoration: none; color: var(--ink); }
-.hub-card:hover { border-color: var(--orange); }
-.hub-card-title { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 700; color: var(--brown-dark); margin-bottom: 4px; }
-/* §10 — title-only icon bump (the menu's .nav-icon stays 16px). Colour inherits via currentColor. */
-.hub-card-title .nav-icon { width: 18px; height: 18px; }
-.hub-card-sub { font-size: 13px; color: var(--muted); }
+/* ── Home hub — four category columns (Sales · Warehouse · Database · Tools & Settings), each a white
+   panel with a vertical nav list (PR196). Desktop = 4 across; reflows to 2 then 1 on narrower screens. */
+.hub { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; max-width: 1240px; margin: 0 auto; padding: 24px 18px calc(24px + env(safe-area-inset-bottom)); }
+.hub-col { background: white; border: 1px solid var(--line); border-radius: 14px; padding: 14px 12px; }
+.hub-col-title { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 2px 4px 10px; }
+.hub-col-list { display: flex; flex-direction: column; gap: 4px; }
+.hub-item { display: block; border-radius: 10px; padding: 12px; text-decoration: none; color: var(--ink); border: 1px solid transparent; }
+.hub-item:hover { background: var(--cream); border-color: var(--line); }
+.hub-item-head { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; color: var(--brown-dark); margin-bottom: 3px; }
+.hub-item-head .nav-icon { width: 18px; height: 18px; }
+.hub-item-sub { font-size: 12px; line-height: 1.45; color: var(--muted); }
+/* at-a-glance work-queue chips (Sales / Purchasing / Outbound) */
+.hub-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.hub-stat { display: inline-flex; align-items: center; gap: 5px; background: var(--cream); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 600; }
+.hub-stat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.hub-stat-dot.red { background: var(--red); }
+.hub-stat-dot.yellow { background: #E0A92E; }
+.hub-stat-dot.green { background: var(--green); }
+.hub-stat-label { color: var(--muted); font-weight: 600; }
+.hub-stat-num { font-weight: 800; color: var(--brown-dark); }
+@media (max-width: 1100px) { .hub { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .hub { grid-template-columns: 1fr; gap: 12px; } }
 
 /* ── Payment badges ── */
 .pay { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; }

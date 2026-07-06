@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { createSupabaseBrowserClient } from '@jigzle/db/client';
 import { NAV_GROUPS } from '@/components/navConfig';
 
@@ -16,24 +16,33 @@ export default function AppHeader({ active, userEmail }: { active?: string; user
 
   return (
     <header className="app-header">
-      <Link href="/" className="logo" onClick={() => setOpen(false)}>J</Link>
+      <Link href="/" className="logo" onClick={() => setOpen(false)} aria-label="Jigzle home">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.webp" alt="Jigzle" width={30} height={30} />
+      </Link>
       <Link href="/" className="title" style={{ textDecoration: 'none', color: 'inherit' }}>Jigzle Ops</Link>
 
-      {/* Desktop: one horizontal bar, the 3 groups separated by dividers. */}
+      {/* Desktop: the 4 category labels; hover / keyboard-focus a label to reveal its items. */}
       <nav className="topnav" aria-label="Primary">
-        {NAV_GROUPS.map((g, i) => (
-          <Fragment key={g.label}>
-            {i > 0 && <span className="nav-divider" aria-hidden="true" />}
-            <div className="nav-group" role="group" aria-label={g.label}>
-              {g.items.map((n) => (
-                <Link key={n.key} href={n.href} className={active === n.key ? 'active' : undefined}>
-                  <span className="nav-icon-wrap">{n.icon}</span>
-                  {n.label}
-                </Link>
-              ))}
+        {NAV_GROUPS.map((g) => {
+          const activeGroup = g.items.some((n) => n.key === active);
+          return (
+            <div className="nav-group" key={g.label}>
+              <button type="button" className={`nav-group-btn ${activeGroup ? 'active' : ''}`} aria-haspopup="true">
+                {g.label}
+                <span className="nav-caret" aria-hidden="true">▾</span>
+              </button>
+              <div className="nav-dropdown" role="menu" aria-label={g.label}>
+                {g.items.map((n) => (
+                  <Link key={n.key} href={n.href} role="menuitem" className={active === n.key ? 'active' : undefined}>
+                    <span className="nav-icon-wrap">{n.icon}</span>
+                    {n.label}
+                  </Link>
+                ))}
+              </div>
             </div>
-          </Fragment>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Mobile: hamburger toggles the slide-down drawer (the same config, 3 labeled sections). */}
