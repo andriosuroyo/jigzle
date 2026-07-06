@@ -655,3 +655,29 @@ export async function getMonthlyShipmentsXlsx(year: number, month0: number): Pro
   const base64 = Buffer.from(buf as ArrayBuffer).toString('base64');
   return { filename: `outbound-shipments-${year}-${pad2(month0 + 1)}.xlsx`, base64, count: rows.length };
 }
+
+// ── PR190: editable per-shipment note in Outbound → History. Keyed by the History row's group key
+// (S:<send_id> or C:<composite>) so a note can be attached to ANY shipment — e.g. the export-courier
+// tracking number that only lands after the forwarder settles. Empty note deletes the row. ──
+export async function getOutboundNote(shipKey: string): Promise<string | null> {
+  const supabase = createSupabaseServerClient();
+  const key = (shipKey || '').trim();
+  if (!key) return null;
+  const { data } = await supabase.from('outbound_shipment_notes').select('note').eq('ship_key', key).maybeSingle();
+  return (data?.note as string | null) ?? null;
+}
+
+export async function setOutboundNote(shipKey: string, note: string): Promise<{ error: string | null }> {
+  const supabase = createSupabaseServerClient();
+  const key = (shipKey || '').trim();
+  if (!key) return { error: 'setOutboundNote: missing shipment key' };
+  const value = (note || '').trim();
+  if (!value) {
+    const { error } = await supabase.from('outbound_shipment_notes').delete().eq('ship_key', key);
+    return { error: error ? error.message : null };
+  }
+  const { error } = await supabase
+    .from('outbound_shipment_notes')
+    .upsert({ ship_key: key, note: value, updated_at: new Date().toISOString() }, { onConflict: 'ship_key' });
+  return { error: error ? error.message : null };
+}
