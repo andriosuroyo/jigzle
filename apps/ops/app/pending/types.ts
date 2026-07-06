@@ -34,6 +34,7 @@ export interface PendingLine {
   item_code: string | null;
   name: string;
   qty: number;
+  unit_price_idr: number | null; // PR196: per-line price, editable while the order is in Pending
   line_note: string | null; // per-line shipment note (editable here, shown in Outbound, locked in History)
   available: number;
   on_the_way: number;
