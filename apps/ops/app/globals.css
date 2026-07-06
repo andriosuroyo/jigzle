@@ -724,6 +724,34 @@ button.po-pick-btn:active { background: var(--paper); }
 .cat-grid .pf-half { grid-column: span 6; }
 .cat-grid .pf-third { grid-column: span 4; }
 @media (max-width: 560px) { .cat-grid .pf-half { grid-column: 1 / -1; } }
+
+/* PR191 — SearchSelect: a searchable single-value combobox (Theme / Artist / classification types) */
+.ss { position: relative; }
+.ss-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font: inherit; color: var(--ink); cursor: pointer; text-align: left; }
+.ss-btn:disabled { opacity: 0.55; cursor: default; }
+.ss-btn .ss-ph { color: var(--muted); }
+.ss-btn .ss-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-caret { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+.ss-pop { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 6px; }
+.ss-search { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font: inherit; margin-bottom: 6px; box-sizing: border-box; }
+.ss-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.ss-opt { width: 100%; text-align: left; padding: 7px 9px; border: 0; background: transparent; border-radius: 6px; font: inherit; color: var(--ink); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-opt:hover { background: var(--cream); }
+.ss-opt.on { background: var(--cream); font-weight: 700; }
+.ss-clear { color: var(--muted); }
+.ss-create { color: var(--brown-dark); font-weight: 700; }
+.ss-empty { padding: 7px 9px; color: var(--muted); font-size: 13px; }
+
+/* PR191 — Round-image toggle on the Dimensions tab */
+.cat-round { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.cat-round input { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* PR191 — the two AUTOFILLED classification fields (read-only, derived from the geometry) */
+.cat-auto { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.cat-auto-row { display: flex; align-items: center; gap: 8px; }
+.cat-auto-label { font-size: 13px; color: var(--muted); min-width: 90px; }
+.cat-auto-val { font-weight: 700; color: var(--ink); }
+.cat-auto-tag { margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: var(--cream); border-radius: 999px; padding: 2px 8px; }
 .cat-bc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .cat-bc { display: flex; align-items: center; gap: 8px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .cat-bc .bc-code { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--brown); }

@@ -10,6 +10,7 @@ import {
   getNeedsReview,
   getSharedBarcodes,
   getSku,
+  quickAddSku,
   searchCatalogue,
   setVerified,
   unlinkBarcode,
@@ -18,43 +19,45 @@ import {
 import { missingForComplete } from '@/app/catalog/types';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
 import CatalogBrowse from '@/components/CatalogBrowse';
+import SearchSelect from '@/components/SearchSelect';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
 type FieldKind = 'text' | 'textarea' | 'number' | 'bool';
-// PR188 — `list` = a datalist of existing values for this column (a dropdown you can also type into);
-// `w` = grid width (third → three across, for L/W/H rows). Defaults to half.
-type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind; list?: string; w?: 'full' | 'half' | 'third' };
+// PR188 — `list` = a datalist of existing values for this column (a dropdown you can also type into).
+// PR191 — `select` = render a searchable combobox (SearchSelect) over the catalogue-wide distinct values
+// instead of a datalist, so operators PICK an existing value rather than retype a typo-variant (Theme /
+// Artist / the classification types). `w` = grid width (third → three across, for L/W/H). Defaults half.
+type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind; list?: string; select?: boolean; w?: 'full' | 'half' | 'third' };
 
-// every catalogue column is editable EXCEPT item_code (identity, read-only) and created_at/updated_at
-// (system). updated_at is stamped server-side on save.
+// every catalogue column is editable EXCEPT item_code (identity) and created_at/updated_at (system).
+// PR191 reshaped the groups: self_code dropped; release_date moved under Description; piece_count
+// (as-scraped) hidden (numeric only going forward); piece_size / image_type are AUTOFILLED from the
+// dimensions (shown read-only, not in this grid); location is autofilled from tags (hidden); tags /
+// article_number (in Barcodes) / release year+month left the editor.
 const GROUPS: { title: string; fields: FieldDef[] }[] = [
   {
     title: 'Identity & naming',
     fields: [
-      { key: 'self_code', label: 'Self code', kind: 'text' },
       { key: 'brand_prefix', label: 'Brand prefix', kind: 'text' },
       { key: 'original_name', label: 'Original name', kind: 'text' },
       { key: 'translate_name', label: 'Translated name', kind: 'text' },
       { key: 'description', label: 'Description', kind: 'textarea' },
+      { key: 'release_date', label: 'Release date', kind: 'text' },
     ],
   },
   {
     title: 'Classification',
     fields: [
-      { key: 'product_type', label: 'Product type', kind: 'text', list: 'product_type' },
-      { key: 'sub_type', label: 'Sub type', kind: 'text', list: 'sub_type' },
-      { key: 'piece_count', label: 'Piece count (as scraped)', kind: 'text' },
-      { key: 'piece_count_n', label: 'Piece count (number)', kind: 'number' },
-      { key: 'piece_type', label: 'Piece type', kind: 'text', list: 'piece_type' },
-      { key: 'piece_size', label: 'Piece size', kind: 'text', list: 'piece_size' },
-      { key: 'material', label: 'Material', kind: 'text', list: 'material' },
-      { key: 'effect', label: 'Effect', kind: 'text', list: 'effect' },
-      { key: 'image_type', label: 'Image type', kind: 'text', list: 'image_type' },
-      { key: 'theme', label: 'Theme', kind: 'text', list: 'theme' },
-      { key: 'location', label: 'Location (depicted)', kind: 'text', list: 'location' },
-      { key: 'artist', label: 'Artist', kind: 'text', list: 'artist' },
+      { key: 'product_type', label: 'Product type', kind: 'text', select: true, list: 'product_type', w: 'half' },
+      { key: 'sub_type', label: 'Sub type', kind: 'text', select: true, list: 'sub_type', w: 'half' },
+      { key: 'piece_count_n', label: 'Piece count', kind: 'number', w: 'half' },
+      { key: 'piece_type', label: 'Piece type', kind: 'text', select: true, list: 'piece_type', w: 'half' },
+      { key: 'material', label: 'Material', kind: 'text', list: 'material', w: 'half' },
+      { key: 'effect', label: 'Effect', kind: 'text', list: 'effect', w: 'half' },
+      { key: 'theme', label: 'Theme', kind: 'text', select: true, list: 'theme' },
+      { key: 'artist', label: 'Artist', kind: 'text', select: true, list: 'artist' },
     ],
   },
   {
@@ -69,20 +72,48 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       { key: 'real_weight', label: 'Real weight (g)', kind: 'number' },
     ],
   },
-  {
-    title: 'Media & tags',
-    fields: [
-      { key: 'tags', label: 'Tags', kind: 'textarea' },
-      { key: 'article_number', label: 'Article number', kind: 'text' },
-      { key: 'release_date', label: 'Release date (scraped — not the input date)', kind: 'text' },
-      { key: 'release_year', label: 'Release year', kind: 'number', w: 'half' },
-      { key: 'release_month', label: 'Release month', kind: 'number', w: 'half' },
-    ],
-  },
-  // needs_review is no longer a manual toggle — it's DERIVED by the completion gate on every save
-  // (PR18 §6): a SKU drops off Needs-review once it has name + brand_prefix + product_type (+ piece
-  // count if a puzzle). See updateSku / missingForComplete.
+  // Media holds no grid fields — just the Google-Drive image editor (rendered specially below).
+  { title: 'Media', fields: [] },
+  // needs_review is DERIVED by the completion gate on every save (PR18 §6): a SKU drops off Needs-review
+  // once it has name + brand_prefix + product_type (+ piece count if a puzzle). See updateSku.
 ];
+
+// ── PR191 autofill helpers ──
+// piece_size band: puzzle face area (biggest × next, cm²) ÷ piece count → cm² per piece → a size name.
+function computePieceSize(sizeP: number | null, sizeL: number | null, pieces: number | null): string {
+  if (!pieces || pieces <= 0 || sizeP == null || sizeL == null || sizeP <= 0 || sizeL <= 0) return '';
+  const per = (sizeP * sizeL) / pieces;
+  if (per < 0.9) return 'Micro';
+  if (per < 1.5) return 'Tiny';
+  if (per < 3) return 'Small';
+  if (per < 5) return 'Standard';
+  if (per < 10) return 'Large';
+  return 'Jumbo';
+}
+// image_type from the (biggest-first) dimensions: Round is flagged by the operator (only the diameter is
+// entered); Square = L and W equal; Panorama = L/W > 2.5; anything else is an ordinary rectangle (blank).
+function computeImageType(round: boolean, sizeP: number | null, sizeL: number | null): string {
+  if (round) return 'Round';
+  if (sizeP != null && sizeL != null && sizeP > 0 && sizeL === sizeP) return 'Square';
+  if (sizeP != null && sizeL != null && sizeL > 0 && sizeP / sizeL > 2.5) return 'Panorama';
+  return '';
+}
+// best-effort year/month from the scraped release_date text (kept for sorting; hidden in the editor).
+function computeReleaseYM(release: string): { year: number | null; month: number | null } {
+  const s = (release || '').trim();
+  const y = s.match(/(?:19|20)\d{2}/)?.[0];
+  const year = y ? Number(y) : null;
+  let month: number | null = null;
+  const ym = s.match(/(?:19|20)\d{2}[^\d]{1,2}(\d{1,2})/);
+  if (ym) { const m = Number(ym[1]); if (m >= 1 && m <= 12) month = m; }
+  return { year, month };
+}
+const numOrNull = (v: unknown): number | null => {
+  const s = String(v ?? '').trim();
+  if (s === '') return null;
+  const n = Number(s);
+  return Number.isNaN(n) ? null : n;
+};
 
 type FormState = Record<string, string | boolean>;
 
@@ -169,8 +200,15 @@ export default function CatalogBoard({
   const [mode, setMode] = useState<RightMode>(null);
   const [detail, setDetail] = useState<SkuDetail | null>(null);
   const [form, setForm] = useState<FormState>({});
+  const [round, setRound] = useState(false); // PR191: image is round → Product L is the diameter (W/H hidden)
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [collision, setCollision] = useState<CollisionRow | null>(null);
+
+  // PR191 — "+ New SKU" overlay (item code + name + product type → quickAddSku, then open it to complete)
+  const [newOpen, setNewOpen] = useState(false);
+  const [newCode, setNewCode] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState<string | null>(null);
 
   const [newBarcode, setNewBarcode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -274,7 +312,7 @@ export default function CatalogBoard({
       const d = await getSku(code);
       if (reqRef.current !== myReq) return;
       setDetail(d);
-      if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); }
+      if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); }
     } catch (e) {
       if (reqRef.current !== myReq) return;
       setError(e instanceof Error ? e.message : 'Failed to load SKU.');
@@ -310,20 +348,65 @@ export default function CatalogBoard({
     setDetail(null);
   }
 
+  // ── PR191: "+ New SKU" — item code + name + product type → a partial (needs-review) SKU, then open it ──
+  function openNewSku() {
+    if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
+    setNewCode(''); setNewName(''); setNewType(null); setError(null);
+    setNewOpen(true);
+  }
+  async function submitNewSku() {
+    const code = newCode.trim();
+    if (!code || !newName.trim() || !newType) { setError('Item code, name and product type are required.'); return; }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await quickAddSku({ item_code: code, name: newName.trim(), product_type: newType });
+      if (!res.ok) {
+        if (res.reason === 'exists') { setNewOpen(false); await openSku(res.existing.item_code); setError(`That code already exists — opened ${res.existing.item_code}.`); }
+        else setError(res.message ?? 'Could not create the SKU.');
+        return;
+      }
+      setNewOpen(false);
+      await refreshNeeds();
+      await openSku(res.item_code);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not create the SKU.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveSku() {
     if (!detail) return;
     resetMsg();
     setBusy(true);
     try {
-      const patch = buildPatch(detail.sku, form);
+      const patch = buildPatch(detail.sku, form) as Record<string, unknown>;
+
+      // PR191 — a round image is entered as a single diameter (Product L); W/H are meaningless, so clear
+      // them. The autofilled columns (image_type / piece_size / release year+month) are DERIVED here from
+      // the final geometry, not edited directly, and written only when they actually change.
+      const sizeP = numOrNull(form['size_p']);
+      const sizeL = round ? null : numOrNull(form['size_l']);
+      if (round) { patch.size_l = null; patch.size_t = null; }
+      const setIfChanged = (key: keyof CatalogueRow, next: string | number | null) => {
+        const cur = (detail.sku[key] ?? null) as string | number | null;
+        if ((next ?? null) !== (cur ?? null)) patch[key as string] = next;
+      };
+      setIfChanged('image_type', computeImageType(round, sizeP, sizeL) || null);
+      setIfChanged('piece_size', computePieceSize(sizeP, sizeL, numOrNull(form['piece_count_n'])) || null);
+      const { year, month } = computeReleaseYM(String(form['release_date'] ?? ''));
+      setIfChanged('release_year', year);
+      setIfChanged('release_month', month);
+
       // PR189 — the manual image URLs edit outside `form` (it's an array). Trim blanks, cap at 5, and
       // include only when actually changed. Empty → null (clears the column).
       const cleaned = imageUrls.map((u) => u.trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS);
       const orig = detail.sku.image_urls ?? [];
       if (JSON.stringify(cleaned) !== JSON.stringify(orig)) {
-        (patch as Record<string, unknown>).image_urls = cleaned.length ? cleaned : null;
+        patch.image_urls = cleaned.length ? cleaned : null;
       }
-      await updateSku(detail.sku.item_code, patch);
+      await updateSku(detail.sku.item_code, patch as Partial<CatalogueRow>);
       const n = Object.keys(patch).length;
       await reloadDetail(detail.sku.item_code);
       await refreshNeeds();
@@ -473,8 +556,8 @@ export default function CatalogBoard({
 
               {detailTab < GROUPS.length ? (
                 <section className="cat-grp">
-                  {/* PR189 — the Media tab leads with the up-to-5 Google-Drive image URL editor */}
-                  {GROUPS[detailTab].title === 'Media & tags' && (
+                  {/* PR189/PR191 — the Media tab is just the up-to-5 Google-Drive image URL editor */}
+                  {GROUPS[detailTab].title === 'Media' && (
                     <div className="cat-imgedit">
                       <div className="cat-grp-title">Images — Google Drive, up to {MAX_IMAGE_URLS} (first is primary)</div>
                       {imageUrls.map((u, i) => (
@@ -497,25 +580,47 @@ export default function CatalogBoard({
                       {imageUrls.length < MAX_IMAGE_URLS && (
                         <button className="btn-secondary sc-mini" onClick={() => setImageUrls((a) => [...a, ''])}>+ add image URL</button>
                       )}
-                      <div className="hint" style={{ marginTop: 6 }}>Each file must be shared “anyone with the link can view”. Save to apply.</div>
                     </div>
                   )}
+
+                  {/* PR191 — Dimensions leads with the Round toggle: on → Product L is the diameter, W/H hidden. */}
+                  {GROUPS[detailTab].title === 'Dimensions & weight' && (
+                    <label className="cat-round">
+                      <input type="checkbox" checked={round} onChange={(e) => setRound(e.target.checked)} />
+                      <span>Round image (Ø) — enter the diameter as Product L (width &amp; height are dropped)</span>
+                    </label>
+                  )}
+
                   <div className="cat-grid">
                     {GROUPS[detailTab].fields.map((fld) => {
                       const k = fld.key as string;
+                      // round: the product width/height are meaningless (a single diameter) — hide them,
+                      // and label Product L as the diameter.
+                      if (round && (k === 'size_l' || k === 'size_t')) return null;
+                      const label = round && k === 'size_p' ? 'Diameter (cm)' : fld.label;
                       const w = fld.kind === 'textarea' || fld.kind === 'bool' ? 'full' : fld.w ?? 'half';
                       const opts = fld.list ? fieldOptions[fld.list] : undefined;
                       const listId = fld.list ? `dl-${fld.list}` : undefined;
                       return (
                         <div className={`po-field pf-${w}`} key={k} style={{ marginBottom: 0 }}>
-                          {fld.kind === 'bool' ? (
+                          {fld.select ? (
+                            <>
+                              <label>{label}</label>
+                              <SearchSelect
+                                value={String(form[k] ?? '') || null}
+                                options={opts ?? []}
+                                onChange={(v) => setForm((f) => ({ ...f, [k]: v ?? '' }))}
+                                disabled={busy}
+                              />
+                            </>
+                          ) : fld.kind === 'bool' ? (
                             <label className="rcv-close">
                               <input type="checkbox" checked={!!form[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.checked }))} />
-                              {fld.label}
+                              {label}
                             </label>
                           ) : (
                             <>
-                              <label>{fld.label}</label>
+                              <label>{label}</label>
                               {fld.kind === 'textarea' ? (
                                 <textarea value={String(form[k] ?? '')} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />
                               ) : (
@@ -538,6 +643,22 @@ export default function CatalogBoard({
                       );
                     })}
                   </div>
+
+                  {/* PR191 — Classification's two AUTOFILLED read-only fields, derived from the geometry.
+                      Image type & Piece size are computed from the dimensions + piece count on save. */}
+                  {GROUPS[detailTab].title === 'Classification' && (() => {
+                    const sizeP = numOrNull(form['size_p']);
+                    const sizeL = round ? null : numOrNull(form['size_l']);
+                    const it = computeImageType(round, sizeP, sizeL);
+                    const ps = computePieceSize(sizeP, sizeL, numOrNull(form['piece_count_n']));
+                    return (
+                      <div className="cat-auto">
+                        <div className="cat-auto-row"><span className="cat-auto-label">Image type</span><span className="cat-auto-val">{it || '—'}</span><span className="cat-auto-tag">auto</span></div>
+                        <div className="cat-auto-row"><span className="cat-auto-label">Piece size</span><span className="cat-auto-val">{ps || '—'}</span><span className="cat-auto-tag">auto</span></div>
+                        <div className="hint" style={{ marginTop: 4 }}>Image type &amp; Piece size fill in from the dimensions + piece count (set them on the Dimensions tab). Location fills from Tags.</div>
+                      </div>
+                    );
+                  })()}
                 </section>
               ) : (
                 <section className="cat-grp">
@@ -630,6 +751,8 @@ export default function CatalogBoard({
             {/* SEARCH — just a search bar; results while typing, otherwise the recent-search log */}
             {tab === 'search' && (
               <div className="cat-search">
+                {/* PR191 — create a brand-new SKU from the app (future additions no longer come via import) */}
+                <button className="btn-secondary po-add-full" onClick={openNewSku}>+ New SKU</button>
                 <div className="scan-row">
                   <input
                     type="text"
@@ -735,6 +858,40 @@ export default function CatalogBoard({
               </div>
             )}
       </div>
+
+      {/* PR191 — "+ New SKU" overlay: minimal identity (code + name + product type), needs-review, then
+          opens the new SKU's bodyview to complete the rest. */}
+      {newOpen && (
+        <div className="sc-modal-backdrop" onClick={() => setNewOpen(false)}>
+          <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="New SKU" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <span className="sc-modal-title">New SKU</span>
+              <button className="sc-modal-x" onClick={() => setNewOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="sc-modal-body">
+              {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
+              <div className="po-form">
+                <div className="po-field">
+                  <label>Item code</label>
+                  <input type="text" placeholder="e.g. BR-000123" value={newCode} onChange={(e) => setNewCode(e.target.value)} disabled={busy} />
+                </div>
+                <div className="po-field">
+                  <label>Name</label>
+                  <input type="text" placeholder="product name" value={newName} onChange={(e) => setNewName(e.target.value)} disabled={busy} />
+                </div>
+                <div className="po-field">
+                  <label>Product type</label>
+                  <SearchSelect value={newType} options={fieldOptions['product_type'] ?? []} onChange={setNewType} disabled={busy} />
+                </div>
+                <div className="fd-commit">
+                  <span className="fd-commit-info">Adds a needs-review SKU — fill in the rest after.</span>
+                  <button className="btn-primary" onClick={submitNewSku} disabled={busy || !newCode.trim() || !newName.trim() || !newType}>{busy ? 'Creating…' : 'Create SKU'}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
