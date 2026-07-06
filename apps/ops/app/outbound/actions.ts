@@ -42,7 +42,7 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
   // embedded filters restrict both which orders return and which lines come back.
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,customer_id,customers(name,phone),order_lines!inner(line_id,item_code,courier)')
+    .select('sales_id,order_date,customer_id,address_id,customers(name,phone),order_lines!inner(line_id,item_code,courier,address_id)')
     .is('order_lines.shipped_at', null)
     .not('order_lines.fulfilled_at', 'is', null)
     // PR-B §6: a line only ships once it's ADDRESSED (courier set in Fulfill). Without this, cut-but-
@@ -54,12 +54,17 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
   if (error || !data) return [];
 
   return data.map((o) => {
-    const lines = (o.order_lines ?? []) as { line_id: string; item_code: string | null; courier: string | null }[];
+    const lines = (o.order_lines ?? []) as { line_id: string; item_code: string | null; courier: string | null; address_id: number | null }[];
     const cust = one<{ name: string | null; phone: string | null }>(o.customers as never);
     const planned = lines.find((l) => l.courier)?.courier ?? null;
+    // PR197: the send's ship address — the line's (stamped at fulfill), else the order's. Used to group
+    // same-destination orders for one-send consolidation.
+    const addressId = (lines.find((l) => l.address_id != null)?.address_id ?? (o.address_id as number | null)) ?? null;
     return {
       sales_id: o.sales_id as string,
       order_date: (o.order_date as string | null) ?? null,
+      customer_id: (o.customer_id as number | null) ?? null,
+      address_id: addressId,
       customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
       customer_phone: cust?.phone ?? null,
       ready_count: lines.length,
@@ -88,7 +93,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
   // straddling the very end may show fewer items — acceptable for the tail of a 100-shipment view).
   // `staff` is new (0052) — degrade gracefully if the migration isn't applied yet (retry sans staff)
   // so History never goes blank in the deploy→migrate window.
-  const baseCols = 'customer_ref,recipient_name,ship_date,address,courier,weight_gram,qty,item_code,item_code_raw,note,verify_method,scanned_barcode,sales_id,customer_id,send_id';
+  const baseCols = 'customer_ref,recipient_name,ship_date,address,courier,weight_gram,qty,item_code,item_code_raw,note,verify_method,scanned_barcode,sales_id,customer_id,send_id,dispatched_at';
   async function fetchWith(cols: string) {
     let q = supabase
       .from('outbound_shipments')
@@ -123,6 +128,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
     sales_id: string | null;
     customer_id: number | null;
     send_id: string | null;
+    dispatched_at: string | null;
     staff: string | null;
   }[];
   if (!items.length) return [];
@@ -170,6 +176,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
   type Group = {
     key: string; ship_date: string | null; customer: string | null; address: string | null;
     courier: string | null; weight_gram: number | null; send_id: string | null; customer_id: number | null;
+    dispatched_at: string | null; // PR198: set once the send is handed to the courier
     staff: string | null; items: ShipmentHistoryItem[]; codes: string[]; notes: Set<string>;
   };
   const groups = new Map<string, Group>();
@@ -183,10 +190,11 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
       g = {
         key, ship_date: it.ship_date, customer: it.recipient_name || it.customer_ref,
         address: it.address, courier: it.courier, weight_gram: it.weight_gram, send_id: it.send_id,
-        customer_id: it.customer_id, staff: it.staff, items: [], codes: [], notes: new Set(),
+        customer_id: it.customer_id, dispatched_at: it.dispatched_at, staff: it.staff, items: [], codes: [], notes: new Set(),
       };
       groups.set(key, g);
     }
+    if (it.dispatched_at && !g.dispatched_at) g.dispatched_at = it.dispatched_at;
     const vm = it.verify_method === 'scan' || it.verify_method === 'manual' ? it.verify_method : null;
     g.items.push({
       item_code: it.item_code ?? it.item_code_raw ?? null,
@@ -207,6 +215,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
     return {
       key: g.key,
       send_id: g.send_id, // PR195: present for app ships (→ cancellable); null for CSV/legacy rows
+      dispatched_at: g.dispatched_at, // PR198: set once handed to the courier (packed → dispatched)
       ship_date: g.ship_date,
       // header identity: the customer ID label when the customer resolves; legacy rows fall back to
       // the shipped-to name they carry
@@ -391,6 +400,36 @@ export async function recordShipment(payload: ShipInput): Promise<ShipResult> {
   return { affected, stock };
 }
 
+// ── Consolidated shipment (PR197): ship the lines of SEVERAL orders (same customer + address + courier)
+// as one send. Line ids span orders; the RPC derives each line's order, allocates one send_id, and
+// completes each order independently. Mirrors recordShipment's return (affected codes + fresh stock). ──
+export async function recordConsolidatedShipment(payload: {
+  line_ids: string[];
+  boxes: ShipInput['boxes'];
+  verify?: ShipInput['verify'];
+  staff?: string | null;
+}): Promise<ShipResult> {
+  if (!payload.line_ids?.length) throw new Error('recordConsolidatedShipment: select at least one line');
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.rpc('record_consolidated_shipment', {
+    p_line_ids: payload.line_ids,
+    p_boxes: payload.boxes ?? [],
+    p_verify: payload.verify ?? [],
+    p_staff: payload.staff?.trim() || null,
+  });
+  if (error) throw new Error(`recordConsolidatedShipment: ${error.message}`);
+  const affected = (data as string[] | null) ?? [];
+  let stock: ShipResult['stock'] = [];
+  if (affected.length) {
+    const { data: s } = await supabase
+      .from('stock_check')
+      .select('item_code,available,physical,reserved')
+      .in('item_code', affected);
+    stock = (s ?? []) as ShipResult['stock'];
+  }
+  return { affected, stock };
+}
+
 // ── Cancel a shipment (PR195): un-record an app-recorded send — the reverse of record_shipment. The
 // send's lines drop back into Ready-to-ship (fulfilled + addressed, shipped_at cleared) with NO stock
 // adjustment (the parcel never left), and the order returns to 'Need send'. From there, Return to
@@ -401,6 +440,16 @@ export async function cancelShipment(sendId: string): Promise<{ error: string | 
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.rpc('cancel_shipment', { p_send_id: sendId });
   if (error) return { error: `Couldn't cancel shipment: ${error.message}` };
+  return { error: null };
+}
+
+// ── Mark dispatched (PR198): stamp the send as handed to the courier — the point of no return (cancel
+// is refused afterwards). Purely a lifecycle marker; no stock moves. Errors returned as data. ──
+export async function dispatchSend(sendId: string): Promise<{ error: string | null }> {
+  if (!sendId) return { error: 'No shipment selected.' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('dispatch_send', { p_send_id: sendId });
+  if (error) return { error: `Couldn't mark dispatched: ${error.message}` };
   return { error: null };
 }
 

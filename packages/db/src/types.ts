@@ -361,6 +361,8 @@ export type Box = {
 export type ShipQueueRow = {
   sales_id: string;
   order_date: string | null;
+  customer_id: number | null;       // PR197: grouping key for one-send consolidation…
+  address_id: number | null;        // …together with the ship address (line's, else order's)
   customer_name: string | null;
   customer_phone: string | null;
   ready_count: number;              // fulfilled, unshipped, non-cancelled lines

@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { volWeight, chargeable } from '@jigzle/lib';
 import type { ShipQueueRow } from '@jigzle/db/types';
-import { getShipQueue, getOrderForShip, recordShipment, returnToFulfill } from '@/app/outbound/actions';
+import { getShipQueue, getOrderForShip, recordShipment, recordConsolidatedShipment, returnToFulfill } from '@/app/outbound/actions';
 import type { ShipDetail, ShipResult } from '@/app/outbound/types';
+import type { ShipLine } from '@jigzle/db/types';
 import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import IconSelect from '@/components/IconSelect';
@@ -77,6 +78,12 @@ export default function OutboundBoard({
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<(ShipResult & { units: number; completed: boolean }) | null>(null);
+  // PR197: one-send consolidation — other ready orders to the SAME customer+address+courier can ship in
+  // this parcel. `included` = their sales_ids; `sibDetails` caches each included order's ship detail (for
+  // its lines + pending count). Verification/boxes are shared across the merged line set.
+  const [included, setIncluded] = useState<Set<string>>(new Set());
+  const [sibDetails, setSibDetails] = useState<Map<string, ShipDetail>>(new Map());
+  const [sibBusy, setSibBusy] = useState<string | null>(null);
 
   const defaultPreset = boxPresets[0]?.code ?? CUSTOM;
   const makeBox = (): BoxDraft => ({ key: boxKeySeq++, preset: defaultPreset, real: '', p: '', l: '', t: '' });
@@ -88,10 +95,12 @@ export default function OutboundBoard({
     return m;
   }, [detail]);
 
-  const imgCodes = useMemo(
-    () => (detail?.lines ?? []).map((l) => l.item_code).filter(Boolean) as string[],
-    [detail]
-  );
+  const imgCodes = useMemo(() => {
+    // PR197: cover the primary AND any included siblings' lines
+    const base = detail?.lines ?? [];
+    const extra = [...included].flatMap((sid) => sibDetails.get(sid)?.lines ?? []);
+    return [...base, ...extra].map((l) => l.item_code).filter(Boolean) as string[];
+  }, [detail, included, sibDetails]);
   const imgMap = useSkuImages(imgCodes);
 
   // O3 copyable address block (PR119). Layout:
@@ -129,6 +138,8 @@ export default function OutboundBoard({
 
   function applyDetail(d: ShipDetail | null) {
     setDetail(d);
+    setIncluded(new Set());        // PR197: a fresh primary drops any consolidation selection
+    setSibDetails(new Map());
     if (d) {
       setVerified(new Map());      // O1: lines start UNCHECKED
       setScanCounts(new Map());
@@ -138,6 +149,47 @@ export default function OutboundBoard({
       setScanMsg(null);
       setCopied(false);
     }
+  }
+
+  // PR197: other ready orders combinable with the open one — same customer + same ship address + same
+  // courier (one parcel = one courier). Only when the primary is addressed; the RPC re-checks server-side.
+  const siblings = useMemo(() => {
+    if (!detail || detail.address_id == null) return [];
+    return queue.filter(
+      (q) =>
+        q.sales_id !== detail.sales_id &&
+        q.customer_id != null && q.customer_id === detail.customer_id &&
+        q.address_id != null && q.address_id === detail.address_id &&
+        (q.planned_courier ?? null) === (detail.planned_courier ?? null)
+    );
+  }, [queue, detail]);
+
+  // the merged line set actually shipping: primary + every included sibling's lines.
+  const shipLines: ShipLine[] = useMemo(() => {
+    const base = detail?.lines ?? [];
+    const extra = [...included].flatMap((sid) => sibDetails.get(sid)?.lines ?? []);
+    return [...base, ...extra];
+  }, [detail, included, sibDetails]);
+
+  // tick/untick a sibling — load its detail (lines + pending count) on first include.
+  async function toggleSibling(salesId: string) {
+    if (included.has(salesId)) {
+      setIncluded((prev) => { const n = new Set(prev); n.delete(salesId); return n; });
+      return;
+    }
+    if (!sibDetails.has(salesId)) {
+      setSibBusy(salesId);
+      try {
+        const d = await getOrderForShip(salesId);
+        if (d) setSibDetails((prev) => new Map(prev).set(salesId, d));
+        else { setError(`Couldn't load ${salesId}.`); return; }
+      } catch {
+        setError(`Couldn't load ${salesId}.`); return;
+      } finally {
+        setSibBusy(null);
+      }
+    }
+    setIncluded((prev) => new Set(prev).add(salesId));
   }
 
   async function openOrder(salesId: string) {
@@ -257,12 +309,17 @@ export default function OutboundBoard({
 
   // O5 gate: every line verified AND every Custom box has all three dims. unitsShipping = ALL lines
   // (no partial ship — the subset decision was made at Fulfill).
-  const allVerified = !!detail && detail.lines.length > 0 && detail.lines.every((l) => verified.has(l.line_id));
+  // PR197: gates span the merged line set (primary + included siblings).
+  const allVerified = !!detail && shipLines.length > 0 && shipLines.every((l) => verified.has(l.line_id));
   const customIncomplete = boxes.some(
     (b) => b.preset === CUSTOM && !(numOrNull(b.p) != null && numOrNull(b.l) != null && numOrNull(b.t) != null)
   );
-  const unitsShipping = detail?.lines.reduce((s, l) => s + l.qty, 0) ?? 0;
-  const willComplete = !!detail && detail.lines.length > 0 && detail.pending_fulfill_count === 0;
+  const unitsShipping = shipLines.reduce((s, l) => s + l.qty, 0);
+  // every involved order completes only if it has no still-unfulfilled line (primary + each sibling).
+  const willComplete =
+    !!detail && shipLines.length > 0 &&
+    detail.pending_fulfill_count === 0 &&
+    [...included].every((sid) => (sibDetails.get(sid)?.pending_fulfill_count ?? 0) === 0);
 
   async function copyAddress() {
     try {
@@ -280,26 +337,37 @@ export default function OutboundBoard({
     setError(null);
     try {
       const willCompleteNow = willComplete;
-      const res = await recordShipment({
-        sales_id: detail.sales_id,
-        line_ids: detail.lines.map((l) => l.line_id), // all-or-none: ship every fulfilled-unshipped line
-        // 0035: how each line was checked — 'scan' carries the read barcode, 'manual' a tick. The gate
-        // (allVerified) guarantees every line has a method; default to 'manual' defensively.
-        verify: detail.lines.map((l) => {
+      // 0035: how each line was checked — 'scan' carries the read barcode, 'manual' a tick. The gate
+      // (allVerified) guarantees every line has a method; default to 'manual' defensively.
+      const verifyFor = (lines: ShipLine[]) =>
+        lines.map((l) => {
           const method = verified.get(l.line_id) ?? 'manual';
           return { line_id: l.line_id, method, barcode: method === 'scan' ? (scannedBarcodes.get(l.line_id) ?? null) : null };
-        }),
-        boxes: boxes
-          .filter((b) => {
-            const d = boxDims(b);
-            return b.real.trim() || d.p != null || d.l != null || d.t != null;
+        });
+      const boxPayload = boxes
+        .filter((b) => {
+          const d = boxDims(b);
+          return b.real.trim() || d.p != null || d.l != null || d.t != null;
+        })
+        .map((b) => {
+          const d = boxDims(b);
+          return { real_weight: numOrNull(b.real), dim_p: d.p, dim_l: d.l, dim_t: d.t };
+        });
+      // PR197: siblings included → one consolidated send across orders; else the single-order path.
+      const res = included.size > 0
+        ? await recordConsolidatedShipment({
+            line_ids: shipLines.map((l) => l.line_id),
+            verify: verifyFor(shipLines),
+            boxes: boxPayload,
+            staff: getActiveStaff(),
           })
-          .map((b) => {
-            const d = boxDims(b);
-            return { real_weight: numOrNull(b.real), dim_p: d.p, dim_l: d.l, dim_t: d.t };
-          }),
-        staff: getActiveStaff(),
-      });
+        : await recordShipment({
+            sales_id: detail.sales_id,
+            line_ids: detail.lines.map((l) => l.line_id), // all-or-none: ship every fulfilled-unshipped line
+            verify: verifyFor(detail.lines),
+            boxes: boxPayload,
+            staff: getActiveStaff(),
+          });
       if (res.affected.length === 0) {
         setError('Those lines were already shipped — nothing to do.');
       } else {
@@ -328,6 +396,35 @@ export default function OutboundBoard({
     } finally {
       setCommitting(false);
     }
+  }
+
+  // PR197: one line row of the ship detail — reused for the primary order and each included sibling.
+  function renderShipLine(l: ShipLine) {
+    const mode = verified.get(l.line_id);
+    const n = scanCounts.get(l.line_id) ?? 0;
+    const countText = mode ? `${l.qty}/${l.qty}` : `${n}/${l.qty}`;
+    const countCls = mode === 'manual' ? 'manual' : mode === 'scan' ? 'scan' : 'zero';
+    return (
+      <li key={l.line_id} className="ff-line pend-line-card">
+        <div className="pend-line">
+          <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+          <div className="pend-line-main">
+            <span className="ff-code">{l.item_code || '—'}</span>
+            <span className="ff-name">{l.name}</span>
+          </div>
+          <div className="ob-verify">
+            <span className={`ob-count ${countCls}`}>{countText}</span>
+            <button className="ob-manual-btn" onClick={() => toggleLine(l.line_id)}>
+              {mode === 'manual' ? '✓ checked' : mode === 'scan' ? '✓ scanned' : 'manual check'}
+            </button>
+          </div>
+        </div>
+        {/* note set in Pending/Fulfill — read-only here */}
+        {l.line_note && (
+          <div className="note-show"><span className="note-show-tag" aria-hidden="true">✎</span><span className="note-show-text">{l.line_note}</span></div>
+        )}
+      </li>
+    );
   }
 
   // PR155 — bodyview: the body shows EITHER the staff line + ship queue (full width) OR the tapped
@@ -397,6 +494,36 @@ export default function OutboundBoard({
                 </div>
               )}
 
+              {/* PR197: other ready orders to this same customer + address + courier — tick to ship them
+                  in this one parcel (one send). */}
+              {siblings.length > 0 && (
+                <section className="fd-section">
+                  <div className="fd-section-head">Also going to this address</div>
+                  <ul className="ff-lines">
+                    {siblings.map((q) => (
+                      <li key={q.sales_id} className="ff-line pend-line-card">
+                        <label className="pend-line" style={{ cursor: 'pointer', alignItems: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={included.has(q.sales_id)}
+                            disabled={sibBusy === q.sales_id || committing}
+                            onChange={() => toggleSibling(q.sales_id)}
+                          />
+                          <div className="pend-line-main">
+                            <span className="ff-code">{q.sales_id}</span>
+                            <span className="ff-name">{q.ready_count} {q.ready_count === 1 ? 'item' : 'items'}{q.planned_courier ? ` · ${q.planned_courier}` : ''}</span>
+                          </div>
+                          {sibBusy === q.sales_id && <span className="scan-msg">loading…</span>}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                  {included.size > 0 && (
+                    <div className="hint">Shipping {included.size + 1} orders as one send ({unitsShipping} units).</div>
+                  )}
+                </section>
+              )}
+
               {/* Items — verify every one (manual check or scan), then ship the whole order */}
               <section className="fd-section">
                 <div className="fd-section-head">Items</div>
@@ -412,34 +539,21 @@ export default function OutboundBoard({
                   {scanMsg && <span className="scan-msg">{scanMsg}</span>}
                 </div>
                 <ul className="ff-lines">
-                  {detail.lines.map((l) => {
-                    const mode = verified.get(l.line_id);
-                    const n = scanCounts.get(l.line_id) ?? 0;
-                    const countText = mode ? `${l.qty}/${l.qty}` : `${n}/${l.qty}`;
-                    const countCls = mode === 'manual' ? 'manual' : mode === 'scan' ? 'scan' : 'zero';
-                    return (
-                      <li key={l.line_id} className="ff-line pend-line-card">
-                        <div className="pend-line">
-                          <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
-                          <div className="pend-line-main">
-                            <span className="ff-code">{l.item_code || '—'}</span>
-                            <span className="ff-name">{l.name}</span>
-                          </div>
-                          <div className="ob-verify">
-                            <span className={`ob-count ${countCls}`}>{countText}</span>
-                            <button className="ob-manual-btn" onClick={() => toggleLine(l.line_id)}>
-                              {mode === 'manual' ? '✓ checked' : mode === 'scan' ? '✓ scanned' : 'manual check'}
-                            </button>
-                          </div>
-                        </div>
-                        {/* note set in Pending/Fulfill — read-only here */}
-                        {l.line_note && (
-                          <div className="note-show"><span className="note-show-tag" aria-hidden="true">✎</span><span className="note-show-text">{l.line_note}</span></div>
-                        )}
-                      </li>
-                    );
-                  })}
+                  {detail.lines.map((l) => renderShipLine(l))}
                 </ul>
+                {/* PR197: included siblings' lines, grouped under their order id (they ship in this send) */}
+                {[...included].map((sid) => {
+                  const sd = sibDetails.get(sid);
+                  if (!sd) return null;
+                  return (
+                    <div key={sid}>
+                      <div className="fd-section-head" style={{ marginTop: 8, opacity: 0.8 }}>＋ {sid}</div>
+                      <ul className="ff-lines">
+                        {sd.lines.map((l) => renderShipLine(l))}
+                      </ul>
+                    </div>
+                  );
+                })}
               </section>
 
               {/* Boxes — numbered icon; row 1 = box type (largest) + L/W/H side-by-side (static for a
