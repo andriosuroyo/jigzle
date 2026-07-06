@@ -244,7 +244,7 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
 
   const { data: order } = await supabase
     .from('orders')
-    .select('sales_id,customer_id,address_id,status,customers(name,phone)')
+    .select('sales_id,customer_id,address_id,status,export_courier,customers(name,phone)')
     .eq('sales_id', salesId)
     .maybeSingle();
   if (!order) return null;
@@ -311,6 +311,29 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
   const courierLabel = rows.find((r) => r.courier_label)?.courier_label ?? null;
   const courierTracking = rows.find((r) => r.courier_tracking)?.courier_tracking ?? null;
 
+  // PR193: export shipment — resolve the order's export courier (set at Fulfill for an intl ship-to)
+  // to its Settings row for the intermediary address. Degrades gracefully: a missing column / row just
+  // leaves the export fields null, so Outbound falls back to the plain single-address view.
+  const exportCourier = (order.export_courier as string | null) ?? null;
+  let exportNeedsAddress = false;
+  let exportAddrRecipient: string | null = null;
+  let exportAddrPhone: string | null = null;
+  let exportAddrText: string | null = null;
+  if (exportCourier) {
+    const { data: xc } = await supabase
+      .from('settings_export_couriers')
+      .select('needs_address,addr_recipient,addr_phone,addr_text')
+      .is('user_id', null)
+      .eq('label', exportCourier)
+      .maybeSingle();
+    if (xc) {
+      exportNeedsAddress = !!xc.needs_address;
+      exportAddrRecipient = (xc.addr_recipient as string | null) ?? null;
+      exportAddrPhone = (xc.addr_phone as string | null) ?? null;
+      exportAddrText = (xc.addr_text as string | null) ?? null;
+    }
+  }
+
   // barcodes for optional scan resolution
   let barcodes: { barcode: string; item_code: string }[] = [];
   if (codes.length) {
@@ -350,6 +373,11 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
     planned_courier: lines.find((l) => l.courier)?.courier ?? null,
     courier_label: courierLabel,
     courier_tracking: courierTracking,
+    export_courier: exportCourier,
+    export_needs_address: exportNeedsAddress,
+    export_addr_recipient: exportAddrRecipient,
+    export_addr_phone: exportAddrPhone,
+    export_addr_text: exportAddrText,
     lines,
     barcodes,
     pending_fulfill_count: pending ?? 0,

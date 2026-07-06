@@ -1417,6 +1417,11 @@ img.sku-img { background: #e8e8e8; }
 .ob-copy { position: absolute; top: 8px; right: 8px; background: white; border: 1px solid var(--line); border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--brown); padding: 4px 8px; cursor: pointer; }
 .ob-copy:active { background: var(--paper); }
 .ob-addr-hint { margin-top: 6px; }
+/* PR193 — export shipment: customer + courier address blocks side-by-side (customer first). */
+.ob-export-banner { margin-top: 8px; }
+.ob-addr-pair.two { display: flex; gap: 10px; flex-wrap: wrap; }
+.ob-addr-pair.two > .ob-addr { flex: 1 1 240px; margin-top: 8px; }
+.ob-addr-cap { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--brown); margin-bottom: 6px; padding-right: 64px; }
 
 /* ── PR26 — Outbound O8 box preset dropdown ── */
 .box-preset { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }

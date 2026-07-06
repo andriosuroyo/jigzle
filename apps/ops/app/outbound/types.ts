@@ -30,6 +30,15 @@ export interface ShipDetail {
   planned_courier: string | null;       // base courier from fulfill (e.g. 'TIKI')
   courier_label: string | null;         // denormalized label from the line (e.g. 'TIKI ONS')
   courier_tracking: string | null;      // tracking entered at fulfill
+  // PR193 — export shipment (international ship-to): the export courier chosen at Fulfill and its
+  // optional intermediary address. When export_needs_address, Outbound shows the courier's address as
+  // a SECOND block (customer first, courier second) — the parcel goes to the courier first, who then
+  // forwards it abroad. No-address export couriers (DHL/FedEx) show the customer address only.
+  export_courier: string | null;
+  export_needs_address: boolean;
+  export_addr_recipient: string | null;
+  export_addr_phone: string | null;
+  export_addr_text: string | null;
   lines: ShipLine[];
   barcodes: { barcode: string; item_code: string }[]; // for scan verification
   pending_fulfill_count: number; // unshipped, non-cancelled lines NOT yet fulfilled
