@@ -24,6 +24,7 @@ export interface SendToOutboundInput {
   courier_speed?: string | null;   // speed tier, e.g. 'ONS'
   courier_label?: string | null;   // denormalized label, e.g. 'TIKI ONS'
   tracking?: string | null;
+  export_courier?: string | null;  // PR192 — export courier label for an international ship-to; null domestic
 }
 
 // ── one cut line in the Fulfill detail (FT-6: read-only — the whole cut set ships; no checkbox, no
@@ -45,6 +46,7 @@ export interface FulfillDetail {
   default_address_id: number | null; // the order's current address_id (null = SA-1 deferred)
   needs_address: boolean;            // address_id is null → must be set before sending to Outbound
   courier_tracking: string | null;   // tracking carried back from a "Return to Fulfill" (re-prefilled)
+  export_courier: string | null;     // PR192 — export courier stamped on the order (re-prefilled on return)
   lines: FulfillCutLine[];           // the cut, courier-null, unshipped lines
   addresses: CustomerAddress[];
 }

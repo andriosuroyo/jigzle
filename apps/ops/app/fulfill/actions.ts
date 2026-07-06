@@ -59,7 +59,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
 
   const { data: order } = await supabase
     .from('orders')
-    .select('sales_id,order_date,customer_id,address_id,customers(name,phone)')
+    .select('sales_id,order_date,customer_id,address_id,export_courier,customers(name,phone)')
     .eq('sales_id', salesId)
     .maybeSingle();
   if (!order) return null;
@@ -118,6 +118,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
     default_address_id: addressId,
     needs_address: addressId == null,
     courier_tracking: courierTracking,
+    export_courier: (order.export_courier as string | null) ?? null,
     lines,
     addresses,
   };
@@ -178,7 +179,14 @@ export async function sendToOutbound(input: SendToOutboundInput): Promise<{ erro
     p_courier_speed: input.courier_speed ?? null,
     p_courier_label: input.courier_label ?? null,
   });
-  return { error: error ? `sendToOutbound: ${error.message}` : null };
+  if (error) return { error: `sendToOutbound: ${error.message}` };
+  // PR192: stamp the export courier onto the order (kept in sync with the ship-to — null for a
+  // domestic address). Separate from set_fulfillment so the RPC is untouched; same order, RLS-gated.
+  const { error: xErr } = await supabase
+    .from('orders')
+    .update({ export_courier: input.export_courier ?? null })
+    .eq('sales_id', input.sales_id);
+  return { error: xErr ? `sendToOutbound: shipped, but couldn't record export courier: ${xErr.message}` : null };
 }
 
 // ── Send back to pending (FT-4): clear the cut entirely (unfulfill_order) → the lines return to

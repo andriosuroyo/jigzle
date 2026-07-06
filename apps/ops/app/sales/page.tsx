@@ -2,7 +2,7 @@ import { createSupabaseServerClient } from '@jigzle/db/server';
 import OrdersShell, { type OrdersTab } from '@/components/OrdersShell';
 import { getPending } from '@/app/pending/actions';
 import { getToSendQueue } from '@/app/fulfill/actions';
-import { getPaymentMethods, getCourierServices, getBoxPresets, getCommonNotes, getChannelOptions } from '@/app/settings/actions';
+import { getPaymentMethods, getCourierServices, getBoxPresets, getCommonNotes, getChannelOptions, getExportCouriers } from '@/app/settings/actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -32,6 +32,7 @@ export default async function SalesPage({
     boxPresets,
     commonNotes,
     channelOptions,
+    exportCouriers,
   ] = await Promise.all([
     supabase.auth.getUser(),
     getPending(),
@@ -41,6 +42,7 @@ export default async function SalesPage({
     getBoxPresets(),
     getCommonNotes(),
     getChannelOptions(),
+    getExportCouriers(),
   ]);
 
   const tabParam = (searchParams?.tab ?? '') as OrdersTab;
@@ -60,6 +62,7 @@ export default async function SalesPage({
       boxPresets={boxPresets}
       commonNotes={commonNotes}
       channelOptions={channelOptions}
+      exportCouriers={exportCouriers.filter((c) => c.is_active)}
     />
   );
 }
