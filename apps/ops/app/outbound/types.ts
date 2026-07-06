@@ -88,6 +88,7 @@ export interface ShipmentHistoryBox {
 
 export interface ShipmentHistoryRow {
   key: string;                     // synthetic id (send_id, or a composite) — for React keys + selection
+  send_id: string | null;          // PR195: app ships carry a send_id → cancellable; CSV/legacy rows are null
   ship_date: string | null;
   customer: string | null;         // PR155: the CUSTOMER ID label ("Name (last4)") when resolvable
   recipient: string | null;        // PR155: recipient name — leads the Shipped-to block

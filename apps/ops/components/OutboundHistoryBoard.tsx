@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { volWeight } from '@jigzle/lib';
-import { getOutboundHistory } from '@/app/outbound/actions';
+import { getOutboundHistory, cancelShipment } from '@/app/outbound/actions';
 import type { ShipmentHistoryRow, ShipmentHistoryBox } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
@@ -24,6 +24,7 @@ export default function OutboundHistoryBoard({
   active = true,
   onCountChange,
   onDetailOpenChange,
+  onCancelled,
   reloadKey = 0,
 }: {
   initialOrders: ShipmentHistoryRow[];
@@ -34,12 +35,18 @@ export default function OutboundHistoryBoard({
   onCountChange?: (n: number) => void;
   // PR155: the shell hides the tab bar while a shipment detail bodyview is open (breadcrumb stays).
   onDetailOpenChange?: (open: boolean) => void;
+  // PR195: a shipment was un-recorded → the shell reloads the Ready-to-ship queue (the lines return there).
+  onCancelled?: () => void;
   reloadKey?: number;
 }) {
   const [orders, setOrders] = useState<ShipmentHistoryRow[]>(initialOrders);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [selKey, setSelKey] = useState<string | null>(null);
+  // PR195: cancel-shipment inline confirm (app ships only). Its error stays under the action.
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelErr, setCancelErr] = useState<string | null>(null);
   const reqRef = useRef(0);
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
   const loadedRef = useRef(initialOrders.length > 0); // PR181: false until the deferred first load lands
@@ -95,6 +102,23 @@ export default function OutboundHistoryBoard({
 
   // PR155: bodyview — the shell hides the tab bar while a detail is open.
   useEffect(() => { onDetailOpenChange?.(!!selKey); }, [selKey, onDetailOpenChange]);
+  // PR195: reset the cancel confirm/error whenever the selection changes.
+  useEffect(() => { setConfirmCancel(false); setCancelErr(null); }, [selKey]);
+
+  // PR195: un-record the selected app shipment — its lines return to Ready-to-ship (no stock move) and
+  // the order goes back to Need send. Remove the row here and tell the shell to reload the Ready queue.
+  async function doCancelShipment() {
+    if (!sel?.send_id) return;
+    setCancelling(true);
+    setCancelErr(null);
+    const { error } = await cancelShipment(sel.send_id);
+    if (error) { setCancelErr(error); setCancelling(false); return; }
+    setOrders((prev) => prev.filter((o) => o.key !== sel.key));
+    setSelKey(null);
+    setConfirmCancel(false);
+    setCancelling(false);
+    onCancelled?.();
+  }
 
   // Shipped-to block: recipient name leads, phone ends (PR155).
   const shippedTo = sel ? [sel.recipient, sel.address, sel.phone].filter(Boolean).join('\n') : '';
@@ -220,6 +244,24 @@ export default function OutboundHistoryBoard({
                 )}
               </ul>
             </section>
+
+            {/* PR195: Cancel shipment (app ships only — CSV/legacy rows have no send_id). Un-records the
+                send: items return to Ready-to-ship, order back to Need send, no stock adjustment. Inline
+                confirm; the error stays under the action. */}
+            {sel.send_id && (
+              <div className="ob-return">
+                {!confirmCancel ? (
+                  <button className="btn-link danger" onClick={() => setConfirmCancel(true)} disabled={cancelling}>Cancel shipment</button>
+                ) : (
+                  <span className="rcv-reverse-ask">
+                    Cancel this shipment? Its {sel.item_count} {sel.item_count === 1 ? 'item' : 'items'} return to Ready-to-ship and the order goes back to Need send. No stock is changed (nothing left the shelf).
+                    <button className="btn-secondary" onClick={() => setConfirmCancel(false)} disabled={cancelling}>Keep</button>
+                    <button className="btn-primary danger" onClick={doCancelShipment} disabled={cancelling}>{cancelling ? 'Cancelling…' : 'Yes, cancel'}</button>
+                  </span>
+                )}
+                {cancelErr && <div className="validation err" style={{ marginTop: 6 }}>{cancelErr}</div>}
+              </div>
+            )}
           </div>
         </>
       )}
