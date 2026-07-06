@@ -342,6 +342,10 @@ export default function OutboundBoard({
   const customIncomplete = boxes.some(
     (b) => b.preset === CUSTOM && !(numOrNull(b.p) != null && numOrNull(b.l) != null && numOrNull(b.t) != null)
   );
+  // PR197: every box must carry a MEASURED real weight (> 0) — never ship an unweighed parcel. Mirrors
+  // the Custom-dims gate; blocks the whole send until each box has a real weight (an empty extra box can
+  // be removed via its × button).
+  const weightMissing = boxes.some((b) => { const r = numOrNull(b.real); return r == null || r <= 0; });
   const unitsShipping = shipLines.reduce((s, l) => s + l.qty, 0);
   // every involved order completes only if it has no still-unfulfilled line (primary + each sibling).
   const willComplete =
@@ -360,7 +364,7 @@ export default function OutboundBoard({
   }
 
   async function commit() {
-    if (!detail || !allVerified || customIncomplete) return;
+    if (!detail || !allVerified || customIncomplete || weightMissing) return;
     setCommitting(true);
     setError(null);
     try {
@@ -661,12 +665,13 @@ export default function OutboundBoard({
 
               {/* Commit bar (O5: all-or-none) — button + a two-line readiness checklist (grey → green). */}
               <div className="fd-commit">
-                <button className="btn-primary" onClick={commit} disabled={committing || !allVerified || customIncomplete}>
+                <button className="btn-primary" onClick={commit} disabled={committing || !allVerified || customIncomplete || weightMissing}>
                   {committing ? 'Shipping…' : 'Mark shipped'}
                 </button>
                 <ul className="ship-checks">
                   <li className={allVerified ? 'done' : ''}>{allVerified ? '✓' : '○'} All items checked</li>
                   <li className={!customIncomplete ? 'done' : ''}>{!customIncomplete ? '✓' : '○'} Box details filled</li>
+                  <li className={!weightMissing ? 'done' : ''}>{!weightMissing ? '✓' : '○'} Real weight measured</li>
                 </ul>
               </div>
 
