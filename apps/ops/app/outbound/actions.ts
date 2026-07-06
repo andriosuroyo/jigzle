@@ -93,7 +93,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
   // straddling the very end may show fewer items — acceptable for the tail of a 100-shipment view).
   // `staff` is new (0052) — degrade gracefully if the migration isn't applied yet (retry sans staff)
   // so History never goes blank in the deploy→migrate window.
-  const baseCols = 'customer_ref,recipient_name,ship_date,address,courier,weight_gram,qty,item_code,item_code_raw,note,verify_method,scanned_barcode,sales_id,customer_id,send_id';
+  const baseCols = 'customer_ref,recipient_name,ship_date,address,courier,weight_gram,qty,item_code,item_code_raw,note,verify_method,scanned_barcode,sales_id,customer_id,send_id,dispatched_at';
   async function fetchWith(cols: string) {
     let q = supabase
       .from('outbound_shipments')
@@ -128,6 +128,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
     sales_id: string | null;
     customer_id: number | null;
     send_id: string | null;
+    dispatched_at: string | null;
     staff: string | null;
   }[];
   if (!items.length) return [];
@@ -175,6 +176,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
   type Group = {
     key: string; ship_date: string | null; customer: string | null; address: string | null;
     courier: string | null; weight_gram: number | null; send_id: string | null; customer_id: number | null;
+    dispatched_at: string | null; // PR198: set once the send is handed to the courier
     staff: string | null; items: ShipmentHistoryItem[]; codes: string[]; notes: Set<string>;
   };
   const groups = new Map<string, Group>();
@@ -188,10 +190,11 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
       g = {
         key, ship_date: it.ship_date, customer: it.recipient_name || it.customer_ref,
         address: it.address, courier: it.courier, weight_gram: it.weight_gram, send_id: it.send_id,
-        customer_id: it.customer_id, staff: it.staff, items: [], codes: [], notes: new Set(),
+        customer_id: it.customer_id, dispatched_at: it.dispatched_at, staff: it.staff, items: [], codes: [], notes: new Set(),
       };
       groups.set(key, g);
     }
+    if (it.dispatched_at && !g.dispatched_at) g.dispatched_at = it.dispatched_at;
     const vm = it.verify_method === 'scan' || it.verify_method === 'manual' ? it.verify_method : null;
     g.items.push({
       item_code: it.item_code ?? it.item_code_raw ?? null,
@@ -212,6 +215,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
     return {
       key: g.key,
       send_id: g.send_id, // PR195: present for app ships (→ cancellable); null for CSV/legacy rows
+      dispatched_at: g.dispatched_at, // PR198: set once handed to the courier (packed → dispatched)
       ship_date: g.ship_date,
       // header identity: the customer ID label when the customer resolves; legacy rows fall back to
       // the shipped-to name they carry
@@ -436,6 +440,16 @@ export async function cancelShipment(sendId: string): Promise<{ error: string | 
   const supabase = createSupabaseServerClient();
   const { error } = await supabase.rpc('cancel_shipment', { p_send_id: sendId });
   if (error) return { error: `Couldn't cancel shipment: ${error.message}` };
+  return { error: null };
+}
+
+// ── Mark dispatched (PR198): stamp the send as handed to the courier — the point of no return (cancel
+// is refused afterwards). Purely a lifecycle marker; no stock moves. Errors returned as data. ──
+export async function dispatchSend(sendId: string): Promise<{ error: string | null }> {
+  if (!sendId) return { error: 'No shipment selected.' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('dispatch_send', { p_send_id: sendId });
+  if (error) return { error: `Couldn't mark dispatched: ${error.message}` };
   return { error: null };
 }
 

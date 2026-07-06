@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { volWeight } from '@jigzle/lib';
-import { getOutboundHistory, cancelShipment } from '@/app/outbound/actions';
+import { getOutboundHistory, cancelShipment, dispatchSend } from '@/app/outbound/actions';
 import type { ShipmentHistoryRow, ShipmentHistoryBox } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
@@ -47,6 +47,7 @@ export default function OutboundHistoryBoard({
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelErr, setCancelErr] = useState<string | null>(null);
+  const [dispatching, setDispatching] = useState(false); // PR198: mark-dispatched in flight
   const reqRef = useRef(0);
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
   const loadedRef = useRef(initialOrders.length > 0); // PR181: false until the deferred first load lands
@@ -103,7 +104,7 @@ export default function OutboundHistoryBoard({
   // PR155: bodyview — the shell hides the tab bar while a detail is open.
   useEffect(() => { onDetailOpenChange?.(!!selKey); }, [selKey, onDetailOpenChange]);
   // PR195: reset the cancel confirm/error whenever the selection changes.
-  useEffect(() => { setConfirmCancel(false); setCancelErr(null); }, [selKey]);
+  useEffect(() => { setConfirmCancel(false); setCancelErr(null); setDispatching(false); }, [selKey]);
 
   // PR195: un-record the selected app shipment — its lines return to Ready-to-ship (no stock move) and
   // the order goes back to Need send. Remove the row here and tell the shell to reload the Ready queue.
@@ -118,6 +119,20 @@ export default function OutboundHistoryBoard({
     setConfirmCancel(false);
     setCancelling(false);
     onCancelled?.();
+  }
+
+  // PR198: mark the selected packed send as dispatched (handed to courier) — the point of no return.
+  // Optimistically reflect it (hides Cancel, shows "dispatched"); the stamped date is today.
+  async function doDispatch() {
+    if (!sel?.send_id) return;
+    setDispatching(true);
+    setCancelErr(null);
+    const { error } = await dispatchSend(sel.send_id);
+    if (error) { setCancelErr(error); setDispatching(false); return; }
+    const stamp = new Date().toISOString();
+    setOrders((prev) => prev.map((o) => (o.key === sel.key ? { ...o, dispatched_at: stamp } : o)));
+    setConfirmCancel(false);
+    setDispatching(false);
   }
 
   // Shipped-to block: recipient name leads, phone ends (PR155).
@@ -162,7 +177,10 @@ export default function OutboundHistoryBoard({
             {/* PR155 header: customer ID headline; "shipped <date> by <staff>" subtext */}
             <div className="fd-head">
               <div className="fd-title fd-title-plain">{sel.customer || '—'}</div>
-              <div className="fd-sub">shipped {fmtDate(sel.ship_date)}{sel.staff ? ` by ${sel.staff}` : ''}</div>
+              <div className="fd-sub">
+                packed {fmtDate(sel.ship_date)}{sel.staff ? ` by ${sel.staff}` : ''}
+                {sel.dispatched_at ? ` · dispatched ${fmtDate(sel.dispatched_at)}` : sel.send_id ? ' · not yet dispatched' : ''}
+              </div>
             </div>
 
             {shippedTo && (
@@ -250,8 +268,14 @@ export default function OutboundHistoryBoard({
                 confirm; the error stays under the action. */}
             {sel.send_id && (
               <div className="ob-return">
-                {!confirmCancel ? (
-                  <button className="btn-link danger" onClick={() => setConfirmCancel(true)} disabled={cancelling}>Cancel shipment</button>
+                {sel.dispatched_at ? (
+                  <span className="hint">Dispatched {fmtDate(sel.dispatched_at)} — handed to the courier, so this send can no longer be cancelled.</span>
+                ) : !confirmCancel ? (
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button className="btn-secondary" onClick={doDispatch} disabled={dispatching || cancelling}>{dispatching ? 'Marking…' : 'Mark dispatched'}</button>
+                    <button className="btn-link danger" onClick={() => setConfirmCancel(true)} disabled={cancelling || dispatching}>Cancel shipment</button>
+                    <span className="hint">Packed — mark dispatched when it&apos;s handed to the courier (that locks cancellation).</span>
+                  </div>
                 ) : (
                   <span className="rcv-reverse-ask">
                     Cancel this shipment? Its {sel.item_count} {sel.item_count === 1 ? 'item' : 'items'} return to Ready-to-ship and the order goes back to Need send. No stock is changed (nothing left the shelf).
