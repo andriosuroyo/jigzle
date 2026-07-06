@@ -124,32 +124,32 @@ export const NAV_GROUPS: NavGroup[] = [
       // JZ-001: the sell-side stages collapse into a single Sales pipeline window — Pending → Fulfill,
       // plus a History tab. New is a button inside that window. The Sales team's job stops at Fulfill;
       // Outbound (shipping) is a warehouse screen, see below.
-      { key: 'orders', href: '/sales', label: 'Sales', icon: iconOrders, sub: 'The sell-side pipeline — Pending → Fulfill, plus History; + new orders.' },
-      { key: 'purchasing', href: '/purchasing', label: 'Purchasing', icon: iconOrder, sub: 'Enter & advance purchase orders; group them into shipments.' },
+      { key: 'orders', href: '/sales', label: 'Sales', icon: iconOrders, sub: 'Add new & manage orders + check order history.' },
+      { key: 'purchasing', href: '/purchasing', label: 'Purchasing', icon: iconOrder, sub: 'Add new purchase orders & manage shipments + check PO history.' },
     ],
   },
   {
     label: 'Warehouse',
     items: [
-      { key: 'inbound', href: '/inbound', label: 'Inbound', icon: iconInbound, sub: 'Check arrivals into stock — the only "+" side.' },
+      { key: 'inbound', href: '/inbound', label: 'Inbound', icon: iconInbound, sub: 'Check & input incoming into stock + check inbound history.' },
       // Outbound (goods out) is the shipping screen the warehouse runs once Sales has fulfilled an order.
-      { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound, sub: 'Box, weigh, and ship fulfilled orders.' },
-      { key: 'inventory', href: '/inventory', label: 'Inventory', icon: iconInventory, sub: 'Stock per SKU — browse levels, adjust (±), and run a stock count.' },
+      { key: 'outbound', href: '/outbound', label: 'Outbound', icon: iconOutbound, sub: 'Fulfill outgoing sales orders + check outbound history.' },
+      { key: 'inventory', href: '/inventory', label: 'Inventory', icon: iconInventory, sub: 'Browse & adjust stock per SKU + check inventory history, and run a stock count.' },
     ],
   },
   {
     label: 'Database',
     items: [
       // PR190 — Customer now carries Search + Fix tabs; the former Data Health nav folded into Fix.
-      { key: 'customers', href: '/customers', label: 'Customer', icon: iconCustomer, sub: 'Search customers A–Z (spend, tier, addresses) & Fix data issues — duplicates, shared numbers.' },
-      { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog, sub: 'Edit SKUs & barcodes; needs-review & shared-barcode cleanup.' },
+      { key: 'customers', href: '/customers', label: 'Customer', icon: iconCustomer, sub: 'Browse customers tier, contact details & addresses.' },
+      { key: 'catalog', href: '/catalog', label: 'Catalog', icon: iconCatalog, sub: 'Add new & edit SKUs details.' },
     ],
   },
   {
     label: 'Tools & Settings',
     items: [
-      { key: 'calculator', href: '/calculator', label: 'Calculator', icon: iconCalculator, sub: 'Import landed-cost & recommended sale price; FX rates, saved calcs.' },
-      { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings, sub: 'Configurable lists — payment, courier, box, inbound labels.' },
+      { key: 'calculator', href: '/calculator', label: 'Calculator', icon: iconCalculator, sub: 'Import cost & price calculator.' },
+      { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings, sub: 'Configurable lists.' },
     ],
   },
 ];
