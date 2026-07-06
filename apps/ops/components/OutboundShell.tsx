@@ -36,6 +36,10 @@ export default function OutboundShell({
   const [tab, setTab] = useState<OutboundTab>('ready');
   const [readyCount, setReadyCount] = useState(initialQueue.length);
   const onReadyCount = useCallback((n: number) => setReadyCount(n), []);
+  // PR195: bumped when History cancels a shipment → OutboundBoard reloads its queue (the un-recorded
+  // order's lines return to Ready-to-ship). Both boards stay mounted, so this keeps them in sync.
+  const [readyReload, setReadyReload] = useState(0);
+  const onShipmentCancelled = useCallback(() => setReadyReload((n) => n + 1), []);
   // PR155: a board's bodyview DETAIL is open → hide the tab bar (breadcrumb stays). Tracked per tab
   // because both boards stay mounted; the bar hides only when the ACTIVE tab's detail is open.
   const [detailOpenBy, setDetailOpenBy] = useState<Record<OutboundTab, boolean>>({ ready: false, history: false });
@@ -157,10 +161,11 @@ export default function OutboundShell({
             staffOptions={staffOptions}
             onCountChange={onReadyCount}
             onDetailOpenChange={onReadyDetail}
+            reloadKey={readyReload}
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <OutboundHistoryBoard active={tab === 'history'} initialOrders={shippedHistory} boxPresets={boxPresets} onDetailOpenChange={onHistoryDetail} />
+          <OutboundHistoryBoard active={tab === 'history'} initialOrders={shippedHistory} boxPresets={boxPresets} onDetailOpenChange={onHistoryDetail} onCancelled={onShipmentCancelled} />
         </div>
       </div>
 

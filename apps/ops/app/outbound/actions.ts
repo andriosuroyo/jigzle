@@ -206,6 +206,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
     const cust = g.customer_id != null ? custById.get(g.customer_id) ?? null : null;
     return {
       key: g.key,
+      send_id: g.send_id, // PR195: present for app ships (→ cancellable); null for CSV/legacy rows
       ship_date: g.ship_date,
       // header identity: the customer ID label when the customer resolves; legacy rows fall back to
       // the shipped-to name they carry
@@ -388,6 +389,19 @@ export async function recordShipment(payload: ShipInput): Promise<ShipResult> {
     stock = (s ?? []) as ShipResult['stock'];
   }
   return { affected, stock };
+}
+
+// ── Cancel a shipment (PR195): un-record an app-recorded send — the reverse of record_shipment. The
+// send's lines drop back into Ready-to-ship (fulfilled + addressed, shipped_at cleared) with NO stock
+// adjustment (the parcel never left), and the order returns to 'Need send'. From there, Return to
+// Fulfill / Send back to pending take it further back. Only APP ships (send_id) are cancellable —
+// legacy CSV rows carry no send_id. Errors returned as data (button-awaited mutation, per CLAUDE.md). ──
+export async function cancelShipment(sendId: string): Promise<{ error: string | null }> {
+  if (!sendId) return { error: 'No shipment selected.' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('cancel_shipment', { p_send_id: sendId });
+  if (error) return { error: `Couldn't cancel shipment: ${error.message}` };
+  return { error: null };
 }
 
 // ── Return to Fulfill (PR-B §6): clear the courier on the order's cut-unshipped lines via
