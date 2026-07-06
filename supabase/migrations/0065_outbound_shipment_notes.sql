@@ -1,4 +1,4 @@
--- 0059 — editable per-shipment note in Outbound → History (PR190).
+-- 0065 — editable per-shipment note in Outbound → History (PR190).
 -- Lets the operator attach a free-text note to ANY shipment (e.g. the export-courier tracking number
 -- that only comes back after the forwarder settles weight/cost). Keyed by the History row's group key
 -- (S:<send_id> for app shipments, C:<composite> for legacy CSV rows) so it works for every shipment,
