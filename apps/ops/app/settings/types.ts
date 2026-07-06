@@ -95,6 +95,21 @@ export interface ShipmentCourier {
   sort_order: number;
 }
 
+// 0066 (PR191): export couriers for international/outbound shipments (Repack, DHL, FedEx…), picked in
+// Fulfill when the ship-to is outside Indonesia. needs_address → the courier receives the parcel first
+// at its own intermediary address (the addr_* fields); DHL/FedEx pick up locally and have none.
+export interface ExportCourier {
+  id: number;
+  label: string;
+  icon: string | null;
+  is_active: boolean;
+  needs_address: boolean;
+  addr_recipient: string | null;
+  addr_phone: string | null;
+  addr_text: string | null;
+  sort_order: number;
+}
+
 // 0059 (PR193): the Catalog classification pick-lists (Product / Sub / Piece type). Same label-only
 // shape as ChannelOption; read by the Catalog item editor's type comboboxes (unioned with the
 // catalogue's distinct values).

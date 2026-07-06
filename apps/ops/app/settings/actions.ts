@@ -12,6 +12,7 @@ import type {
   ChannelOption,
   CommonNote,
   CourierService,
+  ExportCourier,
   InboundLabel,
   LocalCourier,
   PaymentMethod,
@@ -341,4 +342,62 @@ export async function uploadSettingIcon(form: FormData): Promise<{ url: string }
   if (error) throw new Error(`uploadSettingIcon: ${error.message}`);
 
   return { url: `${base}/storage/v1/object/public/${ICON_BUCKET}/${path}` };
+}
+
+// ── 0066 (PR191): export couriers — the Fulfill/international pick-list, with an optional intermediary
+// address. GLOBAL rows only (user_id null), same posture as the other Settings lists. getExportCouriers
+// degrades to [] until 0066 is applied. ──
+const EXPORT_COLS = 'id,label,icon,is_active,needs_address,addr_recipient,addr_phone,addr_text,sort_order';
+
+export async function getExportCouriers(): Promise<ExportCourier[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('settings_export_couriers')
+    .select(EXPORT_COLS)
+    .is('user_id', null)
+    .order('sort_order', { ascending: true })
+    .order('label', { ascending: true });
+  if (error) return []; // table not yet created → degrade
+  return (data ?? []) as ExportCourier[];
+}
+
+type ExportCourierInput = {
+  label: string;
+  needs_address?: boolean;
+  addr_recipient?: string | null;
+  addr_phone?: string | null;
+  addr_text?: string | null;
+};
+
+export async function addExportCourier(input: ExportCourierInput): Promise<ExportCourier> {
+  const supabase = createSupabaseServerClient();
+  const label = input.label.trim();
+  if (!label) throw new Error('A courier name is required.');
+  const { data: maxRow } = await supabase.from('settings_export_couriers').select('sort_order').is('user_id', null).order('sort_order', { ascending: false }).limit(1).maybeSingle();
+  const sort_order = ((maxRow?.sort_order as number | null) ?? -1) + 1;
+  const { data, error } = await supabase
+    .from('settings_export_couriers')
+    .insert({ user_id: null, label, needs_address: !!input.needs_address, addr_recipient: input.addr_recipient ?? null, addr_phone: input.addr_phone ?? null, addr_text: input.addr_text ?? null, sort_order })
+    .select(EXPORT_COLS)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as ExportCourier;
+}
+
+export async function updateExportCourier(id: number, patch: Partial<Pick<ExportCourier, 'label' | 'is_active' | 'needs_address' | 'addr_recipient' | 'addr_phone' | 'addr_text'>>): Promise<ExportCourier> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.from('settings_export_couriers').update(patch).eq('id', id).select(EXPORT_COLS).single();
+  if (error) throw new Error(error.message);
+  return data as ExportCourier;
+}
+
+export async function deleteExportCourier(id: number): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('settings_export_couriers').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function reorderExportCouriers(ids: number[]): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  await Promise.all(ids.map((id, i) => supabase.from('settings_export_couriers').update({ sort_order: i }).eq('id', id)));
 }

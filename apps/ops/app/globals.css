@@ -414,6 +414,15 @@ button.po-pick-btn:active { background: var(--paper); }
 /* ── Subform ── */
 .subform { display: flex; flex-direction: column; gap: 8px; background: var(--cream); border: 1px dashed var(--line); border-radius: 8px; padding: 10px; }
 .subform-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+/* PR191 — export-courier settings rows (label + toggles, optional address block) */
+.exc-row { flex-direction: column; align-items: stretch; gap: 8px; }
+.exc-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.exc-label { flex: 1 1 160px; min-width: 120px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: white; }
+.exc-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); white-space: nowrap; }
+.exc-chk input { width: auto; }
+.exc-addr { display: flex; flex-direction: column; gap: 6px; padding-left: 4px; }
+.exc-addr input, .exc-addr textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: white; }
+.exc-addr textarea { resize: vertical; font-family: inherit; }
 .subform-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 /* ── Selected customer ── */

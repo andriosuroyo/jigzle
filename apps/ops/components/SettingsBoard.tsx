@@ -12,6 +12,7 @@ import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import SupplierSettings from '@/components/SupplierSettings';
 import ForwarderSettings from '@/components/ForwarderSettings';
+import ExportCourierSettings from '@/components/ExportCourierSettings';
 import type { Supplier, Forwarder } from '@jigzle/db/types';
 import {
   addSetting,
@@ -157,12 +158,12 @@ const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SEC
 
 // ── categories: the landing grouping. A tab is either a generic settings list (kind) or the bespoke
 //    Suppliers editor (custom). ──
-type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'forwarders' };
+type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'forwarders' } | { custom: 'export_courier' };
 type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
 
 const CATEGORIES: Category[] = [
   { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
-  { key: 'shipping', title: 'Shipping', sub: 'Couriers and box presets used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }] },
+  { key: 'shipping', title: 'Shipping', sub: 'Couriers, box presets and export couriers used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }, { custom: 'export_courier' }] },
   { key: 'inbound', title: 'Inbound', sub: 'Labels for the receiving flow and warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'inbound_labels' }, { kind: 'staff' }] },
   { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers, forwarders and couriers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
@@ -235,11 +236,15 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
   // tab badge counts (live for generic lists; suppliers uses its initial count)
   function tabCount(t: CatTab): number {
     if ('kind' in t) return lists[t.kind].length;
-    return t.custom === 'forwarders' ? forwarders.length : suppliers.length;
+    if (t.custom === 'forwarders') return forwarders.length;
+    if (t.custom === 'suppliers') return suppliers.length;
+    return 0; // export_courier self-loads; no server-side initial count
   }
   function tabLabel(t: CatTab): string {
     if ('kind' in t) return SECTION_BY_KIND[t.kind].title;
-    return t.custom === 'forwarders' ? 'Forwarders' : 'Suppliers';
+    if (t.custom === 'forwarders') return 'Forwarders';
+    if (t.custom === 'suppliers') return 'Suppliers';
+    return 'Export couriers';
   }
   // total settings in a category, for the landing card badge
   function catCount(c: Category): number {
@@ -441,6 +446,8 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
                     </>
                   ) : t.custom === 'forwarders' ? (
                     <ForwarderSettings initial={forwarders} embedded />
+                  ) : t.custom === 'export_courier' ? (
+                    <ExportCourierSettings embedded />
                   ) : (
                     <SupplierSettings initial={suppliers} embedded />
                   )}
