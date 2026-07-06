@@ -8,7 +8,7 @@ import SearchInput from '@/components/SearchInput';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
 import StatusCircles, { payTone } from '@/components/StatusCircles';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
-import type { CourierService, CommonNote } from '@/app/settings/types';
+import type { CourierService, CommonNote, ExportCourier } from '@/app/settings/types';
 import NoteEditor from '@/components/NoteEditor';
 import IconSelect from '@/components/IconSelect';
 import SkuImage from '@/components/SkuImage';
@@ -19,6 +19,7 @@ import { addressLine } from '@/components/addressLine';
 export default function FulfillBoard({
   initialQueue,
   courierServices,
+  exportCouriers = [],
   commonNotes = [],
   initialOrderId,
   userEmail,
@@ -29,6 +30,7 @@ export default function FulfillBoard({
 }: {
   initialQueue: ToSendQueueRow[];
   courierServices: CourierService[];
+  exportCouriers?: ExportCourier[]; // PR192 — active export couriers, shown when the ship-to is intl
   commonNotes?: CommonNote[];
   initialOrderId?: string | null;
   userEmail: string;
@@ -47,6 +49,7 @@ export default function FulfillBoard({
 
   const [addressId, setAddressId] = useState<number | null>(null);
   const [courierId, setCourierId] = useState<number | null>(courierServices[0]?.id ?? null);
+  const [exportCourierId, setExportCourierId] = useState<number | null>(null); // PR192
   const [tracking, setTracking] = useState('');
 
   const [committing, setCommitting] = useState(false);
@@ -71,11 +74,24 @@ export default function FulfillBoard({
   const imgCodes = useMemo(() => (detail?.lines ?? []).map((l) => l.item_code).filter((c): c is string => !!c), [detail]);
   const imgMap = useSkuImages(imgCodes);
 
+  // PR192: the chosen ship-to is international when its country is set and not Indonesia. Only then does
+  // Fulfill require an Export courier (Repack, DHL, …); Outbound later attaches that courier's
+  // intermediary address alongside the customer's. Legacy/blank negara counts as domestic.
+  const selectedAddress = useMemo(() => detail?.addresses.find((a) => a.address_id === addressId) ?? null, [detail, addressId]);
+  const isIntl = useMemo(() => {
+    const n = (selectedAddress?.negara ?? '').trim().toLowerCase();
+    return n !== '' && n !== 'indonesia';
+  }, [selectedAddress]);
+
   function applyDetail(d: FulfillDetail | null) {
     setDetail(d);
     if (d) {
       setAddressId(d.default_address_id ?? d.addresses[0]?.address_id ?? null);
       setCourierId(courierServices[0]?.id ?? null);
+      // PR192: re-prefill the export courier carried back from a Return to Fulfill (match by label),
+      // else default to the first active one. Only actually used when the ship-to is international.
+      const prev = d.export_courier ? exportCouriers.find((c) => c.label === d.export_courier) : null;
+      setExportCourierId(prev?.id ?? exportCouriers[0]?.id ?? null);
       setTracking(d.courier_tracking ?? ''); // re-prefill tracking returned from Outbound
     }
   }
@@ -130,6 +146,9 @@ export default function FulfillBoard({
     const courierName = (svc.courier || '').trim() || labelTokens[0] || '';
     const courierSpeed = svc.speed ?? ((svc.courier || '').trim() ? null : labelTokens.slice(1).join(' ') || null);
     if (!courierName) { setError('This courier has no name — edit its label in Settings → Shipping → Couriers.'); return; }
+    // PR192: an international ship-to must carry an export courier (the field only appears when isIntl).
+    const exc = isIntl ? (exportCouriers.find((c) => c.id === exportCourierId) ?? null) : null;
+    if (isIntl && !exc) { setError('Pick an export courier for this international shipment.'); return; }
     const myReq = ++reqIdRef.current;
     setCommitting(true);
     setError(null);
@@ -142,10 +161,11 @@ export default function FulfillBoard({
         courier_speed: courierSpeed,
         courier_label: svc.label,
         tracking: tracking.trim() || null,
+        export_courier: exc?.label ?? null, // null for a domestic address
       });
       if (reqIdRef.current !== myReq) return; // superseded — don't clobber a newer selection
       if (sendErr) { setError(sendErr); return; }
-      setSuccess(`${detail.sales_id} sent to Outbound (${svc.label}).`);
+      setSuccess(`${detail.sales_id} sent to Outbound (${svc.label}${exc ? ` · export via ${exc.label}` : ''}).`);
       onAdvance?.(detail.sales_id, 'Outbound'); // JZ-001: pipeline toast
       setDetail(null);
       setSelected(null);
@@ -206,7 +226,7 @@ export default function FulfillBoard({
     }
   }
 
-  const canSend = !!detail && detail.lines.length > 0 && addressId != null && courierId != null && !committing;
+  const canSend = !!detail && detail.lines.length > 0 && addressId != null && courierId != null && (!isIntl || exportCourierId != null) && !committing;
 
   // PR147 — bodyview: the body shows EITHER the full-width To-send queue OR the tapped order's detail
   // with a ← back button (the Purchasing-History pattern); breadcrumb + pipeline tabs stay put above.
@@ -336,10 +356,30 @@ export default function FulfillBoard({
                 </div>
               </section>
 
+              {/* PR192: Export courier — only for an international ship-to (negara ≠ Indonesia). Repack &
+                  co. receive the parcel first at their own address (attached in Outbound); DHL/FedEx
+                  pick up locally. Required before sending an international order to Outbound. */}
+              {isIntl && (
+                <section className="fd-section fd-export">
+                  <div className="fd-section-head">Export courier</div>
+                  <div className="hint" style={{ marginBottom: 6 }}>Ship-to is outside Indonesia ({selectedAddress?.negara}). Pick the export courier that carries this parcel abroad.</div>
+                  {exportCouriers.length === 0 ? (
+                    <div className="validation warn">No export couriers configured — add them in Settings → Shipping → Export couriers.</div>
+                  ) : (
+                    <IconSelect
+                      ariaLabel="Export courier"
+                      value={exportCourierId}
+                      options={exportCouriers.map((c) => ({ value: c.id, label: c.label, icon: c.icon }))}
+                      onChange={setExportCourierId}
+                    />
+                  )}
+                </section>
+              )}
+
               {/* Commit bar — disabled until address + courier set (the Outbound gate) */}
               <div className="fd-commit">
                 {!canSend && !committing && (
-                  <span className="warn-text">{addressId == null ? 'pick an address' : courierId == null ? 'pick a courier' : ''}</span>
+                  <span className="warn-text">{addressId == null ? 'pick an address' : courierId == null ? 'pick a courier' : isIntl && exportCourierId == null ? 'pick an export courier' : ''}</span>
                 )}
                 <button className="btn-primary" onClick={sendOut} disabled={!canSend}>
                   {committing ? 'Sending…' : 'Send to Outbound'}
