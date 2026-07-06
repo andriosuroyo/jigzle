@@ -74,6 +74,7 @@ export default function OutboundBoard({
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [boxes, setBoxes] = useState<BoxDraft[]>([]);
   const [copied, setCopied] = useState(false);
+  const [copiedExport, setCopiedExport] = useState(false); // PR193 — courier-address block copy state
 
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +137,32 @@ export default function OutboundBoard({
     return footer ? `${head}\n\n${footer}` : head;
   }, [detail]);
 
+  // PR193: for an EXPORT shipment whose courier has an intermediary address (Repack & co.), the parcel
+  // physically ships to the COURIER first — this is that second copyable block. Shown only when the
+  // export courier "needs address" and one is filled; DHL/FedEx (local pickup) have none → no block, so
+  // Outbound falls back to the customer-only view. The customer's intl address (above) stays as the
+  // final-destination reference to attach to the box.
+  const exportShipment = !!detail?.export_courier;
+  const exportAddressBlock = useMemo(() => {
+    if (!detail || !detail.export_needs_address) return '';
+    const addr = (detail.export_addr_text ?? '').trim();
+    if (!addr) return '';
+    const lines = [detail.export_addr_recipient, addr, detail.export_addr_phone]
+      .filter((x) => x && String(x).trim())
+      .join('\n');
+    return lines;
+  }, [detail]);
+
+  async function copyExportAddress() {
+    try {
+      await navigator.clipboard.writeText(exportAddressBlock);
+      setCopiedExport(true);
+      setTimeout(() => setCopiedExport(false), 1500);
+    } catch {
+      setError('Copy failed — select the block and copy manually.');
+    }
+  }
+
   function applyDetail(d: ShipDetail | null) {
     setDetail(d);
     setIncluded(new Set());        // PR197: a fresh primary drops any consolidation selection
@@ -148,6 +175,7 @@ export default function OutboundBoard({
       setScan('');
       setScanMsg(null);
       setCopied(false);
+      setCopiedExport(false);
     }
   }
 
@@ -473,15 +501,38 @@ export default function OutboundBoard({
 
           {detail && (
             <>
-              {/* O3: shipping-details label (section-head style) + copyable address block */}
+              {/* O3: shipping-details label (section-head style) + copyable address block. PR193: an
+                  EXPORT shipment (intl ship-to) shows two blocks side-by-side — customer (final
+                  destination) first, export courier (intermediary) second; both go on the box. A
+                  no-address export courier (DHL/FedEx) shows the customer block only. */}
               <div className="fd-head">
                 <div className="fd-section-head">Shipping details</div>
-                <div className="ob-addr">
-                  <button className="ob-copy" onClick={copyAddress} aria-label="Copy address block">
-                    {copied ? '✓ Copied' : '⧉ Copy'}
-                  </button>
-                  <pre className="ob-addr-block">{addressBlock}</pre>
-                  {!(detail.courier_label || detail.planned_courier) && <div className="hint ob-addr-hint">Courier not set — set it in Fulfill.</div>}
+                {exportShipment && (
+                  <div className="validation warn ob-export-banner">
+                    Export shipment via {detail.export_courier}.{' '}
+                    {exportAddressBlock
+                      ? 'Ship the parcel to the courier (right) first; attach the customer address (left) for onward delivery.'
+                      : `${detail.export_courier} picks up locally — ship to the customer address below.`}
+                  </div>
+                )}
+                <div className={`ob-addr-pair ${exportShipment && exportAddressBlock ? 'two' : ''}`}>
+                  <div className="ob-addr">
+                    {exportShipment && exportAddressBlock && <div className="ob-addr-cap">Customer — final destination</div>}
+                    <button className="ob-copy" onClick={copyAddress} aria-label="Copy customer address block">
+                      {copied ? '✓ Copied' : '⧉ Copy'}
+                    </button>
+                    <pre className="ob-addr-block">{addressBlock}</pre>
+                    {!(detail.courier_label || detail.planned_courier) && <div className="hint ob-addr-hint">Courier not set — set it in Fulfill.</div>}
+                  </div>
+                  {exportShipment && exportAddressBlock && (
+                    <div className="ob-addr">
+                      <div className="ob-addr-cap">Send to {detail.export_courier} first (intermediary)</div>
+                      <button className="ob-copy" onClick={copyExportAddress} aria-label="Copy export courier address block">
+                        {copiedExport ? '✓ Copied' : '⧉ Copy'}
+                      </button>
+                      <pre className="ob-addr-block">{exportAddressBlock}</pre>
+                    </div>
+                  )}
                 </div>
               </div>
 
