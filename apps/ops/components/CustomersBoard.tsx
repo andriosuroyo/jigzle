@@ -1,10 +1,13 @@
 'use client';
 
-// Customer directory (PR92). Left: A–Z quick-tabs (with per-letter counts) over the full customer
-// list, name-sorted. Right: the selected customer's detail — name header, ID + joined (first purchase)
-// subheader, three read-only stat cards (total spend / member tier / last purchase + days since), an
-// editable Personal-details block (name + WhatsApp), and the address list (add / edit / delete via an
-// overlay). Spend / tier / dates are loaded per customer (getCustomerDetail), never for the whole list.
+// Customer directory (PR92; reworked PR190 into a Search | Fix tabbed board with a full-width bodyview,
+// mirroring the Catalog shell). SEARCH tab: a search bar + A–Z quick-tabs (with per-letter counts) over
+// the full customer list, name-sorted — tapping a customer opens their detail as a full-width bodyview
+// (name header, ID + joined subheader, three stat cards, editable personal details, and the address
+// list). FIX tab: the customer-integrity cleanup that used to live on the separate Data Health nav —
+// Duplicates (same-name), shared number / shared address groups, no-address / blank-name / odd-phone
+// scans, empty-record purge, and the "(last4)" name-code backfill. Spend / tier / dates load per
+// customer (getCustomerDetail); the Fix scans load lazily the first time the tab is opened.
 
 import { useMemo, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
@@ -18,13 +21,17 @@ import { customerLabel, fmtRpCompact, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
   addCustomerAddress,
+  addNameCodes,
   deleteCustomer,
   deleteCustomerAddress,
+  deleteEmptyStrays,
   getCustomerDetail,
+  getDataHealth,
+  getDuplicateGroups,
   updateCustomer,
   updateCustomerAddress,
 } from '@/app/customers/actions';
-import type { AddressInput, ChannelEntry, CustomerDetail, CustomerListRow, CustomerPatch } from '@/app/customers/types';
+import type { AddressInput, ChannelEntry, CustomerDetail, CustomerListRow, CustomerPatch, DataHealth, DuplicateGroup } from '@/app/customers/types';
 import type { CustomerAddress } from '@jigzle/db/types';
 import SearchInput from '@/components/SearchInput';
 
@@ -44,6 +51,8 @@ function bucketOf(name: string | null): string {
   const ch = (name?.trim()?.[0] ?? '').toUpperCase();
   return ch >= 'A' && ch <= 'Z' ? ch : '#';
 }
+
+type Tab = 'search' | 'fix';
 
 type AddrDraft = { recipient_name: string; contact_phone: string; negara: string; provinsi: string; kota: string; kecamatan: string; kelurahan: string; kode_pos: string; street: string; delivery_note: string };
 const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
@@ -67,6 +76,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const channelSelectOptions: IconOption<string>[] = channelOptions.map((c) => ({ value: c.label, label: c.label, icon: c.icon }));
   const [customers, setCustomers] = useState<CustomerListRow[]>(initialCustomers);
   const tiers = initialTiers;
+  const [tab, setTab] = useState<Tab>('search');
   const [letter, setLetter] = useState<string>('A');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
@@ -84,16 +94,89 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   // live search (name or phone) over the full loaded list
   const [query, setQuery] = useState('');
 
-  // duplicate-cleanup modal
-  const [showDup, setShowDup] = useState(false);
+  // ── Fix tab: the customer-integrity scans, loaded lazily on first open (PR190) ──
+  const [health, setHealth] = useState<DataHealth | null>(null);
+  const [dupGroups, setDupGroups] = useState<DuplicateGroup[] | null>(null);
+  const [fixLoading, setFixLoading] = useState(false);
+  const [fixError, setFixError] = useState<string | null>(null);
+  const [mergeIds, setMergeIds] = useState<number[] | null>(null);   // a group → opens the merge tool
+  const [confirmStrays, setConfirmStrays] = useState(false);
+  const [coding, setCoding] = useState(false);
+  const [codeProgress, setCodeProgress] = useState(0);
+
   // "Delete customer ID" two-step confirm (detail danger zone)
   const [confirmDel, setConfirmDel] = useState(false);
-  // a merge removed stray records — drop them from the directory + clear any open detail that was deleted
+
+  const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
+  const note = (tone: 'ok' | 'err' | 'warn', text: string) => setNotice({ tone, text });
+
+  async function loadFix() {
+    setFixLoading(true);
+    setFixError(null);
+    try {
+      const [h, g] = await Promise.all([getDataHealth(), getDuplicateGroups()]);
+      setHealth(h);
+      setDupGroups(g);
+    } catch (e) {
+      setFixError(e instanceof Error ? e.message : 'Failed to scan customers.');
+    } finally {
+      setFixLoading(false);
+    }
+  }
+
+  function switchTab(t: Tab) {
+    setTab(t);
+    if (t === 'fix' && !health && !fixLoading) loadFix();
+  }
+
+  // a merge removed stray records — drop them from the directory, clear any open detail that was deleted,
+  // and re-run the Fix scans so the groups reflect the new state
   function onMerged(removedIds: number[]) {
     if (removedIds.length === 0) return;
     const gone = new Set(removedIds);
     setCustomers((prev) => prev.filter((c) => !gone.has(c.id)));
     if (selectedId != null && gone.has(selectedId)) { setSelectedId(null); setDetail(null); }
+  }
+
+  // backfill the "(last4)" code into every name that lacks it — loop the paged action to completion
+  async function runAddCodes() {
+    setCoding(true);
+    setCodeProgress(0);
+    setNotice(null);
+    try {
+      let afterId = 0;
+      let total = 0;
+      let done = false;
+      while (!done) {
+        const res = await addNameCodes(afterId);
+        afterId = res.lastId;
+        total += res.updated;
+        done = res.done;
+        setCodeProgress(total);
+      }
+      note('ok', `Added the (code) to ${total} customer name${total === 1 ? '' : 's'}.`);
+      await loadFix();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setCoding(false);
+    }
+  }
+
+  async function deleteStrays() {
+    if (!health) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const res = await deleteEmptyStrays(health.emptyStrays.map((s) => s.id));
+      note('ok', `Deleted ${res.deleted} empty record${res.deleted === 1 ? '' : 's'}${res.skipped ? `, skipped ${res.skipped} (had attached data)` : ''}.`);
+      setConfirmStrays(false);
+      await loadFix();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
   }
 
   // delete the open customer outright (server refuses if it still has sales/operational rows)
@@ -123,9 +206,6 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   // dup detection: terms that the street field repeats from the structured fields (shown as a confirm)
   const [dupWarn, setDupWarn] = useState<string[] | null>(null);
 
-  const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
-  const note = (tone: 'ok' | 'err' | 'warn', text: string) => setNotice({ tone, text });
-
   // buckets: customers grouped by first letter, each name-sorted; counts per letter
   const buckets = useMemo(() => {
     const m = new Map<string, CustomerListRow[]>();
@@ -140,8 +220,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const hasHash = (buckets.get('#')?.length ?? 0) > 0;
   const tabs = hasHash ? [...LETTERS, '#'] : LETTERS;
 
-  // when searching, the list spans all letters (match name OR phone digits); else it's the active letter
-  const RESULT_CAP = 300;
+  // when searching, the list spans all letters (match name OR phone digits); else it's the active letter.
+  // PR190 — no result cap: every match is shown.
   const results = useMemo(() => {
     const s = query.trim().toLowerCase();
     if (!s) return null;
@@ -156,7 +236,6 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   }, [query, customers]);
 
   const shown = results ?? buckets.get(letter) ?? [];
-  const capped = shown.slice(0, RESULT_CAP);
 
   async function openCustomer(id: number) {
     setSelectedId(id);
@@ -181,6 +260,15 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     } finally {
       setDetailLoading(false);
     }
+  }
+
+  // leave the customer bodyview back to the tab list
+  function closeDetail() {
+    setSelectedId(null);
+    setDetail(null);
+    setNotice(null);
+    // a name / address just edited can change the Fix scans — refresh them on the way back
+    if (tab === 'fix' && health) loadFix();
   }
 
   // save a personal-details field (name / any of the three phones) if it changed
@@ -288,6 +376,24 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   }
 
   const since = daysSince(detail?.last_purchase ?? null);
+  const showBody = selectedId != null;
+  const fixCount = health
+    ? (dupGroups?.length ?? 0) + health.sharedPhoneGroupCount + health.sharedAddressGroupCount
+      + health.noAddressCount + health.blankNameCount + health.oddPhoneCount + health.emptyStrayCount
+    : 0;
+
+  // a compact clickable directory row (used by the Fix single-customer scans)
+  const flaggedRow = (c: { id: number; name: string | null; phone: string | null; badPhones?: string[] }, sub?: string) => (
+    <li key={c.id}>
+      <button className={`fq-row ${selectedId === c.id ? 'active' : ''}`} onClick={() => openCustomer(c.id)} disabled={busy}>
+        <div className="fq-row-top">
+          <span className="fq-headline">{customerLabel(c.name, c.phone)}</span>
+          <span className="hint">#{c.id}</span>
+        </div>
+        <div className="fq-row-bot"><span>{sub ?? (c.phone || 'no number')}</span></div>
+      </button>
+    </li>
+  );
 
   return (
     <div className="ops">
@@ -295,69 +401,17 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
       <Breadcrumbs
         items={[
           { label: 'Home', href: '/' },
-          detail ? { label: 'Customer', onClick: () => { setSelectedId(null); setDetail(null); } } : { label: 'Customer' },
+          detail ? { label: 'Customer', onClick: closeDetail } : { label: 'Customer' },
           ...(detail ? [{ label: customerLabel(detail.name, detail.phone) }] : []),
         ]}
       />
 
-      <div className="fulfill-layout cust-layout">
-        {/* ── left: A–Z tabs + list ── */}
-        <aside className="fq-pane">
-          <div className="cust-search-wrap">
-            <SearchInput value={query} onChange={setQuery} placeholder="Search name or phone…" />
-          </div>
-
-          {/* A–Z tabs hide while searching (results span every letter) */}
-          {!results && (
-            <div className="fq-filters cust-az" role="tablist" aria-label="A–Z">
-              {tabs.map((l) => {
-                const n = buckets.get(l)?.length ?? 0;
-                return (
-                  <button
-                    key={l}
-                    role="tab"
-                    aria-selected={letter === l}
-                    className={`fq-filter ${letter === l ? 'active' : ''}`}
-                    onClick={() => setLetter(l)}
-                  >
-                    {l}<span className="fq-filter-count">{n}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {shown.length === 0 && (
-            <div className="hint fq-empty">{results ? `No matches for “${query.trim()}”.` : `No customers under “${letter}”.`}</div>
-          )}
-          <ul className="fq-list">
-            {capped.map((c) => {
-              const tier = tiers[c.id];
-              return (
-                <li key={c.id}>
-                  <button className={`fq-row ${selectedId === c.id ? 'active' : ''}`} onClick={() => openCustomer(c.id)}>
-                    <div className="fq-row-top">
-                      <span className="fq-headline">{customerLabel(c.name, c.phone)}</span>
-                      {tier && <span className={`tier tier-${tier.toLowerCase()}`}>{tier}</span>}
-                    </div>
-                    <div className="fq-row-bot"><span>{c.phone || '—'}</span></div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          {shown.length > RESULT_CAP && (
-            <div className="hint" style={{ padding: '6px 8px' }}>Showing first {RESULT_CAP} of {shown.length} — refine your search.</div>
-          )}
-          <button className="btn-link cust-dup-link" onClick={() => setShowDup(true)}>Find duplicates</button>
-        </aside>
-
-        {/* ── right: detail ── */}
-        <main className="fd-pane">
+      {/* ── customer bodyview (full width; ← back to the tab you came from) ── */}
+      {showBody && (
+        <div className="bodyview cust-bodyview">
+          <button className="btn-link bv-back" onClick={closeDetail}>← back</button>
           {notice && <div className={`validation ${notice.tone}`} style={{ marginBottom: 12 }}>{notice.text}</div>}
-
-          {!selectedId && <div className="fd-empty">Pick a letter, then a customer to see their spend, tier and details.</div>}
-          {selectedId && detailLoading && <div className="fd-empty">Loading…</div>}
+          {detailLoading && <div className="fd-empty">Loading…</div>}
 
           {detail && (
             <>
@@ -505,7 +559,257 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               </section>
             </>
           )}
-        </main>
+        </div>
+      )}
+
+      {/* ── the two main tabs (system pill style); hidden while a bodyview is open ── */}
+      {!showBody && (
+        <div className="orders-bar">
+          <nav className="orders-tabs" role="tablist" aria-label="Customer">
+            <button role="tab" aria-selected={tab === 'search'} className={`orders-tab ${tab === 'search' ? 'active' : ''}`} onClick={() => switchTab('search')}>Search</button>
+            <button role="tab" aria-selected={tab === 'fix'} className={`orders-tab ${tab === 'fix' ? 'active' : ''}`} onClick={() => switchTab('fix')}>
+              Fix{fixCount > 0 && <span className="orders-tab-count">{fixCount}</span>}
+            </button>
+          </nav>
+        </div>
+      )}
+
+      {/* ── tab content (hidden under a bodyview) ── */}
+      <div className="bodyview cust-tabwrap" hidden={showBody}>
+        {notice && !detail && <div className={`validation ${notice.tone}`} style={{ marginBottom: 12 }}>{notice.text}</div>}
+
+        {/* SEARCH — search bar + A–Z tabs + the (uncapped) directory list */}
+        {tab === 'search' && (
+          <>
+            <div className="cust-search-wrap">
+              <SearchInput value={query} onChange={setQuery} placeholder="Search name or phone…" />
+            </div>
+
+            {/* A–Z tabs hide while searching (results span every letter) */}
+            {!results && (
+              <div className="fq-filters cust-az" role="tablist" aria-label="A–Z">
+                {tabs.map((l) => {
+                  const n = buckets.get(l)?.length ?? 0;
+                  return (
+                    <button
+                      key={l}
+                      role="tab"
+                      aria-selected={letter === l}
+                      className={`fq-filter ${letter === l ? 'active' : ''}`}
+                      onClick={() => setLetter(l)}
+                    >
+                      {l}<span className="fq-filter-count">{n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {shown.length === 0 && (
+              <div className="hint fq-empty">{results ? `No matches for “${query.trim()}”.` : `No customers under “${letter}”.`}</div>
+            )}
+            <ul className="fq-list">
+              {shown.map((c) => {
+                const tier = tiers[c.id];
+                return (
+                  <li key={c.id}>
+                    <button className={`fq-row ${selectedId === c.id ? 'active' : ''}`} onClick={() => openCustomer(c.id)}>
+                      <div className="fq-row-top">
+                        <span className="fq-headline">{customerLabel(c.name, c.phone)}</span>
+                        {tier && <span className={`tier tier-${tier.toLowerCase()}`}>{tier}</span>}
+                      </div>
+                      <div className="fq-row-bot"><span>{c.phone || '—'}</span></div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+
+        {/* FIX — the customer-integrity cleanup (formerly the Data Health nav). Resolve each list to 0. */}
+        {tab === 'fix' && (
+          <div className="cust-fix">
+            {fixError && <div className="validation err">{fixError}</div>}
+            {fixLoading && !health && <div className="hint">Scanning customers…</div>}
+
+            {health && (
+              <>
+                <div className="po-tobuy-head" style={{ marginTop: 4 }}>
+                  <div className="hint">Customers that share a <b>number</b> or an <b>address</b> — or that carry blank / broken fields — are almost always import debris. Fix each list to keep the database clean.</div>
+                  <button className="btn-secondary" onClick={loadFix} disabled={fixLoading || busy}>{fixLoading ? 'Refreshing…' : 'Refresh'}</button>
+                </div>
+
+                <div className="cust-stats" style={{ marginTop: 8 }}>
+                  <div className="cust-stat">
+                    <div className="cust-stat-label">Customers</div>
+                    <div className="cust-stat-value cust-stat-figure">{health.totalCustomers.toLocaleString('en-US')}</div>
+                    <div className="cust-stat-sub">total records</div>
+                  </div>
+                  <div className="cust-stat">
+                    <div className="cust-stat-label">Duplicates</div>
+                    <div className="cust-stat-value cust-stat-figure">{dupGroups?.length ?? 0}</div>
+                    <div className="cust-stat-sub">same-name groups</div>
+                  </div>
+                  <div className="cust-stat">
+                    <div className="cust-stat-label">Shared number</div>
+                    <div className="cust-stat-value cust-stat-figure">{health.sharedPhoneGroupCount}</div>
+                    <div className="cust-stat-sub">{health.overThreeCount} need a manual choice</div>
+                  </div>
+                  <div className="cust-stat">
+                    <div className="cust-stat-label">Shared address</div>
+                    <div className="cust-stat-value cust-stat-figure">{health.sharedAddressGroupCount}</div>
+                    <div className="cust-stat-sub">groups (no shared number)</div>
+                  </div>
+                </div>
+
+                {health.missingCode > 0 && (
+                  <div className="dh-maint">
+                    <span><b>{health.missingCode.toLocaleString('en-US')}</b> customer name{health.missingCode === 1 ? '' : 's'} are missing the <code>(last4)</code> code (e.g. “Henny Y” → “Henny Y (1299)”).</span>
+                    <button className="btn-secondary" onClick={runAddCodes} disabled={coding || fixLoading || busy}>
+                      {coding ? `Adding… ${codeProgress.toLocaleString('en-US')}` : 'Add (code) to names'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Duplicates — same-name groups with a likely stray (the "Find duplicates" scan) */}
+                <div className="fd-section-head" style={{ marginTop: 16 }}>Duplicates {dupGroups?.length ? `(${dupGroups.length})` : ''}</div>
+                {dupGroups && dupGroups.length === 0 && <div className="validation ok">No same-name duplicates found.</div>}
+                <ul className="dh-list">
+                  {(dupGroups ?? []).map((g) => (
+                    <li key={`d-${g.key}`} className="dh-group">
+                      <div className="dh-group-main">
+                        <div className="dh-group-head">
+                          {g.members.map((m, i) => (
+                            <span key={m.id} className="dh-member">
+                              {i > 0 && <span className="dh-sep">·</span>}
+                              {customerLabel(m.name, m.phones[0])} <span className="hint">#{m.id}</span>
+                            </span>
+                          ))}
+                        </div>
+                        <div className="dh-group-sub hint">same name “{g.name}” · {g.members.length} records</div>
+                      </div>
+                      <button className="btn-secondary" onClick={() => setMergeIds(g.members.map((m) => m.id))}>Review &amp; merge</button>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* shared number */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Sharing a number {health.groups.length ? `(${health.groups.length})` : ''}</div>
+                {health.groups.length === 0 && <div className="validation ok">No customers share a phone number.</div>}
+                <ul className="dh-list">
+                  {health.groups.map((g) => (
+                    <li key={`p-${g.memberIds.join('-')}`} className="dh-group">
+                      <div className="dh-group-main">
+                        <div className="dh-group-head">
+                          {g.members.map((m, i) => (
+                            <span key={m.id} className="dh-member">
+                              {i > 0 && <span className="dh-sep">·</span>}
+                              {customerLabel(m.name, m.phones[0])} <span className="hint">#{m.id}</span>
+                            </span>
+                          ))}
+                          {g.numberCount > 3 && <span className="dup-tag dup-tag-stray">{g.numberCount} numbers</span>}
+                        </div>
+                        <div className="dh-group-sub hint">shares {g.sharedPhones.join(', ')}</div>
+                      </div>
+                      <button className="btn-secondary" onClick={() => setMergeIds(g.memberIds)}>Review &amp; merge</button>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* shared address */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Sharing an address {health.addressGroups.length ? `(${health.addressGroups.length})` : ''}</div>
+                {health.addressGroups.length === 0 && <div className="validation ok">No customers share an address (beyond those already sharing a number).</div>}
+                <ul className="dh-list">
+                  {health.addressGroups.map((g) => (
+                    <li key={`a-${g.memberIds.join('-')}`} className="dh-group">
+                      <div className="dh-group-main">
+                        <div className="dh-group-head">
+                          {g.members.map((m, i) => (
+                            <span key={m.id} className="dh-member">
+                              {i > 0 && <span className="dh-sep">·</span>}
+                              {customerLabel(m.name, m.phones[0])} <span className="hint">#{m.id}</span>
+                            </span>
+                          ))}
+                        </div>
+                        <div className="dh-group-sub hint">shares “{g.sharedAddress.slice(0, 80)}{g.sharedAddress.length > 80 ? '…' : ''}”</div>
+                      </div>
+                      <button className="btn-secondary" onClick={() => setMergeIds(g.memberIds)}>Review &amp; merge</button>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* no address (has orders) */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>No address {health.noAddressCount ? `(${health.noAddressCount})` : ''}</div>
+                {health.noAddressCount === 0 ? (
+                  <div className="validation ok">Every customer with an order has an address on file.</div>
+                ) : (
+                  <>
+                    <div className="hint" style={{ marginBottom: 6 }}>Ordered before but no saved address — open each to add one.</div>
+                    <ul className="fq-list">{health.noAddress.map((c) => flaggedRow(c))}</ul>
+                    {health.noAddressCount > health.noAddress.length && (
+                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.noAddress.length} of {health.noAddressCount}.</div>
+                    )}
+                  </>
+                )}
+
+                {/* blank name */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Blank name {health.blankNameCount ? `(${health.blankNameCount})` : ''}</div>
+                {health.blankNameCount === 0 ? (
+                  <div className="validation ok">Every customer record has a name.</div>
+                ) : (
+                  <>
+                    <div className="hint" style={{ marginBottom: 6 }}>No name on the record — open each to name it (or fold it into a real record via a merge).</div>
+                    <ul className="fq-list">{health.blankNames.map((c) => flaggedRow(c))}</ul>
+                    {health.blankNameCount > health.blankNames.length && (
+                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.blankNames.length} of {health.blankNameCount}.</div>
+                    )}
+                  </>
+                )}
+
+                {/* odd phone */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Odd phone format {health.oddPhoneCount ? `(${health.oddPhoneCount})` : ''}</div>
+                {health.oddPhoneCount === 0 ? (
+                  <div className="validation ok">Every number on file looks like a valid phone number.</div>
+                ) : (
+                  <>
+                    <div className="hint" style={{ marginBottom: 6 }}>A number on the record doesn’t look valid (too short/long or has letters) — likely a typo. Open each to fix.</div>
+                    <ul className="fq-list">{health.oddPhones.map((c) => flaggedRow(c, `odd: ${(c.badPhones ?? []).join(', ')}`))}</ul>
+                    {health.oddPhoneCount > health.oddPhones.length && (
+                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.oddPhones.length} of {health.oddPhoneCount}.</div>
+                    )}
+                  </>
+                )}
+
+                {/* empty strays */}
+                <div className="po-tobuy-head" style={{ marginTop: 20 }}>
+                  <div className="fd-section-head" style={{ marginBottom: 0 }}>Empty records {health.emptyStrays.length ? `(${health.emptyStrays.length})` : ''}</div>
+                  {health.emptyStrays.length > 0 && !confirmStrays && (
+                    <button className="btn-secondary" onClick={() => { setNotice(null); setConfirmStrays(true); }} disabled={busy}>Delete all</button>
+                  )}
+                  {confirmStrays && (
+                    <span className="dh-confirm">
+                      <span className="hint">Delete {health.emptyStrays.length} empty record{health.emptyStrays.length === 1 ? '' : 's'}?</span>
+                      <button className="btn-secondary" onClick={() => setConfirmStrays(false)} disabled={busy}>Cancel</button>
+                      <button className="btn-link danger" onClick={deleteStrays} disabled={busy}>{busy ? 'Deleting…' : 'Delete'}</button>
+                    </span>
+                  )}
+                </div>
+                {health.emptyStrays.length === 0 ? (
+                  <div className="validation ok">No empty records — every customer has a number, address, channel or order.</div>
+                ) : (
+                  <div className="dh-stray-list hint">
+                    {health.emptyStrays.map((s) => `${s.name || '(no name)'} #${s.id}`).join('  ·  ')}
+                  </div>
+                )}
+
+                <div className="dh-foot hint">
+                  For a bulk reconcile against the source spreadsheets, see <code>scripts/import/reconcile_customers.py</code>.
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* address overlay (add / edit / delete) */}
@@ -596,7 +900,13 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
         </div>
       )}
 
-      {showDup && <MergeDuplicates onClose={() => setShowDup(false)} onMerged={onMerged} />}
+      {mergeIds && (
+        <MergeDuplicates
+          initialIds={mergeIds}
+          onClose={() => { setMergeIds(null); loadFix(); }}
+          onMerged={onMerged}
+        />
+      )}
     </div>
   );
 }

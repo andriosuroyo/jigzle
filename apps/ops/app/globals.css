@@ -89,6 +89,9 @@ input, textarea, select, button { font-family: inherit; }
 .po-card-mini .po-card-name { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .po-card-meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .po-card-meta > .po-card-cust { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* PR190 — the quickview status pills sit hard-left (the global .stock-pills margin-left:auto would
+   otherwise float them into the middle of the card); qty alone is pushed to the far right. */
+.po-card-meta .stock-pills { margin-left: 0; }
 .po-card-meta .po-card-qty { margin-left: auto; flex-shrink: 0; }
 .po-chev { flex-shrink: 0; align-self: center; color: var(--brown-light); font-size: 22px; font-weight: 700; line-height: 1; }
 /* the tap-to-act detail overlay: header, then qty (left) + stock icons (right), then the actions */
@@ -106,6 +109,10 @@ input, textarea, select, button { font-family: inherit; }
 .td-qtyrow .fd-section-head { margin-bottom: 6px; }
 .td-stock { display: flex; align-items: flex-end; padding-bottom: 6px; }
 .td-stock .stock-pills { gap: 14px; }
+/* PR190 — the overlay's status pills read larger than the tiny card pills (icons were too small to
+   glance at). Applies to both the Manual and From-Sales tap-to-act overlays. */
+.td-stock .stock-pill { font-size: 15px; padding: 4px 12px; gap: 6px; }
+.td-stock .stock-pill svg { width: 19px; height: 19px; }
 .tobuy-detail .td-actions { justify-content: flex-start; align-items: center; }
 .tobuy-detail .td-actions .btn-trash { margin-left: auto; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }

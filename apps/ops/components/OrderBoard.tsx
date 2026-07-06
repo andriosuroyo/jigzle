@@ -1190,12 +1190,10 @@ export default function OrderBoard({
           />
         </div>
 
-        {/* Confirm → To ship (the only button; edits auto-save on blur). Delete stays below. */}
+        {/* PR190 — Confirm → To ship (left) shares one row with Delete (right, via fd-commit's
+            space-between); edits auto-save on blur. */}
         <div className="fd-commit">
           <button className="btn-primary" onClick={confirmOne} disabled={busy}>{busy ? '…' : 'Confirm → To ship'}</button>
-        </div>
-
-        <div className="ob-return">
           {!confirmDel ? (
             <TrashButton onClick={() => setConfirmDel(true)} disabled={busy} ariaLabel="Delete order" />
           ) : (
