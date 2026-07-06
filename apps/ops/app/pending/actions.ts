@@ -132,6 +132,30 @@ export async function getPending(): Promise<PendingOrder[]> {
 // lines uncut, so NO stock moves — see 0061). Each RPC recomputes sales_total_idr + re-derives the
 // payment status. Errors returned as data (button-awaited mutations, per CLAUDE.md / PR145).
 
+// ── apply a whole edited item set at once (the Pending edit modal's "Done"): kept lines updated,
+// removed lines deleted, new lines inserted, then total + payment recomputed. Batch so the modal can
+// buffer changes and Cancel discards. Each line: { line_id?: string|null, item_code, qty, unit_price_idr }
+// (unit_price_idr null/blank counts as 0 in the total). Uncut lines only — 0064. ──
+export async function replaceOrderLines(
+  salesId: string,
+  lines: { line_id: string | null; item_code: string | null; qty: number; unit_price_idr: number | null }[]
+): Promise<{ error: string | null }> {
+  if (!salesId) return { error: 'replaceOrderLines: sales_id is required' };
+  if (!lines?.length) return { error: 'An order must keep at least one item.' };
+  if (lines.some((l) => !Number.isFinite(l.qty) || l.qty < 1)) return { error: 'Every item needs a quantity of at least 1.' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('replace_order_lines', {
+    p_sales_id: salesId,
+    p_lines: lines.map((l) => ({
+      line_id: l.line_id,
+      item_code: l.item_code,
+      qty: Math.round(l.qty),
+      unit_price_idr: l.unit_price_idr == null ? null : Math.round(l.unit_price_idr),
+    })),
+  });
+  return { error: error ? `Couldn't save items: ${error.message}` : null };
+}
+
 // ── add a line to a pending order (fresh {sales_id}-{n}); returns the new line_id. ──
 export async function addOrderLine(
   salesId: string,

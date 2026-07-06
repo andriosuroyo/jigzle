@@ -278,7 +278,7 @@ export default function OutboundHistoryBoard({
                   </div>
                 ) : (
                   <span className="rcv-reverse-ask">
-                    Cancel this shipment? Its {sel.item_count} {sel.item_count === 1 ? 'item' : 'items'} return to Ready-to-ship and the order goes back to Need send. No stock is changed (nothing left the shelf).
+                    Cancel this shipment? Its {sel.item_count} {sel.item_count === 1 ? 'item' : 'items'} return to Sales Pending (stock restored) so you can edit the order; nothing physically left the shelf.
                     <button className="btn-secondary" onClick={() => setConfirmCancel(false)} disabled={cancelling}>Keep</button>
                     <button className="btn-primary danger" onClick={doCancelShipment} disabled={cancelling}>{cancelling ? 'Cancelling…' : 'Yes, cancel'}</button>
                   </span>

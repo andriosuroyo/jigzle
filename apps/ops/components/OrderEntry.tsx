@@ -333,8 +333,9 @@ export default function OrderEntry({
   // ── items ──
   function addLine(sku: SkuHit) {
     const qty = Math.max(1, parseInt(draftQty[sku.item_code] || '1', 10) || 1);
+    // PR199: 0 is a valid price — returns/refunds/exchanges are handled case-by-case, so an item can be
+    // added at Rp 0 (empty field → 0). Only negatives are impossible (Math.max clamps).
     const price = Math.max(0, parseInt(draftPrice[sku.item_code] || '', 10) || 0);
-    if (price <= 0) { setError(`Enter a price for ${sku.item_code}.`); return; }
     setError(null);
     setLines((prev) => {
       const i = prev.findIndex((l) => l.item_code === sku.item_code && l.unit_price_idr === price);
