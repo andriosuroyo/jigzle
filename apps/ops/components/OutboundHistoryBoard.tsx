@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { volWeight } from '@jigzle/lib';
-import { getOutboundHistory, cancelShipment, dispatchSend } from '@/app/outbound/actions';
+import { getOutboundHistory, cancelShipment, dispatchSend, getOutboundNote, setOutboundNote } from '@/app/outbound/actions';
 import type { ShipmentHistoryRow, ShipmentHistoryBox } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
@@ -48,11 +48,31 @@ export default function OutboundHistoryBoard({
   const [cancelling, setCancelling] = useState(false);
   const [cancelErr, setCancelErr] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false); // PR198: mark-dispatched in flight
+  // PR190 — editable per-shipment note (available on every shipment)
+  const [note, setNote] = useState('');
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteMsg, setNoteMsg] = useState<string | null>(null);
   const reqRef = useRef(0);
   const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
   const loadedRef = useRef(initialOrders.length > 0); // PR181: false until the deferred first load lands
 
   const sel = useMemo(() => orders.find((o) => o.key === selKey) ?? null, [orders, selKey]);
+
+  // PR190 — load the manual note whenever a shipment is opened; save/clear on demand
+  useEffect(() => {
+    setNote(''); setNoteMsg(null);
+    if (!selKey) return;
+    let live = true;
+    getOutboundNote(selKey).then((n) => { if (live) setNote(n ?? ''); }).catch(() => {});
+    return () => { live = false; };
+  }, [selKey]);
+  async function saveNote() {
+    if (!selKey) return;
+    setNoteBusy(true); setNoteMsg(null);
+    const { error } = await setOutboundNote(selKey, note);
+    setNoteBusy(false);
+    setNoteMsg(error ? error : 'Saved.');
+  }
 
   const imgCodes = useMemo(
     () => (sel?.items ?? []).map((i) => i.item_code).filter((c): c is string => !!c),
@@ -199,10 +219,26 @@ export default function OutboundHistoryBoard({
 
             {sel.note && (
               <section className="fd-section">
-                <div className="fd-section-head">Notes</div>
+                <div className="fd-section-head">Item notes</div>
                 <pre className="ob-addr-block">{sel.note}</pre>
               </section>
             )}
+
+            {/* PR190 — editable shipment note (any shipment): e.g. the export-courier tracking number */}
+            <section className="fd-section">
+              <div className="fd-section-head">Shipment note</div>
+              <textarea
+                className="ob-note-input"
+                rows={3}
+                placeholder="e.g. export courier tracking number, follow-up notes…"
+                value={note}
+                onChange={(e) => { setNote(e.target.value); setNoteMsg(null); }}
+              />
+              <div className="ob-note-actions">
+                <button className="btn-secondary sc-mini" onClick={saveNote} disabled={noteBusy}>{noteBusy ? 'Saving…' : 'Save note'}</button>
+                {noteMsg && <span className={noteMsg === 'Saved.' ? 'hint' : 'validation err'}>{noteMsg}</span>}
+              </div>
+            </section>
 
             <section className="fd-section">
               <div className="fd-section-head">Shipped items</div>
