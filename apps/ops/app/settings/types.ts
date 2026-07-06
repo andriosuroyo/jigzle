@@ -95,6 +95,17 @@ export interface ShipmentCourier {
   sort_order: number;
 }
 
+// 0059 (PR193): the Catalog classification pick-lists (Product / Sub / Piece type). Same label-only
+// shape as ChannelOption; read by the Catalog item editor's type comboboxes (unioned with the
+// catalogue's distinct values).
+export interface CatalogClassOption {
+  id: number;
+  label: string;
+  icon: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
 // what getSettings() returns — one ordered, active-only list per kind.
 export interface SettingsData {
   paymentMethods: PaymentMethod[];
@@ -106,12 +117,15 @@ export interface SettingsData {
   staff: StaffMember[];
   localCouriers: LocalCourier[];
   shipmentCouriers: ShipmentCourier[];
+  catProductTypes: CatalogClassOption[];
+  catSubTypes: CatalogClassOption[];
+  catPieceTypes: CatalogClassOption[];
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).
-export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels' | 'common_note' | 'channel' | 'staff' | 'local_courier' | 'ship_courier';
+export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels' | 'common_note' | 'channel' | 'staff' | 'local_courier' | 'ship_courier' | 'cat_product_type' | 'cat_sub_type' | 'cat_piece_type';
 
-export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel | CommonNote | ChannelOption | StaffMember | LocalCourier | ShipmentCourier;
+export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel | CommonNote | ChannelOption | StaffMember | LocalCourier | ShipmentCourier | CatalogClassOption;
 
 // permissive payload shapes for add/update — the actions whitelist columns per kind, so a stray key
 // can never reach an identity/system column (id / user_id / sort_order / created_at).

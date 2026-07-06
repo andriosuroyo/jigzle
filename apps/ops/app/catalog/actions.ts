@@ -168,6 +168,22 @@ export async function getCatalogFieldOptions(): Promise<Record<string, string[]>
       for (const r of (data ?? []) as unknown as Record<string, unknown>[])
         for (const f of OPTION_FIELDS) { const v = r[f]; if (typeof v === 'string' && v.trim()) sets[f].add(v.trim()); }
   }
+
+  // PR193 — union the Settings-managed classification lists (0059) so curated values always appear
+  // even if no SKU uses them yet, and typo-variants retired in Settings simply drop out of the SKU's
+  // distinct values over time. Degrades silently if the tables aren't applied yet.
+  const MANAGED: Record<string, string> = {
+    product_type: 'settings_catalog_product_types',
+    sub_type: 'settings_catalog_sub_types',
+    piece_type: 'settings_catalog_piece_types',
+  };
+  await Promise.all(
+    Object.entries(MANAGED).map(async ([field, table]) => {
+      const { data } = await supabase.from(table).select('label').is('user_id', null).eq('is_active', true);
+      for (const r of (data ?? []) as { label: string | null }[]) { const v = (r.label ?? '').trim(); if (v) sets[field].add(v); }
+    }),
+  );
+
   const out: Record<string, string[]> = {};
   for (const f of OPTION_FIELDS) out[f] = [...sets[f]].sort((a, b) => a.localeCompare(b));
   return out;

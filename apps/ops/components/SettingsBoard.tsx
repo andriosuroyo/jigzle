@@ -126,6 +126,32 @@ const SECTIONS: SectionDef[] = [
     sortKey: 'label',
     blank: { label: '' },
   },
+  // 0059 (PR193): the Catalog classification pick-lists. The item editor's type comboboxes union these
+  // with the catalogue's distinct values — curate here to retire typo-variants.
+  {
+    kind: 'cat_product_type',
+    title: 'Product types',
+    sub: 'Top-level product types shown in the Catalog item editor’s Product type picker.',
+    cols: [{ key: 'label', label: 'Product type', type: 'text', grow: true }],
+    sortKey: 'label',
+    blank: { label: '' },
+  },
+  {
+    kind: 'cat_sub_type',
+    title: 'Sub types',
+    sub: 'Sub-types shown in the Catalog item editor’s Sub type picker.',
+    cols: [{ key: 'label', label: 'Sub type', type: 'text', grow: true }],
+    sortKey: 'label',
+    blank: { label: '' },
+  },
+  {
+    kind: 'cat_piece_type',
+    title: 'Piece types',
+    sub: 'Piece types shown in the Catalog item editor’s Piece type picker.',
+    cols: [{ key: 'label', label: 'Piece type', type: 'text', grow: true }],
+    sortKey: 'label',
+    blank: { label: '' },
+  },
 ];
 const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SECTIONS.map((s) => [s.kind, s])) as Record<SettingsKind, SectionDef>;
 
@@ -140,6 +166,7 @@ const CATEGORIES: Category[] = [
   { key: 'inbound', title: 'Inbound', sub: 'Labels for the receiving flow and warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'inbound_labels' }, { kind: 'staff' }] },
   { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers, forwarders and couriers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
+  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists (Product / Sub / Piece type) for the Catalog item editor.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }] },
 ];
 const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
 
@@ -175,6 +202,9 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
     staff: initial.staff,
     local_courier: initial.localCouriers,
     ship_courier: initial.shipmentCouriers,
+    cat_product_type: initial.catProductTypes,
+    cat_sub_type: initial.catSubTypes,
+    cat_piece_type: initial.catPieceTypes,
   });
   const [busy, setBusy] = useState(false);
   // notice tone follows the action: ok (green) = additive, err (red) = removed/failed, warn (yellow) = neutral edit.

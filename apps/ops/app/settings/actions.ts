@@ -8,6 +8,7 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type {
   BoxPreset,
+  CatalogClassOption,
   ChannelOption,
   CommonNote,
   CourierService,
@@ -34,6 +35,9 @@ const TABLE: Record<SettingsKind, string> = {
   staff: 'settings_staff',
   local_courier: 'settings_local_couriers',
   ship_courier: 'settings_shipment_couriers',
+  cat_product_type: 'settings_catalog_product_types',
+  cat_sub_type: 'settings_catalog_sub_types',
+  cat_piece_type: 'settings_catalog_piece_types',
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -49,6 +53,9 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   staff: ['label', 'icon', 'is_active'],
   local_courier: ['label', 'icon', 'is_active'],
   ship_courier: ['label', 'icon', 'is_active'],
+  cat_product_type: ['label', 'icon', 'is_active'],
+  cat_sub_type: ['label', 'icon', 'is_active'],
+  cat_piece_type: ['label', 'icon', 'is_active'],
 };
 
 // uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
@@ -89,7 +96,7 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
@@ -99,8 +106,11 @@ export async function getSettings(): Promise<SettingsData> {
     listSafe<StaffMember>(TABLE.staff),
     listSafe<LocalCourier>(TABLE.local_courier), // 0055 — degrades to [] until the migration is applied
     listSafe<ShipmentCourier>(TABLE.ship_courier), // 0056 — same degrade
+    listSafe<CatalogClassOption>(TABLE.cat_product_type), // 0059 — degrades to [] until applied
+    listSafe<CatalogClassOption>(TABLE.cat_sub_type),
+    listSafe<CatalogClassOption>(TABLE.cat_piece_type),
   ]);
-  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers };
+  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes };
 }
 
 // 0056: Purchasing History's shipment-courier pick-list (degrades to [] until 0056 is applied).
