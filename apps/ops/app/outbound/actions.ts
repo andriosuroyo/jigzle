@@ -42,7 +42,7 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
   // embedded filters restrict both which orders return and which lines come back.
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,customer_id,customers(name,phone),order_lines!inner(line_id,item_code,courier)')
+    .select('sales_id,order_date,customer_id,address_id,customers(name,phone),order_lines!inner(line_id,item_code,courier,address_id)')
     .is('order_lines.shipped_at', null)
     .not('order_lines.fulfilled_at', 'is', null)
     // PR-B §6: a line only ships once it's ADDRESSED (courier set in Fulfill). Without this, cut-but-
@@ -54,12 +54,17 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
   if (error || !data) return [];
 
   return data.map((o) => {
-    const lines = (o.order_lines ?? []) as { line_id: string; item_code: string | null; courier: string | null }[];
+    const lines = (o.order_lines ?? []) as { line_id: string; item_code: string | null; courier: string | null; address_id: number | null }[];
     const cust = one<{ name: string | null; phone: string | null }>(o.customers as never);
     const planned = lines.find((l) => l.courier)?.courier ?? null;
+    // PR197: the send's ship address — the line's (stamped at fulfill), else the order's. Used to group
+    // same-destination orders for one-send consolidation.
+    const addressId = (lines.find((l) => l.address_id != null)?.address_id ?? (o.address_id as number | null)) ?? null;
     return {
       sales_id: o.sales_id as string,
       order_date: (o.order_date as string | null) ?? null,
+      customer_id: (o.customer_id as number | null) ?? null,
+      address_id: addressId,
       customer_name: cust ? customerLabel(cust.name, cust.phone) : null,
       customer_phone: cust?.phone ?? null,
       ready_count: lines.length,
@@ -380,6 +385,36 @@ export async function recordShipment(payload: ShipInput): Promise<ShipResult> {
       .in('order_line_id', payload.line_ids);
   }
 
+  let stock: ShipResult['stock'] = [];
+  if (affected.length) {
+    const { data: s } = await supabase
+      .from('stock_check')
+      .select('item_code,available,physical,reserved')
+      .in('item_code', affected);
+    stock = (s ?? []) as ShipResult['stock'];
+  }
+  return { affected, stock };
+}
+
+// ── Consolidated shipment (PR197): ship the lines of SEVERAL orders (same customer + address + courier)
+// as one send. Line ids span orders; the RPC derives each line's order, allocates one send_id, and
+// completes each order independently. Mirrors recordShipment's return (affected codes + fresh stock). ──
+export async function recordConsolidatedShipment(payload: {
+  line_ids: string[];
+  boxes: ShipInput['boxes'];
+  verify?: ShipInput['verify'];
+  staff?: string | null;
+}): Promise<ShipResult> {
+  if (!payload.line_ids?.length) throw new Error('recordConsolidatedShipment: select at least one line');
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.rpc('record_consolidated_shipment', {
+    p_line_ids: payload.line_ids,
+    p_boxes: payload.boxes ?? [],
+    p_verify: payload.verify ?? [],
+    p_staff: payload.staff?.trim() || null,
+  });
+  if (error) throw new Error(`recordConsolidatedShipment: ${error.message}`);
+  const affected = (data as string[] | null) ?? [];
   let stock: ShipResult['stock'] = [];
   if (affected.length) {
     const { data: s } = await supabase
