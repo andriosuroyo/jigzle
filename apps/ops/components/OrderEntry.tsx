@@ -19,6 +19,7 @@ import type { PaymentMethod, ChannelOption } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import IconSelect from '@/components/IconSelect';
 import PhoneCountrySelect from '@/components/PhoneCountrySelect';
+import CountrySelect from '@/components/CountrySelect';
 import { dialOf } from '@/components/countries';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -38,6 +39,10 @@ const URGENCY_OPTS: { key: Urgency; label: string }[] = [
 ];
 
 type Line = { item_code: string; name: string; qty: number; unit_price_idr: number; available: number; on_the_way: number };
+
+// PR194: the ID-specific geo fields (autofill / kecamatan / kelurahan) only apply to Indonesian
+// addresses — hidden for an international ship-to, whose negara then drives the export flow (Fulfill).
+const isIndonesia = (c: string | null | undefined) => (c ?? '').trim().toLowerCase() === 'indonesia';
 
 // Payment label (Paid/Partial/Unpaid) for the rail's Payment row. (SA-9: the dead `status` field that
 // deriveStatus used to also return was dropped — only this payment label remains.)
@@ -574,19 +579,27 @@ export default function OrderEntry({
                     <label>Recipient name<input type="text" value={tidy.recipient_name ?? ''} onChange={(e) => setTidy({ ...tidy, recipient_name: e.target.value })} /></label>
                     <label>Contact phone<input type="text" inputMode="tel" value={tidy.contact_phone ?? ''} onChange={(e) => setTidy({ ...tidy, contact_phone: e.target.value })} /></label>
                   </div>
+                  {/* PR194: pick a real country (structured) so an international ship-to sets negara
+                      correctly and drives the export-courier flow at Fulfill. The Indonesia-only geo
+                      fields (autofill / kecamatan / kelurahan) hide when the country isn't Indonesia. */}
                   <div className="ta-autofill">
-                    <label>Autofill <em>(province / city / kecamatan / kelurahan / postcode)</em></label>
-                    <PostcodeAutofill
-                      onPick={(h) => setTidy({ ...tidy, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })}
-                    />
+                    <label>Country</label>
+                    <CountrySelect value={tidy.negara || null} onChange={(country) => setTidy({ ...tidy, negara: country })} disabled={savingAddr} />
                   </div>
+                  {isIndonesia(tidy.negara) && (
+                    <div className="ta-autofill">
+                      <label>Autofill <em>(province / city / kecamatan / kelurahan / postcode)</em></label>
+                      <PostcodeAutofill
+                        onPick={(h) => setTidy({ ...tidy, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })}
+                      />
+                    </div>
+                  )}
                   <div className="ta-grid">
-                    <label>Province<input type="text" value={tidy.provinsi ?? ''} onChange={(e) => setTidy({ ...tidy, provinsi: e.target.value })} /></label>
+                    <label>Province{isIndonesia(tidy.negara) ? '' : ' / region'}<input type="text" value={tidy.provinsi ?? ''} onChange={(e) => setTidy({ ...tidy, provinsi: e.target.value })} /></label>
                     <label>City / district<input type="text" value={tidy.kota ?? ''} onChange={(e) => setTidy({ ...tidy, kota: e.target.value })} /></label>
-                    <label>Subdistrict (kecamatan)<input type="text" value={tidy.kecamatan ?? ''} onChange={(e) => setTidy({ ...tidy, kecamatan: e.target.value })} /></label>
-                    <label>Ward (kelurahan)<input type="text" value={tidy.kelurahan ?? ''} onChange={(e) => setTidy({ ...tidy, kelurahan: e.target.value })} /></label>
+                    {isIndonesia(tidy.negara) && <label>Subdistrict (kecamatan)<input type="text" value={tidy.kecamatan ?? ''} onChange={(e) => setTidy({ ...tidy, kecamatan: e.target.value })} /></label>}
+                    {isIndonesia(tidy.negara) && <label>Ward (kelurahan)<input type="text" value={tidy.kelurahan ?? ''} onChange={(e) => setTidy({ ...tidy, kelurahan: e.target.value })} /></label>}
                     <label>Postcode<input type="text" inputMode="numeric" value={tidy.kode_pos ?? ''} onChange={(e) => setTidy({ ...tidy, kode_pos: e.target.value })} /></label>
-                    <label>Country<input type="text" value={tidy.negara ?? ''} onChange={(e) => setTidy({ ...tidy, negara: e.target.value })} /></label>
                   </div>
                   <label className="ta-full">Address <em>(street, alley/gang, no.)</em><textarea value={tidy.street ?? ''} onChange={(e) => setTidy({ ...tidy, street: e.target.value })} /></label>
                   <label className="ta-full">Delivery note <em>(printed below the courier line)</em><textarea value={tidy.delivery_note ?? ''} onChange={(e) => setTidy({ ...tidy, delivery_note: e.target.value })} /></label>
