@@ -36,7 +36,7 @@ from db import Client, load_env  # noqa: E402
 # ── config (no hard-coded secrets) ──
 NOT_FOUND_CSV = Path(__file__).resolve().parent / "image_not_found_skus.csv"
 BUCKET = "sku-images"
-DISPLAY_MAX = 400          # longest side, px
+DISPLAY_MAX = 300          # longest side, px (dropped 400→300 to keep the bucket under the 1 GB free tier)
 WEBP_QUALITY = 80
 FUZZY_THRESHOLD = 0.85     # orphan-suggest cutoff (never auto-applied)
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
