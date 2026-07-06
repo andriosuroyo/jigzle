@@ -25,7 +25,8 @@ input, textarea, select, button { font-family: inherit; }
 /* ── Login (copied screen) ── */
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(180deg, var(--cream) 0%, var(--paper) 100%); }
 .login-card { width: 100%; max-width: 360px; background: white; border-radius: 16px; padding: 28px 24px; box-shadow: 0 4px 24px rgba(74,51,32,0.08); text-align: center; }
-.login-card .logo-big { width: 56px; height: 56px; background: var(--brown); color: var(--orange); font-weight: 800; font-size: 30px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+.login-card .logo-big { width: 72px; height: 72px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px; overflow: hidden; }
+.login-card .logo-big img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .login-card h1 { font-size: 18px; margin: 0 0 4px; color: var(--brown-dark); }
 .login-card p { font-size: 12px; color: var(--muted); margin: 0 0 20px; }
 .login-card button { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -43,7 +44,8 @@ input, textarea, select, button { font-family: inherit; }
 
 /* ── App header ── */
 .app-header { background: var(--brown); color: white; padding: 14px 18px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50; }
-.app-header .logo { width: 28px; height: 28px; background: var(--orange); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 14px; flex-shrink: 0; }
+.app-header .logo { width: 30px; height: 30px; background: white; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; padding: 1px; }
+.app-header .logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .app-header .title { flex: 1; font-size: 15px; font-weight: 700; }
 .app-header .signout { background: rgba(255,255,255,0.15); border: none; color: white; padding: 6px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; }
 .app-header .signout:active { background: rgba(255,255,255,0.25); }

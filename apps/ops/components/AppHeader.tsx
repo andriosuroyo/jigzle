@@ -16,7 +16,10 @@ export default function AppHeader({ active, userEmail }: { active?: string; user
 
   return (
     <header className="app-header">
-      <Link href="/" className="logo" onClick={() => setOpen(false)}>J</Link>
+      <Link href="/" className="logo" onClick={() => setOpen(false)} aria-label="Jigzle home">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.webp" alt="Jigzle" width={30} height={30} />
+      </Link>
       <Link href="/" className="title" style={{ textDecoration: 'none', color: 'inherit' }}>Jigzle Ops</Link>
 
       {/* Desktop: the 4 category labels; hover / keyboard-focus a label to reveal its items. */}

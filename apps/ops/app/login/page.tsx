@@ -22,7 +22,8 @@ function LoginInner() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <div className="logo-big">J</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <div className="logo-big"><img src="/logo.webp" alt="Jigzle" width={72} height={72} /></div>
         <h1>Jigzle Ops</h1>
         <p>Sign in with your Google account to continue.</p>
         {error === 'unauthorized' && (
