@@ -56,6 +56,15 @@ export interface EmptyStray {
   name: string | null;
 }
 
+// PR190 — a single customer flagged by a Fix-tab scan (blank name / no address / odd phone). Carries
+// enough to render a directory row and open the customer's bodyview to fix it.
+export interface FlaggedCustomer {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  badPhones?: string[];   // odd-phone scan only: the raw values that don't normalize
+}
+
 export interface DataHealth {
   totalCustomers: number;
   noName: number;                 // customers with a blank name
@@ -67,6 +76,13 @@ export interface DataHealth {
   addressGroups: AddressDupGroup[];     // capped; excludes ones already shown as shared-number groups
   emptyStrayCount: number;
   emptyStrays: EmptyStray[];      // capped list of deletable empties
+  // PR190 — extra "keep an eye on future inputs" scans, each a capped list + full count:
+  noAddressCount: number;         // customers who have ordered but have no address on file
+  noAddress: FlaggedCustomer[];
+  blankNameCount: number;         // records with an empty name (same population as noName)
+  blankNames: FlaggedCustomer[];
+  oddPhoneCount: number;          // records carrying a raw number that doesn't normalize (likely a typo)
+  oddPhones: FlaggedCustomer[];
 }
 
 // editable personal details (name + up to three whatsapp/phone numbers)

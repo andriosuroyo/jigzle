@@ -18,6 +18,7 @@ import type {
   DuplicateGroup,
   DuplicateMember,
   EmptyStray,
+  FlaggedCustomer,
   MergeResult,
 } from './types';
 
@@ -479,6 +480,34 @@ export async function getDataHealth(): Promise<DataHealth> {
   }
   const emptyStrays: EmptyStray[] = candidates.filter((r) => !referenced.has(r.customer_id)).map((r) => ({ id: r.customer_id, name: r.name }));
 
+  const dispPhone = (r: CustPhoneRow): string | null => r.phone_raw ?? r.phone;
+
+  // ── PR190: blank name — a record whose name field is empty (import debris / hard to find later) ──
+  const blankNames: FlaggedCustomer[] = rows
+    .filter((r) => !(r.name ?? '').trim())
+    .map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
+
+  // ── PR190: odd phone — a raw number is on file but doesn't normalize (too short/long, letters, junk) ──
+  const oddPhones: FlaggedCustomer[] = [];
+  for (const r of rows) {
+    const raws = [r.phone_raw, r.phone2_raw, r.phone3_raw].filter((p): p is string => !!(p && p.trim()));
+    const bad = raws.filter((raw) => !normalizePhone(raw));
+    if (bad.length) oddPhones.push({ id: r.customer_id, name: r.name, phone: dispPhone(r), badPhones: bad });
+  }
+
+  // ── PR190: no address — customers who have ordered yet have no saved address (a shipping risk). Only
+  // customers without any address are candidates; we then keep those that actually carry orders.
+  const noAddrIds = rows.filter((r) => (addrCount.get(r.customer_id) ?? 0) === 0).map((r) => r.customer_id);
+  const hasOrders = new Set<number>();
+  const ordFound = await chunked(noAddrIds, 200, async (slice) => {
+    const { data } = await supabase.from('orders').select('customer_id').in('customer_id', slice);
+    return (data ?? []) as { customer_id: number }[];
+  });
+  for (const o of ordFound) hasOrders.add(o.customer_id);
+  const noAddress: FlaggedCustomer[] = rows
+    .filter((r) => hasOrders.has(r.customer_id))
+    .map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
+
   return {
     totalCustomers: rows.length,
     noName,
@@ -490,6 +519,12 @@ export async function getDataHealth(): Promise<DataHealth> {
     addressGroups: addressGroups.slice(0, 200),
     emptyStrayCount: emptyStrays.length,
     emptyStrays: emptyStrays.slice(0, 200),
+    noAddressCount: noAddress.length,
+    noAddress: noAddress.slice(0, 200),
+    blankNameCount: blankNames.length,
+    blankNames: blankNames.slice(0, 200),
+    oddPhoneCount: oddPhones.length,
+    oddPhones: oddPhones.slice(0, 200),
   };
 }
 
