@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
-import { getPending, sendReadyItems, deleteOrder, markOrderPaid } from '@/app/pending/actions';
+import { getPending, sendReadyItems, deleteOrder, markOrderPaid, addOrderLine, updateOrderLine, deleteOrderLine } from '@/app/pending/actions';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
 import SearchInput from '@/components/SearchInput';
-import type { OrderDot, PendingOrder } from '@/app/pending/types';
+import SkuSearchAdd from '@/components/SkuSearchAdd';
+import type { OrderDot, PendingOrder, PendingLine } from '@/app/pending/types';
 import type { CommonNote } from '@/app/settings/types';
 import NoteEditor from '@/components/NoteEditor';
 import SkuImage from '@/components/SkuImage';
@@ -55,6 +56,16 @@ export default function PendingBoard({
   // PR148: delete goes through the overlay confirm (no bare window.confirm); its error stays in the modal.
   const [confirmDel, setConfirmDel] = useState(false);
   const [delErr, setDelErr] = useState<string | null>(null);
+  // PR196: edit-items mode — per-line qty/price drafts, inline remove-confirm, and an add-item panel.
+  const [editItems, setEditItems] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, { qty: string; price: string }>>({});
+  const [rowBusy, setRowBusy] = useState<string | null>(null); // line_id (or '+add') mid-write
+  const [rowErr, setRowErr] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);                 // the add-item panel is open
+  const [addPick, setAddPick] = useState<string | null>(null); // chosen item_code awaiting qty/price
+  const [addQty, setAddQty] = useState('1');
+  const [addPrice, setAddPrice] = useState('');
   const reqRef = useRef(0);
 
   // PR149: readiness-tab filter + free-text search (customer name, order id, or a SKU on the order)
@@ -182,6 +193,72 @@ export default function PendingBoard({
     }
   }
 
+  // PR196 — edit items on a pending order. Every line shown here is UNCUT, so these ops move no stock
+  // (stock_check counts only fulfilled/shipped rows); each RPC recomputes the total + payment status.
+  function setDraft(lineId: string, field: 'qty' | 'price', value: string) {
+    setDrafts((d) => {
+      const cur = d[lineId] ?? { qty: '', price: '' };
+      return { ...d, [lineId]: { ...cur, [field]: value } };
+    });
+  }
+  function beginEdit() {
+    if (!sel) return;
+    const d: Record<string, { qty: string; price: string }> = {};
+    for (const l of sel.lines) d[l.line_id] = { qty: String(l.qty), price: String(l.unit_price_idr ?? 0) };
+    setDrafts(d);
+    setRowErr(null); setConfirmRemove(null); setAdding(false); setAddPick(null);
+    setEditItems(true);
+  }
+  function endEdit() {
+    setEditItems(false); setConfirmRemove(null); setAdding(false); setAddPick(null); setRowErr(null);
+  }
+  async function saveLine(l: PendingLine) {
+    const d = drafts[l.line_id];
+    if (!sel || !d) return;
+    const qty = parseInt(d.qty, 10);
+    const price = parseInt(d.price, 10);
+    if (!Number.isFinite(qty) || qty < 1) { setRowErr('Quantity must be at least 1.'); return; }
+    const nextPrice = Number.isFinite(price) ? price : 0;
+    if (qty === l.qty && nextPrice === (l.unit_price_idr ?? 0)) return; // unchanged → no write
+    setRowBusy(l.line_id); setRowErr(null);
+    const { error: e } = await updateOrderLine(l.line_id, qty, nextPrice);
+    if (e) { setRowErr(e); setRowBusy(null); return; }
+    await refresh();
+    setRowBusy(null);
+  }
+  async function removeLine(lineId: string) {
+    setRowBusy(lineId); setRowErr(null);
+    const { error: e } = await deleteOrderLine(lineId);
+    if (e) { setRowErr(e); setRowBusy(null); setConfirmRemove(null); return; }
+    await refresh();
+    setConfirmRemove(null); setRowBusy(null);
+  }
+  async function commitAdd() {
+    if (!sel || !addPick) return;
+    const qty = parseInt(addQty, 10);
+    const price = parseInt(addPrice, 10);
+    if (!Number.isFinite(qty) || qty < 1) { setRowErr('Quantity must be at least 1.'); return; }
+    setRowBusy('+add'); setRowErr(null);
+    const { error: e } = await addOrderLine(sel.sales_id, addPick, qty, Number.isFinite(price) ? price : 0, null);
+    if (e) { setRowErr(e); setRowBusy(null); return; }
+    await refresh();
+    setAddPick(null); setAddQty('1'); setAddPrice(''); setAdding(false); setRowBusy(null);
+  }
+
+  // reset edit mode when the selected order changes (mirrors the delete-confirm reset).
+  useEffect(() => { endEdit(); setConfirmDel(false); }, [selId]);
+  // keep drafts in sync with the (possibly refreshed) line set while editing — preserve half-typed
+  // values, seed newly-added lines, drop removed ones.
+  useEffect(() => {
+    if (!editItems || !sel) return;
+    setDrafts((prev) => {
+      const next: Record<string, { qty: string; price: string }> = {};
+      for (const l of sel.lines) next[l.line_id] = prev[l.line_id] ?? { qty: String(l.qty), price: String(l.unit_price_idr ?? 0) };
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, editItems]);
+
   // PR147 — bodyview: the body shows EITHER the filter tabs + full-width queue OR the tapped order's
   // detail with a ← back button (the Purchasing-History pattern); breadcrumb + pipeline tabs stay put.
   const body = (
@@ -252,8 +329,16 @@ export default function PendingBoard({
                 </div>
               </div>
 
-              {/* Lines — compact row: image left, code / name / qty / status to its right */}
+              {/* Lines — compact row: image left, code / name / qty / status to its right. PR196: "Edit
+                  items" swaps qty/status for qty + price inputs and a remove ✕, and reveals Add item. */}
               <section className="fd-section">
+                <div className="fd-section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Items</span>
+                  <button className="btn-link" onClick={() => (editItems ? endEdit() : beginEdit())} disabled={busy}>
+                    {editItems ? 'Done' : 'Edit items'}
+                  </button>
+                </div>
+                {editItems && rowErr && <div className="validation err" style={{ marginBottom: 6 }}>{rowErr}</div>}
                 <ul className="ff-lines">
                   {sel.lines.map((l) => (
                     <li key={l.line_id} className="ff-line pend-line-card">
@@ -263,13 +348,69 @@ export default function PendingBoard({
                           <span className="ff-code">{l.item_code || '—'}</span>
                           <span className="ff-name">{l.name}</span>
                         </div>
-                        <span className="ff-qty">×{l.qty}</span>
-                        <span className={`pend-status ${l.status}`}>{STATUS_LABEL[l.status] ?? l.status}</span>
+                        {editItems ? (
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <input
+                              type="number" min={1} aria-label="Quantity" style={{ width: 48 }}
+                              value={drafts[l.line_id]?.qty ?? String(l.qty)}
+                              onChange={(e) => setDraft(l.line_id, 'qty', e.target.value)}
+                              onBlur={() => saveLine(l)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              disabled={rowBusy === l.line_id}
+                            />
+                            <input
+                              type="number" min={0} aria-label="Unit price (Rp)" style={{ width: 96 }}
+                              value={drafts[l.line_id]?.price ?? String(l.unit_price_idr ?? 0)}
+                              onChange={(e) => setDraft(l.line_id, 'price', e.target.value)}
+                              onBlur={() => saveLine(l)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              disabled={rowBusy === l.line_id}
+                            />
+                            <button className="btn-link danger" onClick={() => setConfirmRemove(l.line_id)} disabled={rowBusy === l.line_id} aria-label="Remove item">✕</button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="ff-qty">×{l.qty}</span>
+                            <span className={`pend-status ${l.status}`}>{STATUS_LABEL[l.status] ?? l.status}</span>
+                          </>
+                        )}
                       </div>
-                      <NoteEditor lineId={l.line_id} value={l.line_note} commonNotes={commonNotes} onSaved={(note) => applyLineNote(sel.sales_id, l.line_id, note)} />
+                      {editItems && confirmRemove === l.line_id && (
+                        <div className="rcv-reverse-ask" style={{ marginTop: 6 }}>
+                          Remove {l.item_code || l.name}?
+                          <button className="btn-secondary" onClick={() => setConfirmRemove(null)} disabled={rowBusy === l.line_id}>Keep</button>
+                          <button className="btn-primary danger" onClick={() => removeLine(l.line_id)} disabled={rowBusy === l.line_id}>{rowBusy === l.line_id ? 'Removing…' : 'Yes, remove'}</button>
+                        </div>
+                      )}
+                      {!editItems && (
+                        <NoteEditor lineId={l.line_id} value={l.line_note} commonNotes={commonNotes} onSaved={(note) => applyLineNote(sel.sales_id, l.line_id, note)} />
+                      )}
                     </li>
                   ))}
                 </ul>
+                {editItems && (
+                  <div style={{ marginTop: 8 }}>
+                    {!adding && !addPick && (
+                      <button className="btn-link" onClick={() => setAdding(true)} disabled={!!rowBusy}>+ Add item</button>
+                    )}
+                    {adding && !addPick && (
+                      <SkuSearchAdd
+                        listed={new Set(sel.lines.map((l) => l.item_code).filter((c): c is string => !!c))}
+                        placeholder="Add item: search by code or name"
+                        onSelect={(code) => { setAddPick(code); setAddQty('1'); setAddPrice(''); }}
+                      />
+                    )}
+                    {addPick && (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span className="ff-code">{addPick}</span>
+                        <input type="number" min={1} aria-label="Quantity" style={{ width: 48 }} value={addQty} onChange={(e) => setAddQty(e.target.value)} />
+                        <input type="number" min={0} aria-label="Unit price (Rp)" placeholder="price" style={{ width: 96 }} value={addPrice} onChange={(e) => setAddPrice(e.target.value)} />
+                        <button className="btn-primary" onClick={commitAdd} disabled={rowBusy === '+add'}>{rowBusy === '+add' ? 'Adding…' : 'Add'}</button>
+                        <button className="btn-secondary" onClick={() => { setAddPick(null); setAdding(false); }} disabled={rowBusy === '+add'}>cancel</button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
 
               {/* Payment — totals only; balance right-aligned, green when clear. Settling is the single

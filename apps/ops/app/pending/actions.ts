@@ -52,7 +52,7 @@ export async function getPending(): Promise<PendingOrder[]> {
   // order's uncut lines only (a partial order's already-cut lines live in Fulfill/Outbound, not here).
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customers(name,phone),order_lines!inner(line_id,item_code,qty,line_note,catalogue(original_name,translate_name,self_code))')
+    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customers(name,phone),order_lines!inner(line_id,item_code,qty,unit_price_idr,line_note,catalogue(original_name,translate_name,self_code))')
     .neq('status', 'Cancelled')
     .is('order_lines.fulfilled_at', null)
     .is('order_lines.shipped_at', null)
@@ -83,6 +83,7 @@ export async function getPending(): Promise<PendingOrder[]> {
       line_id: string;
       item_code: string | null;
       qty: number;
+      unit_price_idr: number | null;
       line_note: string | null;
       catalogue: { original_name: string | null; translate_name: string | null; self_code: string | null } | null;
     }[];
@@ -94,6 +95,7 @@ export async function getPending(): Promise<PendingOrder[]> {
         item_code: r.item_code,
         name: nameOf(one(r.catalogue as never), r.item_code ?? r.line_id),
         qty: r.qty,
+        unit_price_idr: r.unit_price_idr ?? null,
         line_note: r.line_note,
         available: a.available,
         on_the_way: a.on_the_way,
@@ -124,6 +126,56 @@ export async function getPending(): Promise<PendingOrder[]> {
     };
   });
   return out;
+}
+
+// PR196 — Editable pending orders: add / update / remove a line on an order still in Pending (all its
+// lines uncut, so NO stock moves — see 0061). Each RPC recomputes sales_total_idr + re-derives the
+// payment status. Errors returned as data (button-awaited mutations, per CLAUDE.md / PR145).
+
+// ── add a line to a pending order (fresh {sales_id}-{n}); returns the new line_id. ──
+export async function addOrderLine(
+  salesId: string,
+  itemCode: string | null,
+  qty: number,
+  unitPrice: number,
+  note: string | null
+): Promise<{ error: string | null }> {
+  if (!salesId) return { error: 'addOrderLine: sales_id is required' };
+  if (!Number.isFinite(qty) || qty < 1) return { error: 'Quantity must be at least 1.' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('add_order_line', {
+    p_sales_id: salesId,
+    p_item_code: itemCode ?? null,
+    p_qty: Math.round(qty),
+    p_unit_price: Math.round(unitPrice || 0),
+    p_line_note: note && note.trim() ? note.trim() : null,
+  });
+  return { error: error ? `Couldn't add item: ${error.message}` : null };
+}
+
+// ── change an uncut line's quantity and/or unit price. ──
+export async function updateOrderLine(
+  lineId: string,
+  qty: number,
+  unitPrice: number
+): Promise<{ error: string | null }> {
+  if (!lineId) return { error: 'updateOrderLine: line_id is required' };
+  if (!Number.isFinite(qty) || qty < 1) return { error: 'Quantity must be at least 1.' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('update_order_line', {
+    p_line_id: lineId,
+    p_qty: Math.round(qty),
+    p_unit_price: Math.round(unitPrice || 0),
+  });
+  return { error: error ? `Couldn't update item: ${error.message}` : null };
+}
+
+// ── remove an uncut line (refuses the last active line — use Delete order for that). ──
+export async function deleteOrderLine(lineId: string): Promise<{ error: string | null }> {
+  if (!lineId) return { error: 'deleteOrderLine: line_id is required' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('delete_order_line', { p_line_id: lineId });
+  return { error: error ? `Couldn't remove item: ${error.message}` : null };
 }
 
 // ── set a line's note (0035): the per-line shipment note, editable in Pending/Fulfill. Empty → NULL.
