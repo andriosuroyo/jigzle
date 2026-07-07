@@ -1745,3 +1745,10 @@ img.sku-img { background: #e8e8e8; }
 .cat-srcrow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .cat-srcrow-n { width: 22px; text-align: center; color: var(--muted); font-size: 12px; font-weight: 700; flex-shrink: 0; }
 .cat-srcrow input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: white; }
+
+/* PR218 — Catalog Identity: barcodes at the bottom (chips + full-width add button) */
+.cat-bc-foot { margin-top: 4px; }
+.cat-bc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.cat-bc-chip { font-size: 12px; font-family: monospace; background: var(--cream); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+.cat-bc-chip em { font-style: normal; color: var(--brown); font-size: 10px; margin-left: 5px; }
+.cat-bc-add { width: 100%; }
