@@ -8,12 +8,26 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import { resolveSkuImages } from '@/app/images/actions';
 import { getCustomers } from '@/app/customers/actions';
-import type { InvoiceAddress, InvoiceCustomerData, InvoiceCustomerRow, InvoiceLine, InvoiceOrder } from './types';
+import type { CnShipmentRow, InvoiceAddress, InvoiceCustomerData, InvoiceCustomerRow, InvoiceLine, InvoiceOrder } from './types';
 
 // Lightweight customer picker list (id / name / phone), reusing the directory's paged loader.
 export async function getInvoiceCustomers(): Promise<InvoiceCustomerRow[]> {
   const rows = await getCustomers();
   return rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone }));
+}
+
+// Forwarder/import shipments for the CN-doc "Shipment_id" picker (ship_id, tracking, courier, date).
+// courier is read here (it postdates the Shipment TS type). Degrades to [] if the read errors.
+export async function getShipments(): Promise<CnShipmentRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('shipments')
+    .select('ship_id,tracking,courier,ship_date,status')
+    .order('ship_date', { ascending: false, nullsFirst: false })
+    .limit(500);
+  if (error || !data) return [];
+  return (data as { ship_id: string; tracking: string | null; courier: string | null; ship_date: string | null; status: string | null }[])
+    .map((r) => ({ shipId: r.ship_id, tracking: r.tracking, courier: r.courier, shipDate: r.ship_date, status: r.status }));
 }
 
 // catalogue name convention used everywhere: translate_name || original_name || self_code || code
