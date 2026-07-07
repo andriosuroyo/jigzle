@@ -216,7 +216,17 @@ export default function ToBuyBoard({
     try { await setPlannedQty(po_id, q); } catch (e) { setError(e instanceof Error ? e.message : 'Failed to set qty.'); }
   }
 
+  // remove the acted row from its list locally (optimistic) — avoids a full 3-list refetch on the hot path.
+  function removeRow(s: { kind: SubTab; id: number | string }) {
+    if (s.kind === 'manual') setPlanned((prev) => prev.filter((p) => p.po_id !== Number(s.id)));
+    else if (s.kind === 'sales') setPreorders((prev) => prev.filter((p) => p.line_id !== String(s.id)));
+    else setSoldOutList((prev) => prev.filter((p) => p.po_id !== Number(s.id)));
+  }
+
   // ── Done → To Forwarder (a Processing PO). Manual advances its own PO; a preorder spawns one. ──
+  // PR219: the row is removed locally by the caller BEFORE this runs, so we only do the single write
+  // here (no heavy 3-list refetch) — the next Done is clickable as soon as that one write returns. On
+  // failure we resync so the row reappears.
   async function done(t: BuyTarget) {
     setBusy(true); setError(null);
     try {
@@ -224,8 +234,7 @@ export default function ToBuyBoard({
       // preorder isn't a PO yet, so it spawns one.
       if ((t.kind === 'manual' || t.kind === 'oos') && t.po_id != null) await setPOStatus(t.po_id, 'Processing');
       else if (t.kind === 'sales') await buyPreorder({ item_code: t.item_code, qty: t.qty, customer_id: t.customer_id });
-      await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); await refresh(); }
     finally { setBusy(false); }
   }
 
@@ -253,8 +262,12 @@ export default function ToBuyBoard({
   // Gated behind the "Cancel this item?" confirm overlay (confirmDelId).
   async function delItem(po_id: number) {
     setBusy(true); setError(null);
-    try { await deletePO(po_id); setConfirmDelId(null); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); }
+    // optimistic remove (no full refetch); resync only if the delete fails.
+    setPlanned((prev) => prev.filter((p) => p.po_id !== po_id));
+    setSoldOutList((prev) => prev.filter((p) => p.po_id !== po_id));
+    setConfirmDelId(null);
+    try { await deletePO(po_id); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); await refresh(); }
     finally { setBusy(false); }
   }
 
@@ -456,7 +469,7 @@ export default function ToBuyBoard({
             </div>
             <div className="sc-modal-foot td-actions">
               <button className="btn-secondary" onClick={() => { const t = detail.target; setSel(null); openBuy(t); }} disabled={busy}>Buy</button>
-              <button className="btn-primary" onClick={() => { const t = detail.target; setSel(null); done(t); }} disabled={busy}>Done →</button>
+              <button className="btn-primary" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}>Done →</button>
               {detail.canDelete && detail.po_id != null && (
                 <TrashButton onClick={() => { const id = detail.po_id!; setSel(null); setConfirmDelId(id); }} disabled={busy} ariaLabel="Cancel this item" />
               )}
