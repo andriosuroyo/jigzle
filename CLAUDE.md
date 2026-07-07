@@ -63,9 +63,13 @@ Notes:
     and aren't destructive (Mark as paid, Send back to pending, and every "+ New / + Add" **entry** button
     that opens an add form — New order, New item, Add note, Add item, Add address, Add supplier, …).
   - **White** (`btn-secondary`) — genuinely neutral / low-stakes (Change, Cancel, Edit, close).
-  - **Red** (`btn-danger` / `TrashButton`) — destructive (Delete order / item / PO). "Mark as out of
+  - **Red** — destructive. Two shades: the *opener* on a detail view is a red **outline** (`btn-danger`
+    / `TrashButton`) — a caution that's safe to tap; the *confirm commit* inside the dialog is **solid**
+    red (`btn-primary danger`, via `ConfirmModal danger`) — the actual irreversible step. "Mark as out of
     stock" stays a red-tinted secondary (`btn-secondary danger`) — a cautionary state change, not a delete.
-  Apply this to any new button; don't invent a per-request colour.
+  Icon convention: reserve a bare leading **"+"** for the top-level **New order** entry; give secondary
+  add buttons a meaningful icon instead (e.g. a notepad for Add note). Apply this to any new button;
+  don't invent a per-request colour.
 
 ## Supabase migrations — how they get applied
 

@@ -18,6 +18,7 @@ export default function ConfirmModal({
   confirmLabel,
   confirmDisabled,
   cancelLabel = '← Back',
+  danger,
   onConfirm,
   onCancel,
   children,
@@ -29,6 +30,7 @@ export default function ConfirmModal({
   confirmLabel: string;
   confirmDisabled?: boolean;
   cancelLabel?: string;
+  danger?: boolean; // destructive confirm → the commit button is solid red, not the default orange
   onConfirm: () => void;
   onCancel: () => void;
   children: ReactNode;
@@ -48,7 +50,7 @@ export default function ConfirmModal({
 
         <div className="sc-modal-foot">
           <button className="btn-secondary" onClick={onCancel} disabled={busy}>{cancelLabel}</button>
-          <button className="btn-primary" onClick={onConfirm} disabled={busy || confirmDisabled}>{confirmLabel}</button>
+          <button className={`btn-primary${danger ? ' danger' : ''}`} onClick={onConfirm} disabled={busy || confirmDisabled}>{confirmLabel}</button>
         </div>
       </div>
     </div>

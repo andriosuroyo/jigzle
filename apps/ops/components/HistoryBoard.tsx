@@ -457,15 +457,13 @@ export default function HistoryBoard({
               <div className="ob-return">
                 {!editingNote ? (
                   <button className="btn-brown btn-ico" onClick={startEditNote}>
-                    {summary.order_note ? (
-                      <>
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-                        </svg>
-                        Edit note
-                      </>
-                    ) : '+ Add note'}
+                    {/* PR235 — a notepad icon (a note), not a "+"; the bare "+" is reserved for "New order". */}
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                      <polyline points="14 3 14 9 20 9" />
+                      <line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="13" y2="17" />
+                    </svg>
+                    {summary.order_note ? 'Edit note' : 'Add note'}
                   </button>
                 ) : <span />}
                 <button className="btn-danger btn-ico" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={deleting} aria-label="Delete order">
