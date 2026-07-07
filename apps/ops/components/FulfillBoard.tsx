@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending } from '@/app/fulfill/actions';
-import { deleteOrder } from '@/app/pending/actions';
 import SearchInput from '@/components/SearchInput';
-import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
-import TrashButton from '@/components/TrashButton';
 import StatusCircles, { payTone } from '@/components/StatusCircles';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
 import type { CourierService, CommonNote, ExportCourier } from '@/app/settings/types';
@@ -56,9 +53,6 @@ export default function FulfillBoard({
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null); // FT-7: top-level, survives detail clearing
-  // PR148: delete goes through the overlay confirm; its error stays in the modal.
-  const [confirmDel, setConfirmDel] = useState(false);
-  const [delErr, setDelErr] = useState<string | null>(null);
   const reqIdRef = useRef(0);
 
   // FT-1: filter the queue by customer name OR SKU code (client-side over the loaded worklist)
@@ -196,32 +190,6 @@ export default function FulfillBoard({
       await refreshQueue();
     } catch (e) {
       if (reqIdRef.current === myReq) setError(e instanceof Error ? e.message : 'Send back to pending failed.');
-    } finally {
-      setCommitting(false);
-    }
-  }
-
-  // PR148: delete via delete_order (any stage; snapshot into order_delete_log; cut lines return to
-  // stock by deletion). Runs from the overlay confirm; errors render inside the modal.
-  async function doDelete() {
-    if (!detail) return;
-    const myReq = ++reqIdRef.current;
-    setCommitting(true);
-    setDelErr(null);
-    try {
-      const { error: err } = await deleteOrder(detail.sales_id);
-      if (err) {
-        if (reqIdRef.current === myReq) setDelErr(err);
-        return;
-      }
-      if (reqIdRef.current !== myReq) return;
-      setConfirmDel(false);
-      setSuccess(`${detail.sales_id} deleted.`);
-      setDetail(null);
-      setSelected(null);
-      await refreshQueue();
-    } catch (e) {
-      if (reqIdRef.current === myReq) setDelErr(e instanceof Error ? e.message : 'Delete failed.');
     } finally {
       setCommitting(false);
     }
@@ -374,8 +342,8 @@ export default function FulfillBoard({
                 </section>
               )}
 
-              {/* Commit bar — Send back (left) · Send to Outbound · delete trashcan (right). Disabled
-                  until address + courier set (the Outbound gate). */}
+              {/* Commit bar — Send back (left) · Send to Outbound. No Delete here: an order in Fulfill is
+                  already cut/ready; deletion belongs to Pending (PR224). Disabled until address + courier set. */}
               <div className="fd-commit fd-commit-row">
                 <button className="btn-secondary" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
                 <button className="btn-primary" onClick={sendOut} disabled={!canSend}>
@@ -384,24 +352,9 @@ export default function FulfillBoard({
                 {!canSend && !committing && (
                   <span className="warn-text">{addressId == null ? 'pick an address' : courierId == null ? 'pick a courier' : isIntl && exportCourierId == null ? 'pick an export courier' : ''}</span>
                 )}
-                <TrashButton onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={committing} ariaLabel="Delete order" className="fd-del-right" />
               </div>
 
               <div className="fd-orderid">{detail.sales_id}</div>
-
-              {confirmDel && (
-                <DeleteOrderConfirm
-                  salesId={detail.sales_id}
-                  lines={[
-                    `${detail.lines.length} cut item${detail.lines.length === 1 ? '' : 's'} return to stock.`,
-                    'Recorded payments are erased with the order.',
-                  ]}
-                  busy={committing}
-                  error={delErr}
-                  onConfirm={doDelete}
-                  onCancel={() => setConfirmDel(false)}
-                />
-              )}
             </>
           )}
           </div>
