@@ -384,14 +384,11 @@ export default function HistoryBoard({
               <section className="fd-section">
                 <div className="fd-section-head">Note</div>
                 {!editingNote ? (
-                  <>
-                    {summary.order_note ? (
-                      <p className="order-note">{summary.order_note}</p>
-                    ) : (
-                      <div className="hint">No note yet.</div>
-                    )}
-                    <button className="btn-link" onClick={startEditNote}>{summary.order_note ? 'Edit note' : '+ Add note'}</button>
-                  </>
+                  summary.order_note ? (
+                    <p className="order-note">{summary.order_note}</p>
+                  ) : (
+                    <div className="hint">No note yet.</div>
+                  )
                 ) : (
                   <>
                     <textarea
@@ -409,9 +406,22 @@ export default function HistoryBoard({
                 )}
               </section>
 
-              {/* Delete (PR148 — overlay confirm; available even on completed orders). PR166: right-aligned
-                  red trashcan (the standard delete affordance). */}
-              <div className="ob-return" style={{ justifyContent: 'flex-end' }}>
+              {/* Add/Edit note (left) + delete trashcan (right), on one line. PR214: the note button
+                  moved here from inside the Note section; it reads "✏ Edit note" once a note exists. */}
+              <div className="ob-return" style={{ justifyContent: 'space-between' }}>
+                {!editingNote ? (
+                  <button className="btn-secondary" onClick={startEditNote}>
+                    {summary.order_note ? (
+                      <>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: '-2px' }} aria-hidden="true">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                        </svg>
+                        Edit note
+                      </>
+                    ) : '+ Add note'}
+                  </button>
+                ) : <span />}
                 <TrashButton onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={deleting} ariaLabel="Delete order" />
               </div>
 
