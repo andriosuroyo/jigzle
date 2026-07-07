@@ -1721,3 +1721,9 @@ img.sku-img { background: #e8e8e8; }
 .btn-brown:active { opacity: 0.9; }
 .btn-brown:disabled { opacity: 0.5; cursor: not-allowed; }
 .cat-new-btn { margin-left: auto; }
+
+/* PR213 — Sales → Fulfill detail: uppercase Courier/Tracking labels (match SHIP TO / ITEMS), and a
+   single action row: Send back · Send to Outbound (left) + delete trashcan (right). */
+.fd-courier .fd-label { text-transform: uppercase; letter-spacing: 0.04em; }
+.fd-commit-row { justify-content: flex-start; }
+.fd-commit-row .fd-del-right { margin-left: auto; }

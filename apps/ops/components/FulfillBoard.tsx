@@ -6,6 +6,7 @@ import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending }
 import { deleteOrder } from '@/app/pending/actions';
 import SearchInput from '@/components/SearchInput';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
+import TrashButton from '@/components/TrashButton';
 import StatusCircles, { payTone } from '@/components/StatusCircles';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
 import type { CourierService, CommonNote, ExportCourier } from '@/app/settings/types';
@@ -289,9 +290,6 @@ export default function FulfillBoard({
               {/* Address (FT-6: radio + needs-address flag) */}
               <section className="fd-section">
                 <div className="fd-section-head">Ship to</div>
-                {detail.needs_address && (
-                  <div className="validation warn">Needs address — pick one before sending to Outbound.</div>
-                )}
                 {detail.addresses.length === 0 && <div className="hint">No saved address for this customer — add one in Sales.</div>}
                 <ul className="addr-list">
                   {detail.addresses.map((a) => (
@@ -376,20 +374,17 @@ export default function FulfillBoard({
                 </section>
               )}
 
-              {/* Commit bar — disabled until address + courier set (the Outbound gate) */}
-              <div className="fd-commit">
-                {!canSend && !committing && (
-                  <span className="warn-text">{addressId == null ? 'pick an address' : courierId == null ? 'pick a courier' : isIntl && exportCourierId == null ? 'pick an export courier' : ''}</span>
-                )}
+              {/* Commit bar — Send back (left) · Send to Outbound · delete trashcan (right). Disabled
+                  until address + courier set (the Outbound gate). */}
+              <div className="fd-commit fd-commit-row">
+                <button className="btn-secondary" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
                 <button className="btn-primary" onClick={sendOut} disabled={!canSend}>
                   {committing ? 'Sending…' : 'Send to Outbound'}
                 </button>
-              </div>
-
-              {/* Send back to pending + delete — bottom, left-aligned (like Pending's delete row). */}
-              <div className="ob-return">
-                <button className="btn-link" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
-                <button className="btn-link pend-delete" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={committing}>Delete order</button>
+                {!canSend && !committing && (
+                  <span className="warn-text">{addressId == null ? 'pick an address' : courierId == null ? 'pick a courier' : isIntl && exportCourierId == null ? 'pick an export courier' : ''}</span>
+                )}
+                <TrashButton onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={committing} ariaLabel="Delete order" className="fd-del-right" />
               </div>
 
               <div className="fd-orderid">{detail.sales_id}</div>
