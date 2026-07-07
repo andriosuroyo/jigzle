@@ -33,3 +33,25 @@ export type InvoiceCustomerData = {
   addresses: InvoiceAddress[];
   orders: InvoiceOrder[];
 };
+
+// ── China customs docs (Phase 2) ──
+
+// A forwarder/import shipment, picked as the "Shipment_id" (ship_id, e.g. "SUB 191") that the CN
+// Packing List / Invoice / Shipping all key off. tracking/courier are the import HAWB + carrier.
+export type CnShipmentRow = {
+  shipId: string;
+  tracking: string | null;
+  courier: string | null;
+  shipDate: string | null;
+  status: string | null;
+};
+
+// One package on the CN Packing List. Dimensions in cm, real weight in kg, plus its China-domestic
+// box tracking (e.g. "ZTO 79011515924946"). Entered here for now (net-new — not yet stored).
+export type CnBox = {
+  p: string; // length
+  l: string; // width
+  t: string; // height
+  realWeight: string;
+  tracking: string;
+};

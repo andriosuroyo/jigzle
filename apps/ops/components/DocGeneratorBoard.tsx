@@ -4,10 +4,13 @@
 // invoices; the China docs (Packing List / Invoice / Shipping) and SP Declare are stubbed pending
 // Phases 2–3. Each doc renders a live PDF preview with a one-click download (@react-pdf/renderer).
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import InvoiceTab from '@/components/docs/InvoiceTab';
+import CnPackingTab, { emptyBox } from '@/components/docs/CnPackingTab';
+import { getShipments } from '@/app/doc-generator/actions';
+import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
 
 type Tab = 'invoice-idr' | 'invoice-usd' | 'cn-packing' | 'cn-invoice' | 'cn-shipping' | 'sp-declare';
 const TABS: { key: Tab; label: string }[] = [
@@ -31,6 +34,22 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
   const [tab, setTab] = useState<Tab>('invoice-idr');
   const label = TABS.find((t) => t.key === tab)!.label;
 
+  // ── shared CN state (a picked shipment + its packages feed all three China docs) ──
+  const [shipments, setShipments] = useState<CnShipmentRow[]>([]);
+  const [shipmentsLoaded, setShipmentsLoaded] = useState(false);
+  const [cnShipId, setCnShipId] = useState('');
+  const [cnMark, setCnMark] = useState('');
+  const [cnBoxes, setCnBoxes] = useState<CnBox[]>([emptyBox()]);
+  const [cnDivisor, setCnDivisor] = useState(6000);
+
+  const isCn = tab === 'cn-packing' || tab === 'cn-invoice' || tab === 'cn-shipping';
+  useEffect(() => {
+    if (isCn && !shipmentsLoaded) {
+      setShipmentsLoaded(true);
+      getShipments().then(setShipments).catch(() => setShipments([]));
+    }
+  }, [isCn, shipmentsLoaded]);
+
   return (
     <div className="ops">
       <AppHeader active="doc-generator" userEmail={userEmail} />
@@ -49,7 +68,15 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
       <div className="orders-panels">
         {tab === 'invoice-idr' && <InvoiceTab currency="IDR" />}
         {tab === 'invoice-usd' && <InvoiceTab currency="USD" />}
-        {tab === 'cn-packing' && <ComingSoon label="CN Packing List" />}
+        {tab === 'cn-packing' && (
+          <CnPackingTab
+            shipments={shipments}
+            shipId={cnShipId} setShipId={setCnShipId}
+            mark={cnMark} setMark={setCnMark}
+            boxes={cnBoxes} setBoxes={setCnBoxes}
+            divisor={cnDivisor} setDivisor={setCnDivisor}
+          />
+        )}
         {tab === 'cn-invoice' && <ComingSoon label="CN Invoice" />}
         {tab === 'cn-shipping' && <ComingSoon label="CN Shipping" />}
         {tab === 'sp-declare' && <ComingSoon label="SP Declare" />}
