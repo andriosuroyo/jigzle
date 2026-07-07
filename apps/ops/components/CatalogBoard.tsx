@@ -15,6 +15,7 @@ import {
   getCatalogDuplicates,
   getMissingWeight,
   acceptEstimatedWeight,
+  getMissingImage,
   getSharedBarcodes,
   getSku,
   quickAddSku,
@@ -202,6 +203,8 @@ export default function CatalogBoard({
   const fixLoadedRef = useRef(false);
   // PR210 — likely-duplicate groups load separately (a full-catalogue scan) so the fast lists show first
   const [dupes, setDupes] = useState<DupGroup[] | null>(null);
+  // PR212 — missing-image list also loads separately (a moderate bucket scan)
+  const [missingImg, setMissingImg] = useState<CatalogueListRow[] | null>(null);
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogueListRow[]>([]);
@@ -209,6 +212,7 @@ export default function CatalogBoard({
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
   const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
   const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: up to 5 manual Google-Drive image URLs
+  const [imgUnavailable, setImgUnavailable] = useState(false); // PR212: "no picture available" (0071)
   const [heroIdx, setHeroIdx] = useState(0); // PR189: which manual image the hero shows
 
   const [mode, setMode] = useState<RightMode>(null);
@@ -306,6 +310,7 @@ export default function CatalogBoard({
       .then(([untranslated, puzzleNoPieces, implausible, offList, missingWeight]) => setFixExtra({ untranslated, puzzleNoPieces, implausible, offList, missingWeight }))
       .catch(() => {});
     getCatalogDuplicates().then(setDupes).catch(() => setDupes([])); // separate: full-catalogue scan
+    getMissingImage().then(setMissingImg).catch(() => setMissingImg([])); // separate: bucket scan
   }, [tab]);
 
   // PR211 — accept a SKU's estimated weight into its real weight, then drop it from the list.
@@ -343,7 +348,7 @@ export default function CatalogBoard({
       const d = await getSku(code);
       if (reqRef.current !== myReq) return;
       setDetail(d);
-      if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); }
+      if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable); }
     } catch (e) {
       if (reqRef.current !== myReq) return;
       setError(e instanceof Error ? e.message : 'Failed to load SKU.');
@@ -360,7 +365,7 @@ export default function CatalogBoard({
     const d = await getSku(code);
     if (reqRef.current !== myReq) return;
     setDetail(d);
-    if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); }
+    if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setImgUnavailable(!!d.sku.image_unavailable); }
   }
 
   // Barcode-only refresh — update just the barcode list (+ shared flags), preserving any
@@ -437,6 +442,8 @@ export default function CatalogBoard({
       if (JSON.stringify(cleaned) !== JSON.stringify(orig)) {
         patch.image_urls = cleaned.length ? cleaned : null;
       }
+      // PR212 — "no picture available" flag (outside `form`); include only when changed.
+      if (!!imgUnavailable !== !!detail.sku.image_unavailable) patch.image_unavailable = imgUnavailable;
       await updateSku(detail.sku.item_code, patch as Partial<CatalogueRow>);
       const n = Object.keys(patch).length;
       await reloadDetail(detail.sku.item_code);
@@ -634,6 +641,10 @@ export default function CatalogBoard({
                       {imageUrls.length < MAX_IMAGE_URLS && (
                         <button className="btn-secondary sc-mini" onClick={() => setImageUrls((a) => [...a, ''])}>+ add image URL</button>
                       )}
+                      <label className="cat-round" style={{ marginTop: 12 }}>
+                        <input type="checkbox" checked={imgUnavailable} onChange={(e) => setImgUnavailable(e.target.checked)} />
+                        <span>No picture available — searched but none found (hides it from the Fix “missing image” list)</span>
+                      </label>
                     </div>
                   )}
 
@@ -945,6 +956,11 @@ export default function CatalogBoard({
                       ))}
                     </ul>
                   )}
+                </section>
+
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Missing image ({missingImg ? fixCount2(missingImg.length) : '…'})</div>
+                  {!missingImg ? <div className="hint">Scanning images…</div> : renderFixList(missingImg, 'Every SKU has an image (or is marked “no picture available”).', 'no image')}
                 </section>
 
                 <section className="cat-fix-sec">

@@ -549,6 +549,29 @@ export async function getOffListClassification(): Promise<OffListRow[]> {
   return out.slice(0, FIX_CAP);
 }
 
+// Missing image — a SKU with no resolvable bucket image (sku_image_resolved status ≠ has_image) that
+// isn't flagged "no picture available". Only ~4k SKUs lack an image, so this is a workable list. Runs
+// on its own (a moderate scan). Degrades to [] until 0071 (image_unavailable) is applied.
+export async function getMissingImage(): Promise<CatalogueListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const noImg: string[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from('sku_image_resolved').select('item_code,image_status').neq('image_status', 'has_image').order('item_code').range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    for (const r of data as { item_code: string }[]) noImg.push(r.item_code);
+    if (data.length < PAGE || noImg.length >= 8000) break;
+  }
+  if (!noImg.length) return [];
+  const out: CatalogueListRow[] = [];
+  for (let i = 0; i < noImg.length && out.length < FIX_CAP; i += 300) {
+    const { data, error } = await supabase.from('catalogue').select(LIST_COLS).in('item_code', noImg.slice(i, i + 300)).eq('image_unavailable', false).limit(FIX_CAP);
+    if (error) return []; // image_unavailable column missing (pre-0071) → degrade
+    for (const c of (data ?? []) as CatNameRow[]) { out.push(toListRow(c)); if (out.length >= FIX_CAP) break; }
+  }
+  return out.slice(0, FIX_CAP);
+}
+
 // Likely duplicate SKUs — different item_codes that share the same normalized name + brand + piece
 // count (an accidental double-entry of the same product). Scans the whole catalogue (paged), so it is
 // loaded on its own (not blocking the fast Fix lists). Returns up to 200 groups, most-duplicated first.
