@@ -1715,3 +1715,9 @@ img.sku-img { background: #e8e8e8; }
 .sb-grid-head { font-size: 11px; color: #8a8a88; font-weight: 700; margin-bottom: 2px; }
 .sb-grid-head span { padding-left: 2px; }
 .sb-grid input { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }
+
+/* PR207 — Catalog Search: brown "+ New item" button aligned right on the tab row */
+.btn-brown { background: var(--brown); color: #fff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn-brown:active { opacity: 0.9; }
+.btn-brown:disabled { opacity: 0.5; cursor: not-allowed; }
+.cat-new-btn { margin-left: auto; }
