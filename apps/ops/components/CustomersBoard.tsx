@@ -10,6 +10,7 @@
 // customer (getCustomerDetail); the Fix scans load lazily the first time the tab is opened.
 
 import { useMemo, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import CountrySelect from '@/components/CountrySelect';
@@ -76,7 +77,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const channelSelectOptions: IconOption<string>[] = channelOptions.map((c) => ({ value: c.label, label: c.label, icon: c.icon }));
   const [customers, setCustomers] = useState<CustomerListRow[]>(initialCustomers);
   const tiers = initialTiers;
-  const [tab, setTab] = useState<Tab>('search');
+  // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
+  const [tab, setTab] = useUrlTab<Tab>('tab', 'search', ['search', 'fix']);
   const [letter, setLetter] = useState<string>('A');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);

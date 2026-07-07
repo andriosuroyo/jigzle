@@ -13,6 +13,7 @@
 // and Out-of-stock / Done / Delete actions. "Done" sends the item to To Forwarder (a Processing PO).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import {
   buyPreorder,
   createDraftSku,
@@ -91,7 +92,8 @@ export default function ToBuyBoard({
   preorders: PreorderRow[];
   soldOut: SoldOutRow[];
 }) {
-  const [tab, setTab] = useState<SubTab>('manual');
+  // PR223 — the sub-tab is mirrored to ?buy= (distinct from Purchasing's ?tab=) so a hard Refresh stays put.
+  const [tab, setTab] = useUrlTab<SubTab>('buy', 'manual', ['manual', 'sales', 'oos']);
   const [planned, setPlanned] = useState<PlannedItemRow[]>(initialPlanned);
   const [preorders, setPreorders] = useState<PreorderRow[]>(initialPreorders);
   const [soldOut, setSoldOutList] = useState<SoldOutRow[]>(initialSoldOut);

@@ -6,6 +6,7 @@
 // History (per shipment / per item) views. The full pipeline still works inside the bucketed boards.
 
 import { useMemo, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import OrderBoard from '@/components/OrderBoard';
@@ -44,7 +45,8 @@ export default function PurchasingShell({
   shipmentCouriers?: string[]; // 0056 — History's international courier pick-list (Settings-managed)
   userEmail: string;
 }) {
-  const [tab, setTab] = useState<PurchasingTab>('forwarder');
+  // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
+  const [tab, setTab] = useUrlTab<PurchasingTab>('tab', 'forwarder', ['tobuy', 'forwarder', 'ship', 'history']);
   // PR153: a board's bodyview DETAIL is open → hide the pipeline tabs (the breadcrumb stays) for
   // more viewing space. Boards report via onDetailOpenChange; a tab switch always resets it.
   const [detailOpen, setDetailOpen] = useState(false);

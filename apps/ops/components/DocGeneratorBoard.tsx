@@ -5,6 +5,7 @@
 // Phases 2–3. Each doc renders a live PDF preview with a one-click download (@react-pdf/renderer).
 
 import { useEffect, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import InvoiceTab from '@/components/docs/InvoiceTab';
@@ -26,7 +27,8 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) {
-  const [tab, setTab] = useState<Tab>('invoice-idr');
+  // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
+  const [tab, setTab] = useUrlTab<Tab>('tab', 'invoice-idr', ['invoice-idr', 'invoice-usd', 'cn-packing', 'cn-invoice', 'cn-shipping', 'sp-declare']);
   const label = TABS.find((t) => t.key === tab)!.label;
 
   // ── shared CN state (a picked shipment + its packages feed all three China docs) ──
