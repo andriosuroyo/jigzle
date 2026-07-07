@@ -45,3 +45,23 @@ Notes:
 - The primary nav is a single source of truth in `apps/ops/components/navConfig.tsx`
   (consumed by both the hub landing page and `AppHeader`).
 - Match the surrounding code's style, comment density, and naming when editing.
+
+## Supabase migrations — how they get applied
+
+**Claude cannot apply migrations itself in the web/remote environment.** Only
+`NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are exposed — the service-role key
+is a PostgREST/JWT credential, **not** a Postgres password, so there is no `psql`/DDL path from
+the session (no `DATABASE_URL`, no DB password, no `supabase` CLI login). Therefore:
+
+1. **Write the migration as a file** under `supabase/migrations/NNNN_name.sql` (next number in
+   sequence), committed with the PR that needs it — this is the source of truth / paper trail.
+2. **Also paste the SQL into the chat** so the user can run it in the **Supabase SQL Editor**
+   (Dashboard → SQL Editor). Make the SQL **idempotent** (`if not exists`, `create or replace`,
+   guarded seeds) so re-running is safe.
+3. **Write the app code to degrade gracefully until the migration is applied** — a loader that
+   reads a not-yet-created table/column must catch the error and return `[]`/null so the screen
+   still renders (mirror `getExportCouriers`, which returns `[]` if `settings_export_couriers`
+   is missing). Never let a missing column white-screen a page.
+
+If a future session is given a real `DATABASE_URL` / DB password, it may apply migrations directly
+with `psql`; absent that, follow the paste-the-SQL flow above.
