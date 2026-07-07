@@ -1549,6 +1549,42 @@ img.sku-img { background: #e8e8e8; }
 .pend-status.to_order { color: var(--red); background: #FBEAEA; }
 .pend-delete { color: var(--red); }
 
+/* ── PR224 — Pending detail: per-line editor, header order-id chip, icon action row ── */
+.pend-line-note { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pend-line .btn-edit { margin-left: 2px; }
+
+/* copyable order-id chip, sitting under the customer/date row in the header */
+.fd-orderid-chip { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; background: white; border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px; cursor: pointer; }
+.fd-orderid-chip:active { background: var(--paper); }
+.fd-orderid-code { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--brown-dark); }
+.fd-orderid-chip svg { color: var(--brown-light); flex-shrink: 0; }
+
+.pay-hint { margin-top: 8px; }
+
+/* actions — one left-aligned, horizontally-scrollable row of icon buttons */
+.fd-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+.fd-actions::-webkit-scrollbar { height: 0; }
+.fd-actions > button { flex-shrink: 0; }
+.btn-ico { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn-ico svg { flex-shrink: 0; }
+
+/* red "Delete order / Delete item" text button (mirrors .btn-secondary in red) */
+.btn-danger { background: white; border: 1px solid var(--red); color: var(--red); padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-danger:active { background: #FBEAEA; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* per-line editor overlay */
+.le-sku { display: flex; align-items: center; gap: 10px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-top: 4px; }
+.le-sku-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.le-sku .btn-link { flex-shrink: 0; }
+.le-row { display: flex; gap: 12px; margin-top: 14px; }
+.le-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.le-field.grow { flex: 1; }
+.le-note { margin-top: 14px; }
+.le-field input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; }
+.le-foot { display: flex; align-items: center; gap: 10px; }
+.le-del { margin-right: auto; }
+
 /* ── PR-B — Fulfill To-send preview SKU list (FT-3) ── */
 .ff-sku-list { margin-left: auto; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
 /* Fulfill row: "N items (SKU1, SKU2)" — fills the row, ellipsised; date sits to its right. */
