@@ -1582,8 +1582,10 @@ img.sku-img { background: #e8e8e8; }
 .le-field.grow { flex: 1; }
 .le-note { margin-top: 14px; }
 .le-field input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; }
+/* the price input fills its (grow) field in the editor — overrides the narrow fixed .edit-price width */
+.le-field .edit-price { width: 100%; height: auto; text-align: left; padding: 9px 10px; font-size: 16px; }
 .le-foot { display: flex; align-items: center; gap: 10px; }
-.le-del { margin-right: auto; }
+.le-del { margin-left: auto; }
 
 /* ── PR-B — Fulfill To-send preview SKU list (FT-3) ── */
 .ff-sku-list { margin-left: auto; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
