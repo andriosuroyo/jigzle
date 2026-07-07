@@ -12,7 +12,19 @@ let registered = false;
 // rendering any CN document (from the tab and the doc component).
 export function ensureCjkFont(): void {
   if (registered || typeof window === 'undefined') return;
-  Font.register({ family: CJK, src: `${window.location.origin}/fonts/jigzle-cjk.ttf` });
+  const src = `${window.location.origin}/fonts/jigzle-cjk.ttf`;
+  // Register the one subset file under every weight/style combo. The subset has no true bold/italic
+  // faces, but this makes `fontWeight: 700` / `fontStyle: 'italic'` in the docs RESOLVE instead of
+  // throwing "font not registered" — they just render in the regular face.
+  Font.register({
+    family: CJK,
+    fonts: [
+      { src },
+      { src, fontWeight: 'bold' },
+      { src, fontStyle: 'italic' },
+      { src, fontWeight: 'bold', fontStyle: 'italic' },
+    ],
+  });
   Font.registerHyphenationCallback((word) => [word]); // never hyphenate (breaks CJK + codes)
   registered = true;
 }
