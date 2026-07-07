@@ -30,6 +30,7 @@ export default function DeleteOrderConfirm({
       busy={busy}
       confirmLabel={busy ? 'Deleting…' : 'Delete order'}
       cancelLabel="← Back"
+      danger
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
