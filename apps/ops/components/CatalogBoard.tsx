@@ -11,6 +11,7 @@ import {
   getUntranslated,
   getPuzzleNoPieces,
   getImplausibleDims,
+  getOffListClassification,
   getSharedBarcodes,
   getSku,
   quickAddSku,
@@ -21,6 +22,7 @@ import {
 } from '@/app/catalog/actions';
 import { missingForComplete } from '@/app/catalog/types';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
+import type { OffListRow } from '@/app/catalog/actions';
 import CatalogBrowse from '@/components/CatalogBrowse';
 import SearchSelect from '@/components/SearchSelect';
 import SearchInput from '@/components/SearchInput';
@@ -193,7 +195,7 @@ export default function CatalogBoard({
   const [needsReview, setNeedsReview] = useState<CatalogueListRow[]>(initialNeedsReview);
   const [shared, setShared] = useState<CollisionRow[]>(initialShared);
   // PR208 — extra Fix data-quality lists, lazy-loaded the first time the Fix tab opens (keeps /catalog fast)
-  const [fixExtra, setFixExtra] = useState<{ untranslated: CatalogueListRow[]; puzzleNoPieces: CatalogueListRow[]; implausible: CatalogueListRow[] } | null>(null);
+  const [fixExtra, setFixExtra] = useState<{ untranslated: CatalogueListRow[]; puzzleNoPieces: CatalogueListRow[]; implausible: CatalogueListRow[]; offList: OffListRow[] } | null>(null);
   const fixLoadedRef = useRef(false);
 
   const [search, setSearch] = useState('');
@@ -295,8 +297,8 @@ export default function CatalogBoard({
   useEffect(() => {
     if (tab !== 'fix' || fixLoadedRef.current) return;
     fixLoadedRef.current = true;
-    Promise.all([getUntranslated(), getPuzzleNoPieces(), getImplausibleDims()])
-      .then(([untranslated, puzzleNoPieces, implausible]) => setFixExtra({ untranslated, puzzleNoPieces, implausible }))
+    Promise.all([getUntranslated(), getPuzzleNoPieces(), getImplausibleDims(), getOffListClassification()])
+      .then(([untranslated, puzzleNoPieces, implausible, offList]) => setFixExtra({ untranslated, puzzleNoPieces, implausible, offList }))
       .catch(() => {});
   }, [tab]);
 
@@ -908,6 +910,28 @@ export default function CatalogBoard({
                 <section className="cat-fix-sec">
                   <div className="cat-grp-title">Implausible dimensions / weight ({fixExtra ? fixCount2(fixExtra.implausible.length) : '…'})</div>
                   {!fixExtra ? <div className="hint">Loading…</div> : renderFixList(fixExtra.implausible, 'No out-of-range dimensions or weights.', 'check values')}
+                </section>
+
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Off-list classification ({fixExtra ? fixCount2(fixExtra.offList.length) : '…'})</div>
+                  {!fixExtra ? <div className="hint">Loading…</div> : (
+                    <ul className="fq-list">
+                      {fixExtra.offList.length === 0 && <li><div className="hint fq-empty">All product/sub/piece types match the Settings lists.</div></li>}
+                      {fixExtra.offList.map((r, i) => (
+                        <li key={`${r.item_code}-${r.field}-${i}`}>
+                          <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
+                            <div className="cat-row">
+                              <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                              <div className="cat-row-main">
+                                <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
+                                <div className="fq-row-bot"><span>{r.brand_prefix || '—'}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.field.replace('_type', '')}: {r.value}</span></div>
+                              </div>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </section>
               </div>
             )}
