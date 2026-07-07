@@ -16,7 +16,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
 import {
   buyPreorder,
-  createDraftSku,
   createPlannedItem,
   deletePO,
   getPlannedItems,
@@ -200,10 +199,12 @@ export default function ToBuyBoard({
     if (!Number.isFinite(qty) || qty < 0) { setError('Qty must be a number ≥ 0.'); return; }
     setBusy(true); setError(null);
     try {
-      // a brand-new code is stubbed into the catalogue (draft) so the buy-list item can reference it
-      if (!picked) await createDraftSku({ item_code: code });
+      // PR231 — a picked SKU FKs via item_code; a brand-new/unknown code is stored as a PLACEHOLDER
+      // (item_code_raw, no catalogue row) and matched to a real SKU later at Inbound receive. No draft
+      // SKU is created here — new SKUs enter the catalogue only when the goods actually arrive.
       await createPlannedItem({
-        item_code: code,
+        item_code: picked ? code : null,
+        item_code_raw: picked ? null : code,
         qty,
         product_link: link.trim() || null,
         item_note: note.trim() || null,
@@ -283,7 +284,7 @@ export default function ToBuyBoard({
     if (sel.kind === 'manual') {
       const p = planned.find((x) => x.po_id === sel.id);
       if (!p) return null;
-      return { kind: 'manual' as const, po_id: p.po_id, item_code: p.item_code, name: p.name, qty: p.qty, urgency: p.urgency,
+      return { kind: 'manual' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency,
         wf: p.with_forwarder, otw: p.on_the_way, avail: p.available, context: `PO #${p.po_id}`, note: p.item_note,
         qtyEditable: true, canDelete: true,
         target: { kind: 'manual' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link } };
@@ -291,14 +292,14 @@ export default function ToBuyBoard({
     if (sel.kind === 'sales') {
       const p = preorders.find((x) => x.line_id === sel.id);
       if (!p) return null;
-      return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, name: p.name, qty: p.qty, urgency: p.urgency,
+      return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, code: p.item_code ?? '', name: p.name, qty: p.qty, urgency: p.urgency,
         wf: 0, otw: 0, avail: p.available, context: `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}`, note: null as string | null,
         qtyEditable: false, canDelete: false,
         target: { kind: 'sales' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link } };
     }
     const p = soldOut.find((x) => x.po_id === sel.id);
     if (!p) return null;
-    return { kind: 'oos' as const, po_id: p.po_id, item_code: p.item_code, name: p.name, qty: p.qty, urgency: p.urgency,
+    return { kind: 'oos' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency,
       wf: p.with_forwarder, otw: p.on_the_way, avail: p.available,
       context: p.origin === 'sales' ? `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}` : `PO #${p.po_id}`, note: p.sold_out_note,
       qtyEditable: p.origin === 'manual', canDelete: true,
@@ -370,7 +371,7 @@ export default function ToBuyBoard({
                   <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
                     <div className="po-card-l1">
-                      <span className="ff-code">{p.item_code || '—'}</span>
+                      <span className="ff-code">{p.item_code ?? p.item_code_raw ?? '—'}</span>
                       <span className="ff-name po-card-name">{p.name}</span>
                       <span className="po-card-date">{fmtDate(p.input_date)}</span>
                     </div>
@@ -427,7 +428,7 @@ export default function ToBuyBoard({
                   <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
                     <div className="po-card-l1">
-                      <span className="ff-code">{p.item_code || '—'}</span>
+                      <span className="ff-code">{p.item_code ?? p.item_code_raw ?? '—'}</span>
                       <span className="ff-name po-card-name">{p.name}</span>
                       <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
                     </div>
@@ -455,7 +456,7 @@ export default function ToBuyBoard({
           <div className="sc-modal tobuy-detail" role="dialog" aria-modal="true" aria-label="Item actions" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head td-head-block">
               <div className="td-head-titles">
-                <span className="sc-modal-title">{detail.item_code || '—'}</span>
+                <span className="sc-modal-title">{detail.code || '—'}</span>
                 {detailHasName && <div className="ff-name td-name">{detail.name}</div>}
               </div>
               {/* Edit → the Catalog editor, but only for a known SKU: a brand-new/unknown manual code has
@@ -469,7 +470,7 @@ export default function ToBuyBoard({
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
               {/* image left; a tidy label→value stack to its right: priority, qty-to-buy, stock. */}
               <div className="td-head2">
-                <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : (detail.item_code ?? '')} size={SKU_IMG.md} />
+                <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : detail.code} size={SKU_IMG.md} />
                 <div className="td-side">
                   {detail.urgency && (
                     <div className={`td-prio td-prio-${detail.urgency}`}><span className="td-prio-dot" />{detail.urgency[0].toUpperCase() + detail.urgency.slice(1)} priority</div>
@@ -580,7 +581,7 @@ export default function ToBuyBoard({
                 </div>
               )}
               {isNewSku && (
-                <div className="validation ok" style={{ margin: '8px 0' }}>New SKU: it will be added to the catalog.</div>
+                <div className="validation ok" style={{ margin: '8px 0' }}>New code — kept as a placeholder; you’ll match it to a real SKU when it arrives at Inbound.</div>
               )}
 
               {/* item fields — always shown, qty defaults to 1. PR158: Qty + Product link share a line

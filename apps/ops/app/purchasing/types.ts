@@ -119,7 +119,10 @@ export interface PreorderRow {
 
 // ── To buy → Planned (manual buy-list; PO status 'Planned'). Created with no supplier yet. ──
 export interface PlannedItemInput {
-  item_code: string;
+  // PR231 — a known SKU FKs via item_code; a brand-new/unknown code is stored as a placeholder in
+  // item_code_raw (item_code NULL) and resolved to a real SKU at Inbound receive. Exactly one is set.
+  item_code?: string | null;
+  item_code_raw?: string | null;
   qty: number;
   product_link?: string | null;
   item_note?: string | null;
@@ -129,6 +132,7 @@ export interface PlannedItemInput {
 export interface PlannedItemRow {
   po_id: number;
   item_code: string | null;
+  item_code_raw: string | null; // PR231 — the placeholder code shown when item_code is NULL (unknown SKU)
   name: string;
   qty: number;
   product_link: string | null;
@@ -147,6 +151,7 @@ export interface PlannedItemRow {
 export interface SoldOutRow {
   po_id: number;
   item_code: string | null;
+  item_code_raw: string | null; // PR231 — placeholder code when item_code is NULL (unknown SKU)
   name: string;
   qty: number;
   urgency: Urgency | null;

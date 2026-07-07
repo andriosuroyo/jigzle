@@ -511,8 +511,11 @@ export async function deletePO(poId: number): Promise<void> {
 // ── To buy → Planned: create a manual buy-list item (PO status 'Planned', no supplier yet). ──
 export async function createPlannedItem(input: PlannedItemInput): Promise<{ po_id: number }> {
   const supabase = createSupabaseServerClient();
-  const item_code = input.item_code?.trim();
-  if (!item_code) throw new Error('createPlannedItem: an item code is required');
+  // PR231 — a known SKU FKs via item_code; a brand-new/unknown code is a placeholder held in
+  // item_code_raw (item_code NULL) and resolved to a real SKU at Inbound receive (mapPlaceholderPO).
+  const item_code = input.item_code?.trim() || null;
+  const item_code_raw = input.item_code_raw?.trim() || null;
+  if (!item_code && !item_code_raw) throw new Error('createPlannedItem: an item code is required');
   const qty = Number(input.qty);
   if (!Number.isFinite(qty) || qty < 0) throw new Error('createPlannedItem: qty must be a number >= 0');
 
@@ -522,6 +525,7 @@ export async function createPlannedItem(input: PlannedItemInput): Promise<{ po_i
     .from('purchase_orders')
     .insert({
       item_code,
+      item_code_raw,
       qty,
       status: 'Planned',
       status_since: today,
@@ -673,11 +677,11 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,qty,product_link,item_note,urgency,status,status_since,input_date')
+    .select('po_id,item_code,item_code_raw,qty,product_link,item_note,urgency,status,status_since,input_date')
     .eq('status', 'Planned')
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
-  const rows = (data ?? []) as { po_id: number; item_code: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null; input_date: string | null }[];
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null; input_date: string | null }[];
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -693,6 +697,7 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
     return {
       po_id: r.po_id,
       item_code: r.item_code,
+      item_code_raw: r.item_code_raw,
       name: r.item_code ? nameByCode.get(r.item_code) ?? DASH : DASH,
       qty: r.qty,
       product_link: r.product_link,
@@ -711,13 +716,13 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,qty,product_link,urgency,sold_out_date,sold_out_note,customer_id,marketplace_order_id,status,input_date')
+    .select('po_id,item_code,item_code_raw,qty,product_link,urgency,sold_out_date,sold_out_note,customer_id,marketplace_order_id,status,input_date')
     .eq('status', 'Sold out')
     .order('sold_out_date', { ascending: false, nullsFirst: false })
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
   const rows = (data ?? []) as {
-    po_id: number; item_code: string | null; qty: number; product_link: string | null; urgency: Urgency | null;
+    po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; product_link: string | null; urgency: Urgency | null;
     sold_out_date: string | null; sold_out_note: string | null; customer_id: number | null; marketplace_order_id: string | null; input_date: string | null;
   }[];
   if (!rows.length) return [];
@@ -755,6 +760,7 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
     return {
       po_id: r.po_id,
       item_code: r.item_code,
+      item_code_raw: r.item_code_raw,
       name: r.item_code ? nameByCode.get(r.item_code) ?? DASH : DASH,
       qty: r.qty,
       product_link: r.product_link,
