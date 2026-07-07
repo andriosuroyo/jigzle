@@ -353,13 +353,13 @@ export default function ToBuyBoard({
             {planned.map((p) => (
               <li key={p.po_id}>
                 <button className={`po-card po-card-btn po-card-mini${urgClass(p.urgency)}`} onClick={() => setSel({ kind: 'manual', id: p.po_id })}>
-                  <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.md} />
+                  <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
                     <div className="po-card-l1">
                       <span className="ff-code">{p.item_code || '—'}</span>
+                      <span className="ff-name po-card-name">{p.name}</span>
                       <span className="po-card-date">{fmtDate(p.input_date)}</span>
                     </div>
-                    <div className="ff-name po-card-name">{p.name}</div>
                     <div className="po-card-meta">
                       <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />
                       <span className="po-card-qty">×{p.qty}</span>
@@ -382,13 +382,13 @@ export default function ToBuyBoard({
             {preorders.map((p) => (
               <li key={p.line_id}>
                 <button className={`po-card po-card-btn po-card-mini${urgClass(p.urgency)}`} onClick={() => setSel({ kind: 'sales', id: p.line_id })}>
-                  <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.md} />
+                  <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
                     <div className="po-card-l1">
                       <span className="ff-code">{p.item_code || '—'}</span>
+                      <span className="ff-name po-card-name">{p.name}</span>
                       <span className="po-card-date">{fmtDate(p.order_date)}</span>
                     </div>
-                    <div className="ff-name po-card-name">{p.name}</div>
                     <div className="po-card-meta">
                       <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
                       <span className="po-card-qty">×{p.qty}</span>
@@ -410,13 +410,13 @@ export default function ToBuyBoard({
             {soldOut.map((p) => (
               <li key={p.po_id}>
                 <button className={`po-card po-card-btn po-card-mini${urgClass(p.urgency)}`} onClick={() => setSel({ kind: 'oos', id: p.po_id })}>
-                  <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.md} />
+                  <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
                     <div className="po-card-l1">
                       <span className="ff-code">{p.item_code || '—'}</span>
+                      <span className="ff-name po-card-name">{p.name}</span>
                       <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
                     </div>
-                    <div className="ff-name po-card-name">{p.name}</div>
                     <div className="po-card-meta">
                       {p.origin === 'sales'
                         ? <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
@@ -564,7 +564,7 @@ export default function ToBuyBoard({
 
               {/* item fields — always shown, qty defaults to 1. PR158: Qty + Product link share a line
                   (link fills the space to the right) to keep the overlay short. */}
-              <div className="po-form" style={{ marginTop: 4 }}>
+              <div className="po-form" style={{ marginTop: 18 }}>
                 <div className="po-field-row">
                   <div className="po-field">
                     <label>Qty</label>
@@ -602,9 +602,8 @@ export default function ToBuyBoard({
                   </div>
                 </div>
 
-                <div className="po-commit">
-                  <span className="fd-commit-info">{!canAdd ? 'Search a SKU, or type a new SKU code and search.' : ''}</span>
-                  <button className="btn-primary" onClick={submitPlanned} disabled={busy || !canAdd}>{busy ? 'Adding…' : 'Add item'}</button>
+                <div className="po-commit po-commit-left">
+                  <button className="btn-primary" onClick={submitPlanned} disabled={busy || !canAdd}>{busy ? 'Adding…' : '+ Add item'}</button>
                 </div>
               </div>
             </div>

@@ -235,6 +235,17 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-commit .fd-commit-info { flex: 1; min-width: 0; }
 .po-commit .btn-primary { flex-shrink: 0; }
 
+/* PR229 — To-buy cards: smaller image, two lines. Line 1 = code + name + date; line 2 = pills/customer +
+   qty grouped to the right. */
+.po-card-mini .po-card-l1 .ff-name { flex: 1; min-width: 0; }
+.po-card-mini .po-card-meta { justify-content: flex-end; }
+.po-card-mini .po-card-meta .po-card-qty { margin-left: 0; }
+
+/* PR229 — Add-planned-item overlay: roomier field spacing, all-caps labels, left-aligned commit button. */
+.po-form > .po-field, .po-form > .po-field-row { margin-bottom: 18px; }
+.po-form .po-field > label { text-transform: uppercase; letter-spacing: 0.04em; }
+.po-commit-left { justify-content: flex-start; }
+
 /* ── Panels ── */
 /* PR156: overflow VISIBLE (was hidden) — the Payment IconSelect dropdown opens past the panel edge;
    overflow:hidden clipped it so no option could be tapped. The head rounds its own top corners. */
