@@ -33,22 +33,34 @@ export async function middleware(req: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const path = req.nextUrl.pathname;
-  const isPublic =
-    path === '/login' ||
-    path.startsWith('/auth/callback') ||
+
+  // Cacheable static assets: hashed Next bundles (immutable), the manifest, and the icons/brand images.
+  const isAsset =
     path.startsWith('/_next') ||
     path === '/manifest.json' ||
     path === '/sw.js' ||
     path.startsWith('/icons') ||
     path === '/favicon.ico' ||
-    // Brand assets rendered on the (unauthenticated) login screen, plus the app/apple icons iOS
-    // fetches for "Add to Home Screen". Without these the middleware redirects the asset request to
-    // /login, so the login <img> falls back to alt text and iOS shows the brown letter tile (PR198).
     path === '/logo.webp' ||
     path === '/icon.png' ||
     path === '/apple-icon.png';
 
-  if (isPublic) return res;
+  // PR232 — the app has no service worker, so an installed iOS PWA (or a browser tab) keeps serving the
+  // HTML document from its own HTTP cache after a deploy — the classic "my change didn't show up until I
+  // reopened the app". Every page is force-dynamic (the server always renders fresh) and the referenced
+  // /_next bundles are content-hashed, so it's safe to forbid caching the DOCUMENT + server actions:
+  // the browser re-fetches the current HTML each launch, which pulls the latest bundle. Assets stay
+  // cacheable (they're immutable / rarely change).
+  const noStore = (r: NextResponse): NextResponse => {
+    if (!isAsset) r.headers.set('Cache-Control', 'no-store, must-revalidate');
+    return r;
+  };
+
+  // Brand assets rendered on the (unauthenticated) login screen + the app/apple icons iOS fetches for
+  // "Add to Home Screen" are public; the login/callback pages are public too (PR198).
+  const isPublic = path === '/login' || path.startsWith('/auth/callback') || isAsset;
+
+  if (isPublic) return noStore(res);
 
   if (!user) {
     const url = req.nextUrl.clone();
@@ -66,7 +78,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return res;
+  return noStore(res);
 }
 
 export const config = {
