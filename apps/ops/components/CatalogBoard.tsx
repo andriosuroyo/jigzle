@@ -64,8 +64,8 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       { key: 'sub_type', label: 'Sub type', kind: 'text', select: true, list: 'sub_type', w: 'half' },
       { key: 'piece_count_n', label: 'Piece count', kind: 'number', w: 'half' },
       { key: 'piece_type', label: 'Piece type', kind: 'text', select: true, list: 'piece_type', w: 'half' },
-      { key: 'material', label: 'Material', kind: 'text', list: 'material', w: 'half' },
-      { key: 'effect', label: 'Effect', kind: 'text', list: 'effect', w: 'half' },
+      { key: 'material', label: 'Material', kind: 'text', select: true, list: 'material', w: 'half' },
+      { key: 'effect', label: 'Effect', kind: 'text', select: true, list: 'effect', w: 'half' },
       { key: 'theme', label: 'Theme', kind: 'text', select: true, list: 'theme' },
       { key: 'artist', label: 'Artist', kind: 'text', select: true, list: 'artist' },
     ],
@@ -422,9 +422,13 @@ export default function CatalogBoard({
       // PR191 — a round image is entered as a single diameter (Product L); W/H are meaningless, so clear
       // them. The autofilled columns (image_type / piece_size / release year+month) are DERIVED here from
       // the final geometry, not edited directly, and written only when they actually change.
+      const isJigsaw = /jigsaw/i.test(String(form['product_type'] ?? ''));
       const sizeP = numOrNull(form['size_p']);
       const sizeL = round ? null : numOrNull(form['size_l']);
-      if (round) { patch.size_l = null; patch.size_t = null; }
+      if (round) {
+        patch.size_l = null;                 // Width is always dropped for a diameter
+        if (isJigsaw) patch.size_t = null;   // Height dropped only for a flat round jigsaw
+      }
       const setIfChanged = (key: keyof CatalogueRow, next: string | number | null) => {
         const cur = (detail.sku[key] ?? null) as string | number | null;
         if ((next ?? null) !== (cur ?? null)) patch[key as string] = next;
@@ -648,20 +652,23 @@ export default function CatalogBoard({
                     </div>
                   )}
 
-                  {/* PR191 — Dimensions leads with the Round toggle: on → Product L is the diameter, W/H hidden. */}
+                  {/* PR216 — Dimensions leads with the Round/diameter toggle: on → Product L is the
+                      diameter, Width is emptied+disabled; Height too, but only for a jigsaw puzzle (a
+                      3D round item such as a spherical lamp keeps its height). */}
                   {GROUPS[detailTab].title === 'Dimensions & weight' && (
                     <label className="cat-round">
                       <input type="checkbox" checked={round} onChange={(e) => setRound(e.target.checked)} />
-                      <span>Round image (Ø) — enter the diameter as Product L (width &amp; height are dropped)</span>
+                      <span>Round / uses a diameter (Ø) — enter it as Product L. Width is emptied; height too for a jigsaw puzzle.</span>
                     </label>
                   )}
 
                   <div className="cat-grid">
                     {GROUPS[detailTab].fields.map((fld) => {
                       const k = fld.key as string;
-                      // round: the product width/height are meaningless (a single diameter) — hide them,
-                      // and label Product L as the diameter.
-                      if (round && (k === 'size_l' || k === 'size_t')) return null;
+                      const isJigsaw = /jigsaw/i.test(String(form['product_type'] ?? ''));
+                      // Round/diameter: Product L is the diameter. Width is always emptied+disabled;
+                      // Height too, but only for a jigsaw puzzle (a 3D round item keeps its height).
+                      const roundLocked = round && (k === 'size_l' || (k === 'size_t' && isJigsaw));
                       const label = round && k === 'size_p' ? 'Diameter (cm)' : fld.label;
                       const w = fld.kind === 'textarea' || fld.kind === 'bool' ? 'full' : fld.w ?? 'half';
                       const opts = fld.list ? fieldOptions[fld.list] : undefined;
@@ -693,7 +700,8 @@ export default function CatalogBoard({
                                   type={fld.kind === 'number' ? 'number' : 'text'}
                                   step={fld.kind === 'number' ? 'any' : undefined}
                                   list={listId}
-                                  value={String(form[k] ?? '')}
+                                  value={roundLocked ? '' : String(form[k] ?? '')}
+                                  disabled={roundLocked}
                                   onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}
                                 />
                               )}
@@ -709,18 +717,21 @@ export default function CatalogBoard({
                     })}
                   </div>
 
-                  {/* PR191 — Classification's two AUTOFILLED read-only fields, derived from the geometry.
-                      Image type & Piece size are computed from the dimensions + piece count on save. */}
-                  {GROUPS[detailTab].title === 'Classification' && (() => {
+                  {/* PR216 — Dimensions' auto-derived read-only fields: Image type + Piece size (from the
+                      geometry + piece count) and Volume weight (Box L×W×H ÷ 5, grams). */}
+                  {GROUPS[detailTab].title === 'Dimensions & weight' && (() => {
                     const sizeP = numOrNull(form['size_p']);
                     const sizeL = round ? null : numOrNull(form['size_l']);
                     const it = computeImageType(round, sizeP, sizeL);
                     const ps = computePieceSize(sizeP, sizeL, numOrNull(form['piece_count_n']));
+                    const dp = numOrNull(form['dim_p']), dl = numOrNull(form['dim_l']), dt = numOrNull(form['dim_t']);
+                    const volW = dp && dl && dt ? Math.round((dp * dl * dt) / 5) : null;
                     return (
                       <div className="cat-auto">
                         <div className="cat-auto-row"><span className="cat-auto-label">Image type</span><span className="cat-auto-val">{it || '—'}</span><span className="cat-auto-tag">auto</span></div>
                         <div className="cat-auto-row"><span className="cat-auto-label">Piece size</span><span className="cat-auto-val">{ps || '—'}</span><span className="cat-auto-tag">auto</span></div>
-                        <div className="hint" style={{ marginTop: 4 }}>Image type &amp; Piece size fill in from the dimensions + piece count (set them on the Dimensions tab). Location fills from Tags.</div>
+                        <div className="cat-auto-row"><span className="cat-auto-label">Volume weight (g)</span><span className="cat-auto-val">{volW != null ? volW.toLocaleString('en-US') : '—'}</span><span className="cat-auto-tag">auto</span></div>
+                        <div className="hint" style={{ marginTop: 4 }}>Image type &amp; Piece size derive from the dimensions + piece count; Volume weight = Box L × W × H ÷ 5 (g).</div>
                       </div>
                     );
                   })()}
