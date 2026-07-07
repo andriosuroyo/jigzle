@@ -12,6 +12,7 @@ import type {
   ChannelOption,
   CommonNote,
   CourierService,
+  DeclarationUser,
   ExportCourier,
   InboundLabel,
   LocalCourier,
@@ -400,4 +401,53 @@ export async function deleteExportCourier(id: number): Promise<void> {
 export async function reorderExportCouriers(ids: number[]): Promise<void> {
   const supabase = createSupabaseServerClient();
   await Promise.all(ids.map((id, i) => supabase.from('settings_export_couriers').update({ sort_order: i }).eq('id', id)));
+}
+
+// ── 0068 (PR205): declaration users — the SP Declare (Surat Pernyataan) identity pick-list. GLOBAL
+// rows only, same posture as the other lists. getDeclarationUsers degrades to [] until 0068 is applied. ──
+const DECL_COLS = 'id,name,ktp,npwp,phone,address,sort_order';
+
+export async function getDeclarationUsers(): Promise<DeclarationUser[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('settings_declaration_users')
+    .select(DECL_COLS)
+    .is('user_id', null)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  if (error) return []; // table not yet created → degrade
+  return (data ?? []) as DeclarationUser[];
+}
+
+export async function addDeclarationUser(name: string): Promise<DeclarationUser> {
+  const supabase = createSupabaseServerClient();
+  const nm = name.trim();
+  if (!nm) throw new Error('A name is required.');
+  const { data: maxRow } = await supabase.from('settings_declaration_users').select('sort_order').is('user_id', null).order('sort_order', { ascending: false }).limit(1).maybeSingle();
+  const sort_order = ((maxRow?.sort_order as number | null) ?? -1) + 1;
+  const { data, error } = await supabase
+    .from('settings_declaration_users')
+    .insert({ user_id: null, name: nm, sort_order })
+    .select(DECL_COLS)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as DeclarationUser;
+}
+
+export async function updateDeclarationUser(id: number, patch: Partial<Pick<DeclarationUser, 'name' | 'ktp' | 'npwp' | 'phone' | 'address'>>): Promise<DeclarationUser> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.from('settings_declaration_users').update(patch).eq('id', id).select(DECL_COLS).single();
+  if (error) throw new Error(error.message);
+  return data as DeclarationUser;
+}
+
+export async function deleteDeclarationUser(id: number): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('settings_declaration_users').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function reorderDeclarationUsers(ids: number[]): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  await Promise.all(ids.map((id, i) => supabase.from('settings_declaration_users').update({ sort_order: i }).eq('id', id)));
 }

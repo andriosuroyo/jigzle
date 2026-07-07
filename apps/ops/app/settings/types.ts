@@ -110,6 +110,18 @@ export interface ExportCourier {
   sort_order: number;
 }
 
+// 0068 (PR205): SP Declare (Surat Pernyataan) declaration users — a person's identity that fills the
+// customs declaration (picked in Doc Generator → SP Declare). KTP/NPWP/phone/address vary per person.
+export interface DeclarationUser {
+  id: number;
+  name: string;
+  ktp: string | null;
+  npwp: string | null;
+  phone: string | null;
+  address: string | null;
+  sort_order: number;
+}
+
 // 0059 (PR193): the Catalog classification pick-lists (Product / Sub / Piece type). Same label-only
 // shape as ChannelOption; read by the Catalog item editor's type comboboxes (unioned with the
 // catalogue's distinct values).
