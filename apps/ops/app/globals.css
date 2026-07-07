@@ -1740,3 +1740,8 @@ img.sku-img { background: #e8e8e8; }
 .edit-additem { width: 100%; margin-top: 12px; }
 .edit-addrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .edit-pay { margin-top: 16px; }
+
+/* PR217 — Catalog Links tab: Sources rows (numbered URL fields, mirror the image rows) */
+.cat-srcrow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cat-srcrow-n { width: 22px; text-align: center; color: var(--muted); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.cat-srcrow input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: white; }

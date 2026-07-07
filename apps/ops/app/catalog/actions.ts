@@ -604,6 +604,37 @@ export async function getCatalogDuplicates(): Promise<DupGroup[]> {
   return out.slice(0, 200);
 }
 
+// ── PR217: source links (sku_sources, 0003) — the Links → Sources editor + the Purchasing "Buy"
+// overlay both use these (getSkuSources also lives in purchasing/actions for that overlay). Up to 8
+// slots (0071: source_index 0..7). setSkuSources replaces the whole set for a SKU. ──
+export async function getSkuSources(itemCode: string): Promise<string[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase.from('sku_sources').select('url,source_index').eq('item_code', itemCode).order('source_index', { ascending: true });
+  return (data ?? []).map((r) => (r as { url: string }).url).filter(Boolean);
+}
+
+export async function setSkuSources(itemCode: string, urls: string[]): Promise<{ error: string | null }> {
+  const supabase = createSupabaseServerClient();
+  const code = itemCode.trim();
+  if (!code) return { error: 'setSkuSources: item_code is required' };
+  const clean = urls.map((u) => u.trim()).filter(Boolean).slice(0, 8);
+
+  // Snapshot the current rows so a failed insert (e.g. an 8th slot before 0072 is applied) can be
+  // rolled back — the delete+insert isn't a transaction, so we restore on error to never lose data.
+  const { data: prev } = await supabase.from('sku_sources').select('source_index,url').eq('item_code', code);
+  const { error: delErr } = await supabase.from('sku_sources').delete().eq('item_code', code);
+  if (delErr) return { error: delErr.message };
+  if (!clean.length) return { error: null };
+  const rows = clean.map((url, i) => ({ item_code: code, source_index: i, url }));
+  const { error } = await supabase.from('sku_sources').insert(rows);
+  if (error) {
+    const snapshot = (prev ?? []) as { source_index: number; url: string }[];
+    if (snapshot.length) await supabase.from('sku_sources').insert(snapshot.map((r) => ({ item_code: code, source_index: r.source_index, url: r.url })));
+    return { error: error.message };
+  }
+  return { error: null };
+}
+
 // ── shared-barcodes tab: the barcode_collisions view (0020) ──
 export async function getSharedBarcodes(): Promise<CollisionRow[]> {
   const supabase = createSupabaseServerClient();
