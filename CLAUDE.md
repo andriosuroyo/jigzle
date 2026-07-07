@@ -33,6 +33,16 @@ Notes:
 - This auto-merge default applies to ordinary builds. For anything destructive or
   irreversible beyond a normal code deploy (DB migrations, data backfills, deleting/renaming
   things you didn't create), still confirm with the user first.
+- **After the squash-merge, keep the branch and its remote in lock-step.** The squash creates a
+  *new* commit on `main` (authored by `GitHub <noreply@github.com>`). If you resync the feature
+  branch to it (`git fetch origin main && git checkout -B <branch> origin/main`) but leave
+  `origin/<branch>` pointing at the old pre-merge commit, then `origin/<branch>..HEAD` contains
+  GitHub's merge commit — a commit you didn't author locally — and the Stop hook flags it as
+  "Unverified" (a false positive). **Fix: right after the resync, also push the branch so the
+  remote matches** — `git push --force-with-lease origin <branch>` (force-with-lease is correct
+  here: the branch holds only already-merged history). That leaves `origin/<branch>..HEAD` empty
+  and the hook has nothing to flag. Do this every time, so a turn never ends with the local branch
+  ahead of its remote by GitHub's merge commit.
 
 ## Conventions
 
