@@ -7,12 +7,19 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier } from '@/app/purchasing/actions';
-import type { ShipmentHistoryRow, ShipmentItemRow } from '@/app/purchasing/types';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes } from '@/app/purchasing/actions';
+import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+
+// PR206: box editor draft rows (string inputs) ⇄ ShipmentBox (numbers/null).
+type BoxDraft = { p: string; l: string; t: string; w: string; tracking: string };
+const emptyBoxDraft = (): BoxDraft => ({ p: '', l: '', t: '', w: '', tracking: '' });
+const numOrNull = (s: string): number | null => (s.trim() === '' ? null : Number(s));
+const boxToDraft = (b: ShipmentBox): BoxDraft => ({ p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', w: b.real_weight?.toString() ?? '', tracking: b.tracking ?? '' });
+const draftToBox = (d: BoxDraft): ShipmentBox => ({ dim_p: numOrNull(d.p), dim_l: numOrNull(d.l), dim_t: numOrNull(d.t), real_weight: numOrNull(d.w), tracking: d.tracking.trim() || null });
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 // Active = shipped date; Completed = received date.
@@ -56,6 +63,11 @@ export default function PurchasingHistoryBoard({
   const [courierDraft, setCourierDraft] = useState('');
   const [trackingDraft, setTrackingDraft] = useState('');
   const [courierErr, setCourierErr] = useState<string | null>(null);
+  // PR206 (0069): per-box dims/weight/tracking drafts (saved as a set; pre-fill the CN Packing List)
+  const [boxDraft, setBoxDraft] = useState<BoxDraft[]>([]);
+  const [savingBoxes, setSavingBoxes] = useState(false);
+  const [boxErr, setBoxErr] = useState<string | null>(null);
+  const [boxSaved, setBoxSaved] = useState(false);
 
   // PR153: tell the shell when a detail is open (it hides the pipeline tabs, keeps the breadcrumb)
   useEffect(() => { onDetailOpenChange?.(!!openShip); }, [openShip, onDetailOpenChange]);
@@ -114,8 +126,12 @@ export default function PurchasingHistoryBoard({
     setCourierDraft(s.courier ?? '');
     setTrackingDraft(s.tracking ?? '');
     setCourierErr(null);
+    setBoxErr(null);
+    setBoxSaved(false);
+    setBoxDraft([]);
     setShipItems([]);
     setShipItemsLoading(true);
+    getShipmentBoxes(s.ship_id).then((rows) => setBoxDraft(rows.length ? rows.map(boxToDraft) : [emptyBoxDraft()])).catch(() => setBoxDraft([emptyBoxDraft()]));
     try {
       setShipItems(await getShipmentItems(s.ship_id));
     } catch {
@@ -123,6 +139,16 @@ export default function PurchasingHistoryBoard({
     } finally {
       setShipItemsLoading(false);
     }
+  }
+
+  // PR206: save the whole box set for the open shipment (replaces existing rows).
+  async function saveBoxes() {
+    if (!openShip) return;
+    setSavingBoxes(true); setBoxErr(null); setBoxSaved(false);
+    const { error } = await setShipmentBoxes(openShip.ship_id, boxDraft.map(draftToBox));
+    setSavingBoxes(false);
+    if (error) { setBoxErr(error); return; }
+    setBoxSaved(true);
   }
 
   // save the per-Ship-ID note from the detail view (works even when starting empty).
@@ -194,6 +220,31 @@ export default function PurchasingHistoryBoard({
               onChange={(e) => setTrackingDraft(e.target.value)}
               onBlur={(e) => void saveCourier(courierDraft, e.target.value)}
             />
+          </div>
+        </section>
+
+        {/* PR206: box dimensions / weight / China tracking — pre-fills the Doc Generator CN Packing
+            List for this ship_id. Optional; degrades to a no-op until migration 0069 is applied. */}
+        <section className="fd-section">
+          <div className="fd-section-head">Boxes — dimensions &amp; tracking <em className="panel-opt">(optional)</em></div>
+          {boxErr && <div className="validation err">{boxErr}</div>}
+          <div className="sb-grid sb-grid-head">
+            <span>L (cm)</span><span>W (cm)</span><span>H (cm)</span><span>Real wt (kg)</span><span>Box tracking</span><span />
+          </div>
+          {boxDraft.map((b, i) => (
+            <div className="sb-grid" key={i}>
+              <input type="text" inputMode="decimal" value={b.p} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, p: e.target.value } : r)))} />
+              <input type="text" inputMode="decimal" value={b.l} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, l: e.target.value } : r)))} />
+              <input type="text" inputMode="decimal" value={b.t} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, t: e.target.value } : r)))} />
+              <input type="text" inputMode="decimal" value={b.w} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, w: e.target.value } : r)))} />
+              <input type="text" value={b.tracking} placeholder="ZTO …" onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, tracking: e.target.value } : r)))} />
+              <button className="set-del" aria-label="Remove box" onClick={() => setBoxDraft((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : prev))}>✕</button>
+            </div>
+          ))}
+          <div className="po-inline2" style={{ marginTop: 6, gap: 8 }}>
+            <button className="btn-link" onClick={() => setBoxDraft((prev) => [...prev, emptyBoxDraft()])}>+ Add box</button>
+            <button className="btn-secondary" onClick={saveBoxes} disabled={savingBoxes}>{savingBoxes ? 'Saving…' : 'Save boxes'}</button>
+            {boxSaved && <span className="hint" style={{ alignSelf: 'center' }}>Saved.</span>}
           </div>
         </section>
 

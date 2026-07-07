@@ -196,6 +196,16 @@ export interface ShipmentItemRow {
   currency: string | null; // from the line's supplier country (yuan / yen …) for the "each" label
 }
 
+// PR206 (0069): a box on an import shipment — dims (cm) + real weight (kg) + China box tracking.
+// Captured in Purchasing History detail; pre-fills the Doc Generator CN Packing List.
+export interface ShipmentBox {
+  dim_p: number | null;
+  dim_l: number | null;
+  dim_t: number | null;
+  real_weight: number | null;
+  tracking: string | null;
+}
+
 // ── Purchasing History → Per shipment (read-only): one completed shipment, so shipment-level data
 // (receive date, tracking) isn't duplicated across its item rows. ──
 export interface ShipmentHistoryRow {

@@ -1709,3 +1709,9 @@ img.sku-img { background: #e8e8e8; }
 .month-btn:active { background: var(--paper); }
 .month-btn:disabled { opacity: 0.6; cursor: default; }
 .month-btn-cta { font-size: 12px; font-weight: 600; color: var(--brown); white-space: nowrap; }
+
+/* PR206 — Purchasing History box editor (dims/weight/tracking → CN Packing List pre-fill) */
+.sb-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1.6fr 22px; gap: 6px; margin-bottom: 6px; align-items: center; }
+.sb-grid-head { font-size: 11px; color: #8a8a88; font-weight: 700; margin-bottom: 2px; }
+.sb-grid-head span { padding-left: 2px; }
+.sb-grid input { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }

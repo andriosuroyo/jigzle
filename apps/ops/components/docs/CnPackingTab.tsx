@@ -5,9 +5,10 @@
 // volumetric divisor (5000/6000). Net weight = Σ volume weights, gross = Σ real weights, packages =
 // row count. Shared shipment/box state lives in the board so the other CN docs can reuse it.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { pdf } from '@react-pdf/renderer';
+import { getShipmentBoxes } from '@/app/purchasing/actions';
 import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
 import PackingListDoc, { type PackingBox } from './PackingListDoc';
 import { ensureCjkFont } from './cjkFont';
@@ -35,6 +36,22 @@ export type CnPackingProps = {
 export default function CnPackingTab({ shipments, shipId, setShipId, mark, setMark, boxes, setBoxes, divisor, setDivisor }: CnPackingProps) {
   ensureCjkFont();
   const [downloading, setDownloading] = useState(false);
+
+  // Pre-fill packages from the shipment's saved boxes (captured in Purchasing → History). Fetch once
+  // per ship-id; only replace when saved boxes exist, so manual entry is never wiped.
+  const prefilledFor = useRef<string>('');
+  useEffect(() => {
+    const sid = shipId.trim();
+    if (!sid || prefilledFor.current === sid) return;
+    prefilledFor.current = sid;
+    getShipmentBoxes(sid)
+      .then((rows) => {
+        if (rows.length) {
+          setBoxes(rows.map((b) => ({ p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', realWeight: b.real_weight?.toString() ?? '', tracking: b.tracking ?? '' })));
+        }
+      })
+      .catch(() => {});
+  }, [shipId, setBoxes]);
 
   const pkgBoxes: PackingBox[] = useMemo(
     () => boxes

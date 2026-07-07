@@ -33,6 +33,7 @@ import type {
   ReceivedItemRow,
   ShipmentItemRow,
   ShipmentHistoryRow,
+  ShipmentBox,
   PlannedItemInput,
   PlannedItemRow,
   SoldOutRow,
@@ -272,6 +273,36 @@ export async function setShipmentCourier(
     .update({ courier: courier.trim() || null, tracking: tracking.trim() || null })
     .eq('ship_id', sid);
   return { error: error ? `setShipmentCourier: ${error.message}` : null };
+}
+
+// ── PR206 (0069): per-box dims/weight/tracking for an import shipment (Purchasing History detail).
+// getShipmentBoxes degrades to [] until 0069 is applied. setShipmentBoxes replaces the whole set for a
+// ship_id (delete + insert) and returns the error as data (PR145 convention). ──
+export async function getShipmentBoxes(shipId: string): Promise<ShipmentBox[]> {
+  const sid = shipId.trim();
+  if (!sid) return [];
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('shipment_boxes')
+    .select('dim_p,dim_l,dim_t,real_weight,tracking')
+    .eq('ship_id', sid)
+    .order('sort_order', { ascending: true });
+  if (error || !data) return []; // table not yet created → degrade
+  return data as ShipmentBox[];
+}
+
+export async function setShipmentBoxes(shipId: string, boxes: ShipmentBox[]): Promise<{ error: string | null }> {
+  const sid = shipId.trim();
+  if (!sid) return { error: 'setShipmentBoxes: a ship id is required' };
+  const supabase = createSupabaseServerClient();
+  const { error: delErr } = await supabase.from('shipment_boxes').delete().eq('ship_id', sid);
+  if (delErr) return { error: `setShipmentBoxes: ${delErr.message}` };
+  const rows = boxes
+    .filter((b) => b.dim_p != null || b.dim_l != null || b.dim_t != null || b.real_weight != null || (b.tracking ?? '').trim())
+    .map((b, i) => ({ ship_id: sid, dim_p: b.dim_p, dim_l: b.dim_l, dim_t: b.dim_t, real_weight: b.real_weight, tracking: (b.tracking ?? '').trim() || null, sort_order: i }));
+  if (rows.length === 0) return { error: null };
+  const { error } = await supabase.from('shipment_boxes').insert(rows);
+  return { error: error ? `setShipmentBoxes: ${error.message}` : null };
 }
 
 // ── SKU search (catalogue text + barcode + brand name), with live available + incoming (D3) ──
