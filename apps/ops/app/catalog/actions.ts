@@ -491,6 +491,38 @@ export async function getOffListClassification(): Promise<OffListRow[]> {
   return out.slice(0, FIX_CAP);
 }
 
+// Likely duplicate SKUs — different item_codes that share the same normalized name + brand + piece
+// count (an accidental double-entry of the same product). Scans the whole catalogue (paged), so it is
+// loaded on its own (not blocking the fast Fix lists). Returns up to 200 groups, most-duplicated first.
+export type DupGroup = { key: string; name: string; brand: string | null; pieces: number | null; members: { item_code: string; name: string }[] };
+export async function getCatalogDuplicates(): Promise<DupGroup[]> {
+  const supabase = createSupabaseServerClient();
+  const PAGE = 1000;
+  type Row = CatNameRow & { piece_count_n: number | null };
+  const rows: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from('catalogue').select(`${LIST_COLS},piece_count_n`).order('item_code').range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    rows.push(...(data as Row[]));
+    if (data.length < PAGE || rows.length >= 60000) break; // safety cap
+  }
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const groups = new Map<string, Row[]>();
+  for (const r of rows) {
+    const nm = nameOf(r);
+    if (!nm || nm === r.item_code) continue; // no usable name → can't judge a duplicate
+    const key = `${norm(nm)}|${(r.brand_prefix || '').toLowerCase()}|${r.piece_count_n ?? ''}`;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(r);
+  }
+  const out: DupGroup[] = [];
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    out.push({ key: '', name: nameOf(members[0]), brand: members[0].brand_prefix, pieces: members[0].piece_count_n, members: members.map((m) => ({ item_code: m.item_code, name: nameOf(m) })) });
+  }
+  out.sort((a, b) => b.members.length - a.members.length);
+  return out.slice(0, 200);
+}
+
 // ── shared-barcodes tab: the barcode_collisions view (0020) ──
 export async function getSharedBarcodes(): Promise<CollisionRow[]> {
   const supabase = createSupabaseServerClient();
