@@ -406,6 +406,55 @@ export async function getNeedsReview(): Promise<CatalogueListRow[]> {
   }));
 }
 
+// ── PR208: Catalog Fix data-quality lists. Each returns up to FIX_CAP rows (the UI shows the count,
+// with a "+" when capped). Lazy-loaded on the first Fix-tab open so /catalog stays fast. ──
+const FIX_CAP = 300;
+const toListRow = (c: CatNameRow): CatalogueListRow => ({ item_code: c.item_code, name: nameOf(c), brand_prefix: c.brand_prefix ?? null, needs_review: !!c.needs_review });
+
+// Untranslated: an original (usually Chinese/Japanese) name is present but the translated name is blank.
+export async function getUntranslated(): Promise<CatalogueListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('catalogue')
+    .select(LIST_COLS)
+    .not('original_name', 'is', null)
+    .is('translate_name', null)
+    .order('item_code')
+    .limit(FIX_CAP);
+  return ((data ?? []) as CatNameRow[]).map(toListRow);
+}
+
+// Puzzle without a piece count — a jigsaw with piece_count_n blank (the completion gate needs it).
+export async function getPuzzleNoPieces(): Promise<CatalogueListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('catalogue')
+    .select(LIST_COLS)
+    .ilike('product_type', '%puzzle%')
+    .is('piece_count_n', null)
+    .order('item_code')
+    .limit(FIX_CAP);
+  return ((data ?? []) as CatNameRow[]).map(toListRow);
+}
+
+// Implausible dimensions / weight — negative, zero-where-set, or absurdly large values (fat-fingers):
+// any product/box dimension > 250 cm or < 0, a real weight < 0 or > 30 kg, or a piece count > 100k.
+export async function getImplausibleDims(): Promise<CatalogueListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('catalogue')
+    .select(LIST_COLS)
+    .or([
+      'real_weight.lt.0', 'real_weight.gt.30000',
+      'size_p.gt.250', 'size_l.gt.250', 'size_t.gt.250', 'size_p.lt.0', 'size_l.lt.0', 'size_t.lt.0',
+      'dim_p.gt.250', 'dim_l.gt.250', 'dim_t.gt.250', 'dim_p.lt.0', 'dim_l.lt.0', 'dim_t.lt.0',
+      'piece_count_n.gt.100000', 'piece_count_n.lt.0',
+    ].join(','))
+    .order('item_code')
+    .limit(FIX_CAP);
+  return ((data ?? []) as CatNameRow[]).map(toListRow);
+}
+
 // ── shared-barcodes tab: the barcode_collisions view (0020) ──
 export async function getSharedBarcodes(): Promise<CollisionRow[]> {
   const supabase = createSupabaseServerClient();

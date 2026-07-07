@@ -8,6 +8,9 @@ import {
   addBarcode,
   getCatalogFieldOptions,
   getNeedsReview,
+  getUntranslated,
+  getPuzzleNoPieces,
+  getImplausibleDims,
   getSharedBarcodes,
   getSku,
   quickAddSku,
@@ -189,6 +192,9 @@ export default function CatalogBoard({
   const [detailTab, setDetailTab] = useState(0); // PR185: which field sub-tab of the item bodyview
   const [needsReview, setNeedsReview] = useState<CatalogueListRow[]>(initialNeedsReview);
   const [shared, setShared] = useState<CollisionRow[]>(initialShared);
+  // PR208 — extra Fix data-quality lists, lazy-loaded the first time the Fix tab opens (keeps /catalog fast)
+  const [fixExtra, setFixExtra] = useState<{ untranslated: CatalogueListRow[]; puzzleNoPieces: CatalogueListRow[]; implausible: CatalogueListRow[] } | null>(null);
+  const fixLoadedRef = useRef(false);
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogueListRow[]>([]);
@@ -284,6 +290,15 @@ export default function CatalogBoard({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  // PR208 — lazy-load the extra Fix lists the first time the Fix tab is opened.
+  useEffect(() => {
+    if (tab !== 'fix' || fixLoadedRef.current) return;
+    fixLoadedRef.current = true;
+    Promise.all([getUntranslated(), getPuzzleNoPieces(), getImplausibleDims()])
+      .then(([untranslated, puzzleNoPieces, implausible]) => setFixExtra({ untranslated, puzzleNoPieces, implausible }))
+      .catch(() => {});
+  }, [tab]);
 
   function switchTab(t: Tab) {
     setTab(t);
@@ -476,6 +491,29 @@ export default function CatalogBoard({
   }
 
   const fixCount = needsReview.length + shared.length;
+
+  // PR208 — shared renderer for a Fix data-quality list (mirrors the Needs-review list markup).
+  const fixCount2 = (n: number) => (n >= 300 ? '300+' : String(n));
+  function renderFixList(rows: CatalogueListRow[], empty: string, badge: string) {
+    return (
+      <ul className="fq-list">
+        {rows.length === 0 && <li><div className="hint fq-empty">{empty}</div></li>}
+        {rows.map((r) => (
+          <li key={r.item_code}>
+            <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
+              <div className="cat-row">
+                <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                <div className="cat-row-main">
+                  <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
+                  <div className="fq-row-bot"><span>{r.brand_prefix || '—'}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{badge}</span></div>
+                </div>
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+  }
 
   // SKU images for the visible lists + the open SKU — one batch read, lazy.
   const imgCodes = useMemo(() => {
@@ -854,6 +892,22 @@ export default function CatalogBoard({
                       </li>
                     ))}
                   </ul>
+                </section>
+
+                {/* PR208 — extra data-quality lists (lazy-loaded on first Fix open) */}
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Untranslated names ({fixExtra ? fixCount2(fixExtra.untranslated.length) : '…'})</div>
+                  {!fixExtra ? <div className="hint">Loading…</div> : renderFixList(fixExtra.untranslated, 'All named items are translated.', 'no translation')}
+                </section>
+
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Puzzles missing piece count ({fixExtra ? fixCount2(fixExtra.puzzleNoPieces.length) : '…'})</div>
+                  {!fixExtra ? <div className="hint">Loading…</div> : renderFixList(fixExtra.puzzleNoPieces, 'Every puzzle has a piece count.', 'no piece count')}
+                </section>
+
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Implausible dimensions / weight ({fixExtra ? fixCount2(fixExtra.implausible.length) : '…'})</div>
+                  {!fixExtra ? <div className="hint">Loading…</div> : renderFixList(fixExtra.implausible, 'No out-of-range dimensions or weights.', 'check values')}
                 </section>
               </div>
             )}
