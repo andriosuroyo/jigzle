@@ -9,6 +9,8 @@ import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import InvoiceTab from '@/components/docs/InvoiceTab';
 import CnPackingTab, { emptyBox } from '@/components/docs/CnPackingTab';
+import CnInvoiceTab from '@/components/docs/CnInvoiceTab';
+import CnShippingTab from '@/components/docs/CnShippingTab';
 import { getShipments } from '@/app/doc-generator/actions';
 import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
 
@@ -77,8 +79,12 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
             divisor={cnDivisor} setDivisor={setCnDivisor}
           />
         )}
-        {tab === 'cn-invoice' && <ComingSoon label="CN Invoice" />}
-        {tab === 'cn-shipping' && <ComingSoon label="CN Shipping" />}
+        {tab === 'cn-invoice' && (
+          <CnInvoiceTab shipments={shipments} shipId={cnShipId} setShipId={setCnShipId} mark={cnMark} boxes={cnBoxes} divisor={cnDivisor} />
+        )}
+        {tab === 'cn-shipping' && (
+          <CnShippingTab shipments={shipments} shipId={cnShipId} setShipId={setCnShipId} boxes={cnBoxes} divisor={cnDivisor} />
+        )}
         {tab === 'sp-declare' && <ComingSoon label="SP Declare" />}
       </div>
     </div>
