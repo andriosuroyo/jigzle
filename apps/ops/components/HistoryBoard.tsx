@@ -32,6 +32,10 @@ function boxToneOf(state: HistoryState): CircleTone {
   return 'grey';
 }
 
+// PR228 — order-id copy chip icons, matching the Pending detail header.
+const CopyIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
+const CheckIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>);
+
 export default function HistoryBoard({
   initialOrders,
   boxPresets,
@@ -337,12 +341,17 @@ export default function HistoryBoard({
           {loadingSummary && <div className="hint">Loading summary…</div>}
           {!loadingSummary && summary && (
             <>
-              {/* PR144 header: customer id left, order date right; the sales id moved to the bottom. */}
+              {/* PR228 header: customer left, order date right; the order id sits just below as a copyable
+                  chip — the same style as the Pending detail. */}
               <div className="fd-head">
                 <div className="fd-head-row">
                   <div className="fd-title fd-title-plain">{summary.customer_name || '—'}</div>
                   {selRow?.order_date && <span className="fd-date">{selRow.order_date.slice(0, 10)}</span>}
                 </div>
+                <button className="fd-orderid-chip" onClick={copyOrderId} aria-label={copiedId ? 'Order ID copied' : 'Copy order ID'} title="Copy order ID">
+                  <span className="fd-orderid-code">{summary.sales_id}</span>
+                  {copiedId ? <CheckIcon /> : <CopyIcon />}
+                </button>
               </div>
 
               <section className="fd-section">
@@ -443,9 +452,9 @@ export default function HistoryBoard({
                 )}
               </section>
 
-              {/* Add/Edit note (left, brown to match "+ New order") + "Delete order" (right, text button).
-                  PR224: the note button is brown and the delete carries its label. */}
-              <div className="ob-return" style={{ justifyContent: 'space-between' }}>
+              {/* Add/Edit note (brown to match "+ New order") + "Delete order" grouped together, delete
+                  to the right of the note button (PR228). */}
+              <div className="ob-return">
                 {!editingNote ? (
                   <button className="btn-brown btn-ico" onClick={startEditNote}>
                     {summary.order_note ? (
@@ -464,14 +473,6 @@ export default function HistoryBoard({
                     <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                   </svg>
                   Delete order
-                </button>
-              </div>
-
-              {/* PR165: order number at the bottom right with a one-tap copy icon */}
-              <div className="fd-orderid">
-                <span>{summary.sales_id}</span>
-                <button className="fd-orderid-copy" onClick={copyOrderId} aria-label="Copy order number" title="Copy order number">
-                  {copiedId ? '✓ Copied' : '⧉'}
                 </button>
               </div>
 
