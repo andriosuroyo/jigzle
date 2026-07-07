@@ -5,6 +5,7 @@
 // hidden, so switching tabs keeps selection + scroll. The boards own their own search.
 
 import { useCallback, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import InboundBoard from '@/components/InboundBoard';
@@ -29,7 +30,8 @@ export default function InboundShell({
   staffOptions: StaffMember[];
   userEmail: string;
 }) {
-  const [tab, setTab] = useState<InboundTab>('arrivals');
+  // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
+  const [tab, setTab] = useUrlTab<InboundTab>('tab', 'arrivals', ['arrivals', 'history']);
   const [arrivalsCount, setArrivalsCount] = useState(initialQueue.length);
   const [adhocSignal, setAdhocSignal] = useState(0);
   const onArrivalsCount = useCallback((n: number) => setArrivalsCount(n), []);

@@ -5,6 +5,7 @@
 // switching tabs keeps selection + scroll. The boards own their own search.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import OutboundBoard from '@/components/OutboundBoard';
@@ -33,7 +34,8 @@ export default function OutboundShell({
   staffOptions: StaffMember[];
   initialOrderId: string | null;
 }) {
-  const [tab, setTab] = useState<OutboundTab>('ready');
+  // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
+  const [tab, setTab] = useUrlTab<OutboundTab>('tab', 'ready', ['ready', 'history']);
   const [readyCount, setReadyCount] = useState(initialQueue.length);
   const onReadyCount = useCallback((n: number) => setReadyCount(n), []);
   // PR195: bumped when History cancels a shipment → OutboundBoard reloads its queue (the un-recorded

@@ -10,6 +10,7 @@
 // is untouched — the boards still call the same RPCs.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import PendingBoard from '@/components/PendingBoard';
@@ -56,7 +57,8 @@ export default function OrdersShell({
   channelOptions: ChannelOption[];
   exportCouriers: ExportCourier[];
 }) {
-  const [tab, setTab] = useState<OrdersTab>(initialTab);
+  // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
+  const [tab, setTab] = useUrlTab<OrdersTab>('tab', initialTab, ['pending', 'fulfill', 'history']);
   const [counts, setCounts] = useState<{ pending: number; fulfill: number }>({
     pending: pending.length,
     fulfill: toSend.length,

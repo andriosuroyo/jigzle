@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import { getPending, sendReadyItems, deleteOrder, markOrderPaid, addOrderLine, updateOrderLine, deleteOrderLine } from '@/app/pending/actions';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
@@ -48,7 +49,8 @@ export default function PendingBoard({
   reloadKey?: number;
 }) {
   const [orders, setOrders] = useState<PendingOrder[]>(initialOrders);
-  const [filter, setFilter] = useState<DotFilter>('all');
+  // PR223 — the readiness sub-filter is mirrored to ?pf= so a hard Refresh keeps e.g. "To order" open.
+  const [filter, setFilter] = useUrlTab<DotFilter>('pf', 'all', ['all', 'red', 'yellow', 'green']);
   const [search, setSearch] = useState(''); // PR149: filter the queue by customer, order id, or SKU
   const [loadingList, setLoadingList] = useState(false);
 

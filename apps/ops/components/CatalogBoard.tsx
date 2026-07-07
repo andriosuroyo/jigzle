@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
@@ -197,7 +198,8 @@ export default function CatalogBoard({
   initialShared: CollisionRow[];
   userEmail: string;
 }) {
-  const [tab, setTab] = useState<Tab>('search');
+  // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
+  const [tab, setTab] = useUrlTab<Tab>('tab', 'search', ['search', 'browse', 'fix']);
   const [detailTab, setDetailTab] = useState(0); // PR185: which field sub-tab of the item bodyview
   const [needsReview, setNeedsReview] = useState<CatalogueListRow[]>(initialNeedsReview);
   const [shared, setShared] = useState<CollisionRow[]>(initialShared);
