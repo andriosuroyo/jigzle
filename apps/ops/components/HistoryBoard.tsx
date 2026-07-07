@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { volWeight } from '@jigzle/lib';
 import AppHeader from '@/components/AppHeader';
-import { getHistory, setOrderNote } from '@/app/history/actions';
+import { getHistory, getHistoryYears, setOrderNote } from '@/app/history/actions';
 import { getOrderSummary, deleteOrder } from '@/app/pending/actions';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
-import TrashButton from '@/components/TrashButton';
 import type { HistoryRow, HistoryState } from '@/app/history/types';
 import type { OrderSummary, BoxSummary } from '@/app/pending/types';
 import type { BoxPreset } from '@/app/settings/types';
@@ -55,7 +54,14 @@ export default function HistoryBoard({
   onCountChange?: (n: number) => void;
   reloadKey?: number;
 }) {
-  const [orders, setOrders] = useState<HistoryRow[]>(initialOrders);
+  // PR224 — lazy load by year: the year sub-tabs come from getHistoryYears() (cheap counts); only ONE
+  // year's rows are fetched at a time (default: the current year), and other years load when their tab is
+  // clicked. The search bar queries the whole log (all years) and shows a flat result list.
+  const currentYear = String(new Date().getFullYear());
+  const [byYear, setByYear] = useState<Record<string, HistoryRow[]>>({});
+  const [loadedYears, setLoadedYears] = useState<Set<string>>(new Set());
+  const [yearMeta, setYearMeta] = useState<{ year: string; count: number }[]>([]);
+  const [searchRows, setSearchRows] = useState<HistoryRow[]>([]);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [yearFilter, setYearFilter] = useState<string | null>(null); // the selected year sub-tab
@@ -75,8 +81,8 @@ export default function HistoryBoard({
   const [copiedId, setCopiedId] = useState(false); // PR165: order-number copy feedback
   const sumReqRef = useRef(0);
   const searchSeq = useRef(0);   // stale-response guard for the live search
-  const firstRun = useRef(true); // skip the debounced refetch on mount (initialOrders already loaded)
-  const loadedRef = useRef(initialOrders.length > 0); // PR179: false until the deferred first load lands
+  const firstRun = useRef(true); // skip the debounced search on mount
+  const loadedRef = useRef(initialOrders.length > 0); // PR179/PR224: false until the deferred first load lands
   const selId = selRow?.sales_id ?? null;
 
   // Reverse-map a shipped box's stored dims → a SETTINGS preset code (XS/M2/…); 'Custom' if no exact
@@ -111,37 +117,50 @@ export default function HistoryBoard({
   const fmtCourier = (c: { label: string | null; tracking: string | null }): string =>
     c.label && c.tracking ? `${c.label}: ${c.tracking}` : c.label || c.tracking || '';
 
-  // PR164 — year sub-tabs (newest first; null-date orders bucket under '—' at the end), each with a
-  // count. Mirrors Inbound/Outbound History so the full terminal-order log is browsable by year, and a
-  // new year (e.g. 2027) appears automatically as soon as an order lands in it.
-  const yearOf = (o: HistoryRow): string => (o.order_date ? o.order_date.slice(0, 4) : '—');
+  // PR224 — year sub-tabs come from the cheap counts (getHistoryYears); the loaded/selected year is
+  // always included even if the metadata lagged (e.g. only the current year has orders). Newest first.
+  const isSearch = query.trim() !== '';
   const years = useMemo(() => {
     const m = new Map<string, number>();
-    for (const o of orders) m.set(yearOf(o), (m.get(yearOf(o)) ?? 0) + 1);
+    for (const { year, count } of yearMeta) m.set(year, count);
+    for (const y of loadedYears) if (!m.has(y)) m.set(y, (byYear[y] ?? []).length);
     return [...m.entries()].sort((a, b) => {
       if (a[0] === '—') return 1;
       if (b[0] === '—') return -1;
-      return a[0] < b[0] ? 1 : -1; // newest first
+      return a[0] < b[0] ? 1 : -1;
     });
-  }, [orders]);
-  // keep the selected year valid as the list changes (search / reload): default to the newest year.
-  useEffect(() => {
-    if (!years.length) { if (yearFilter !== null) setYearFilter(null); return; }
-    if (!yearFilter || !years.some(([y]) => y === yearFilter)) setYearFilter(years[0][0]);
-  }, [years, yearFilter]);
+  }, [yearMeta, loadedYears, byYear]);
+  // in search mode show the flat result list (all years); otherwise the selected year's loaded rows.
   const visibleRows = useMemo(
-    () => (yearFilter ? orders.filter((o) => yearOf(o) === yearFilter) : orders),
-    [orders, yearFilter]
+    () => (isSearch ? searchRows : (yearFilter ? byYear[yearFilter] ?? [] : [])),
+    [isSearch, searchRows, yearFilter, byYear]
   );
 
-  async function runSearch() {
-    const _id = ++searchSeq.current;
-    loadedRef.current = true; // any fetch (deferred load, search, reload) counts as loaded
+  // fetch one year's terminal orders (a YYYY query = a whole-year range in getHistory). Cached by year;
+  // `force` refetches (used after a delete / external reload).
+  async function loadYear(y: string, force = false) {
+    if (!force && loadedYears.has(y)) return;
     setSearching(true);
     try {
-      const rows = await getHistory(query.trim());
-      if (searchSeq.current !== _id) return; // a newer search superseded this one
-      setOrders(rows);
+      const rows = await getHistory(y);
+      setByYear((m) => ({ ...m, [y]: rows }));
+      setLoadedYears((s) => new Set(s).add(y));
+    } catch {
+      /* keep current on transient error */
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  // live search across the WHOLE log (all years), debounced. Empty query → back to year mode.
+  async function runSearch() {
+    const q = query.trim();
+    if (!q) { setSearchRows([]); return; }
+    const _id = ++searchSeq.current;
+    setSearching(true);
+    try {
+      const rows = await getHistory(q);
+      if (searchSeq.current === _id) setSearchRows(rows);
     } catch {
       /* keep current on transient error */
     } finally {
@@ -149,19 +168,35 @@ export default function HistoryBoard({
     }
   }
 
-  // PR179: deferred first load — the shell hands us an empty list and only flips `active` true when the
-  // History tab is opened; fetch the full log once at that point (or on mount if it starts active).
+  // refresh whatever's on screen (year counts + the current year's rows, or the current search).
+  async function reloadCurrent() {
+    getHistoryYears().then(setYearMeta).catch(() => {});
+    if (isSearch) await runSearch();
+    else if (yearFilter) await loadYear(yearFilter, true);
+  }
+
+  // PR179/PR224: deferred first load — when the History tab first shows, pull the year list (for the
+  // tabs) and load only the current year's rows (or the newest year that has any).
   useEffect(() => {
-    if (active && !loadedRef.current) runSearch();
+    if (!active || loadedRef.current) return;
+    loadedRef.current = true;
+    (async () => {
+      setSearching(true);
+      const meta = await getHistoryYears().catch(() => [] as { year: string; count: number }[]);
+      setYearMeta(meta);
+      const initYear = meta.some((m) => m.year === currentYear) ? currentYear : (meta[0]?.year ?? currentYear);
+      setYearFilter(initYear);
+      await loadYear(initYear, true);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // JZ-001: live count badge + external reload (re-runs the current search; see PendingBoard).
-  useEffect(() => { onCountChange?.(orders.length); }, [orders, onCountChange]);
+  // JZ-001: keep the (optional) count contract; History has no shell badge but report what's shown.
+  useEffect(() => { onCountChange?.(visibleRows.length); }, [visibleRows, onCountChange]);
+  // external reload (e.g. a new order created in the shell): refresh the on-screen view.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (reloadKey && loadedRef.current) runSearch(); }, [reloadKey]);
-  // live search: re-query as you type (empty query = recent orders), debounced. Skip the mount run —
-  // initialOrders is already loaded — so we only refetch once the user actually types.
+  useEffect(() => { if (reloadKey && loadedRef.current) reloadCurrent(); }, [reloadKey]);
+  // live search: re-query as you type, debounced. Skip the mount run.
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
     const t = setTimeout(() => { runSearch(); }, 220);
@@ -214,7 +249,7 @@ export default function HistoryBoard({
       setSuccess(`${summary.sales_id} deleted.`);
       setSelRow(null);
       setSummary(null);
-      await runSearch();
+      await reloadCurrent();
     } catch (e) {
       setDelErr(e instanceof Error ? e.message : 'Delete failed.');
     } finally {
@@ -253,8 +288,10 @@ export default function HistoryBoard({
           <div className="search-row" style={{ padding: '0 0 8px' }}>
             <SearchInput value={query} onChange={setQuery} placeholder="Search by customer ID, order ID, or SKU…" />
           </div>
-          {/* Year sub-tabs (newest first, each with a count) — the full log divided by order year. */}
-          {years.length > 0 && (
+          {/* Year sub-tabs (newest first, each with a count). Only the selected year's rows are loaded;
+              clicking another year fetches it on demand (PR224). Hidden while searching — a search spans
+              every year and shows a flat result list. */}
+          {!isSearch && years.length > 0 && (
             <div className="fq-filters" role="tablist" aria-label="Filter by year">
               {years.map(([y, n]) => (
                 <button
@@ -262,14 +299,14 @@ export default function HistoryBoard({
                   role="tab"
                   aria-selected={yearFilter === y}
                   className={`fq-filter ${yearFilter === y ? 'active' : ''}`}
-                  onClick={() => setYearFilter(y)}
+                  onClick={() => { setYearFilter(y); loadYear(y); }}
                 >
                   {y}<span className="fq-filter-count">{n}</span>
                 </button>
               ))}
             </div>
           )}
-          {visibleRows.length === 0 && <div className="hint fq-empty">{searching ? (query.trim() ? 'Searching…' : 'Loading history…') : 'No orders.'}</div>}
+          {visibleRows.length === 0 && <div className="hint fq-empty">{searching ? (isSearch ? 'Searching…' : 'Loading history…') : (isSearch ? 'No match.' : 'No orders.')}</div>}
           <ul className="fq-list">
             {visibleRows.map((o) => (
               <li key={o.sales_id}>
@@ -309,17 +346,7 @@ export default function HistoryBoard({
               </div>
 
               <section className="fd-section">
-                <div className="ord-pay-grid">
-                  <div><span className="ord-pay-k">Total</span><span className="ord-pay-v">{fmtIDR(summary.sales_total_idr)}</span></div>
-                  <div><span className="ord-pay-k">Paid</span><span className="ord-pay-v">{fmtIDR(summary.paid_idr)}</span></div>
-                  {/* Status mirrors the quick-view list pill (same derivation) — right-aligned. */}
-                  <div className="ord-pay-status-col">
-                    <span className="ord-pay-k">Status</span>
-                    {selRow && <span className={`ord-state ${selRow.state}`}>{STATE_LABEL[selRow.state]}</span>}
-                  </div>
-                </div>
-
-                <div className="fd-section-head" style={{ marginTop: 12 }}>Shipped items</div>
+                <div className="fd-section-head">Shipped items</div>
                 <ul className="ff-lines">
                   {summary.lines.map((l) => (
                     <li key={l.line_id} className="ff-line pend-line">
@@ -333,6 +360,16 @@ export default function HistoryBoard({
                   ))}
                   {summary.lines.length === 0 && <li className="hint">No shipped lines yet.</li>}
                 </ul>
+
+                {/* Total / Paid / Status — below the shipped items, mirroring the Pending detail (PR224). */}
+                <div className="ord-pay-grid" style={{ marginTop: 12 }}>
+                  <div><span className="ord-pay-k">Total</span><span className="ord-pay-v">{fmtIDR(summary.sales_total_idr)}</span></div>
+                  <div><span className="ord-pay-k">Paid</span><span className="ord-pay-v">{fmtIDR(summary.paid_idr)}</span></div>
+                  <div className="ord-pay-status-col">
+                    <span className="ord-pay-k">Status</span>
+                    {selRow && <span className={`ord-state ${selRow.state}`}>{STATE_LABEL[selRow.state]}</span>}
+                  </div>
+                </div>
 
                 {summary.boxes.length > 0 && (
                   <>
@@ -406,14 +443,14 @@ export default function HistoryBoard({
                 )}
               </section>
 
-              {/* Add/Edit note (left) + delete trashcan (right), on one line. PR214: the note button
-                  moved here from inside the Note section; it reads "✏ Edit note" once a note exists. */}
+              {/* Add/Edit note (left, brown to match "+ New order") + "Delete order" (right, text button).
+                  PR224: the note button is brown and the delete carries its label. */}
               <div className="ob-return" style={{ justifyContent: 'space-between' }}>
                 {!editingNote ? (
-                  <button className="btn-secondary" onClick={startEditNote}>
+                  <button className="btn-brown btn-ico" onClick={startEditNote}>
                     {summary.order_note ? (
                       <>
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 5, verticalAlign: '-2px' }} aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="M12 20h9" />
                           <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
                         </svg>
@@ -422,7 +459,12 @@ export default function HistoryBoard({
                     ) : '+ Add note'}
                   </button>
                 ) : <span />}
-                <TrashButton onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={deleting} ariaLabel="Delete order" />
+                <button className="btn-danger btn-ico" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={deleting} aria-label="Delete order">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
+                  Delete order
+                </button>
               </div>
 
               {/* PR165: order number at the bottom right with a one-tap copy icon */}

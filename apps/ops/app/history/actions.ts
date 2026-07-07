@@ -145,6 +145,32 @@ export async function getHistory(query = ''): Promise<HistoryRow[]> {
   });
 }
 
+// PR224 — the years present in the terminal-order log, newest first, each with a count. Cheap: it reads
+// the earliest + latest order_date to bound the range, then a HEAD (count-only, no rows) query per year.
+// The History board uses this to render the year sub-tabs while loading only ONE year's rows at a time.
+export async function getHistoryYears(): Promise<{ year: string; count: number }[]> {
+  const supabase = createSupabaseServerClient();
+  const TERMINAL = ['Complete', 'Cancelled'];
+  const [{ data: lo }, { data: hi }] = await Promise.all([
+    supabase.from('orders').select('order_date').in('status', TERMINAL).not('order_date', 'is', null).order('order_date', { ascending: true }).limit(1),
+    supabase.from('orders').select('order_date').in('status', TERMINAL).not('order_date', 'is', null).order('order_date', { ascending: false }).limit(1),
+  ]);
+  const minY = lo?.[0]?.order_date ? Number(String(lo[0].order_date).slice(0, 4)) : null;
+  const maxY = hi?.[0]?.order_date ? Number(String(hi[0].order_date).slice(0, 4)) : null;
+  if (minY == null || maxY == null || maxY < minY) return [];
+  const years: number[] = [];
+  for (let y = maxY; y >= minY; y--) years.push(y);
+  const counts = await Promise.all(
+    years.map(async (y) => {
+      const { count } = await supabase
+        .from('orders').select('sales_id', { count: 'exact', head: true })
+        .in('status', TERMINAL).gte('order_date', `${y}-01-01`).lt('order_date', `${y + 1}-01-01`);
+      return { year: String(y), count: count ?? 0 };
+    })
+  );
+  return counts.filter((c) => c.count > 0);
+}
+
 // Parse a YYYY / YYYY-MM / YYYY-MM-DD prefix into [start, endExclusive] ISO dates; null if not date-like.
 function isoRange(s: string): [string, string] | null {
   const m = /^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/.exec(s.trim());
