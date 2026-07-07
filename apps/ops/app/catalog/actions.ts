@@ -455,6 +455,42 @@ export async function getImplausibleDims(): Promise<CatalogueListRow[]> {
   return ((data ?? []) as CatNameRow[]).map(toListRow);
 }
 
+// Off-list classification — a product/sub/piece type value that isn't in the Settings pick-list
+// (a typo, or a value that should be added to the list). Only these three fields have a canonical
+// Settings list; theme/artist/material are free-text and can't be judged this way.
+export type OffListRow = CatalogueListRow & { field: 'product_type' | 'sub_type' | 'piece_type'; value: string };
+export async function getOffListClassification(): Promise<OffListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const labels = async (table: string): Promise<Set<string>> => {
+    const { data } = await supabase.from(table).select('label');
+    return new Set(((data ?? []) as { label: string }[]).map((r) => r.label));
+  };
+  const [pt, st, pct] = await Promise.all([
+    labels('settings_catalog_product_types'),
+    labels('settings_catalog_sub_types'),
+    labels('settings_catalog_piece_types'),
+  ]);
+  const out: OffListRow[] = [];
+  const scan = async (col: OffListRow['field'], allowed: Set<string>) => {
+    if (allowed.size === 0 || out.length >= FIX_CAP) return; // no pick-list → can't judge
+    const inList = `(${[...allowed].map((v) => `"${v.replace(/"/g, '')}"`).join(',')})`;
+    const { data } = await supabase
+      .from('catalogue')
+      .select(`${LIST_COLS},${col}`)
+      .not(col, 'is', null)
+      .not(col, 'in', inList)
+      .order('item_code')
+      .limit(FIX_CAP);
+    for (const c of (data ?? []) as (CatNameRow & Record<string, string | null>)[]) {
+      out.push({ ...toListRow(c), field: col, value: String(c[col] ?? '') });
+    }
+  };
+  await scan('product_type', pt);
+  await scan('sub_type', st);
+  await scan('piece_type', pct);
+  return out.slice(0, FIX_CAP);
+}
+
 // ── shared-barcodes tab: the barcode_collisions view (0020) ──
 export async function getSharedBarcodes(): Promise<CollisionRow[]> {
   const supabase = createSupabaseServerClient();
