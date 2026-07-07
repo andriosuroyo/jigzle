@@ -71,6 +71,17 @@ function BuyLink({ url, primary }: { url: string; primary?: boolean }) {
   );
 }
 
+// PR230 — action-button icons (out of stock / done buying / delete PO), matching the Sales style.
+const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 16, height: 16, 'aria-hidden': true };
+const BanIcon = () => (<svg {..._ic}><circle cx="12" cy="12" r="9" /><line x1="5.6" y1="5.6" x2="18.4" y2="18.4" /></svg>);
+const BagIcon = () => (<svg {..._ic}><path d="M6 2 3 6v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>);
+const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+
+// a "real" catalogue name — not blank, not the em-dash placeholder, and not just the raw item code
+// (a manual buy-list item can be a brand-new/unknown code that has no catalogue name yet).
+const isRealName = (name: string | null | undefined, code: string | null | undefined): boolean =>
+  !!name && name.trim() !== '' && name.trim() !== '—' && name.trim() !== (code ?? '').trim();
+
 // the active "Buy" overlay target — enough to load + render its links and run the right write-backs.
 type BuyTarget = {
   kind: SubTab;
@@ -308,6 +319,9 @@ export default function ToBuyBoard({
     return () => { alive = false; };
   }, [detailCode]);
 
+  // a new/unknown manual SKU has no catalogue name (and no image / nothing to edit) — drive the header off this.
+  const detailHasName = detail ? isRealName(detail.name, detail.item_code) : false;
+
   // overlay qty stepper: optimistic local update in the right list (manual → planned, oos → soldOut)
   function setDetailQty(q: number) {
     if (!detail || detail.po_id == null) return;
@@ -442,23 +456,26 @@ export default function ToBuyBoard({
             <div className="sc-modal-head td-head-block">
               <div className="td-head-titles">
                 <span className="sc-modal-title">{detail.item_code || '—'}</span>
-                <div className="ff-name td-name">{detail.name}</div>
+                {detailHasName && <div className="ff-name td-name">{detail.name}</div>}
               </div>
-              {detail.item_code && (
+              {/* Edit → the Catalog editor, but only for a known SKU: a brand-new/unknown manual code has
+                  no catalogue entry to edit (and its SKU can't be changed here anyway). */}
+              {detail.item_code && detailHasName && (
                 <a className="td-edit" href={`/catalog?sku=${encodeURIComponent(detail.item_code)}`} target="_blank" rel="noreferrer" title="Edit in Catalog">Edit</a>
               )}
               <button className="sc-modal-x" onClick={() => setSel(null)} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
+              {/* image left; a tidy label→value stack to its right: priority, qty-to-buy, stock. */}
               <div className="td-head2">
-                <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detail.name} size={SKU_IMG.md} />
+                <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : (detail.item_code ?? '')} size={SKU_IMG.md} />
                 <div className="td-side">
                   {detail.urgency && (
                     <div className={`td-prio td-prio-${detail.urgency}`}><span className="td-prio-dot" />{detail.urgency[0].toUpperCase() + detail.urgency.slice(1)} priority</div>
                   )}
-                  <div className="td-qty">
-                    <span className="td-qty-lbl">Qty to buy</span>
+                  <div className="td-row">
+                    <span className="td-row-k">Qty to buy</span>
                     {detail.qtyEditable && detail.po_id != null ? (
                       <span className="qty-step">
                         <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty - 1)} disabled={detail.qty <= 0} aria-label="decrease">−</button>
@@ -473,7 +490,10 @@ export default function ToBuyBoard({
                       <span className="qty-ro" aria-label="quantity">×{detail.qty}</span>
                     )}
                   </div>
-                  <div className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} /></div>
+                  <div className="td-row">
+                    <span className="td-row-k">Stock</span>
+                    <span className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} /></span>
+                  </div>
                 </div>
               </div>
 
@@ -490,13 +510,14 @@ export default function ToBuyBoard({
                 )}
               </div>
             </div>
+            {/* Actions — icon buttons (Sales style): out of stock · done buying (left) + delete PO (right). */}
             <div className="sc-modal-foot td-actions">
               {detail.kind !== 'oos' && (
-                <button className="btn-secondary danger" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}>Out of stock</button>
+                <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
               )}
-              <button className="btn-primary" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}>Done →</button>
+              <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}><BagIcon />Done buying</button>
               {detail.canDelete && detail.po_id != null && (
-                <TrashButton onClick={() => { const id = detail.po_id!; setSel(null); setConfirmDelId(id); }} disabled={busy} ariaLabel="Cancel this item" />
+                <button className="btn-danger btn-ico td-del" onClick={() => { const id = detail.po_id!; setSel(null); setConfirmDelId(id); }} disabled={busy}><TrashIcon />Delete PO</button>
               )}
             </div>
           </div>

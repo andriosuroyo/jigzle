@@ -113,17 +113,18 @@ input, textarea, select, button { font-family: inherit; }
 .td-prio-low  .td-prio-dot { background: var(--green); }
 /* image + a right-hand column that fits within the image's height */
 .td-head2 { display: flex; gap: 14px; align-items: flex-start; }
-.td-side { flex: 1; min-width: 0; min-height: 72px; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
-.td-qty { display: flex; align-items: center; gap: 10px; }
-.td-qty-lbl { font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--brown-dark); }
-.td-qty .qty-ro { font-size: 15px; font-weight: 700; color: var(--ink); }
-.td-stock .stock-pills { gap: 12px; }
+/* PR230 — a tidy label→value stack: priority pill, then aligned "Qty to buy" and "Stock" rows. */
+.td-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.td-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.td-row-k { font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--brown-dark); }
+.td-row .qty-ro { font-size: 15px; font-weight: 700; color: var(--ink); }
+.td-stock .stock-pills { gap: 10px; }
 .td-stock .stock-pill { font-size: 14px; padding: 3px 10px; gap: 6px; }
 .td-stock .stock-pill svg { width: 18px; height: 18px; }
 .td-context { margin-top: 12px; }
 .td-links-head { margin-top: 14px; }
-.tobuy-detail .td-actions { justify-content: flex-start; align-items: center; }
-.tobuy-detail .td-actions .btn-trash { margin-left: auto; }
+.tobuy-detail .td-actions { justify-content: flex-start; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tobuy-detail .td-actions .td-del { margin-left: auto; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .po-card-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-card-l1 .ff-name { flex: 1; }
