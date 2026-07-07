@@ -20,6 +20,7 @@ import { missingForComplete } from '@/app/catalog/types';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
 import CatalogBrowse from '@/components/CatalogBrowse';
 import SearchSelect from '@/components/SearchSelect';
+import SearchInput from '@/components/SearchInput';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -743,6 +744,7 @@ export default function CatalogBoard({
               Fix{fixCount > 0 && <span className="orders-tab-count">{fixCount}</span>}
             </button>
           </nav>
+          {tab === 'search' && <button className="btn-brown cat-new-btn" onClick={openNewSku}>+ New item</button>}
         </div>
       )}
 
@@ -751,17 +753,15 @@ export default function CatalogBoard({
             {/* SEARCH — just a search bar; results while typing, otherwise the recent-search log */}
             {tab === 'search' && (
               <div className="cat-search">
-                {/* PR191 — create a brand-new SKU from the app (future additions no longer come via import) */}
-                <button className="btn-secondary po-add-full" onClick={openNewSku}>+ New SKU</button>
-                <div className="scan-row">
-                  <input
-                    type="text"
-                    placeholder="search SKU, brand, name, or piece count"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); recordSearch(search); runSearch(); } }}
-                  />
-                </div>
+                {/* PR207 — the search bar matches Sales → Pending (shared SearchInput pill). The "+ New
+                    item" create action now lives on the tab row (top-right), not here. */}
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="search SKU, brand, name, or piece count"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); recordSearch(search); runSearch(); } }}
+                />
 
                 {search.trim().length >= 2 ? (
                   <ul className="fq-list">
