@@ -123,7 +123,7 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-secondary" onClick={() => setAdding({ name: '', flag: '', country: '' })} disabled={busy}>+ Add supplier</button>
+          <button className="btn-brown" onClick={() => setAdding({ name: '', flag: '', country: '' })} disabled={busy}>+ Add supplier</button>
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}

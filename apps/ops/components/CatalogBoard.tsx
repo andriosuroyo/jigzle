@@ -803,7 +803,7 @@ export default function CatalogBoard({
                           ))}
                         </div>
                       )}
-                      <button className="btn-secondary cat-bc-add" onClick={() => { resetMsg(); setNewBarcode(''); setBarcodeOpen(true); }}>+ Add barcode</button>
+                      <button className="btn-brown cat-bc-add" onClick={() => { resetMsg(); setNewBarcode(''); setBarcodeOpen(true); }}>+ Add barcode</button>
                     </div>
                   )}
                 </section>
@@ -848,7 +848,7 @@ export default function CatalogBoard({
                           onChange={(e) => setNewBarcode(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doAddBarcode(); } }}
                         />
-                        <button className="btn-secondary" onClick={doAddBarcode} disabled={busy || !newBarcode.trim()}>+ add</button>
+                        <button className="btn-primary" onClick={doAddBarcode} disabled={busy || !newBarcode.trim()}>+ add</button>
                       </div>
                       {bcOwners.length > 0 && (
                         <div className="validation warn" style={{ marginTop: 8 }}>

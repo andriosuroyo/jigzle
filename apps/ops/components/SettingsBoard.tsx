@@ -377,7 +377,7 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
           />
         ))}
         <div className="set-toolbar">
-          <button className="btn-secondary" onClick={() => add(sec.kind, sec.blank)} disabled={busy}>+ add</button>
+          <button className="btn-brown" onClick={() => add(sec.kind, sec.blank)} disabled={busy}>+ add</button>
           <button className="btn-secondary" onClick={() => sortAZ(sec.kind, sec.sortKey)} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       </div>

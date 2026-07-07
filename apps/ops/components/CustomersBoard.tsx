@@ -529,7 +529,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               <section className="fd-section">
                 <div className="po-tobuy-head">
                   <div className="fd-section-head" style={{ marginBottom: 0 }}>Addresses</div>
-                  <button className="btn-secondary" onClick={() => openAddr(null)} disabled={busy}>+ add address</button>
+                  <button className="btn-brown" onClick={() => openAddr(null)} disabled={busy}>+ add address</button>
                 </div>
                 {detail.addresses.length === 0 && <div className="hint">No addresses on file.</div>}
                 <ul className="cust-addrs">

@@ -123,7 +123,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-secondary" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '' })} disabled={busy}>+ Add forwarder</button>
+          <button className="btn-brown" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '' })} disabled={busy}>+ Add forwarder</button>
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}

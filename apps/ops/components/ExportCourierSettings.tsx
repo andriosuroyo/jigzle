@@ -111,7 +111,7 @@ export default function ExportCourierSettings({ embedded = false }: { embedded?:
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-secondary" onClick={() => setAddLabel('')} disabled={busy}>+ Add export courier</button>
+          <button className="btn-brown" onClick={() => setAddLabel('')} disabled={busy}>+ Add export courier</button>
         </div>
       )}
     </Wrap>
