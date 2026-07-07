@@ -439,7 +439,8 @@ export default function PendingBoard({
                         </div>
                         <div className="le-field grow">
                           <label>Unit price (Rp)</label>
-                          <input className="edit-price" type="text" inputMode="numeric" placeholder="price" value={fmtThousands(lePrice)} onChange={(e) => setLePrice(e.target.value.replace(/\D/g, ''))} disabled={leBusy} />
+                          <input className="edit-price" type="text" inputMode="numeric" placeholder="price" value={fmtThousands(lePrice)} onChange={(e) => setLePrice(e.target.value.replace(/\D/g, ''))} disabled={leBusy}
+                            autoComplete="off" data-1p-ignore="true" data-lpignore="true" data-form-type="other" />
                         </div>
                       </div>
 

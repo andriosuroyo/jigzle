@@ -3,16 +3,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending } from '@/app/fulfill/actions';
+import { setLineNote } from '@/app/pending/actions';
 import SearchInput from '@/components/SearchInput';
 import StatusCircles, { payTone } from '@/components/StatusCircles';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
 import type { CourierService, CommonNote, ExportCourier } from '@/app/settings/types';
-import NoteEditor from '@/components/NoteEditor';
 import IconSelect from '@/components/IconSelect';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
+
+// PR227 — a note-only editor per item (square pencil, like Pending but note-only: no SKU/qty/delete).
+type FulfillLine = FulfillDetail['lines'][number];
+const PencilIcon = () => (
+  <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+  </svg>
+);
 
 export default function FulfillBoard({
   initialQueue,
@@ -53,6 +61,11 @@ export default function FulfillBoard({
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null); // FT-7: top-level, survives detail clearing
+  // PR227 — note-only per-item editor overlay
+  const [noteEdit, setNoteEdit] = useState<FulfillLine | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteErr, setNoteErr] = useState<string | null>(null);
   const reqIdRef = useRef(0);
 
   // FT-1: filter the queue by customer name OR SKU code (client-side over the loaded worklist)
@@ -96,6 +109,7 @@ export default function FulfillBoard({
     setSelected(salesId);
     setDetail(null);
     setError(null);
+    setNoteEdit(null);
     setLoadingDetail(true);
     try {
       const d = await getOrderForFulfill(salesId);
@@ -195,6 +209,25 @@ export default function FulfillBoard({
     }
   }
 
+  // PR227 — note-only per-item editor. Opens from the square pencil; saves the line note and reflects it
+  // back into the loaded detail (no full refetch). SKU / qty / delete are intentionally not offered here.
+  function openNote(l: FulfillLine) { setNoteEdit(l); setNoteDraft(l.line_note ?? ''); setNoteErr(null); }
+  function closeNote() { setNoteEdit(null); setNoteErr(null); }
+  async function saveNote() {
+    if (!noteEdit) return;
+    const note = noteDraft.trim() || null;
+    setNoteBusy(true); setNoteErr(null);
+    try {
+      await setLineNote(noteEdit.line_id, note);
+      setDetail((d) => (d ? { ...d, lines: d.lines.map((x) => (x.line_id === noteEdit.line_id ? { ...x, line_note: note } : x)) } : d));
+      setNoteEdit(null);
+    } catch {
+      setNoteErr("Couldn't save the note.");
+    } finally {
+      setNoteBusy(false);
+    }
+  }
+
   const canSend = !!detail && detail.lines.length > 0 && addressId != null && courierId != null && (!isIntl || exportCourierId != null) && !committing;
 
   // PR147 — bodyview: the body shows EITHER the full-width To-send queue OR the tapped order's detail
@@ -240,7 +273,7 @@ export default function FulfillBoard({
       {/* ── Detail ── */}
       {selected && (
         <>
-          <button className="btn-link bv-back" onClick={() => { setSelected(null); setDetail(null); setError(null); }}>← back</button>
+          <button className="btn-link bv-back" onClick={() => { setSelected(null); setDetail(null); setError(null); setNoteEdit(null); }}>← back</button>
           <div className="bv-detail">
           {loadingDetail && <div className="fd-empty">Loading…</div>}
           {!loadingDetail && !detail && <div className="fd-empty">Order not found or already sent.</div>}
@@ -271,31 +304,23 @@ export default function FulfillBoard({
                 </ul>
               </section>
 
-              {/* Items — read-only (the whole cut set ships; partial was decided upstream). Same compact
-                  row as the Pending detail. */}
+              {/* Items — SKU/qty are fixed here (decided upstream); the square pencil edits ONLY the note
+                  (PR227). Larger image with three lines to its right: code, name, and the note (if any). */}
               <section className="fd-section">
                 <div className="fd-section-head">Items</div>
                 <ul className="ff-lines">
                   {detail.lines.map((l) => (
                     <li key={l.line_id} className="ff-line pend-line-card">
                       <div className="pend-line">
-                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
                         <div className="pend-line-main">
                           <span className="ff-code">{l.item_code || '—'}</span>
                           <span className="ff-name">{l.name}</span>
+                          {l.line_note && <span className="pend-line-note">✎ {l.line_note}</span>}
                         </div>
                         <span className="ff-qty">×{l.qty}</span>
+                        <button className="btn-edit" onClick={() => openNote(l)} aria-label="Edit note" title="Edit note"><PencilIcon /></button>
                       </div>
-                      <NoteEditor
-                        lineId={l.line_id}
-                        value={l.line_note}
-                        commonNotes={commonNotes}
-                        onSaved={(note) =>
-                          setDetail((d) =>
-                            d ? { ...d, lines: d.lines.map((x) => (x.line_id === l.line_id ? { ...x, line_note: note } : x)) } : d
-                          )
-                        }
-                      />
                     </li>
                   ))}
                 </ul>
@@ -345,7 +370,7 @@ export default function FulfillBoard({
               {/* Commit bar — Send back (left) · Send to Outbound. No Delete here: an order in Fulfill is
                   already cut/ready; deletion belongs to Pending (PR224). Disabled until address + courier set. */}
               <div className="fd-commit fd-commit-row">
-                <button className="btn-secondary" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
+                <button className="btn-brown" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
                 <button className="btn-primary" onClick={sendOut} disabled={!canSend}>
                   {committing ? 'Sending…' : 'Send to Outbound'}
                 </button>
@@ -355,6 +380,36 @@ export default function FulfillBoard({
               </div>
 
               <div className="fd-orderid">{detail.sales_id}</div>
+
+              {/* PR227 — note-only per-item editor (no SKU / qty / delete on a cut order). */}
+              {noteEdit && (
+                <div className="sc-modal-backdrop" onClick={noteBusy ? undefined : closeNote}>
+                  <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Edit note" onClick={(e) => e.stopPropagation()}>
+                    <div className="sc-modal-head sc-modal-head-row">
+                      <span className="sc-modal-title">Item note</span>
+                      <button className="sc-modal-x" onClick={closeNote} aria-label="Close" disabled={noteBusy}>×</button>
+                    </div>
+                    <div className="sc-modal-body">
+                      {noteErr && <div className="validation err" style={{ marginBottom: 10 }}>{noteErr}</div>}
+                      <div className="le-sku">
+                        <SkuImage status={imgMap[noteEdit.item_code ?? '']?.status} displayUrl={imgMap[noteEdit.item_code ?? '']?.displayUrl} name={noteEdit.name} size={SKU_IMG.sm} />
+                        <div className="le-sku-main">
+                          <span className="ff-code">{noteEdit.item_code || '—'}</span>
+                          <span className="ff-name">{noteEdit.name}</span>
+                        </div>
+                      </div>
+                      <div className="le-field le-note">
+                        <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                        <input type="text" list="ff-notes" placeholder="Add a note…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} disabled={noteBusy} autoComplete="off" />
+                        <datalist id="ff-notes">{commonNotes.map((n) => <option key={n.id} value={n.label} />)}</datalist>
+                      </div>
+                    </div>
+                    <div className="sc-modal-foot le-foot">
+                      <button className="btn-primary" onClick={saveNote} disabled={noteBusy}>{noteBusy ? 'Saving…' : 'Save'}</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
           </div>
