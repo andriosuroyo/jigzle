@@ -1752,3 +1752,10 @@ img.sku-img { background: #e8e8e8; }
 .cat-bc-chip { font-size: 12px; font-family: monospace; background: var(--cream); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
 .cat-bc-chip em { font-style: normal; color: var(--brown); font-size: 10px; margin-left: 5px; }
 .cat-bc-add { width: 100%; }
+
+/* PR220 — manual Refresh button beside the breadcrumb (hard reload, on demand) */
+.crumb-refresh { margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown); cursor: pointer; flex-shrink: 0; }
+.crumb-refresh svg { width: 16px; height: 16px; }
+.crumb-refresh:active { background: var(--paper); }
+.crumb-refresh.spinning svg { animation: crumb-spin 0.8s linear infinite; }
+@keyframes crumb-spin { to { transform: rotate(360deg); } }
