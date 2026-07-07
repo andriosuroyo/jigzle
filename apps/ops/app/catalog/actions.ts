@@ -237,9 +237,10 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
   // only once complete: name + brand_prefix + product_type, plus piece_count_n if a puzzle.
   const { data: cur } = await supabase
     .from('catalogue')
-    .select('brand_prefix,product_type,piece_count_n,original_name,translate_name')
+    .select('brand_prefix,product_type,piece_count_n,original_name,translate_name,piece_size,material')
     .eq('item_code', code)
     .maybeSingle();
+  let est: number | null = null;
   if (cur) {
     const curRow = cur as Record<string, unknown>;
     const pick = (k: string) => (k in upd ? upd[k] : curRow[k]);
@@ -250,10 +251,15 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
       original_name: (pick('original_name') as string | null) ?? null,
       translate_name: (pick('translate_name') as string | null) ?? null,
     });
+    // PR211: keep the weight estimate fresh from the final piece count / size band / material.
+    est = estimateWeight((pick('piece_count_n') as number | null) ?? null, (pick('piece_size') as string | null) ?? null, (pick('material') as string | null) ?? null);
   }
 
   const { error } = await supabase.from('catalogue').update(upd).eq('item_code', code);
   if (error) throw new Error(`updateSku: ${error.message}`);
+
+  // Best-effort est_weight refresh — a separate write so a missing column (pre-0070) can't fail the save.
+  await supabase.from('catalogue').update({ est_weight: est }).eq('item_code', code);
 }
 
 // ── quick-add (PR18 §6): create a PARTIAL SKU from a Stock Check session ──
@@ -410,6 +416,58 @@ export async function getNeedsReview(): Promise<CatalogueListRow[]> {
 // with a "+" when capped). Lazy-loaded on the first Fix-tab open so /catalog stays fast. ──
 const FIX_CAP = 300;
 const toListRow = (c: CatNameRow): CatalogueListRow => ({ item_code: c.item_code, name: nameOf(c), brand_prefix: c.brand_prefix ?? null, needs_review: !!c.needs_review });
+
+// ── PR211: weight estimate. Cardboard base 240 + 0.8·pieces·size_mult·material_mult (grams). Stored
+// in catalogue.est_weight (0070), recomputed on every save, offered as a one-click fill in Fix. ──
+function sizeMult(band: string | null): number {
+  switch ((band || '').trim().toLowerCase()) {
+    case 'micro': return 0.7;
+    case 'tiny': return 0.8;
+    case 'small': return 0.9;
+    case 'large': return 1.2;
+    case 'jumbo': return 1.5;
+    default: return 1.0; // standard / unknown
+  }
+}
+function materialMult(m: string | null): number {
+  const s = (m || '').toLowerCase();
+  if (s.includes('wood')) return 1.5;
+  if (s.includes('plastic') || s.includes('crystal')) return 0.8;
+  if (s.includes('cork')) return 0.6;
+  if (s.includes('foam')) return 0.4;
+  return 1.0; // cardboard / paper / blank
+}
+function estimateWeight(pieces: number | null, band: string | null, material: string | null): number | null {
+  if (!pieces || pieces <= 0) return null;
+  return Math.round(240 + 0.8 * pieces * sizeMult(band) * materialMult(material));
+}
+
+// SKUs with no real weight but an estimate available (has a piece count). Degrades to [] until 0070.
+export type MissingWeightRow = CatalogueListRow & { est_weight: number; pieces: number | null };
+export async function getMissingWeight(): Promise<MissingWeightRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('catalogue')
+    .select(`${LIST_COLS},piece_count_n,est_weight`)
+    .is('real_weight', null)
+    .not('est_weight', 'is', null)
+    .order('item_code')
+    .limit(FIX_CAP);
+  if (error) return []; // est_weight column missing (pre-0070) → degrade
+  return ((data ?? []) as (CatNameRow & { piece_count_n: number | null; est_weight: number })[])
+    .map((c) => ({ ...toListRow(c), est_weight: c.est_weight, pieces: c.piece_count_n }));
+}
+
+// Accept the estimate into real_weight (the Fix "accept" button). Returns error-as-data.
+export async function acceptEstimatedWeight(itemCode: string): Promise<{ error: string | null; weight?: number }> {
+  const supabase = createSupabaseServerClient();
+  const code = itemCode.trim();
+  const { data } = await supabase.from('catalogue').select('est_weight').eq('item_code', code).maybeSingle();
+  const est = (data as { est_weight: number | null } | null)?.est_weight ?? null;
+  if (est == null) return { error: 'No estimate available for this SKU.' };
+  const { error } = await supabase.from('catalogue').update({ real_weight: est, updated_at: new Date().toISOString() }).eq('item_code', code);
+  return { error: error ? error.message : null, weight: est };
+}
 
 // Untranslated: an original (usually Chinese/Japanese) name is present but the translated name is blank.
 export async function getUntranslated(): Promise<CatalogueListRow[]> {

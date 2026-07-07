@@ -13,6 +13,8 @@ import {
   getImplausibleDims,
   getOffListClassification,
   getCatalogDuplicates,
+  getMissingWeight,
+  acceptEstimatedWeight,
   getSharedBarcodes,
   getSku,
   quickAddSku,
@@ -23,7 +25,7 @@ import {
 } from '@/app/catalog/actions';
 import { missingForComplete } from '@/app/catalog/types';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
-import type { OffListRow, DupGroup } from '@/app/catalog/actions';
+import type { OffListRow, DupGroup, MissingWeightRow } from '@/app/catalog/actions';
 import CatalogBrowse from '@/components/CatalogBrowse';
 import SearchSelect from '@/components/SearchSelect';
 import SearchInput from '@/components/SearchInput';
@@ -196,7 +198,7 @@ export default function CatalogBoard({
   const [needsReview, setNeedsReview] = useState<CatalogueListRow[]>(initialNeedsReview);
   const [shared, setShared] = useState<CollisionRow[]>(initialShared);
   // PR208 — extra Fix data-quality lists, lazy-loaded the first time the Fix tab opens (keeps /catalog fast)
-  const [fixExtra, setFixExtra] = useState<{ untranslated: CatalogueListRow[]; puzzleNoPieces: CatalogueListRow[]; implausible: CatalogueListRow[]; offList: OffListRow[] } | null>(null);
+  const [fixExtra, setFixExtra] = useState<{ untranslated: CatalogueListRow[]; puzzleNoPieces: CatalogueListRow[]; implausible: CatalogueListRow[]; offList: OffListRow[]; missingWeight: MissingWeightRow[] } | null>(null);
   const fixLoadedRef = useRef(false);
   // PR210 — likely-duplicate groups load separately (a full-catalogue scan) so the fast lists show first
   const [dupes, setDupes] = useState<DupGroup[] | null>(null);
@@ -300,11 +302,18 @@ export default function CatalogBoard({
   useEffect(() => {
     if (tab !== 'fix' || fixLoadedRef.current) return;
     fixLoadedRef.current = true;
-    Promise.all([getUntranslated(), getPuzzleNoPieces(), getImplausibleDims(), getOffListClassification()])
-      .then(([untranslated, puzzleNoPieces, implausible, offList]) => setFixExtra({ untranslated, puzzleNoPieces, implausible, offList }))
+    Promise.all([getUntranslated(), getPuzzleNoPieces(), getImplausibleDims(), getOffListClassification(), getMissingWeight()])
+      .then(([untranslated, puzzleNoPieces, implausible, offList, missingWeight]) => setFixExtra({ untranslated, puzzleNoPieces, implausible, offList, missingWeight }))
       .catch(() => {});
     getCatalogDuplicates().then(setDupes).catch(() => setDupes([])); // separate: full-catalogue scan
   }, [tab]);
+
+  // PR211 — accept a SKU's estimated weight into its real weight, then drop it from the list.
+  async function acceptWeight(itemCode: string) {
+    const { error } = await acceptEstimatedWeight(itemCode);
+    if (error) return;
+    setFixExtra((prev) => (prev ? { ...prev, missingWeight: prev.missingWeight.filter((r) => r.item_code !== itemCode) } : prev));
+  }
 
   function switchTab(t: Tab) {
     setTab(t);
@@ -932,6 +941,34 @@ export default function CatalogBoard({
                               </div>
                             </div>
                           </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Missing weight — estimate ready ({fixExtra ? fixCount2(fixExtra.missingWeight.length) : '…'})</div>
+                  {!fixExtra ? <div className="hint">Loading…</div> : (
+                    <ul className="fq-list">
+                      {fixExtra.missingWeight.length === 0 && <li><div className="hint fq-empty">No SKUs are missing a weight (with an estimate available).</div></li>}
+                      {fixExtra.missingWeight.map((r) => (
+                        <li key={r.item_code}>
+                          <div className="fq-row" style={{ cursor: 'default' }}>
+                            <div className="cat-row">
+                              <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                              <div className="cat-row-main">
+                                <div className="fq-row-top">
+                                  <button className="btn-link" style={{ padding: 0 }} onClick={() => openSku(r.item_code)} disabled={busy}>{r.item_code}</button>
+                                  <span className="fq-cust">{r.name}</span>
+                                </div>
+                                <div className="fq-row-bot">
+                                  <span>{r.pieces ? `${r.pieces} pc` : '—'} · est <b>{r.est_weight} g</b></span>
+                                  <button className="btn-secondary" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: 12 }} onClick={() => acceptWeight(r.item_code)} disabled={busy}>accept</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </li>
                       ))}
                     </ul>
