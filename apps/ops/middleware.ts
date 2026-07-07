@@ -40,7 +40,13 @@ export async function middleware(req: NextRequest) {
     path === '/manifest.json' ||
     path === '/sw.js' ||
     path.startsWith('/icons') ||
-    path === '/favicon.ico';
+    path === '/favicon.ico' ||
+    // Brand assets rendered on the (unauthenticated) login screen, plus the app/apple icons iOS
+    // fetches for "Add to Home Screen". Without these the middleware redirects the asset request to
+    // /login, so the login <img> falls back to alt text and iOS shows the brown letter tile (PR198).
+    path === '/logo.webp' ||
+    path === '/icon.png' ||
+    path === '/apple-icon.png';
 
   if (isPublic) return res;
 
