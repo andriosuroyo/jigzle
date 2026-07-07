@@ -6,6 +6,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import {
   addBarcode,
+  getBarcodeOwners,
   getCatalogFieldOptions,
   getNeedsReview,
   getUntranslated,
@@ -233,6 +234,8 @@ export default function CatalogBoard({
   const [newType, setNewType] = useState<string | null>(null);
 
   const [newBarcode, setNewBarcode] = useState('');
+  const [barcodeOpen, setBarcodeOpen] = useState(false);              // PR218: barcode-manage overlay
+  const [bcOwners, setBcOwners] = useState<{ item_code: string }[]>([]); // other SKUs already on the typed barcode
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -345,7 +348,7 @@ export default function CatalogBoard({
     setHeroIdx(0);
     setCollision(null);
     setDetail(null);
-    setNewBarcode('');
+    setNewBarcode(''); setBarcodeOpen(false); setBcOwners([]);
     const myReq = ++reqRef.current;
     setLoadingDetail(true);
     try {
@@ -570,8 +573,23 @@ export default function CatalogBoard({
   }, [results, needsReview, detail]);
   const imgMap = useSkuImages(imgCodes);
 
+  // PR218 — while the barcode overlay is open, check whether the typed barcode is already registered
+  // to another SKU (the shared-barcode model still allows it, but we warn first). Debounced.
+  useEffect(() => {
+    if (!barcodeOpen) { setBcOwners([]); return; }
+    const bc = newBarcode.trim();
+    if (bc.length < 3) { setBcOwners([]); return; }
+    let live = true;
+    const t = setTimeout(() => {
+      getBarcodeOwners(bc).then((owners) => {
+        if (!live) return;
+        setBcOwners(owners.filter((o) => o.item_code !== detail?.sku.item_code));
+      }).catch(() => {});
+    }, 300);
+    return () => { live = false; clearTimeout(t); };
+  }, [newBarcode, barcodeOpen, detail]);
+
   const showBody = mode !== null;
-  const BARCODE_TAB = GROUPS.length;
   const crumbLabel = showBody
     ? (mode === 'collision' ? (collision?.barcode ?? 'Barcode') : (detail?.sku.item_code ?? 'Item'))
     : (tab === 'browse' ? 'Browse' : tab === 'fix' ? 'Fix' : 'Search');
@@ -628,17 +646,15 @@ export default function CatalogBoard({
                 );
               })()}
 
-              {/* PR185 — the many fields grouped into sub-tabs (styled like the system tab lists) */}
+              {/* PR185 — the many fields grouped into sub-tabs (styled like the system tab lists).
+                  PR218 — Barcodes are no longer a sub-tab; they live at the bottom of Identity. */}
               <div className="sc-tabs cat-subtabs">
                 {GROUP_TABS.map((label, i) => (
                   <button key={label} className={`sc-tab ${detailTab === i ? 'active' : ''}`} onClick={() => setDetailTab(i)}>{label}</button>
                 ))}
-                <button className={`sc-tab ${detailTab === BARCODE_TAB ? 'active' : ''}`} onClick={() => setDetailTab(BARCODE_TAB)}>
-                  Barcodes{detail.barcodes.length ? ` (${detail.barcodes.length})` : ''}
-                </button>
               </div>
 
-              {detailTab < GROUPS.length ? (
+              {(
                 <section className="cat-grp">
                   {/* PR217 — Links tab: two fixed 8-slot sections. Images = Google-Drive image links
                       (first is primary); Sources = buy links the Purchasing "Buy" overlay reads. */}
@@ -764,41 +780,75 @@ export default function CatalogBoard({
                       </div>
                     );
                   })()}
-                </section>
-              ) : (
-                <section className="cat-grp">
-                  <ul className="cat-bc-list">
-                    {detail.barcodes.length === 0 && <li className="hint">No barcodes linked.</li>}
-                    {detail.barcodes.map((b) => (
-                      <li className="cat-bc" key={b.barcode}>
-                        <span className="bc-code">{b.barcode}</span>
-                        {b.shared && <span className="bc-shared">shared</span>}
-                        <div className="bc-actions">
-                          <label className="rcv-ctl">
-                            <input type="checkbox" checked={b.is_verified} onChange={(e) => doToggleVerified(b.barcode, e.target.checked)} disabled={busy} />
-                            <span>verified</span>
-                          </label>
-                          <button className="btn-link" onClick={() => doUnlink(detail.sku.item_code, b.barcode)} disabled={busy}>unlink</button>
+
+                  {/* PR218 — Barcodes at the bottom of Identity: chips + a full-width button that opens
+                      the manage overlay. */}
+                  {GROUPS[detailTab].title === 'Identity & naming' && (
+                    <div className="cat-bc-foot">
+                      <div className="cat-grp-title" style={{ marginTop: 12 }}>Barcodes{detail.barcodes.length ? ` (${detail.barcodes.length})` : ''}</div>
+                      {detail.barcodes.length > 0 && (
+                        <div className="cat-bc-chips">
+                          {detail.barcodes.map((b) => (
+                            <span key={b.barcode} className="cat-bc-chip">{b.barcode}{b.shared && <em>shared</em>}</span>
+                          ))}
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="scan-row" style={{ marginTop: 8 }}>
-                    <input
-                      type="text"
-                      placeholder="add a barcode (links / shares it)"
-                      value={newBarcode}
-                      onChange={(e) => setNewBarcode(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doAddBarcode(); } }}
-                    />
-                    <button className="btn-secondary" onClick={doAddBarcode} disabled={busy || !newBarcode.trim()}>+ add</button>
-                  </div>
+                      )}
+                      <button className="btn-secondary cat-bc-add" onClick={() => { resetMsg(); setNewBarcode(''); setBarcodeOpen(true); }}>+ Add barcode</button>
+                    </div>
+                  )}
                 </section>
               )}
 
               <div className="fd-commit">
                 <button className="btn-primary" onClick={saveSku} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
               </div>
+
+              {/* PR218 — manage-barcodes overlay: attached list (verify / unlink) + add field that
+                  warns if the barcode is already registered to another SKU (shared model). */}
+              {barcodeOpen && (
+                <div className="sc-modal-backdrop" onClick={busy ? undefined : () => setBarcodeOpen(false)}>
+                  <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Barcodes" onClick={(e) => e.stopPropagation()}>
+                    <div className="sc-modal-head sc-modal-head-row">
+                      <span className="sc-modal-title">Barcodes · {detail.sku.item_code}</span>
+                      <button className="sc-modal-x" onClick={() => setBarcodeOpen(false)} aria-label="Close">×</button>
+                    </div>
+                    <div className="sc-modal-body">
+                      <ul className="cat-bc-list">
+                        {detail.barcodes.length === 0 && <li className="hint">No barcodes linked yet.</li>}
+                        {detail.barcodes.map((b) => (
+                          <li className="cat-bc" key={b.barcode}>
+                            <span className="bc-code">{b.barcode}</span>
+                            {b.shared && <span className="bc-shared">shared</span>}
+                            <div className="bc-actions">
+                              <label className="rcv-ctl">
+                                <input type="checkbox" checked={b.is_verified} onChange={(e) => doToggleVerified(b.barcode, e.target.checked)} disabled={busy} />
+                                <span>verified</span>
+                              </label>
+                              <button className="btn-link" onClick={() => doUnlink(detail.sku.item_code, b.barcode)} disabled={busy}>unlink</button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="scan-row" style={{ marginTop: 10 }}>
+                        <input
+                          type="text"
+                          placeholder="add a barcode"
+                          value={newBarcode}
+                          autoFocus
+                          onChange={(e) => setNewBarcode(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doAddBarcode(); } }}
+                        />
+                        <button className="btn-secondary" onClick={doAddBarcode} disabled={busy || !newBarcode.trim()}>+ add</button>
+                      </div>
+                      {bcOwners.length > 0 && (
+                        <div className="validation warn" style={{ marginTop: 8 }}>
+                          Already registered to {bcOwners.map((o) => o.item_code).join(', ')} — adding will <b>share</b> this barcode.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
