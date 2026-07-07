@@ -12,6 +12,7 @@ import {
   getPuzzleNoPieces,
   getImplausibleDims,
   getOffListClassification,
+  getCatalogDuplicates,
   getSharedBarcodes,
   getSku,
   quickAddSku,
@@ -22,7 +23,7 @@ import {
 } from '@/app/catalog/actions';
 import { missingForComplete } from '@/app/catalog/types';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
-import type { OffListRow } from '@/app/catalog/actions';
+import type { OffListRow, DupGroup } from '@/app/catalog/actions';
 import CatalogBrowse from '@/components/CatalogBrowse';
 import SearchSelect from '@/components/SearchSelect';
 import SearchInput from '@/components/SearchInput';
@@ -197,6 +198,8 @@ export default function CatalogBoard({
   // PR208 — extra Fix data-quality lists, lazy-loaded the first time the Fix tab opens (keeps /catalog fast)
   const [fixExtra, setFixExtra] = useState<{ untranslated: CatalogueListRow[]; puzzleNoPieces: CatalogueListRow[]; implausible: CatalogueListRow[]; offList: OffListRow[] } | null>(null);
   const fixLoadedRef = useRef(false);
+  // PR210 — likely-duplicate groups load separately (a full-catalogue scan) so the fast lists show first
+  const [dupes, setDupes] = useState<DupGroup[] | null>(null);
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogueListRow[]>([]);
@@ -300,6 +303,7 @@ export default function CatalogBoard({
     Promise.all([getUntranslated(), getPuzzleNoPieces(), getImplausibleDims(), getOffListClassification()])
       .then(([untranslated, puzzleNoPieces, implausible, offList]) => setFixExtra({ untranslated, puzzleNoPieces, implausible, offList }))
       .catch(() => {});
+    getCatalogDuplicates().then(setDupes).catch(() => setDupes([])); // separate: full-catalogue scan
   }, [tab]);
 
   function switchTab(t: Tab) {
@@ -928,6 +932,27 @@ export default function CatalogBoard({
                               </div>
                             </div>
                           </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Likely duplicates ({dupes ? (dupes.length >= 200 ? '200+' : dupes.length) : '…'})</div>
+                  {!dupes ? <div className="hint">Scanning the catalogue…</div> : (
+                    <ul className="fq-list">
+                      {dupes.length === 0 && <li><div className="hint fq-empty">No likely duplicates (same name + brand + piece count).</div></li>}
+                      {dupes.map((g) => (
+                        <li key={g.members.map((m) => m.item_code).join(',')}>
+                          <div className="fq-row" style={{ cursor: 'default' }}>
+                            <div className="fq-row-top"><span className="fq-cust">{g.name}</span><span className="po-status forwarder" style={{ marginLeft: 'auto' }}>{g.members.length} SKUs</span></div>
+                            <div className="fq-row-bot" style={{ flexWrap: 'wrap', gap: 8 }}>
+                              {g.members.map((m) => (
+                                <button key={m.item_code} className="btn-link" style={{ padding: 0 }} onClick={() => openSku(m.item_code)} disabled={busy}>{m.item_code}</button>
+                              ))}
+                            </div>
+                          </div>
                         </li>
                       ))}
                     </ul>
