@@ -96,25 +96,32 @@ input, textarea, select, button { font-family: inherit; }
 .po-card-meta .stock-pills { margin-left: 0; }
 .po-card-meta .po-card-qty { margin-left: auto; flex-shrink: 0; }
 .po-chev { flex-shrink: 0; align-self: center; color: var(--brown-light); font-size: 22px; font-weight: 700; line-height: 1; }
-/* the tap-to-act detail overlay: header, then qty (left) + stock icons (right), then the actions */
+/* PR221 — the tap-to-act detail overlay. Header row: SKU code + name below (left), Edit link + close (right).
+   Body: image on the left; to its right, within the image height, the priority, qty-to-buy stepper and the
+   three stock statuses. Then context/note, then the inline "where to buy" links, then the actions. */
 .tobuy-detail { max-width: 440px; }
-.tobuy-detail .td-head { display: flex; gap: 12px; align-items: flex-start; }
-.tobuy-detail .td-head-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.tobuy-detail .td-name { font-size: 15px; color: var(--ink); }
-.td-note { white-space: pre-wrap; word-break: break-word; }
+.tobuy-detail .td-head-block { display: flex; align-items: flex-start; gap: 10px; }
+.td-head-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tobuy-detail .td-name { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-edit { flex-shrink: 0; align-self: center; font-size: 13px; font-weight: 700; color: var(--brown-dark); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 12px; background: var(--paper); }
+.td-edit:hover { background: var(--cream); }
+.td-note { white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
 .td-prio { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--brown-dark); }
 .td-prio-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .td-prio-high .td-prio-dot { background: var(--red); }
 .td-prio-mid  .td-prio-dot { background: var(--orange); }
 .td-prio-low  .td-prio-dot { background: var(--green); }
-.td-qtyrow { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-top: 14px; }
-.td-qtyrow .fd-section-head { margin-bottom: 6px; }
-.td-stock { display: flex; align-items: flex-end; padding-bottom: 6px; }
-.td-stock .stock-pills { gap: 14px; }
-/* PR190 — the overlay's status pills read larger than the tiny card pills (icons were too small to
-   glance at). Applies to both the Manual and From-Sales tap-to-act overlays. */
-.td-stock .stock-pill { font-size: 15px; padding: 4px 12px; gap: 6px; }
-.td-stock .stock-pill svg { width: 19px; height: 19px; }
+/* image + a right-hand column that fits within the image's height */
+.td-head2 { display: flex; gap: 14px; align-items: flex-start; }
+.td-side { flex: 1; min-width: 0; min-height: 72px; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+.td-qty { display: flex; align-items: center; gap: 10px; }
+.td-qty-lbl { font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--brown-dark); }
+.td-qty .qty-ro { font-size: 15px; font-weight: 700; color: var(--ink); }
+.td-stock .stock-pills { gap: 12px; }
+.td-stock .stock-pill { font-size: 14px; padding: 3px 10px; gap: 6px; }
+.td-stock .stock-pill svg { width: 18px; height: 18px; }
+.td-context { margin-top: 12px; }
+.td-links-head { margin-top: 14px; }
 .tobuy-detail .td-actions { justify-content: flex-start; align-items: center; }
 .tobuy-detail .td-actions .btn-trash { margin-left: auto; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -190,14 +197,13 @@ input, textarea, select, button { font-family: inherit; }
 .urg-btn.active.urg-mid  { background: var(--yellow-tint); color: #9C6F1C; border-color: var(--yellow); }
 .urg-btn.active.urg-high { background: var(--red-tint);    color: #993525; border-color: var(--red); }
 
-/* Buy overlay link list + mark-out-of-stock fallback */
+/* "Where to buy" link list (inline in the To-buy detail overlay, PR221) */
 .buy-links { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 16px; }
 .buy-link { display: flex; align-items: center; gap: 10px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; font-size: 14px; font-weight: 600; color: var(--brown-dark); text-decoration: none; }
 .buy-link.primary { background: var(--orange-tint); border-color: var(--orange); }
 .buy-link:active { background: var(--paper); }
 .buy-fav { flex-shrink: 0; width: 18px; height: 18px; border-radius: 4px; }
 .buy-link-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.buy-oos { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; flex-wrap: wrap; }
 .po-nosku { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; align-items: flex-start; }
 
 /* add-item quick-view rows (search results + the chosen SKU): small picture, code + name, an

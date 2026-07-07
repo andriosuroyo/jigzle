@@ -7,11 +7,10 @@
 //                 qty mirrors the order line (uneditable).
 //  • Out of Stock — PO status 'Sold out'. Qty uneditable; Restore → back to Manual.
 //
-// Every card shares one 3-line layout (larger image): line 1 = code + name + urgency (right);
-// line 2 = context (manual: stock figures / note · sales: order id + customer + date); line 3 = qty +
-// Buy + Done. "Buy" opens an overlay listing the product link (if attached) + the catalogue's stored
-// supplier sources, with a "Mark as Out of Stock" fallback. "Done" sends the item to To Forwarder
-// (a Processing PO).
+// Every card shares one layout (larger image): code + name, then context and stock pills. Tapping a card
+// opens a detail overlay (PR221): SKU + Edit (deep-link to the Catalog editor) with the name below; the
+// qty-to-buy stepper and stock statuses beside the image; the catalogue "where to buy" links listed inline;
+// and Out-of-stock / Done / Delete actions. "Done" sends the item to To Forwarder (a Processing PO).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -113,8 +112,8 @@ export default function ToBuyBoard({
   const [note, setNote] = useState('');
   const [addUrgency, setAddUrgency] = useState<Urgency | null>(null);
 
-  // buy overlay
-  const [buyTarget, setBuyTarget] = useState<BuyTarget | null>(null);
+  // PR221 — "where to buy" links now live inline in the detail overlay (the separate Buy step is gone).
+  // Loaded lazily when the overlay opens, keyed on the SKU code.
   const [buySources, setBuySources] = useState<string[]>([]);
   const [buyLoading, setBuyLoading] = useState(false);
 
@@ -238,23 +237,15 @@ export default function ToBuyBoard({
     finally { setBusy(false); }
   }
 
-  // ── buy overlay ──
-  async function openBuy(t: BuyTarget) {
-    setBuyTarget(t); setBuySources([]); setBuyLoading(true); setError(null);
-    try { setBuySources(await getSkuSources(t.item_code)); } catch { setBuySources([]); } finally { setBuyLoading(false); }
-  }
-
-  // mark the buy-overlay's SKU out of stock (all links sold out)
-  async function markOutOfStock() {
-    if (!buyTarget) return;
-    const t = buyTarget;
+  // mark a SKU out of stock (all links sold out) — the row is removed locally first (optimistic), like Done.
+  async function markOutOfStock(t: BuyTarget, s: { kind: SubTab; id: number | string } | null) {
+    setSel(null);
+    if (s) removeRow(s);
     setBusy(true); setError(null);
     try {
       if (t.po_id != null) await setSoldOut(t.po_id, true, null);
       else await markSkuSoldOut({ item_code: t.item_code, customer_id: t.customer_id, qty: t.qty, sales_id: t.sales_id });
-      setBuyTarget(null);
-      await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); await refresh(); }
     finally { setBusy(false); }
   }
 
@@ -300,6 +291,20 @@ export default function ToBuyBoard({
       qtyEditable: p.origin === 'manual', canDelete: true,
       target: { kind: 'oos' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link } };
   }, [sel, planned, preorders, soldOut]);
+
+  // PR221 — load the catalogue "where to buy" links when the detail overlay opens (keyed on the SKU code,
+  // so the fetch runs once per opened item and not on every qty tick).
+  const detailCode = detail?.item_code ?? null;
+  useEffect(() => {
+    if (!detailCode) { setBuySources([]); setBuyLoading(false); return; }
+    let alive = true;
+    setBuySources([]); setBuyLoading(true);
+    getSkuSources(detailCode)
+      .then((s) => { if (alive) setBuySources(s); })
+      .catch(() => { if (alive) setBuySources([]); })
+      .finally(() => { if (alive) setBuyLoading(false); });
+    return () => { alive = false; };
+  }, [detailCode]);
 
   // overlay qty stepper: optimistic local update in the right list (manual → planned, oos → soldOut)
   function setDetailQty(q: number) {
@@ -425,50 +430,68 @@ export default function ToBuyBoard({
         </section>
       )}
 
-      {/* PR168 (Option B) — tap-to-act detail overlay: header, then a single row with the qty stepper on
-          the LEFT and the stock (icon pills) on the RIGHT, then the Buy / Done / Delete actions. */}
+      {/* PR221 — tap-to-act detail overlay. Header: SKU code + Edit (deep-links to the Catalog editor) with
+          the item name right below. Body: image on the left; to its right (within the image height) sit the
+          priority, qty-to-buy stepper and the three stock statuses. The catalogue "where to buy" links are
+          listed inline below (no separate Buy step). Actions: Out of stock / Done / Delete. */}
       {detail && (
         <div className="sc-modal-backdrop" onClick={() => setSel(null)}>
           <div className="sc-modal tobuy-detail" role="dialog" aria-modal="true" aria-label="Item actions" onClick={(e) => e.stopPropagation()}>
-            <div className="sc-modal-head sc-modal-head-row">
-              <span className="sc-modal-title">{detail.item_code || '—'}</span>
+            <div className="sc-modal-head td-head-block">
+              <div className="td-head-titles">
+                <span className="sc-modal-title">{detail.item_code || '—'}</span>
+                <div className="ff-name td-name">{detail.name}</div>
+              </div>
+              {detail.item_code && (
+                <a className="td-edit" href={`/catalog?sku=${encodeURIComponent(detail.item_code)}`} target="_blank" rel="noreferrer" title="Edit in Catalog">Edit</a>
+              )}
               <button className="sc-modal-x" onClick={() => setSel(null)} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
-              <div className="td-head">
+              <div className="td-head2">
                 <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detail.name} size={SKU_IMG.md} />
-                <div className="td-head-main">
-                  <div className="ff-name td-name">{detail.name}</div>
+                <div className="td-side">
                   {detail.urgency && (
                     <div className={`td-prio td-prio-${detail.urgency}`}><span className="td-prio-dot" />{detail.urgency[0].toUpperCase() + detail.urgency.slice(1)} priority</div>
                   )}
-                  <div className="hint">{detail.context}</div>
-                  {detail.note && <div className="hint td-note">{detail.note}</div>}
+                  <div className="td-qty">
+                    <span className="td-qty-lbl">Qty to buy</span>
+                    {detail.qtyEditable && detail.po_id != null ? (
+                      <span className="qty-step">
+                        <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty - 1)} disabled={detail.qty <= 0} aria-label="decrease">−</button>
+                        <input
+                          type="number" inputMode="numeric" min={0} value={detail.qty}
+                          onChange={(e) => setDetailQty(parseInt(e.target.value, 10) || 0)}
+                          onBlur={(e) => changeQty(detail.po_id!, Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        />
+                        <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty + 1)} aria-label="increase">+</button>
+                      </span>
+                    ) : (
+                      <span className="qty-ro" aria-label="quantity">×{detail.qty}</span>
+                    )}
+                  </div>
+                  <div className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} /></div>
                 </div>
               </div>
-              <div className="td-qtyrow">
-                <div className="td-qty">
-                  <div className="fd-section-head">Qty to buy</div>
-                  {detail.qtyEditable && detail.po_id != null ? (
-                    <span className="qty-step">
-                      <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty - 1)} disabled={detail.qty <= 0} aria-label="decrease">−</button>
-                      <input
-                        type="number" inputMode="numeric" min={0} value={detail.qty}
-                        onChange={(e) => setDetailQty(parseInt(e.target.value, 10) || 0)}
-                        onBlur={(e) => changeQty(detail.po_id!, Math.max(0, parseInt(e.target.value, 10) || 0))}
-                      />
-                      <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty + 1)} aria-label="increase">+</button>
-                    </span>
-                  ) : (
-                    <span className="qty-ro" aria-label="quantity">{detail.qty}</span>
-                  )}
-                </div>
-                <div className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} /></div>
+
+              <div className="td-context hint">{detail.context}</div>
+              {detail.note && <div className="hint td-note">{detail.note}</div>}
+
+              <div className="fd-section-head td-links-head">Where to buy</div>
+              <div className="buy-links">
+                {detail.target.product_link && <BuyLink url={detail.target.product_link} primary />}
+                {buyLoading && <div className="hint">Loading catalogue sources…</div>}
+                {!buyLoading && buySources.map((url) => <BuyLink key={url} url={url} />)}
+                {!buyLoading && !detail.target.product_link && buySources.length === 0 && (
+                  <div className="hint">No links on file for this SKU.</div>
+                )}
               </div>
             </div>
             <div className="sc-modal-foot td-actions">
-              <button className="btn-secondary" onClick={() => { const t = detail.target; setSel(null); openBuy(t); }} disabled={busy}>Buy</button>
+              {detail.kind !== 'oos' && (
+                <button className="btn-secondary danger" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}>Out of stock</button>
+              )}
               <button className="btn-primary" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}>Done →</button>
               {detail.canDelete && detail.po_id != null && (
                 <TrashButton onClick={() => { const id = detail.po_id!; setSel(null); setConfirmDelId(id); }} disabled={busy} ariaLabel="Cancel this item" />
@@ -581,43 +604,6 @@ export default function ToBuyBoard({
                   <span className="fd-commit-info">{!canAdd ? 'Search a SKU, or type a new SKU code and search.' : ''}</span>
                   <button className="btn-primary" onClick={submitPlanned} disabled={busy || !canAdd}>{busy ? 'Adding…' : 'Add item'}</button>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* "Buy" overlay — dimmed-backdrop modal: product link + catalogue sources + mark-out-of-stock */}
-      {buyTarget && (
-        <div className="sc-modal-backdrop" onClick={() => setBuyTarget(null)}>
-          <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Buy item" onClick={(e) => e.stopPropagation()}>
-            <div className="sc-modal-head sc-modal-head-row">
-              <span className="sc-modal-title">Buy this item</span>
-              <button className="sc-modal-x" onClick={() => setBuyTarget(null)} aria-label="Close">×</button>
-            </div>
-            <div className="sc-modal-body">
-              {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
-              <div className="po-pick" style={{ marginBottom: 12 }}>
-                <SkuImage status={imgMap[buyTarget.item_code]?.status} displayUrl={imgMap[buyTarget.item_code]?.displayUrl} name={buyTarget.name} size={SKU_IMG.sm} />
-                <div className="po-pick-main">
-                  <div className="po-pick-l1"><span className="ff-code">{buyTarget.item_code || '—'}</span></div>
-                  <div className="po-pick-l2"><span className="ff-name">{buyTarget.name}</span></div>
-                </div>
-              </div>
-
-              <div className="fd-section-head">Where to buy</div>
-              <div className="buy-links">
-                {buyTarget.product_link && <BuyLink url={buyTarget.product_link} primary />}
-                {buyLoading && <div className="hint">Loading catalogue sources…</div>}
-                {!buyLoading && buySources.map((url) => <BuyLink key={url} url={url} />)}
-                {!buyLoading && !buyTarget.product_link && buySources.length === 0 && (
-                  <div className="hint">No links on file for this SKU.</div>
-                )}
-              </div>
-
-              <div className="buy-oos">
-                <div className="hint">All links sold out?</div>
-                <button className="btn-primary danger" onClick={markOutOfStock} disabled={busy}>Mark as Out of Stock</button>
               </div>
             </div>
           </div>

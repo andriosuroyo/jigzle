@@ -589,6 +589,14 @@ export default function CatalogBoard({
     return () => { live = false; clearTimeout(t); };
   }, [newBarcode, barcodeOpen, detail]);
 
+  // PR221 — deep-link: /catalog?sku=CODE opens that SKU straight into the editor (used by the "Edit"
+  // button in Purchasing → To buy). Read once on mount from the URL (no Suspense dependency).
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get('sku');
+    if (code) openSku(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const showBody = mode !== null;
   const crumbLabel = showBody
     ? (mode === 'collision' ? (collision?.barcode ?? 'Barcode') : (detail?.sku.item_code ?? 'Item'))
