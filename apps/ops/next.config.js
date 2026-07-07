@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@jigzle/ui', '@jigzle/lib', '@jigzle/db'],
+  // @react-pdf/renderer (Doc Generator) ships ESM-only — Next must transpile it or webpack throws
+  // "ESM packages need to be imported" at build (PR202).
+  transpilePackages: ['@jigzle/ui', '@jigzle/lib', '@jigzle/db', '@react-pdf/renderer'],
   // PR195 (URGENT freshness fix): kill the App Router CLIENT-side Router Cache stale window. Next 14.2
   // defaults a navigated dynamic route to 30s of stale reuse — so after a write (receive stock in
   // Inbound, a button in Sales/Purchasing) navigating away and back within 30s served the CACHED render
