@@ -3,14 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
-import { getPending, sendReadyItems, deleteOrder, markOrderPaid, addOrderLine, updateOrderLine, deleteOrderLine } from '@/app/pending/actions';
+import { getPending, sendReadyItems, deleteOrder, markOrderPaid, addOrderLine, updateOrderLine, deleteOrderLine, setLineNote } from '@/app/pending/actions';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
-import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
 import SkuSearchAdd from '@/components/SkuSearchAdd';
 import type { OrderDot, PendingOrder, PendingLine } from '@/app/pending/types';
 import type { CommonNote } from '@/app/settings/types';
-import NoteEditor from '@/components/NoteEditor';
 import SkuImage from '@/components/SkuImage';
 import StatusCircles, { payTone } from '@/components/StatusCircles';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -27,6 +25,15 @@ const STATUS_LABEL: Record<string, string> = { available: 'available', on_the_wa
 const fmtIDR = (n: number | null | undefined): string => 'Rp ' + (n ?? 0).toLocaleString('id-ID');
 // thousands-group a digit string for the price field (state stores digits only)
 const fmtThousands = (d: string) => d.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+// PR224 — small inline icons for the action buttons (kept local; the codebase inlines its SVGs).
+const svg = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+const CoinIcon = () => (<svg {...svg}><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6" /><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" /></svg>);
+const ArrowIcon = () => (<svg {...svg}><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>);
+const TrashIcon = () => (<svg {...svg}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+const PencilIcon = () => (<svg {...svg}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
+const CopyIcon = () => (<svg {...svg} width={14} height={14}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
+const CheckIcon = () => (<svg {...svg} width={14} height={14}><polyline points="20 6 9 17 4 12" /></svg>);
 
 export default function PendingBoard({
   initialOrders,
@@ -61,16 +68,20 @@ export default function PendingBoard({
   // PR148: delete goes through the overlay confirm (no bare window.confirm); its error stays in the modal.
   const [confirmDel, setConfirmDel] = useState(false);
   const [delErr, setDelErr] = useState<string | null>(null);
-  // PR215: edit-items OVERLAY — per-line qty/price drafts, immediate trashcan remove, and an add-item
-  // panel. Edits commit per-line as you make them (Save just closes).
-  const [editItems, setEditItems] = useState(false);
-  const [drafts, setDrafts] = useState<Record<string, { qty: string; price: string }>>({});
-  const [rowBusy, setRowBusy] = useState<string | null>(null); // line_id (or '+add') mid-write
-  const [rowErr, setRowErr] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);                 // the add-item panel is open
-  const [addPick, setAddPick] = useState<string | null>(null); // chosen item_code awaiting qty/price
-  const [addQty, setAddQty] = useState('1');
-  const [addPrice, setAddPrice] = useState('');
+  // PR224 — per-line editor OVERLAY (replaces the bulk "Edit items"): a square pencil on each row opens
+  // it to change SKU / qty / price / note or delete that one line; "+ Add item" opens it in add mode.
+  // All fields are drafts, committed together on Save.
+  type LineEdit = { mode: 'edit'; line: PendingLine } | { mode: 'add' };
+  const [lineEdit, setLineEdit] = useState<LineEdit | null>(null);
+  const [leCode, setLeCode] = useState<string | null>(null); // draft item_code (edit: seeded; add: picked)
+  const [leName, setLeName] = useState('');                  // display name for the current code
+  const [leQty, setLeQty] = useState('1');
+  const [lePrice, setLePrice] = useState('');
+  const [leNote, setLeNote] = useState('');
+  const [leChanging, setLeChanging] = useState(false);       // the SKU search (pick/replace) is open
+  const [leBusy, setLeBusy] = useState(false);
+  const [leErr, setLeErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);               // order-id copy feedback
   const reqRef = useRef(0);
 
   // PR149: readiness-tab filter + free-text search (customer name, order id, or a SKU on the order)
@@ -124,17 +135,6 @@ export default function PendingBoard({
     setError(null);
     setSuccess(null);
     setSelId(o.sales_id);
-  }
-
-  // reflect a saved per-line note in local state so it survives re-renders without a refetch.
-  function applyLineNote(salesId: string, lineId: string, note: string | null) {
-    setOrders((prev) =>
-      prev.map((o) =>
-        o.sales_id === salesId
-          ? { ...o, lines: o.lines.map((l) => (l.line_id === lineId ? { ...l, line_note: note } : l)) }
-          : o
-      )
-    );
   }
 
   // FP-6: cut the ready lines (available ≥ qty). Short lines stay in Pending; the cut lines move to Fulfill.
@@ -198,83 +198,81 @@ export default function PendingBoard({
     }
   }
 
-  // PR196 — edit items on a pending order. Every line shown here is UNCUT, so these ops move no stock
-  // (stock_check counts only fulfilled/shipped rows); each RPC recomputes the total + payment status.
-  function setDraft(lineId: string, field: 'qty' | 'price', value: string) {
-    setDrafts((d) => {
-      const cur = d[lineId] ?? { qty: '', price: '' };
-      return { ...d, [lineId]: { ...cur, [field]: value } };
-    });
+  // PR224 — per-line editor. Every line shown here is UNCUT, so these ops move no stock (stock_check
+  // counts only fulfilled/shipped rows); each RPC recomputes the total + payment status.
+  function openLineEdit(l: PendingLine) {
+    setLineEdit({ mode: 'edit', line: l });
+    setLeCode(l.item_code); setLeName(l.name);
+    setLeQty(String(l.qty)); setLePrice(String(l.unit_price_idr ?? 0)); setLeNote(l.line_note ?? '');
+    setLeChanging(false); setLeErr(null);
   }
-  function beginEdit() {
-    if (!sel) return;
-    const d: Record<string, { qty: string; price: string }> = {};
-    for (const l of sel.lines) d[l.line_id] = { qty: String(l.qty), price: String(l.unit_price_idr ?? 0) };
-    setDrafts(d);
-    setRowErr(null); setAdding(false); setAddPick(null);
-    setEditItems(true);
+  function openLineAdd() {
+    setLineEdit({ mode: 'add' });
+    setLeCode(null); setLeName('');
+    setLeQty('1'); setLePrice(''); setLeNote('');
+    setLeChanging(true); setLeErr(null); // start with the SKU picker open
   }
-  function endEdit() {
-    setEditItems(false); setAdding(false); setAddPick(null); setRowErr(null);
-  }
-  async function saveLine(l: PendingLine) {
-    const d = drafts[l.line_id];
-    if (!sel || !d) return;
-    const qty = parseInt(d.qty, 10);
-    const price = parseInt(d.price, 10);
-    if (!Number.isFinite(qty) || qty < 1) { setRowErr('Quantity must be at least 1.'); return; }
-    const nextPrice = Number.isFinite(price) ? price : 0;
-    if (qty === l.qty && nextPrice === (l.unit_price_idr ?? 0)) return; // unchanged → no write
-    setRowBusy(l.line_id); setRowErr(null);
-    const { error: e } = await updateOrderLine(l.line_id, qty, nextPrice);
-    if (e) { setRowErr(e); setRowBusy(null); return; }
-    await refresh();
-    setRowBusy(null);
-  }
-  // qty easy-adjust (± stepper in the edit-items overlay) — bumps the draft and commits immediately.
-  async function stepQty(l: PendingLine, delta: number) {
-    const cur = parseInt(drafts[l.line_id]?.qty ?? String(l.qty), 10) || l.qty;
-    const next = Math.max(1, cur + delta);
-    setDraft(l.line_id, 'qty', String(next));
-    const price = parseInt(drafts[l.line_id]?.price ?? String(l.unit_price_idr ?? 0), 10);
-    setRowBusy(l.line_id); setRowErr(null);
-    const { error: e } = await updateOrderLine(l.line_id, next, Number.isFinite(price) ? price : 0);
-    if (e) { setRowErr(e); setRowBusy(null); return; }
-    await refresh();
-    setRowBusy(null);
-  }
-  async function removeLine(lineId: string) {
-    setRowBusy(lineId); setRowErr(null);
-    const { error: e } = await deleteOrderLine(lineId);
-    if (e) { setRowErr(e); setRowBusy(null); return; }
-    await refresh();
-    setRowBusy(null);
-  }
-  async function commitAdd() {
-    if (!sel || !addPick) return;
-    const qty = parseInt(addQty, 10);
-    const price = parseInt(addPrice, 10);
-    if (!Number.isFinite(qty) || qty < 1) { setRowErr('Quantity must be at least 1.'); return; }
-    setRowBusy('+add'); setRowErr(null);
-    const { error: e } = await addOrderLine(sel.sales_id, addPick, qty, Number.isFinite(price) ? price : 0, null);
-    if (e) { setRowErr(e); setRowBusy(null); return; }
-    await refresh();
-    setAddPick(null); setAddQty('1'); setAddPrice(''); setAdding(false); setRowBusy(null);
+  function closeLineEdit() { setLineEdit(null); setLeChanging(false); setLeErr(null); }
+
+  // commit all drafted changes at once. Changing the SKU of an existing line = add the new line first
+  // (so the order always keeps ≥1 active line and the old delete never hits the last-line guard), then
+  // remove the old — carrying qty/price/note across.
+  async function saveLineEdit() {
+    if (!sel || !lineEdit) return;
+    const qty = parseInt(leQty, 10);
+    if (!Number.isFinite(qty) || qty < 1) { setLeErr('Quantity must be at least 1.'); return; }
+    const priceN = parseInt(lePrice, 10);
+    const price = Number.isFinite(priceN) ? priceN : 0;
+    const note = leNote.trim() || null;
+    setLeBusy(true); setLeErr(null);
+    try {
+      if (lineEdit.mode === 'add') {
+        if (!leCode) { setLeErr('Pick a SKU first.'); setLeBusy(false); return; }
+        const { error } = await addOrderLine(sel.sales_id, leCode, qty, price, note);
+        if (error) { setLeErr(error); setLeBusy(false); return; }
+      } else {
+        const l = lineEdit.line;
+        if (leCode && leCode !== l.item_code) {
+          const { error: addErr } = await addOrderLine(sel.sales_id, leCode, qty, price, note);
+          if (addErr) { setLeErr(addErr); setLeBusy(false); return; }
+          const { error: delErr } = await deleteOrderLine(l.line_id);
+          if (delErr) { setLeErr(delErr); setLeBusy(false); return; }
+        } else {
+          if (qty !== l.qty || price !== (l.unit_price_idr ?? 0)) {
+            const { error } = await updateOrderLine(l.line_id, qty, price);
+            if (error) { setLeErr(error); setLeBusy(false); return; }
+          }
+          if (note !== (l.line_note ?? null)) {
+            try { await setLineNote(l.line_id, note); } catch { setLeErr("Couldn't save the note."); setLeBusy(false); return; }
+          }
+        }
+      }
+      await refresh();
+      setLineEdit(null); setLeChanging(false);
+    } finally {
+      setLeBusy(false);
+    }
   }
 
-  // reset edit mode when the selected order changes (mirrors the delete-confirm reset).
-  useEffect(() => { endEdit(); setConfirmDel(false); }, [selId]);
-  // keep drafts in sync with the (possibly refreshed) line set while editing — preserve half-typed
-  // values, seed newly-added lines, drop removed ones.
-  useEffect(() => {
-    if (!editItems || !sel) return;
-    setDrafts((prev) => {
-      const next: Record<string, { qty: string; price: string }> = {};
-      for (const l of sel.lines) next[l.line_id] = prev[l.line_id] ?? { qty: String(l.qty), price: String(l.unit_price_idr ?? 0) };
-      return next;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sel, editItems]);
+  // delete the one line being edited (guarded server-side: it refuses the order's last active line —
+  // use "Delete order" for that).
+  async function deleteEditedLine() {
+    if (!lineEdit || lineEdit.mode !== 'edit') return;
+    setLeBusy(true); setLeErr(null);
+    const { error } = await deleteOrderLine(lineEdit.line.line_id);
+    if (error) { setLeErr(error); setLeBusy(false); return; }
+    await refresh();
+    setLeBusy(false); setLineEdit(null); setLeChanging(false);
+  }
+
+  // easy-copy the order id (header chip). Best-effort — falls back silently if clipboard is blocked.
+  async function copyOrderId() {
+    if (!sel) return;
+    try { await navigator.clipboard.writeText(sel.sales_id); setCopied(true); setTimeout(() => setCopied(false), 1400); } catch { /* clipboard unavailable */ }
+  }
+
+  // reset edit / delete-confirm state when the selected order changes.
+  useEffect(() => { setLineEdit(null); setLeChanging(false); setConfirmDel(false); setCopied(false); }, [selId]);
 
   // PR147 — bodyview: the body shows EITHER the filter tabs + full-width queue OR the tapped order's
   // detail with a ← back button (the Purchasing-History pattern); breadcrumb + pipeline tabs stay put.
@@ -338,16 +336,20 @@ export default function PendingBoard({
           <button className="btn-link bv-back" onClick={() => setSelId(null)}>← back</button>
           <div className="bv-detail">
             <>
-              {/* PR144 header: customer id left, order date right; the sales id moved to the bottom. */}
+              {/* PR224 header: customer name left, date right; the order id sits just below as a copyable chip. */}
               <div className="fd-head">
                 <div className="fd-head-row">
                   <div className="fd-title fd-title-plain">{sel.customer_name || '—'}</div>
                   {sel.order_date && <span className="fd-date">{sel.order_date.slice(0, 10)}</span>}
                 </div>
+                <button className="fd-orderid-chip" onClick={copyOrderId} aria-label={copied ? 'Order ID copied' : 'Copy order ID'} title="Copy order ID">
+                  <span className="fd-orderid-code">{sel.sales_id}</span>
+                  {copied ? <CheckIcon /> : <CopyIcon />}
+                </button>
               </div>
 
-              {/* Lines — compact row: image left, code / name / qty / status to its right. PR196: "Edit
-                  items" swaps qty/status for qty + price inputs and a remove ✕, and reveals Add item. */}
+              {/* Lines — compact row: image left, code / name / (note) / qty / status, and a square pencil
+                  that opens the per-line editor (PR224). "+ Add item" below opens the same editor in add mode. */}
               <section className="fd-section">
                 <div className="fd-section-head">Items</div>
                 <ul className="ff-lines">
@@ -358,18 +360,20 @@ export default function PendingBoard({
                         <div className="pend-line-main">
                           <span className="ff-code">{l.item_code || '—'}</span>
                           <span className="ff-name">{l.name}</span>
+                          {l.line_note && <span className="pend-line-note">✎ {l.line_note}</span>}
                         </div>
                         <span className="ff-qty">×{l.qty}</span>
                         <span className={`pend-status ${l.status}`}>{STATUS_LABEL[l.status] ?? l.status}</span>
+                        <button className="btn-edit" onClick={() => openLineEdit(l)} aria-label="Edit item" title="Edit item"><PencilIcon /></button>
                       </div>
-                      <NoteEditor lineId={l.line_id} value={l.line_note} commonNotes={commonNotes} onSaved={(note) => applyLineNote(sel.sales_id, l.line_id, note)} />
                     </li>
                   ))}
                 </ul>
+                <button className="btn-secondary edit-additem" onClick={openLineAdd} disabled={busy}>+ Add item</button>
               </section>
 
-              {/* Payment — totals only; balance right-aligned, green when clear. Settling is the single
-                  "Mark as paid" button below (pays the full balance, method 'manual'). */}
+              {/* Payment — totals only; balance right-aligned, green when clear. The settle reminder lives
+                  here (next to the balance) rather than beside the send button (PR224). */}
               <section className="fd-section">
                 <div className="ord-pay-grid">
                   <div><span className="ord-pay-k">Total</span><span className="ord-pay-v">{fmtIDR(sel.sales_total_idr)}</span></div>
@@ -379,102 +383,77 @@ export default function PendingBoard({
                     <span className={`ord-pay-v ord-pay-bal ${sel.balance > 0 ? 'bal-due' : 'bal-clear'}`}>{fmtIDR(sel.balance)}</span>
                   </div>
                 </div>
+                {sel.balance > 0 && sel.ready_count > 0 && (
+                  <div className="warn-text pay-hint">Settle the balance to send ready items.</div>
+                )}
               </section>
 
-              {/* Actions — Mark as paid · Edit items · Send ready items (left) + delete trashcan (right).
-                  PR215: Edit items sits to the left of Send ready; Delete is the standard red trashcan. */}
-              <div className="fd-commit fd-commit-row">
+              {/* Actions — all left-aligned with a leading icon, on one horizontally-scrollable row (PR224). */}
+              <div className="fd-actions">
                 {sel.balance > 0 && (
-                  <button className="btn-secondary" onClick={doMarkPaid} disabled={busy}>{busy ? 'Saving…' : 'Mark as paid'}</button>
+                  <button className="btn-secondary btn-ico" onClick={doMarkPaid} disabled={busy}><CoinIcon />{busy ? 'Saving…' : 'Mark as paid'}</button>
                 )}
-                <button className="btn-secondary" onClick={beginEdit} disabled={busy}>Edit items</button>
-                <button className="btn-primary" onClick={doSendReady} disabled={busy || sel.ready_count === 0 || sel.balance > 0}>
-                  {busy ? 'Working…' : `Send ready items${sel.ready_count ? ` (${sel.ready_count})` : ''}`}
+                <button className="btn-primary btn-ico" onClick={doSendReady} disabled={busy || sel.ready_count === 0 || sel.balance > 0}>
+                  <ArrowIcon />{busy ? 'Working…' : `Send ready items${sel.ready_count ? ` (${sel.ready_count})` : ''}`}
                 </button>
-                <TrashButton onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={busy} ariaLabel="Delete order" className="fd-del-right" />
+                <button className="btn-danger btn-ico" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={busy}><TrashIcon />Delete order</button>
               </div>
-              {sel.balance > 0 && sel.ready_count > 0 && !busy && (
-                <div className="warn-text" style={{ marginTop: 6 }}>settle payment before sending</div>
-              )}
 
-              <div className="fd-orderid">{sel.sales_id}</div>
-
-              {/* PR215 — Edit items overlay: qty ± stepper, plain price field, red trashcan remove, a
-                  full-width add-item, the total/paid/balance, and Save (edits commit immediately). */}
-              {editItems && sel && (
-                <div className="sc-modal-backdrop" onClick={rowBusy ? undefined : endEdit}>
-                  <div className="sc-modal sc-modal-lg" role="dialog" aria-modal="true" aria-label="Edit items" onClick={(e) => e.stopPropagation()}>
+              {/* PR224 — per-line editor overlay: change SKU / qty / price / note, or delete this one line. */}
+              {lineEdit && sel && (
+                <div className="sc-modal-backdrop" onClick={leBusy ? undefined : closeLineEdit}>
+                  <div className="sc-modal" role="dialog" aria-modal="true" aria-label={lineEdit.mode === 'add' ? 'Add item' : 'Edit item'} onClick={(e) => e.stopPropagation()}>
                     <div className="sc-modal-head sc-modal-head-row">
-                      <span className="sc-modal-title">Edit items · {sel.customer_name || sel.sales_id}</span>
-                      <button className="sc-modal-x" onClick={endEdit} aria-label="Close" disabled={!!rowBusy}>×</button>
+                      <span className="sc-modal-title">{lineEdit.mode === 'add' ? 'Add item' : 'Edit item'}</span>
+                      <button className="sc-modal-x" onClick={closeLineEdit} aria-label="Close" disabled={leBusy}>×</button>
                     </div>
                     <div className="sc-modal-body">
-                      {rowErr && <div className="validation err" style={{ marginBottom: 10 }}>{rowErr}</div>}
-                      <ul className="edit-lines">
-                        {sel.lines.map((l) => {
-                          const qv = parseInt(drafts[l.line_id]?.qty ?? String(l.qty), 10) || 1;
-                          return (
-                            <li key={l.line_id} className="edit-line">
-                              <div className="edit-line-main">
-                                <span className="ff-code">{l.item_code || '—'}</span>
-                                <span className="ff-name">{l.name}</span>
-                              </div>
-                              <span className="qty-step">
-                                <button type="button" aria-label="decrease" onClick={() => stepQty(l, -1)} disabled={rowBusy === l.line_id || qv <= 1}>−</button>
-                                <input type="number" inputMode="numeric" min={1} aria-label="Quantity"
-                                  value={drafts[l.line_id]?.qty ?? String(l.qty)}
-                                  onChange={(e) => setDraft(l.line_id, 'qty', e.target.value)}
-                                  onBlur={() => saveLine(l)}
-                                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                                  disabled={rowBusy === l.line_id} />
-                                <button type="button" aria-label="increase" onClick={() => stepQty(l, 1)} disabled={rowBusy === l.line_id}>+</button>
-                              </span>
-                              <input className="edit-price" type="text" inputMode="numeric" aria-label="Unit price (Rp)" placeholder="price"
-                                value={fmtThousands(drafts[l.line_id]?.price ?? String(l.unit_price_idr ?? 0))}
-                                onChange={(e) => setDraft(l.line_id, 'price', e.target.value.replace(/\D/g, ''))}
-                                onBlur={() => saveLine(l)}
-                                disabled={rowBusy === l.line_id} />
-                              <TrashButton onClick={() => removeLine(l.line_id)} disabled={rowBusy === l.line_id} ariaLabel="Remove item" />
-                            </li>
-                          );
-                        })}
-                      </ul>
+                      {leErr && <div className="validation err" style={{ marginBottom: 10 }}>{leErr}</div>}
 
-                      {addPick ? (
-                        <div className="edit-addrow">
-                          <span className="ff-code">{addPick}</span>
-                          <span className="qty-step">
-                            <button type="button" aria-label="decrease" onClick={() => setAddQty(String(Math.max(1, (parseInt(addQty, 10) || 1) - 1)))} disabled={(parseInt(addQty, 10) || 1) <= 1}>−</button>
-                            <input type="number" inputMode="numeric" min={1} aria-label="Quantity" value={addQty} onChange={(e) => setAddQty(e.target.value)} />
-                            <button type="button" aria-label="increase" onClick={() => setAddQty(String((parseInt(addQty, 10) || 1) + 1))}>+</button>
-                          </span>
-                          <input className="edit-price" type="text" inputMode="numeric" placeholder="price" value={fmtThousands(addPrice)} onChange={(e) => setAddPrice(e.target.value.replace(/\D/g, ''))} />
-                          <button className="btn-primary" onClick={commitAdd} disabled={rowBusy === '+add'}>{rowBusy === '+add' ? 'Adding…' : 'Add'}</button>
-                          <button className="btn-secondary" onClick={() => { setAddPick(null); setAdding(false); }} disabled={rowBusy === '+add'}>cancel</button>
-                        </div>
-                      ) : adding ? (
-                        <div style={{ marginTop: 10 }}>
-                          <SkuSearchAdd
-                            listed={new Set(sel.lines.map((l) => l.item_code).filter((c): c is string => !!c))}
-                            placeholder="Add item: search by code or name"
-                            onSelect={(code) => { setAddPick(code); setAddQty('1'); setAddPrice(''); }}
-                          />
-                        </div>
+                      <div className="fd-section-head">SKU</div>
+                      {leChanging ? (
+                        <SkuSearchAdd
+                          listed={new Set(sel.lines.map((l) => l.item_code).filter((c): c is string => !!c && !(lineEdit.mode === 'edit' && c === lineEdit.line.item_code)))}
+                          placeholder="Search by code or name"
+                          onSelect={(code) => { setLeCode(code); setLeName(code); setLeChanging(false); }}
+                        />
                       ) : (
-                        <button className="btn-secondary edit-additem" onClick={() => setAdding(true)} disabled={!!rowBusy}>+ Add item</button>
+                        <div className="le-sku">
+                          <SkuImage status={imgMap[leCode ?? '']?.status} displayUrl={imgMap[leCode ?? '']?.displayUrl} name={leName} size={SKU_IMG.sm} />
+                          <div className="le-sku-main">
+                            <span className="ff-code">{leCode || '—'}</span>
+                            <span className="ff-name">{leName}</span>
+                          </div>
+                          <button type="button" className="btn-link" onClick={() => setLeChanging(true)} disabled={leBusy}>Change</button>
+                        </div>
                       )}
 
-                      <div className="ord-pay-grid edit-pay">
-                        <div><span className="ord-pay-k">Total</span><span className="ord-pay-v">{fmtIDR(sel.sales_total_idr)}</span></div>
-                        <div><span className="ord-pay-k">Paid</span><span className="ord-pay-v">{fmtIDR(sel.paid_idr)}</span></div>
-                        <div className="ord-pay-bal-col">
-                          <span className="ord-pay-k">Balance</span>
-                          <span className={`ord-pay-v ord-pay-bal ${sel.balance > 0 ? 'bal-due' : 'bal-clear'}`}>{fmtIDR(sel.balance)}</span>
+                      <div className="le-row">
+                        <div className="le-field">
+                          <label>Qty</label>
+                          <span className="qty-step">
+                            <button type="button" aria-label="decrease" onClick={() => setLeQty(String(Math.max(1, (parseInt(leQty, 10) || 1) - 1)))} disabled={leBusy || (parseInt(leQty, 10) || 1) <= 1}>−</button>
+                            <input type="number" inputMode="numeric" min={1} aria-label="Quantity" value={leQty} onChange={(e) => setLeQty(e.target.value)} disabled={leBusy} />
+                            <button type="button" aria-label="increase" onClick={() => setLeQty(String((parseInt(leQty, 10) || 1) + 1))} disabled={leBusy}>+</button>
+                          </span>
+                        </div>
+                        <div className="le-field grow">
+                          <label>Unit price (Rp)</label>
+                          <input className="edit-price" type="text" inputMode="numeric" placeholder="price" value={fmtThousands(lePrice)} onChange={(e) => setLePrice(e.target.value.replace(/\D/g, ''))} disabled={leBusy} />
                         </div>
                       </div>
+
+                      <div className="le-field le-note">
+                        <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                        <input type="text" list="le-notes" placeholder="Add a note…" value={leNote} onChange={(e) => setLeNote(e.target.value)} disabled={leBusy} />
+                        <datalist id="le-notes">{commonNotes.map((n) => <option key={n.id} value={n.label} />)}</datalist>
+                      </div>
                     </div>
-                    <div className="sc-modal-foot">
-                      <button className="btn-primary" onClick={endEdit} disabled={!!rowBusy}>Save</button>
+                    <div className="sc-modal-foot le-foot">
+                      {lineEdit.mode === 'edit' && (
+                        <button className="btn-danger btn-ico le-del" onClick={deleteEditedLine} disabled={leBusy}><TrashIcon />Delete item</button>
+                      )}
+                      <button className="btn-primary" onClick={saveLineEdit} disabled={leBusy || (lineEdit.mode === 'add' && !leCode)}>{leBusy ? 'Saving…' : 'Save'}</button>
                     </div>
                   </div>
                 </div>
