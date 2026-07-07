@@ -369,7 +369,7 @@ export default function PendingBoard({
                     </li>
                   ))}
                 </ul>
-                <button className="btn-secondary edit-additem" onClick={openLineAdd} disabled={busy}>+ Add item</button>
+                <button className="btn-brown edit-additem" onClick={openLineAdd} disabled={busy}>+ Add item</button>
               </section>
 
               {/* Payment — totals only; balance right-aligned, green when clear. The settle reminder lives
@@ -391,7 +391,7 @@ export default function PendingBoard({
               {/* Actions — all left-aligned with a leading icon, on one horizontally-scrollable row (PR224). */}
               <div className="fd-actions">
                 {sel.balance > 0 && (
-                  <button className="btn-secondary btn-ico" onClick={doMarkPaid} disabled={busy}><CoinIcon />{busy ? 'Saving…' : 'Mark as paid'}</button>
+                  <button className="btn-brown btn-ico" onClick={doMarkPaid} disabled={busy}><CoinIcon />{busy ? 'Saving…' : 'Mark as paid'}</button>
                 )}
                 <button className="btn-primary btn-ico" onClick={doSendReady} disabled={busy || sel.ready_count === 0 || sel.balance > 0}>
                   <ArrowIcon />{busy ? 'Working…' : `Send ready items${sel.ready_count ? ` (${sel.ready_count})` : ''}`}

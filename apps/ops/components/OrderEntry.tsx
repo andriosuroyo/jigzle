@@ -464,7 +464,7 @@ export default function OrderEntry({
                     </ul>
                   )}
                   {!showNewCust && (
-                    <button className="btn-secondary" onClick={() => setShowNewCust(true)}>+ New customer</button>
+                    <button className="btn-brown" onClick={() => setShowNewCust(true)}>+ New customer</button>
                   )}
                   {showNewCust && (
                     <div className="subform">
@@ -540,7 +540,7 @@ export default function OrderEntry({
                     </ul>
                   )}
                   {!showNewAddr ? (
-                    <button className="btn-secondary" onClick={() => setShowNewAddr(true)} disabled={!customer}>+ New address</button>
+                    <button className="btn-brown" onClick={() => setShowNewAddr(true)} disabled={!customer}>+ New address</button>
                   ) : (
                     <div className="subform">
                       <input type="text" placeholder="Recipient name" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />

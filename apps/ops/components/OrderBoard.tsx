@@ -1224,7 +1224,7 @@ export default function OrderBoard({
                 ))}
               </select>
             </div>
-            <button className="btn-secondary" onClick={() => setSupForm(supForm ? null : { name: '', country: '', flag: '', type: 'Taobao account' })}>+ add</button>
+            <button className="btn-brown" onClick={() => setSupForm(supForm ? null : { name: '', country: '', flag: '', type: 'Taobao account' })}>+ add</button>
           </div>
           {supForm && (
             <div className="subform" style={{ marginTop: 8 }}>

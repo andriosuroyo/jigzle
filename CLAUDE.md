@@ -55,6 +55,17 @@ Notes:
 - The primary nav is a single source of truth in `apps/ops/components/navConfig.tsx`
   (consumed by both the hub landing page and `AppHeader`).
 - Match the surrounding code's style, comment density, and naming when editing.
+- **Button colour system (PR234) — role-based, never ad hoc.** Pick a button's colour from its role,
+  not per request:
+  - **Orange** (`btn-primary`) — the ONE primary CTA of a view/overlay (Save, Send to Outbound, Send
+    ready items, Done buying, and the *commit* button of an add form).
+  - **Brown** (`btn-brown`) — affirmative **secondary** actions: positive things that aren't the primary
+    and aren't destructive (Mark as paid, Send back to pending, and every "+ New / + Add" **entry** button
+    that opens an add form — New order, New item, Add note, Add item, Add address, Add supplier, …).
+  - **White** (`btn-secondary`) — genuinely neutral / low-stakes (Change, Cancel, Edit, close).
+  - **Red** (`btn-danger` / `TrashButton`) — destructive (Delete order / item / PO). "Mark as out of
+    stock" stays a red-tinted secondary (`btn-secondary danger`) — a cautionary state change, not a delete.
+  Apply this to any new button; don't invent a per-request colour.
 
 ## Supabase migrations — how they get applied
 

@@ -107,7 +107,7 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-secondary" onClick={() => setAddName('')} disabled={busy}>+ Add declaration user</button>
+          <button className="btn-brown" onClick={() => setAddName('')} disabled={busy}>+ Add declaration user</button>
         </div>
       )}
     </Wrap>
