@@ -450,10 +450,10 @@ export default function PendingBoard({
                       </div>
                     </div>
                     <div className="sc-modal-foot le-foot">
+                      <button className="btn-primary" onClick={saveLineEdit} disabled={leBusy || (lineEdit.mode === 'add' && !leCode)}>{leBusy ? 'Saving…' : 'Save'}</button>
                       {lineEdit.mode === 'edit' && (
                         <button className="btn-danger btn-ico le-del" onClick={deleteEditedLine} disabled={leBusy}><TrashIcon />Delete item</button>
                       )}
-                      <button className="btn-primary" onClick={saveLineEdit} disabled={leBusy || (lineEdit.mode === 'add' && !leCode)}>{leBusy ? 'Saving…' : 'Save'}</button>
                     </div>
                   </div>
                 </div>
