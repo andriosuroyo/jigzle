@@ -798,7 +798,7 @@ export default function OrderBoard({
           <div className="bv-detail">
             {/* body-header: md image left; SKU + date / name + ×qty / PO # (+ customer) to its right */}
             <div className="po-bvhead">
-              <SkuImage status={imgMap[editPo.item_code ?? '']?.status} displayUrl={imgMap[editPo.item_code ?? '']?.displayUrl} name={editPo.name} size={SKU_IMG.md} />
+              <SkuImage status={imgMap[editPo.item_code ?? '']?.status} displayUrl={imgMap[editPo.item_code ?? '']?.displayUrl} name={editPo.name} size={SKU_IMG.smd} />
               <div className="po-bvhead-main">
                 <div className="po-card-l1">
                   <span className="ff-code">{editPo.item_code || '—'}</span>
@@ -898,7 +898,7 @@ export default function OrderBoard({
           <div className="bv-detail">
             {/* same body-header as To forwarder */}
             <div className="po-bvhead">
-              <SkuImage status={imgMap[editPo!.item_code ?? '']?.status} displayUrl={imgMap[editPo!.item_code ?? '']?.displayUrl} name={editPo!.name} size={SKU_IMG.md} />
+              <SkuImage status={imgMap[editPo!.item_code ?? '']?.status} displayUrl={imgMap[editPo!.item_code ?? '']?.displayUrl} name={editPo!.name} size={SKU_IMG.smd} />
               <div className="po-bvhead-main">
                 <div className="po-card-l1">
                   <span className="ff-code">{editPo!.item_code || '—'}</span>

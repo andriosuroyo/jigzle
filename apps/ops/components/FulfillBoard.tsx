@@ -312,7 +312,7 @@ export default function FulfillBoard({
                   {detail.lines.map((l) => (
                     <li key={l.line_id} className="ff-line pend-line-card">
                       <div className="pend-line">
-                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.md} />
+                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.smd} />
                         <div className="pend-line-main">
                           <span className="ff-code">{l.item_code || '—'}</span>
                           <span className="ff-name">{l.name}</span>
