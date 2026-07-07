@@ -16,6 +16,8 @@ import {
   getMissingWeight,
   acceptEstimatedWeight,
   getMissingImage,
+  getSkuSources,
+  setSkuSources,
   getSharedBarcodes,
   getSku,
   quickAddSku,
@@ -83,7 +85,7 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
     ],
   },
   // Media holds no grid fields — just the Google-Drive image editor (rendered specially below).
-  { title: 'Media', fields: [] },
+  { title: 'Links', fields: [] },
   // needs_review is DERIVED by the completion gate on every save (PR18 §6): a SKU drops off Needs-review
   // once it has name + brand_prefix + product_type (+ piece count if a puzzle). See updateSku.
 ];
@@ -167,14 +169,14 @@ type Tab = 'search' | 'browse' | 'fix';
 
 // PR185 — the item bodyview groups every field into sub-tabs (GROUPS) + a Barcodes tab, styled like the
 // system's tab lists. Short labels for the sub-tab row.
-const GROUP_TABS = ['Identity', 'Classification', 'Dimensions', 'Media'];
+const GROUP_TABS = ['Identity', 'Classification', 'Dimensions', 'Links'];
 type RightMode = 'sku' | 'collision' | null;
 
 // PR188 — the field dropdowns' option lists (distinct existing values). Loaded once per session, lazily,
 // the first time an item is opened.
 let OPTIONS_CACHE: Record<string, string[]> | null = null;
 
-const MAX_IMAGE_URLS = 5;
+const MAX_IMAGE_URLS = 8;
 // PR189 — turn a Google-Drive share link into a direct-render image URL. Handles /file/d/ID/…, ?id=ID,
 // /thumbnail?id=ID, /uc?…id=ID. Falls back to the raw string if no Drive file id is found. The file must
 // be shared "anyone with the link" to render.
@@ -211,8 +213,10 @@ export default function CatalogBoard({
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
   const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
-  const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: up to 5 manual Google-Drive image URLs
+  const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: manual Google-Drive image URLs
   const [imgUnavailable, setImgUnavailable] = useState(false); // PR212: "no picture available" (0071)
+  const [sources, setSources] = useState<string[]>([]);       // PR217: Links → Sources (sku_sources)
+  const [origSources, setOrigSources] = useState<string[]>([]); // loaded set, for change-detect on save
   const [heroIdx, setHeroIdx] = useState(0); // PR189: which manual image the hero shows
 
   const [mode, setMode] = useState<RightMode>(null);
@@ -348,7 +352,10 @@ export default function CatalogBoard({
       const d = await getSku(code);
       if (reqRef.current !== myReq) return;
       setDetail(d);
-      if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable); }
+      if (d) {
+        setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
+        getSkuSources(code).then((s) => { if (reqRef.current === myReq) { setSources(s); setOrigSources(s); } }).catch(() => {});
+      }
     } catch (e) {
       if (reqRef.current !== myReq) return;
       setError(e instanceof Error ? e.message : 'Failed to load SKU.');
@@ -365,7 +372,10 @@ export default function CatalogBoard({
     const d = await getSku(code);
     if (reqRef.current !== myReq) return;
     setDetail(d);
-    if (d) { setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setImgUnavailable(!!d.sku.image_unavailable); }
+    if (d) {
+      setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setImgUnavailable(!!d.sku.image_unavailable);
+      getSkuSources(code).then((s) => { if (reqRef.current === myReq) { setSources(s); setOrigSources(s); } }).catch(() => {});
+    }
   }
 
   // Barcode-only refresh — update just the barcode list (+ shared flags), preserving any
@@ -449,10 +459,19 @@ export default function CatalogBoard({
       // PR212 — "no picture available" flag (outside `form`); include only when changed.
       if (!!imgUnavailable !== !!detail.sku.image_unavailable) patch.image_unavailable = imgUnavailable;
       await updateSku(detail.sku.item_code, patch as Partial<CatalogueRow>);
+
+      // PR217 — Sources (sku_sources) persist separately from the catalogue row; only when changed.
+      const srcClean = sources.map((s) => s.trim()).filter(Boolean).slice(0, 8);
+      let srcWarn = '';
+      if (JSON.stringify(srcClean) !== JSON.stringify(origSources)) {
+        const { error: srcErr } = await setSkuSources(detail.sku.item_code, srcClean);
+        if (srcErr) srcWarn = ` — sources not saved (${srcErr})`;
+      }
+
       const n = Object.keys(patch).length;
       await reloadDetail(detail.sku.item_code);
       await refreshNeeds();
-      setSuccess(n ? `Saved ${n} field${n === 1 ? '' : 's'}.` : 'Saved (updated_at stamped).');
+      setSuccess((n ? `Saved ${n} field${n === 1 ? '' : 's'}.` : 'Saved (updated_at stamped).') + srcWarn);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed.');
     } finally {
@@ -621,34 +640,44 @@ export default function CatalogBoard({
 
               {detailTab < GROUPS.length ? (
                 <section className="cat-grp">
-                  {/* PR189/PR191 — the Media tab is just the up-to-5 Google-Drive image URL editor */}
-                  {GROUPS[detailTab].title === 'Media' && (
+                  {/* PR217 — Links tab: two fixed 8-slot sections. Images = Google-Drive image links
+                      (first is primary); Sources = buy links the Purchasing "Buy" overlay reads. */}
+                  {GROUPS[detailTab].title === 'Links' && (
                     <div className="cat-imgedit">
-                      <div className="cat-grp-title">Images — Google Drive, up to {MAX_IMAGE_URLS} (first is primary)</div>
-                      {imageUrls.map((u, i) => (
+                      <div className="cat-grp-title">Images — Google Drive links (first is primary)</div>
+                      {Array.from({ length: MAX_IMAGE_URLS }).map((_, i) => (
                         <div className="cat-imgrow" key={i}>
                           <span className="cat-imgrow-thumb">
-                            {driveDirect(u)
+                            {driveDirect(imageUrls[i] ?? '')
                               // eslint-disable-next-line @next/next/no-img-element -- external Google-Drive image
-                              ? <img src={driveDirect(u)} alt={`Image ${i + 1}`} />
+                              ? <img src={driveDirect(imageUrls[i] ?? '')} alt={`Image ${i + 1}`} />
                               : <span className="cat-imgrow-ph">{i + 1}</span>}
                           </span>
                           <input
                             type="text"
                             placeholder="Google Drive share link"
-                            value={u}
-                            onChange={(e) => setImageUrls((a) => a.map((x, j) => (j === i ? e.target.value : x)))}
+                            value={imageUrls[i] ?? ''}
+                            onChange={(e) => setImageUrls((a) => { const n = a.slice(); while (n.length < MAX_IMAGE_URLS) n.push(''); n[i] = e.target.value; return n; })}
                           />
-                          <button className="btn-link" onClick={() => setImageUrls((a) => a.filter((_, j) => j !== i))}>remove</button>
                         </div>
                       ))}
-                      {imageUrls.length < MAX_IMAGE_URLS && (
-                        <button className="btn-secondary sc-mini" onClick={() => setImageUrls((a) => [...a, ''])}>+ add image URL</button>
-                      )}
                       <label className="cat-round" style={{ marginTop: 12 }}>
                         <input type="checkbox" checked={imgUnavailable} onChange={(e) => setImgUnavailable(e.target.checked)} />
                         <span>No picture available — searched but none found (hides it from the Fix “missing image” list)</span>
                       </label>
+
+                      <div className="cat-grp-title" style={{ marginTop: 18 }}>Sources — buy links (used by Purchasing → Buy)</div>
+                      {Array.from({ length: 8 }).map((_, i) => (
+                        <div className="cat-srcrow" key={i}>
+                          <span className="cat-srcrow-n">{i + 1}</span>
+                          <input
+                            type="text"
+                            placeholder="product / source URL"
+                            value={sources[i] ?? ''}
+                            onChange={(e) => setSources((a) => { const n = a.slice(); while (n.length < 8) n.push(''); n[i] = e.target.value; return n; })}
+                          />
+                        </div>
+                      ))}
                     </div>
                   )}
 
