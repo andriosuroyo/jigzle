@@ -11,6 +11,7 @@ import InvoiceTab from '@/components/docs/InvoiceTab';
 import CnPackingTab, { emptyBox } from '@/components/docs/CnPackingTab';
 import CnInvoiceTab from '@/components/docs/CnInvoiceTab';
 import CnShippingTab from '@/components/docs/CnShippingTab';
+import SpDeclareTab from '@/components/docs/SpDeclareTab';
 import { getShipments } from '@/app/doc-generator/actions';
 import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
 
@@ -23,14 +24,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'cn-shipping', label: 'CN Shipping' },
   { key: 'sp-declare', label: 'SP Declare' },
 ];
-
-function ComingSoon({ label }: { label: string }) {
-  return (
-    <div style={{ padding: 40, color: '#888', fontSize: 14 }}>
-      <b>{label}</b> is coming in a later phase.
-    </div>
-  );
-}
 
 export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) {
   const [tab, setTab] = useState<Tab>('invoice-idr');
@@ -85,7 +78,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
         {tab === 'cn-shipping' && (
           <CnShippingTab shipments={shipments} shipId={cnShipId} setShipId={setCnShipId} boxes={cnBoxes} divisor={cnDivisor} />
         )}
-        {tab === 'sp-declare' && <ComingSoon label="SP Declare" />}
+        {tab === 'sp-declare' && <SpDeclareTab />}
       </div>
     </div>
   );
