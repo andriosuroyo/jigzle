@@ -35,6 +35,12 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { getActiveStaff, setActiveStaff } from '@/components/staffStore';
 import SearchInput from '@/components/SearchInput';
+import { PackageIcon } from '@/components/AddIcons';
+
+// PR243 — copy/check glyphs for the header id chips (mirrors Sales → Pending/History).
+const csvg = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+const CopyIcon = () => (<svg {...csvg}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
+const CheckIcon = () => (<svg {...csvg}><polyline points="20 6 9 17 4 12" /></svg>);
 
 // Never render a raw internal id as a name (Fulfill F4 parity, §4b). When the only "name" we have is
 // the item_code itself (an edge case — stub creation + search both supply real names), show this.
@@ -137,6 +143,12 @@ export default function InboundBoard({
   const [findMsg, setFindMsg] = useState<string | null>(null);
   const [findNotFound, setFindNotFound] = useState(false); // PR154 → offer "+ Receive as unmarked"
 
+  // PR243 — which header id chip flashed "copied" (ship id vs tracking); mirrors Sales.
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  async function copyVal(text: string, key: string) {
+    try { await navigator.clipboard.writeText(text); setCopiedKey(key); setTimeout(() => setCopiedKey(null), 1400); } catch { /* clipboard unavailable */ }
+  }
+
   // PR154: bodyview — the shell hides the tab bar while the receive detail is open.
   useEffect(() => { onDetailOpenChange?.(!!selected); }, [selected, onDetailOpenChange]);
 
@@ -150,27 +162,6 @@ export default function InboundBoard({
       return a.ship_id.localeCompare(b.ship_id);
     });
   }, [queue]);
-
-  // PR154 map-modal: live "check barcode" — does any SKU already carry the typed/scanned code?
-  const [mapBcHits, setMapBcHits] = useState<ResolvedSku[] | null>(null);
-  const [mapBcChecked, setMapBcChecked] = useState(false);
-  useEffect(() => {
-    const code = mapBarcode.trim();
-    setMapBcHits(null);
-    setMapBcChecked(false);
-    if (!code) return;
-    const t = setTimeout(async () => {
-      try {
-        const res = await resolveBarcode(code);
-        setMapBcHits(res.status === 'resolved' ? [res.sku] : res.status === 'collision' ? res.skus : []);
-      } catch {
-        setMapBcHits([]);
-      } finally {
-        setMapBcChecked(true);
-      }
-    }, 300);
-    return () => clearTimeout(t);
-  }, [mapBarcode]);
 
   // barcode → expected item_code(s). Composite barcode model (0020): a barcode can link to many
   // SKUs, so this maps to a LIST. The fast path only fires when exactly ONE expected SKU owns the
@@ -646,19 +637,17 @@ export default function InboundBoard({
         {/* ── Arrivals list ── */}
         {!selected && (
           <>
-            {/* §5 scan-to-find-shipment — Enter submits (the scanner's auto-return); no button. */}
+            {/* §5 scan-to-find-shipment — Sales-styled search bar; Enter (the scanner's auto-return) submits. */}
             <div className="rcv-find">
-              <div className="fd-section-head">Scan barcode to search</div>
-              <div className="scan-row">
-                <input
-                  type="text"
-                  placeholder="scan an item → find its shipment"
-                  value={findScan}
-                  onChange={(e) => setFindScan(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); findShipment(); } }}
-                />
-                {finding && <span className="scan-msg">…</span>}
-              </div>
+              <SearchInput
+                value={findScan}
+                onChange={setFindScan}
+                placeholder="Scan barcode to find an item's shipment"
+                ariaLabel="Scan barcode to find an item's shipment"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); findShipment(); } }}
+                onClear={() => { setFindMsg(null); setSuggestions(null); setFindNotFound(false); }}
+              />
+              {finding && <div className="hint">Searching…</div>}
               {findMsg && <div className="hint">{findMsg}</div>}
               {findNotFound && (
                 <button className="btn-link" onClick={() => { setFindNotFound(false); setFindMsg(null); setFindScan(''); startAdhoc(); }}>
@@ -725,19 +714,32 @@ export default function InboundBoard({
 
           {detail && (
             <>
-              {/* PR154 header subtext: shipped date + shipment courier & tracking */}
+              {/* PR243 header: title left, shipped date top-right (norm); below, the shipment id and the
+                  tracking each as a copyable chip (mirrors Sales → Pending). */}
               <div className="fd-head">
-                <div className="fd-title">{headerTitle}</div>
-                <div className="fd-sub">
-                  {mode === 'shipment' ? (
-                    <>
-                      {`shipped ${detail.ship_date || '—'} · ${[detail.courier, detail.tracking].filter(Boolean).join(' ') || 'no tracking'}`}
-                      {!detail.is_shipment && <span className="warn-text"> · not in the shipment ledger</span>}
-                    </>
-                  ) : (
-                    <>goods with no shipment ID</>
-                  )}
+                <div className="fd-head-row">
+                  <div className="fd-title">{headerTitle}</div>
+                  {mode === 'shipment' && detail.ship_date && <span className="fd-date">{detail.ship_date}</span>}
                 </div>
+                {mode === 'shipment' ? (
+                  <div className="fd-idchips">
+                    <button className="fd-orderid-chip" onClick={() => copyVal(detail.ship_id, 'ship')} aria-label={copiedKey === 'ship' ? 'Shipment ID copied' : 'Copy shipment ID'} title="Copy shipment ID">
+                      <span className="fd-orderid-code">{detail.ship_id}</span>
+                      {copiedKey === 'ship' ? <CheckIcon /> : <CopyIcon />}
+                    </button>
+                    {detail.tracking ? (
+                      <button className="fd-orderid-chip" onClick={() => copyVal(detail.tracking!, 'trk')} aria-label={copiedKey === 'trk' ? 'Tracking copied' : 'Copy tracking'} title="Copy tracking">
+                        <span className="fd-orderid-code">{[detail.courier, detail.tracking].filter(Boolean).join(' ')}</span>
+                        {copiedKey === 'trk' ? <CheckIcon /> : <CopyIcon />}
+                      </button>
+                    ) : (
+                      <span className="fd-idchip-empty">no tracking</span>
+                    )}
+                    {!detail.is_shipment && <span className="warn-text">not in the shipment ledger</span>}
+                  </div>
+                ) : (
+                  <div className="fd-sub">goods with no shipment ID</div>
+                )}
               </div>
 
               {error && <div className="validation err">{error}</div>}
@@ -761,17 +763,18 @@ export default function InboundBoard({
                   editable, and each scan +1s the matching line. */}
               <section className="fd-section">
                 <div className="fd-section-head">Items</div>
-                <div className="scan-row">
-                  <input
-                    type="text"
-                    placeholder="scan / type a barcode, then Enter"
+                <div className="rcv-scan-row">
+                  <SearchInput
+                    className="rcv-scan-search"
                     value={scan}
-                    onChange={(e) => setScan(e.target.value)}
+                    onChange={setScan}
+                    placeholder="Scan / type a barcode, then Enter"
+                    ariaLabel="Scan or type a barcode"
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doScan(); } }}
                   />
-                  <button className="btn-secondary" onClick={() => openManualAdd()}>Manual add</button>
-                  {scanMsg && <span className="scan-msg">{scanMsg}</span>}
+                  <button className="btn-brown btn-ico" onClick={() => openManualAdd()}><PackageIcon />Manual add</button>
                 </div>
+                {scanMsg && <div className="hint scan-msg">{scanMsg}</div>}
 
                 {/* shared shared-barcode picker (F1) */}
                 {picker && (
@@ -844,38 +847,21 @@ export default function InboundBoard({
               <div className="sc-modal-title">{mappingRaw ? 'Map a SKU' : 'Manual add'}</div>
             </div>
             <div className="sc-modal-body">
-              {/* map mode: optionally capture the box's barcode → linked to the SKU on map, so future
-                  receives of this item auto-resolve via the scan path. PR154: a live check shows any
-                  SKU(s) already carrying the scanned code right under the field. */}
+              {/* Map mode edits the shipment's open placeholder line: pick an existing SKU below, or
+                  create one from the pre-filled code. The optional barcode is linked to the chosen SKU
+                  so future receives of this box auto-resolve via the scan path. */}
               {mappingRaw && (
                 <>
-                  <label className="rcv-map-barcode">
-                    <span className="fd-label">Check Barcode (optional)</span>
+                  <div className="hint rcv-map-intro">Mapping placeholder <b>{mappingRaw}</b> — this updates the shipment&apos;s open line.</div>
+                  <label className="rcv-map-field">
+                    <span className="fd-label">Barcode (optional)</span>
                     <input
                       type="text"
-                      placeholder="scan / type the item's barcode"
+                      placeholder="scan / type the box's barcode"
                       value={mapBarcode}
                       onChange={(e) => setMapBarcode(e.target.value)}
                     />
                   </label>
-                  {mapBcChecked && mapBcHits && mapBcHits.length > 0 && (
-                    <ul className="po-cards po-cards-compact" style={{ marginBottom: 10 }}>
-                      {mapBcHits.map((h) => (
-                        <li key={h.item_code} className="po-card">
-                          <div className="po-card-main">
-                            <div className="po-card-l1">
-                              <span className="ff-code">{h.item_code}</span>
-                              <span className="po-card-poid">{mapBarcode.trim()}</span>
-                            </div>
-                            <div className="po-card-l2"><span className="ff-name">{displayName(h.name, h.item_code)}</span></div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {mapBcChecked && mapBcHits && mapBcHits.length === 0 && (
-                    <div className="hint" style={{ marginBottom: 10 }}>No SKU carries this barcode yet — it will be linked when you map.</div>
-                  )}
                 </>
               )}
               {!stub ? (
@@ -895,10 +881,11 @@ export default function InboundBoard({
                     <div className="rcv-noresult">
                       <div className="hint"><em>No results.</em></div>
                       <button
-                        className="btn-secondary"
-                        onClick={() => setStub({ barcode: '', item_code: mappingRaw ? '' : skuQuery.trim(), name: '', brand: '' })}
+                        className="btn-brown btn-ico"
+                        onClick={() => setStub({ barcode: '', item_code: mappingRaw ? mappingRaw : skuQuery.trim(), name: '', brand: '' })}
                       >
-                        + Add{!mappingRaw && skuQuery.trim() ? ` “${skuQuery.trim()}”` : ''} as a new SKU{mappingRaw ? ' + map' : ''}
+                        <PackageIcon />
+                        {mappingRaw ? 'Create a new SKU + map' : `Add${skuQuery.trim() ? ` “${skuQuery.trim()}”` : ''} as a new SKU`}
                       </button>
                     </div>
                   )}
@@ -920,8 +907,22 @@ export default function InboundBoard({
                     </ul>
                   )}
                 </>
+              ) : mappingRaw ? (
+                // Map mode: just the SKU code, pre-filled from the placeholder. Name/brand are dropped —
+                // brand is auto-derived from the code's prefix; the row is flagged needs-review to name later.
+                <div className="rcv-stub">
+                  <div className="subform-label">Create &amp; map a new SKU (flagged needs review)</div>
+                  <label className="rcv-map-field">
+                    <span className="fd-label">SKU code</span>
+                    <input type="text" placeholder="brand-prefix convention, e.g. APP-300-358" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
+                  </label>
+                  <div className="subform-actions">
+                    <button className="btn-link" onClick={() => setStub(null)}>← back to search</button>
+                    <button className="btn-primary" onClick={createStub}>Create + map</button>
+                  </div>
+                </div>
               ) : (
-                // add a new SKU manually (needs-review stub) — like Purchasing → manual
+                // Manual add: create a new SKU (needs-review stub) — like Purchasing → manual
                 <div className="rcv-stub">
                   <div className="subform-label">+ add new SKU (flagged needs review)</div>
                   <input type="text" placeholder="item code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
@@ -929,7 +930,7 @@ export default function InboundBoard({
                   <input type="text" placeholder="brand prefix (optional)" value={stub.brand} onChange={(e) => setStub({ ...stub, brand: e.target.value })} />
                   <div className="subform-actions">
                     <button className="btn-link" onClick={() => setStub(null)}>← back to search</button>
-                    <button className="btn-secondary" onClick={createStub}>{mappingRaw ? 'create + map' : 'create + add'}</button>
+                    <button className="btn-primary" onClick={createStub}>create + add</button>
                   </div>
                 </div>
               )}
