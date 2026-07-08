@@ -33,24 +33,29 @@ Notes:
 - This auto-merge default applies to ordinary builds. For anything destructive or
   irreversible beyond a normal code deploy (DB migrations, data backfills, deleting/renaming
   things you didn't create), still confirm with the user first.
-- **After the squash-merge, resync the local branch to `main` AND force-push `origin/<branch>` up to
-  match** (`git fetch origin main && git checkout -B <branch> origin/main && git push --force-with-lease
-  origin <branch>`). This keeps `origin/<branch>` == `origin/main`, so `origin/<branch>..HEAD` is empty
-  and the Stop hook has nothing to flag — the **permanent, session-proof fix** for the recurring
-  "Unverified"/"unpushed" false positive on GitHub's squash-merge commit (authored by
-  `GitHub <noreply@github.com>`). It lives in git state + this file, not in the ephemeral hook.
-  - **Why this is safe now — and why it wasn't (PR242 → PR247).** Vercel **deduplicates deployments by
-    commit SHA**. Before, force-pushing the branch to main's merge SHA made Vercel build that SHA as a
-    **Preview** first, then dedupe main's push and **never create the Production deploy** — stranding
-    PR238–241. The fix was the **Ignored Build Step** (Vercel → Settings → Build and Deployment):
-    `if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi` — **only `main` builds; every
-    branch push is skipped.** With previews disabled, the branch force-push can no longer create a preview,
-    so it can't dedupe away production. The force-push is safe again, and it also zeroes out preview
-    deploy-quota burn (Hobby's 100/day cap is then only ever touched by `main` merges).
-  - **Do NOT hand-patch `~/.claude/stop-hook-git-check.sh`.** The harness restores that file to its
-    unpatched version every turn, so edits never hold. The force-push above makes the *unpatched* hook
-    pass by construction — that's the durable path. (If the Ignored Build Step is ever turned off, the
-    force-push becomes unsafe again — re-read the PR242 note before doing so.)
+- **After the squash-merge, resync to `main`, then put ONE empty verified commit on the branch and
+  push that** — do **NOT** force-push the branch to main's exact merge SHA:
+  ```
+  git fetch origin main && git checkout -B <branch> origin/main \
+    && git commit --allow-empty -m "sync: track main after PR merge" \
+    && git push --force-with-lease origin <branch>
+  ```
+  This keeps `origin/<branch>` == local `HEAD` (so `origin/<branch>..HEAD` is empty and the **unpatched**
+  Stop hook passes — no "Unverified"/"unpushed" false positive), while the branch tip is a **different
+  SHA from main's merge commit**. That difference is the whole point (see below).
+  - **Why the branch SHA must differ from main's (PR242 → PR247 → PR252 — the real rule).** Vercel
+    **deduplicates deployments by commit SHA** and, with the **Ignored Build Step** on
+    (Vercel → Settings → Build and Deployment: `if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1;
+    else exit 0; fi` — only `main` builds), **every branch push still creates an "Ignored" deployment
+    record for its SHA.** If you force-push the branch to main's merge SHA, that Ignored record claims the
+    SHA, and main's push to the *same* SHA gets **deduped → the production build never runs** (this
+    stranded PR250 & PR251 at PR249). Keeping the branch on `main + empty commit` leaves main's merge SHA
+    **uncontested**, so production deploys reliably. (PR247 wrongly assumed the Ignored Build Step made the
+    same-SHA force-push safe — it doesn't; an Ignored deployment still dedupes.)
+  - **Do NOT hand-patch `~/.claude/stop-hook-git-check.sh`.** The harness restores it to the unpatched
+    version every turn, so edits never hold. The empty-commit push above makes the *unpatched* hook pass
+    by construction (`origin/<branch>` == `HEAD`), and the empty commit is authored by
+    `noreply@anthropic.com` so it's never flagged as Unverified even if it lands in a range.
 
 ## Conventions
 
