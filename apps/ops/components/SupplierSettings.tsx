@@ -7,6 +7,7 @@
 // settings lists. Country/type are no longer edited here (country is derived from the flag).
 
 import { useState } from 'react';
+import { StoreIcon } from '@/components/AddIcons';
 import { addSupplier, deleteSupplier, reorderSuppliers, updateSupplier } from '@/app/purchasing/actions';
 import type { Supplier } from '@jigzle/db/types';
 import FlagSelect from '@/components/FlagSelect';
@@ -123,7 +124,7 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-brown" onClick={() => setAdding({ name: '', flag: '', country: '' })} disabled={busy}>+ Add supplier</button>
+          <button className="btn-brown btn-ico" onClick={() => setAdding({ name: '', flag: '', country: '' })} disabled={busy}><StoreIcon />Add supplier</button>
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}

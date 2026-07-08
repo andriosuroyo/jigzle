@@ -35,6 +35,7 @@ import CatalogBrowse from '@/components/CatalogBrowse';
 import SearchSelect from '@/components/SearchSelect';
 import SearchInput from '@/components/SearchInput';
 import SkuImage from '@/components/SkuImage';
+import { BarcodeIcon } from '@/components/AddIcons';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 
@@ -803,7 +804,7 @@ export default function CatalogBoard({
                           ))}
                         </div>
                       )}
-                      <button className="btn-brown cat-bc-add" onClick={() => { resetMsg(); setNewBarcode(''); setBarcodeOpen(true); }}>+ Add barcode</button>
+                      <button className="btn-brown btn-ico cat-bc-add" onClick={() => { resetMsg(); setNewBarcode(''); setBarcodeOpen(true); }}><BarcodeIcon />Add barcode</button>
                     </div>
                   )}
                 </section>

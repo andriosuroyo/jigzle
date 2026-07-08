@@ -11,6 +11,7 @@
 
 import { useMemo, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
+import { MapPinIcon } from '@/components/AddIcons';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import CountrySelect from '@/components/CountrySelect';
@@ -529,7 +530,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               <section className="fd-section">
                 <div className="po-tobuy-head">
                   <div className="fd-section-head" style={{ marginBottom: 0 }}>Addresses</div>
-                  <button className="btn-brown" onClick={() => openAddr(null)} disabled={busy}>+ add address</button>
+                  <button className="btn-brown btn-ico" onClick={() => openAddr(null)} disabled={busy}><MapPinIcon />add address</button>
                 </div>
                 {detail.addresses.length === 0 && <div className="hint">No addresses on file.</div>}
                 <ul className="cust-addrs">

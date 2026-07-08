@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import AppHeader from '@/components/AppHeader';
+import { PlusCircleIcon } from '@/components/AddIcons';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import SupplierSettings from '@/components/SupplierSettings';
 import ForwarderSettings from '@/components/ForwarderSettings';
@@ -377,7 +378,7 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
           />
         ))}
         <div className="set-toolbar">
-          <button className="btn-brown" onClick={() => add(sec.kind, sec.blank)} disabled={busy}>+ add</button>
+          <button className="btn-brown btn-ico" onClick={() => add(sec.kind, sec.blank)} disabled={busy}><PlusCircleIcon />add</button>
           <button className="btn-secondary" onClick={() => sortAZ(sec.kind, sec.sortKey)} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       </div>

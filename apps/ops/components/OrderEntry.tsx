@@ -17,6 +17,7 @@ import {
 import type { CustomerHit, LoyaltyReadout, SkuHit, Urgency } from '@/app/sales/types';
 import type { PaymentMethod, ChannelOption } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
+import { UserIcon, MapPinIcon } from '@/components/AddIcons';
 import IconSelect from '@/components/IconSelect';
 import PhoneCountrySelect from '@/components/PhoneCountrySelect';
 import CountrySelect from '@/components/CountrySelect';
@@ -464,7 +465,7 @@ export default function OrderEntry({
                     </ul>
                   )}
                   {!showNewCust && (
-                    <button className="btn-brown" onClick={() => setShowNewCust(true)}>+ New customer</button>
+                    <button className="btn-brown btn-ico" style={{ justifyContent: 'center' }} onClick={() => setShowNewCust(true)}><UserIcon />New customer</button>
                   )}
                   {showNewCust && (
                     <div className="subform">
@@ -540,7 +541,7 @@ export default function OrderEntry({
                     </ul>
                   )}
                   {!showNewAddr ? (
-                    <button className="btn-brown" onClick={() => setShowNewAddr(true)} disabled={!customer}>+ New address</button>
+                    <button className="btn-brown btn-ico" style={{ justifyContent: 'center' }} onClick={() => setShowNewAddr(true)} disabled={!customer}><MapPinIcon />New address</button>
                   ) : (
                     <div className="subform">
                       <input type="text" placeholder="Recipient name" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />

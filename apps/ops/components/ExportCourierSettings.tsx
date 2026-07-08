@@ -7,6 +7,7 @@
 // integrators that pick up locally (DHL/FedEx). Self-loads its list on mount.
 
 import { useEffect, useState } from 'react';
+import { TruckIcon } from '@/components/AddIcons';
 import { addExportCourier, deleteExportCourier, getExportCouriers, reorderExportCouriers, updateExportCourier } from '@/app/settings/actions';
 import type { ExportCourier } from '@/app/settings/types';
 
@@ -111,7 +112,7 @@ export default function ExportCourierSettings({ embedded = false }: { embedded?:
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-brown" onClick={() => setAddLabel('')} disabled={busy}>+ Add export courier</button>
+          <button className="btn-brown btn-ico" onClick={() => setAddLabel('')} disabled={busy}><TruckIcon />Add export courier</button>
         </div>
       )}
     </Wrap>

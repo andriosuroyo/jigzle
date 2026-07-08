@@ -7,6 +7,7 @@
 // Settings → Suppliers. The prefix can't be edited after creation — it's the join key for shipments.
 
 import { useState } from 'react';
+import { TruckIcon } from '@/components/AddIcons';
 import { addForwarder, deleteForwarder, reorderForwarders, updateForwarder } from '@/app/purchasing/actions';
 import type { Forwarder } from '@jigzle/db/types';
 import FlagSelect from '@/components/FlagSelect';
@@ -123,7 +124,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-brown" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '' })} disabled={busy}>+ Add forwarder</button>
+          <button className="btn-brown btn-ico" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '' })} disabled={busy}><TruckIcon />Add forwarder</button>
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}
