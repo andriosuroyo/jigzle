@@ -7,6 +7,7 @@
 // component so Stock Check and Receiving converge on ONE picker (Receiving adopts it later).
 
 import SkuImage from '@/components/SkuImage';
+import { SKU_IMG } from '@/components/skuImageSizes';
 import type { ScanSku } from '@/app/stock-check/types';
 import type { SkuImageMap } from '@/app/images/types';
 
@@ -26,7 +27,7 @@ export default function BarcodePicker({
       <div className="rcv-picker-head">⚠ which SKU?</div>
       {skus.map((s) => (
         <button key={s.item_code} className="rcv-picker-opt" onClick={() => onPick(s)}>
-          <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={32} />
+          <SkuImage status={imgMap[s.item_code]?.status} displayUrl={imgMap[s.item_code]?.displayUrl} name={s.name} size={SKU_IMG.sm} />
           <span className="ff-code">{s.item_code}</span>
           <span className="ff-name">{s.name}</span>
           {s.is_verified && <span className="badge ready">verified</span>}
