@@ -1712,15 +1712,15 @@ img.sku-img { background: #e8e8e8; }
 .rcv-ship-note { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--paper); border: 1px solid var(--line); font-size: 13px; color: var(--ink); white-space: pre-wrap; }
 /* Purchasing History detail: Shipment notes section. */
 .fd-section-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+/* PR255 — the total item cost sits on the right of the "ITEMS (n)" section head; render it as a value
+   (not uppercased/spaced like the label). */
+.fd-items-cost { text-transform: none; letter-spacing: 0; font-weight: 700; color: var(--brown-dark); }
 .ship-note-text { font-size: 13px; color: var(--ink); white-space: pre-wrap; }
 .ship-note-edit textarea { width: 100%; }
 /* PR254 — read-only display of the shipment courier line + saved boxes (History detail view mode). */
 .ship-ro { font-size: 14px; font-weight: 600; color: var(--ink); }
 .ship-box-ro { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .ship-box-ro > li { font-size: 13px; color: var(--ink); background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
-/* PR254 — a non-clickable card (History items list): keep the default cursor, no press feedback. */
-.po-card-static { cursor: default; }
-.po-card-static:active { background: var(--cream); }
 @media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
 
 /* Warehouse staff picker (0052) — header subtext row on Inbound + Outbound. */

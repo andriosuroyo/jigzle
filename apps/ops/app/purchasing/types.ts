@@ -200,6 +200,16 @@ export interface ShipmentItemRow {
   qty: number;
   item_cost: number | null;
   currency: string | null; // from the line's supplier country (yuan / yen …) for the "each" label
+  // PR255 — the per-PO detail captured at To forwarder, surfaced (and editable) when a History item card
+  // is tapped. All optional / nullable.
+  supplier_id: number | null;
+  supplier_name: string | null;
+  method: string | null;                 // local courier (domestic leg to the forwarder)
+  tracking_to_forwarder: string | null;  // local tracking number
+  marketplace_order_id: string | null;   // marketplace order id
+  item_note: string | null;
+  product_link: string | null;
+  input_date: string | null;
 }
 
 // PR206 (0069): a box on an import shipment — dims (cm) + real weight (kg) + China box tracking.

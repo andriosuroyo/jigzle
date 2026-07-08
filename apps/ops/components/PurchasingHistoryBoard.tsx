@@ -7,8 +7,9 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes, deleteShipment } from '@/app/purchasing/actions';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
+import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
 import { isRealName } from '@/components/skuName';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -41,18 +42,26 @@ const boxSummary = (b: ShipmentBox): string => {
 const dateLabel = (s: ShipmentHistoryRow): string =>
   s.completed ? `received ${fmtDate(s.received_date || s.ship_date)}` : `shipped ${fmtDate(s.ship_date)}`;
 const fmtCost = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+// quickview card cost label (list view) — kept as "Total Cost" is only used in the list, not the detail.
 const costLabel = (s: { total_cost: number | null; currency: string | null }): string | null =>
   s.total_cost == null ? null : `Total Cost: ${fmtCost(s.total_cost)}${s.currency ? ` ${s.currency}` : ''}`;
+const costText = (total: number | null, ccy: string | null): string | null =>
+  total == null ? null : `${fmtCost(total)}${ccy ? ` ${ccy}` : ''}`;
 
 export default function PurchasingHistoryBoard({
   initialShipments,
   shipmentCouriers = [],
+  suppliers = [],
+  localCouriers = [],
   active = true,
   onDetailOpenChange,
 }: {
   initialShipments: ShipmentHistoryRow[];
   // 0056 — the Settings-managed international courier pick-list (DHL, FedEx, MTE…)
   shipmentCouriers?: string[];
+  // PR255 — suppliers + local-courier suggestions, for the per-item detail overlay's editable fields.
+  suppliers?: Supplier[];
+  localCouriers?: string[];
   // PR181: whether the History tab is on screen. The shell no longer preloads the shipment history (a
   // paged PO scan + subqueries); we fetch it once the first time this turns true, so Purchasing opens
   // fast on To forwarder.
@@ -88,6 +97,18 @@ export default function PurchasingHistoryBoard({
   const [savingBoxes, setSavingBoxes] = useState(false);
   const [boxErr, setBoxErr] = useState<string | null>(null);
   const [boxSaved, setBoxSaved] = useState(false);
+
+  // PR255 — per-item detail overlay: the tapped item + editable drafts for its captured To-forwarder data.
+  const [selItem, setSelItem] = useState<ShipmentItemRow | null>(null);
+  const [itSupplier, setItSupplier] = useState<string>('');   // supplier_id as string ('' = none)
+  const [itCost, setItCost] = useState('');
+  const [itMethod, setItMethod] = useState('');
+  const [itTracking, setItTracking] = useState('');
+  const [itMarket, setItMarket] = useState('');
+  const [itLink, setItLink] = useState('');
+  const [itNote, setItNote] = useState('');
+  const [itSaving, setItSaving] = useState(false);
+  const [itErr, setItErr] = useState<string | null>(null);
 
   // PR153: tell the shell when a detail is open (it hides the pipeline tabs, keeps the breadcrumb)
   useEffect(() => { onDetailOpenChange?.(!!openShip); }, [openShip, onDetailOpenChange]);
@@ -145,6 +166,7 @@ export default function PurchasingHistoryBoard({
     setEditingShip(false);
     setConfirmDelShip(false);
     setDelErr(null);
+    setSelItem(null);
     setCourierDraft(s.courier ?? '');
     setTrackingDraft(s.tracking ?? '');
     setCourierErr(null);
@@ -220,101 +242,104 @@ export default function PurchasingHistoryBoard({
     setOpenShip((prev) => (prev ? { ...prev, courier: c, tracking: t } : prev));
   }
 
+  // PR255 — open the per-item detail overlay, seeding the editable drafts from the tapped line.
+  function openItem(it: ShipmentItemRow) {
+    setSelItem(it);
+    setItSupplier(it.supplier_id != null ? String(it.supplier_id) : '');
+    setItCost(it.item_cost != null ? String(it.item_cost) : '');
+    setItMethod(it.method ?? '');
+    setItTracking(it.tracking_to_forwarder ?? '');
+    setItMarket(it.marketplace_order_id ?? '');
+    setItLink(it.product_link ?? '');
+    setItNote(it.item_note ?? '');
+    setItErr(null);
+  }
+
+  // PR255 — save the per-item detail (descriptive metadata only), reflected in the loaded list.
+  async function saveItem() {
+    if (!selItem) return;
+    const cost = itCost.trim() === '' ? null : Number(itCost);
+    if (cost != null && (!Number.isFinite(cost) || cost < 0)) { setItErr('Unit cost must be a number ≥ 0.'); return; }
+    const supplier_id = itSupplier === '' ? null : Number(itSupplier);
+    setItSaving(true); setItErr(null);
+    const { error } = await updateShipmentPO(selItem.po_id, {
+      supplier_id,
+      item_cost: cost,
+      method: itMethod,
+      tracking_to_forwarder: itTracking,
+      marketplace_order_id: itMarket,
+      product_link: itLink,
+      item_note: itNote,
+    });
+    if (error) { setItErr(error); setItSaving(false); return; }
+    const sup = suppliers.find((s) => s.supplier_id === supplier_id);
+    setShipItems((prev) => prev.map((r) => (r.po_id === selItem.po_id ? {
+      ...r,
+      supplier_id,
+      supplier_name: supplier_id == null ? null : sup?.name ?? r.supplier_name,
+      item_cost: cost,
+      method: itMethod.trim() || null,
+      tracking_to_forwarder: itTracking.trim() || null,
+      marketplace_order_id: itMarket.trim() || null,
+      product_link: itLink.trim() || null,
+      item_note: itNote.trim() || null,
+    } : r)));
+    setItSaving(false); setSelItem(null);
+  }
+
   const TABS: { key: 'active' | 'completed'; label: string; count: number }[] = [
     { key: 'active', label: 'Active', count: counts.active },
     { key: 'completed', label: 'Completed', count: counts.completed },
   ];
 
-  // ── shipment detail (PR254): a white detail card (Sales-style .bv-detail), display-only by default.
-  // "Edit shipment" flips courier / boxes / note into edit controls; "Delete shipment" (active only)
-  // ungroups it back to To forwarder. Items are always read-only. ──
+  // ── shipment detail (PR255): a white detail card (Sales-style .bv-detail), DISPLAY-ONLY. Editing the
+  // shipment's courier / boxes / note happens in the "Edit shipment" overlay; tapping an item opens its
+  // per-PO detail overlay (the To-forwarder data — courier, tracking, marketplace id, cost, note). ──
   if (openShip) {
-    const cost = costLabel(openShip);
     const courierLine = [openShip.courier, openShip.tracking].filter(Boolean).join(' ');
     const savedBoxes = boxDraft.map(draftToBox).filter((b) => b.dim_p != null || b.dim_l != null || b.dim_t != null || b.real_weight != null || b.tracking);
+    // header item-cost, recomputed live from the loaded lines (Σ cost×qty) so an item edit reflects at once.
+    const loadedCost = shipItems.some((it) => it.item_cost != null) ? shipItems.reduce((n, it) => n + (it.item_cost ?? 0) * it.qty, 0) : null;
+    const itemsCost = costText(shipItems.length ? loadedCost : openShip.total_cost, shipItems.find((it) => it.currency)?.currency ?? openShip.currency);
     return (
       <div className="purch-history">
-        <button className="btn-link bv-back" onClick={() => { setEditingShip(false); setOpenShip(null); }}>← back</button>
+        <button className="btn-link bv-back" onClick={() => { setEditingShip(false); setSelItem(null); setOpenShip(null); }}>← back</button>
         <div className="bv-detail">
+          {/* header: ship id (left) + received/shipped date (right, same line) */}
           <div className="fd-head">
-            <div className="fd-title">{openShip.ship_id}</div>
-            <div className="fd-sub">
-              {dateLabel(openShip)} · {openShip.item_count} {openShip.item_count === 1 ? 'item' : 'items'}
-              {cost ? ` · ${cost}` : ''}
+            <div className="fd-head-row">
+              <div className="fd-title">{openShip.ship_id}</div>
+              <span className="fd-date">{dateLabel(openShip)}</span>
             </div>
           </div>
 
-          {/* Shipment courier & tracking — the international carrier, one line. */}
+          {/* Shipment courier & tracking — display only */}
           <section className="fd-section">
-            <div className="fd-section-head">Shipment courier &amp; tracking{editingShip && <em className="panel-opt"> (optional)</em>}</div>
-            {editingShip ? (
-              <>
-                {courierErr && <div className="validation err">{courierErr}</div>}
-                <div className="po-inline2">
-                  <select
-                    value={courierDraft}
-                    onChange={(e) => { setCourierDraft(e.target.value); void saveCourier(e.target.value, trackingDraft); }}
-                  >
-                    <option value="">— courier —</option>
-                    {shipmentCouriers.map((c) => <option key={c} value={c}>{c}</option>)}
-                    {courierDraft && !shipmentCouriers.includes(courierDraft) && <option value={courierDraft}>{courierDraft}</option>}
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="tracking number"
-                    value={trackingDraft}
-                    onChange={(e) => setTrackingDraft(e.target.value)}
-                    onBlur={(e) => void saveCourier(courierDraft, e.target.value)}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className={courierLine ? 'ship-ro' : 'hint'}>{courierLine || 'No courier / tracking set.'}</div>
-            )}
+            <div className="fd-section-head">Shipment courier &amp; tracking</div>
+            <div className={courierLine ? 'ship-ro' : 'hint'}>{courierLine || 'No courier / tracking set.'}</div>
           </section>
 
-          {/* Boxes — dimensions / weight / China tracking (pre-fills the Doc Generator CN Packing List). */}
+          {/* Boxes — display only */}
           <section className="fd-section">
-            <div className="fd-section-head">Boxes — dimensions &amp; tracking{editingShip && <em className="panel-opt"> (optional)</em>}</div>
-            {editingShip ? (
-              <>
-                {boxErr && <div className="validation err">{boxErr}</div>}
-                <div className="sb-grid sb-grid-head">
-                  <span>L (cm)</span><span>W (cm)</span><span>H (cm)</span><span>Real wt (kg)</span><span>Box tracking</span><span />
-                </div>
-                {boxDraft.map((b, i) => (
-                  <div className="sb-grid" key={i}>
-                    <input type="text" inputMode="decimal" value={b.p} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, p: e.target.value } : r)))} />
-                    <input type="text" inputMode="decimal" value={b.l} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, l: e.target.value } : r)))} />
-                    <input type="text" inputMode="decimal" value={b.t} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, t: e.target.value } : r)))} />
-                    <input type="text" inputMode="decimal" value={b.w} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, w: e.target.value } : r)))} />
-                    <input type="text" value={b.tracking} placeholder="ZTO …" onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, tracking: e.target.value } : r)))} />
-                    <button className="set-del" aria-label="Remove box" onClick={() => setBoxDraft((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : prev))}>✕</button>
-                  </div>
-                ))}
-                <div className="po-inline2" style={{ marginTop: 6, gap: 8 }}>
-                  <button className="btn-link" onClick={() => setBoxDraft((prev) => [...prev, emptyBoxDraft()])}>+ Add box</button>
-                  <button className="btn-secondary" onClick={saveBoxes} disabled={savingBoxes}>{savingBoxes ? 'Saving…' : 'Save boxes'}</button>
-                  {boxSaved && <span className="hint" style={{ alignSelf: 'center' }}>Saved.</span>}
-                </div>
-              </>
-            ) : (
-              savedBoxes.length === 0
-                ? <div className="hint">No boxes recorded.</div>
-                : <ul className="ship-box-ro">{savedBoxes.map((b, i) => <li key={i}>{boxSummary(b)}</li>)}</ul>
-            )}
+            <div className="fd-section-head">Boxes — dimensions &amp; tracking</div>
+            {savedBoxes.length === 0
+              ? <div className="hint">No boxes recorded.</div>
+              : <ul className="ship-box-ro">{savedBoxes.map((b, i) => <li key={i}>{boxSummary(b)}</li>)}</ul>}
           </section>
 
-          {/* Items — always read-only */}
+          {/* Items — count + total item cost in the header; tap a card for its captured detail */}
           <section className="fd-section">
-            <div className="fd-section-head">Items</div>
+            <div className="fd-section-head fd-section-head-row">
+              <span>Items ({openShip.item_count})</span>
+              {itemsCost && <span className="fd-items-cost">Total item cost {itemsCost}</span>}
+            </div>
             {shipItemsLoading && <div className="hint">Loading items…</div>}
             {!shipItemsLoading && shipItems.length === 0 && <div className="hint">No item lines on this shipment.</div>}
             <ul className="po-cards po-cards-compact">
               {shipItems.map((it) => (
                 <li key={it.po_id}>
-                  {/* PR254 — same card standard as To buy / To forwarder: qty above the cost, SKU centred. */}
-                  <div className="po-card po-card-mini po-card-static">
+                  {/* PR255 — tap a card to see / edit the PO detail captured at To forwarder. */}
+                  <button className="po-card po-card-btn po-card-mini" onClick={() => openItem(it)}>
                     <SkuImage status={imgMap[it.item_code ?? '']?.status} displayUrl={imgMap[it.item_code ?? '']?.displayUrl} name={it.name} size={SKU_IMG.sm} />
                     <div className="po-card-main">
                       <span className="ff-code">{it.item_code || '—'}</span>
@@ -328,42 +353,142 @@ export default function PurchasingHistoryBoard({
                         </div>
                       )}
                     </div>
-                  </div>
+                    <span className="po-chev" aria-hidden>›</span>
+                  </button>
                 </li>
               ))}
             </ul>
           </section>
 
-          {/* Shipment notes — shown on Inbound receiving. */}
+          {/* Shipment notes — display only */}
           <section className="fd-section">
             <div className="fd-section-head">Shipment notes</div>
-            {editingShip ? (
-              <div className="ship-note-edit">
-                <textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder="Note for this Ship ID — shown on Inbound receiving" rows={3} disabled={savingNote} />
-                <div className="subform-actions">
-                  <button className="btn-secondary" onClick={saveNote} disabled={savingNote}>{savingNote ? 'Saving…' : 'Save note'}</button>
-                </div>
-              </div>
-            ) : (
-              <div className={openShip.note ? 'ship-note-text' : 'hint'}>{openShip.note || 'No note yet.'}</div>
-            )}
+            <div className={openShip.note ? 'ship-note-text' : 'hint'}>{openShip.note || 'No note yet.'}</div>
           </section>
 
-          {/* Actions — display-only by default: Edit shipment (+ Delete shipment for active). */}
+          {/* Actions */}
           {delErr && <div className="validation err" style={{ marginTop: 12 }}>{delErr}</div>}
           <div className="fd-actions">
-            {editingShip ? (
-              <button className="btn-primary" onClick={() => setEditingShip(false)}>Done</button>
-            ) : (
-              <>
-                <button className="btn-brown btn-ico" onClick={enterEdit}><PencilIcon />Edit shipment</button>
-                {!openShip.completed && (
-                  <button className="btn-danger btn-ico" onClick={() => { setDelErr(null); setConfirmDelShip(true); }}><TrashIcon />Delete shipment</button>
-                )}
-              </>
+            <button className="btn-brown btn-ico" onClick={enterEdit}><PencilIcon />Edit shipment</button>
+            {!openShip.completed && (
+              <button className="btn-danger btn-ico" onClick={() => { setDelErr(null); setConfirmDelShip(true); }}><TrashIcon />Delete shipment</button>
             )}
           </div>
         </div>
+
+        {/* Edit shipment overlay — courier / boxes / note (each saves on its own control; Done closes) */}
+        {editingShip && (
+          <div className="sc-modal-backdrop" onClick={() => setEditingShip(false)}>
+            <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Edit shipment" onClick={(e) => e.stopPropagation()}>
+              <div className="sc-modal-head sc-modal-head-row">
+                <span className="sc-modal-title">Edit {openShip.ship_id}</span>
+                <button className="sc-modal-x" onClick={() => setEditingShip(false)} aria-label="Close">×</button>
+              </div>
+              <div className="sc-modal-body">
+                <div className="po-field">
+                  <label>Shipment courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  {courierErr && <div className="validation err" style={{ marginBottom: 8 }}>{courierErr}</div>}
+                  <div className="po-inline2">
+                    <select value={courierDraft} onChange={(e) => { setCourierDraft(e.target.value); void saveCourier(e.target.value, trackingDraft); }}>
+                      <option value="">— courier —</option>
+                      {shipmentCouriers.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {courierDraft && !shipmentCouriers.includes(courierDraft) && <option value={courierDraft}>{courierDraft}</option>}
+                    </select>
+                    <input type="text" placeholder="tracking number" value={trackingDraft} onChange={(e) => setTrackingDraft(e.target.value)} onBlur={(e) => void saveCourier(courierDraft, e.target.value)} />
+                  </div>
+                </div>
+                <div className="po-field">
+                  <label>Boxes — dimensions &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  {boxErr && <div className="validation err">{boxErr}</div>}
+                  <div className="sb-grid sb-grid-head">
+                    <span>L (cm)</span><span>W (cm)</span><span>H (cm)</span><span>Real wt (kg)</span><span>Box tracking</span><span />
+                  </div>
+                  {boxDraft.map((b, i) => (
+                    <div className="sb-grid" key={i}>
+                      <input type="text" inputMode="decimal" value={b.p} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, p: e.target.value } : r)))} />
+                      <input type="text" inputMode="decimal" value={b.l} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, l: e.target.value } : r)))} />
+                      <input type="text" inputMode="decimal" value={b.t} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, t: e.target.value } : r)))} />
+                      <input type="text" inputMode="decimal" value={b.w} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, w: e.target.value } : r)))} />
+                      <input type="text" value={b.tracking} placeholder="ZTO …" onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, tracking: e.target.value } : r)))} />
+                      <button className="set-del" aria-label="Remove box" onClick={() => setBoxDraft((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : prev))}>✕</button>
+                    </div>
+                  ))}
+                  <div className="po-inline2" style={{ marginTop: 6, gap: 8 }}>
+                    <button className="btn-link" onClick={() => setBoxDraft((prev) => [...prev, emptyBoxDraft()])}>+ Add box</button>
+                    <button className="btn-secondary" onClick={saveBoxes} disabled={savingBoxes}>{savingBoxes ? 'Saving…' : 'Save boxes'}</button>
+                    {boxSaved && <span className="hint" style={{ alignSelf: 'center' }}>Saved.</span>}
+                  </div>
+                </div>
+                <div className="po-field">
+                  <label>Shipment notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder="Note for this Ship ID — shown on Inbound receiving" rows={3} disabled={savingNote} />
+                  <div className="subform-actions">
+                    <button className="btn-secondary" onClick={saveNote} disabled={savingNote}>{savingNote ? 'Saving…' : 'Save note'}</button>
+                  </div>
+                </div>
+              </div>
+              <div className="sc-modal-foot">
+                <button className="btn-primary" onClick={() => setEditingShip(false)}>Done</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* per-item detail overlay — the PO data captured at To forwarder (editable) */}
+        {selItem && (
+          <div className="sc-modal-backdrop" onClick={() => { if (!itSaving) setSelItem(null); }}>
+            <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Item detail" onClick={(e) => e.stopPropagation()}>
+              <div className="sc-modal-head sc-modal-head-row">
+                <div>
+                  <span className="sc-modal-title">{selItem.item_code || '—'}</span>
+                  {isRealName(selItem.name, selItem.item_code) && <div className="sc-modal-sub">{selItem.name} · ×{selItem.qty}</div>}
+                </div>
+                <button className="sc-modal-x" onClick={() => { if (!itSaving) setSelItem(null); }} aria-label="Close">×</button>
+              </div>
+              <div className="sc-modal-body">
+                {itErr && <div className="validation err" style={{ marginBottom: 10 }}>{itErr}</div>}
+                <div className="po-field">
+                  <label>Supplier</label>
+                  <select value={itSupplier} onChange={(e) => setItSupplier(e.target.value)} disabled={itSaving}>
+                    <option value="">— none —</option>
+                    {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>)}
+                  </select>
+                </div>
+                <div className="po-field">
+                  <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <div className="po-cost-row">
+                    <input type="number" inputMode="decimal" min={0} step="any" placeholder="0" value={itCost} onChange={(e) => setItCost(e.target.value)} disabled={itSaving} />
+                    {selItem.currency && <span className="po-cost-ccy">{selItem.currency} / each</span>}
+                  </div>
+                </div>
+                <div className="po-field">
+                  <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <div className="po-inline2">
+                    <input type="text" list="hist-methods" placeholder="courier" value={itMethod} onChange={(e) => setItMethod(e.target.value)} disabled={itSaving} />
+                    <input type="text" placeholder="tracking number" value={itTracking} onChange={(e) => setItTracking(e.target.value)} disabled={itSaving} />
+                  </div>
+                  <datalist id="hist-methods">{localCouriers.map((m) => <option key={m} value={m} />)}</datalist>
+                </div>
+                <div className="po-field">
+                  <label>Marketplace ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <input type="text" placeholder="marketplace order id" value={itMarket} onChange={(e) => setItMarket(e.target.value)} disabled={itSaving} />
+                </div>
+                <div className="po-field">
+                  <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <input type="text" placeholder="https://…" value={itLink} onChange={(e) => setItLink(e.target.value)} disabled={itSaving} />
+                </div>
+                <div className="po-field">
+                  <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <textarea value={itNote} onChange={(e) => setItNote(e.target.value)} disabled={itSaving} rows={2} />
+                </div>
+              </div>
+              <div className="sc-modal-foot">
+                <button className="btn-secondary" onClick={() => setSelItem(null)} disabled={itSaving}>Cancel</button>
+                <button className="btn-primary" onClick={saveItem} disabled={itSaving}>{itSaving ? 'Saving…' : 'Save'}</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* delete confirm — ungroups the shipment back to To forwarder */}
         {confirmDelShip && (

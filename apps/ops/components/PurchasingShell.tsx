@@ -140,7 +140,7 @@ export default function PurchasingShell({
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <PurchasingHistoryBoard active={tab === 'history'} initialShipments={shipmentHistory} shipmentCouriers={shipmentCouriers} onDetailOpenChange={setDetailOpen} />
+          <PurchasingHistoryBoard active={tab === 'history'} initialShipments={shipmentHistory} shipmentCouriers={shipmentCouriers} suppliers={suppliers} localCouriers={localCouriers} onDetailOpenChange={setDetailOpen} />
         </div>
       </div>
     </div>
