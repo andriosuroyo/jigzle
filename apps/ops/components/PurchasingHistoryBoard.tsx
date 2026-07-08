@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
+import { isRealName } from '@/components/skuName';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
@@ -263,7 +264,7 @@ export default function PurchasingHistoryBoard({
                       <span className="ff-code">{it.item_code || '—'}</span>
                       {it.item_cost != null && <span className="po-card-poid">each {it.item_cost}{it.currency ? ` ${it.currency}` : ''}</span>}
                     </div>
-                    <div className="po-card-l2"><span className="ff-name">{it.name}</span><span className="po-card-qty">×{it.qty}</span></div>
+                    <div className="po-card-l2">{isRealName(it.name, it.item_code) && <span className="ff-name">{it.name}</span>}<span className="po-card-qty">×{it.qty}</span></div>
                   </div>
                 </div>
               </li>
