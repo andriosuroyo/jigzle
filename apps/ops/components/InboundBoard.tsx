@@ -41,6 +41,10 @@ import { PackageIcon } from '@/components/AddIcons';
 const csvg = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
 const CopyIcon = () => (<svg {...csvg}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
 const CheckIcon = () => (<svg {...csvg}><polyline points="20 6 9 17 4 12" /></svg>);
+// PR243 — 16px action glyphs: the per-line edit pencil + the remove-line trash (mirrors Sales → Pending).
+const asvg = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+const PencilIcon = () => (<svg {...asvg}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
+const TrashIcon = () => (<svg {...asvg}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
 
 // Never render a raw internal id as a name (Fulfill F4 parity, §4b). When the only "name" we have is
 // the item_code itself (an edge case — stub creation + search both supply real names), show this.
@@ -148,6 +152,10 @@ export default function InboundBoard({
   async function copyVal(text: string, key: string) {
     try { await navigator.clipboard.writeText(text); setCopiedKey(key); setTimeout(() => setCopiedKey(null), 1400); } catch { /* clipboard unavailable */ }
   }
+
+  // PR243 — the received line whose per-line editor overlay is open (exclude / label / dim-weight /
+  // remove), keyed by item_code. The line data itself stays live in `received`; this just gates the modal.
+  const [lineEditCode, setLineEditCode] = useState<string | null>(null);
 
   // PR154: bodyview — the shell hides the tab bar while the receive detail is open.
   useEffect(() => { onDetailOpenChange?.(!!selected); }, [selected, onDetailOpenChange]);
@@ -650,8 +658,8 @@ export default function InboundBoard({
               {finding && <div className="hint">Searching…</div>}
               {findMsg && <div className="hint">{findMsg}</div>}
               {findNotFound && (
-                <button className="btn-link" onClick={() => { setFindNotFound(false); setFindMsg(null); setFindScan(''); startAdhoc(); }}>
-                  + Receive it as an unmarked shipment
+                <button className="btn-brown btn-ico rcv-find-adhoc" onClick={() => { setFindNotFound(false); setFindMsg(null); setFindScan(''); startAdhoc(); }}>
+                  <PackageIcon />Receive as an unmarked shipment
                 </button>
               )}
               {suggestions && suggestions.length > 0 && (
@@ -942,6 +950,9 @@ export default function InboundBoard({
         </div>
       )}
 
+      {/* PR243 — per-line editor overlay (exclude / label / dim-weight / remove) */}
+      {renderLineEditor()}
+
       {/* §6 pre-submit confirmation window */}
       {showConfirm && detail && (
         <ReceiveConfirm
@@ -1001,6 +1012,7 @@ export default function InboundBoard({
     const line = received.get(item_code);
     const got = line?.qty ?? 0;
     const countCls = got === 0 ? 'zero' : exp > 0 && got < exp ? 'short' : 'ok';
+    const excl = line ? excludedOf(line) : 0;
     return (
       <li key={`item-${item_code}`} className="ff-line rcv-item">
         <div className="pend-line">
@@ -1008,6 +1020,14 @@ export default function InboundBoard({
           <div className="pend-line-main">
             <span className="ff-code">{item_code}</span>
             <span className="ff-name">{displayName(name, item_code)}</span>
+            {/* touched-line summary: only surface exclude/label/dim when set, so the row stays clean */}
+            {line && (excl > 0 || line.label || line.dimension_weight) && (
+              <span className="rcv-line-tags">
+                {excl > 0 && <span className="rcv-tag danger">−{excl} excluded</span>}
+                {line.label && <span className="rcv-tag">{line.label}</span>}
+                {line.dimension_weight && <span className="rcv-tag">{line.dimension_weight}</span>}
+              </span>
+            )}
           </div>
           <div className="rcv-count">
             <input
@@ -1024,75 +1044,97 @@ export default function InboundBoard({
             />
             <span className="rcv-denom">/ {exp > 0 ? exp : '—'}</span>
           </div>
+          {line && (
+            <button className="btn-edit" onClick={() => setLineEditCode(item_code)} aria-label="Edit line" title="Edit line"><PencilIcon /></button>
+          )}
         </div>
-        {line && renderControls(line)}
       </li>
     );
   }
 
-  // per-received-line controls: exclude (+ qty/reason) · label · dim/weight · remove
-  function renderControls(line: ReceiveLine) {
+  // PR243 — per-line editor overlay (opened by the row pencil): exclude (+ qty/reason), inbound label,
+  // dim/weight, and remove-line. Edits apply live to the received line; "Done" just closes it.
+  function renderLineEditor() {
+    if (!lineEditCode) return null;
+    const line = received.get(lineEditCode);
+    if (!line) return null;
     const excl = excludedOf(line);
+    const close = () => setLineEditCode(null);
     return (
-      <div className="rcv-controls">
-        <label className="rcv-ctl rcv-ex">
-          <input
-            type="checkbox"
-            checked={line.excluded}
-            onChange={(e) =>
-              setField(line.item_code, e.target.checked
-                ? { excluded: true, excluded_qty: line.excluded_qty ?? Math.max(line.qty, 0) }
-                : { excluded: false, excluded_qty: null, exclude_reason: null })
-            }
-          />
-          <span>exclude</span>
-        </label>
-        {line.excluded && (
-          <>
-            <label className="rcv-ctl">
-              <span>excl qty</span>
+      <div className="sc-modal-backdrop" onClick={close}>
+        <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Edit line" onClick={(e) => e.stopPropagation()}>
+          <div className="sc-modal-head sc-modal-head-row">
+            <span className="sc-modal-title">Edit line · {line.item_code}</span>
+            <button className="sc-modal-x" onClick={close} aria-label="Close">×</button>
+          </div>
+          <div className="sc-modal-body rcv-le-body">
+            <label className="rcv-le-check">
               <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                className="rcv-qty"
-                value={excl}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value, 10);
-                  setField(line.item_code, { excluded_qty: Number.isFinite(n) ? Math.max(n, 0) : 0 });
-                }}
+                type="checkbox"
+                checked={line.excluded}
+                onChange={(e) =>
+                  setField(line.item_code, e.target.checked
+                    ? { excluded: true, excluded_qty: line.excluded_qty ?? Math.max(line.qty, 0) }
+                    : { excluded: false, excluded_qty: null, exclude_reason: null })
+                }
               />
+              <span>Exclude damaged / not-sellable units</span>
             </label>
-            <input
-              type="text"
-              className="rcv-dim"
-              placeholder="reason (e.g. damaged box)"
-              value={line.exclude_reason ?? ''}
-              onChange={(e) => setField(line.item_code, { exclude_reason: e.target.value })}
-            />
-          </>
-        )}
-        <label className="rcv-ctl">
-          <span>label</span>
-          <IconSelect
-            ariaLabel="Inbound label"
-            value={line.label ?? ''}
-            options={[
-              { value: '', label: '—' },
-              ...inboundLabels.map((l) => ({ value: l.label, label: l.label, icon: l.icon })),
-            ]}
-            onChange={(v) => setField(line.item_code, { label: v || null })}
-          />
-        </label>
-        <input
-          type="text"
-          className="rcv-dim"
-          placeholder="dim / weight (optional)"
-          value={line.dimension_weight ?? ''}
-          onChange={(e) => setField(line.item_code, { dimension_weight: e.target.value })}
-        />
-        <button className="li-remove" onClick={() => removeReceived(line.item_code)} aria-label="remove line">×</button>
+            {line.excluded && (
+              <div className="rcv-le-excl">
+                <div className="rcv-le-field rcv-le-field-sm">
+                  <span className="fd-label">Excluded qty</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    className="rcv-qty"
+                    value={excl}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      setField(line.item_code, { excluded_qty: Number.isFinite(n) ? Math.max(n, 0) : 0 });
+                    }}
+                  />
+                </div>
+                <div className="rcv-le-field">
+                  <span className="fd-label">Reason</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. damaged box"
+                    value={line.exclude_reason ?? ''}
+                    onChange={(e) => setField(line.item_code, { exclude_reason: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="rcv-le-field">
+              <span className="fd-label">Label</span>
+              <IconSelect
+                ariaLabel="Inbound label"
+                value={line.label ?? ''}
+                options={[
+                  { value: '', label: '—' },
+                  ...inboundLabels.map((l) => ({ value: l.label, label: l.label, icon: l.icon })),
+                ]}
+                onChange={(v) => setField(line.item_code, { label: v || null })}
+              />
+            </div>
+            <div className="rcv-le-field">
+              <span className="fd-label">Dim / weight <em>(optional)</em></span>
+              <input
+                type="text"
+                placeholder="e.g. 30×20×10, 1.2kg"
+                value={line.dimension_weight ?? ''}
+                onChange={(e) => setField(line.item_code, { dimension_weight: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="sc-modal-foot le-foot">
+            <button className="btn-primary" onClick={close}>Done</button>
+            <button className="btn-danger btn-ico le-del" onClick={() => { removeReceived(line.item_code); close(); }}><TrashIcon />Remove line</button>
+          </div>
+        </div>
       </div>
     );
   }

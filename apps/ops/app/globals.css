@@ -613,12 +613,20 @@ button.po-pick-btn:active { background: var(--paper); }
 .rcv-date-input { padding: 0; border: none; background: none; font-size: 17px; font-weight: 700; color: var(--brown); text-align: right; cursor: pointer; }
 .rcv-date-input::-webkit-calendar-picker-indicator { display: none; }
 
-.rcv-controls { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
-.rcv-ctl { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); font-weight: 600; }
-.rcv-ctl input, .rcv-ctl select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
-.rcv-qty { width: 64px; }
-.rcv-ex { gap: 4px; }
-.rcv-dim { flex: 1; min-width: 120px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+/* PR243 — per-line editor overlay (pencil): exclude toggle + qty/reason, label, dim/weight. */
+.rcv-le-body { display: flex; flex-direction: column; gap: 12px; }
+.rcv-le-check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); font-weight: 600; cursor: pointer; }
+.rcv-le-excl { display: flex; gap: 10px; align-items: flex-end; }
+.rcv-le-field { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.rcv-le-field input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: white; }
+.rcv-le-field .icon-select { width: 100%; }
+.rcv-le-field-sm { flex: 0 0 auto; }
+.rcv-le-field-sm .rcv-qty { width: 88px; }
+/* PR243 — clean-row line summary: exclude/label/dim surface as small tags only when set. */
+.rcv-line-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.rcv-tag { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--paper); color: var(--muted); border: 1px solid var(--line); }
+.rcv-tag.danger { color: var(--red); border-color: var(--red); background: transparent; }
+.rcv-find-adhoc { margin-top: 8px; }
 .rcv-close { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); padding: 6px 0; }
 
 /* ── PR17: scan-to-find-shipment (§5), result banner + Reverse, confirm window extras ── */
