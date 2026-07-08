@@ -125,14 +125,14 @@ input, textarea, select, button { font-family: inherit; }
 .td-prio-low  .td-prio-dot { background: var(--green); }
 /* image + a right-hand column that fits within the image's height */
 .td-head2 { display: flex; gap: 14px; align-items: flex-start; }
-/* PR230 — a tidy label→value stack: priority pill, then aligned "Qty to buy" and "Stock" rows. */
-.td-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.td-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.td-row-k { font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--brown-dark); }
-.td-row .qty-ro { font-size: 15px; font-weight: 700; color: var(--ink); }
-.td-stock .stock-pills { gap: 10px; }
-.td-stock .stock-pill { font-size: 14px; padding: 3px 10px; gap: 6px; }
-.td-stock .stock-pill svg { width: 18px; height: 18px; }
+/* PR240 — beside the 72px image: a left CONTEXT column (PO#/customer · priority · note) and a right
+   CONTROLS column (qty stepper + the combined stock pill). No "Qty to buy" / "Stock" labels. */
+.td-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.td-ctx { font-size: 12px; color: var(--muted); }
+.td-controls { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.td-controls .qty-ro { font-size: 15px; font-weight: 700; color: var(--ink); }
+.td-stock .stock-pill { font-size: 13px; padding: 4px 10px; }
+.td-stock .stock-cell svg { width: 15px; height: 15px; }
 .td-context { margin-top: 12px; }
 .td-links-head { margin-top: 14px; }
 /* PR239 — the standard detail action bar: left-aligned, one horizontally-scrollable row (slides on

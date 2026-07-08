@@ -564,6 +564,33 @@ export async function createDraftSku(input: { item_code: string; name?: string |
   return { item_code, name: name ?? item_code };
 }
 
+// ── PR240: edit a Manual buy-list PO (Planned) inline in the To-buy detail — SKU / qty / priority / note.
+// The SKU is RESOLVED, never written to the catalogue: an exact catalogue match FKs via item_code; anything
+// else is kept as a placeholder (item_code_raw, item_code NULL) and reconciled at Inbound receive. Only a
+// Planned PO is editable here. Returns error-as-data (a button handler awaits it — mutation convention). ──
+export async function updatePlannedItem(input: {
+  po_id: number;
+  sku: string;
+  qty: number;
+  urgency: Urgency | null;
+  item_note: string | null;
+}): Promise<{ error: string | null }> {
+  const supabase = createSupabaseServerClient();
+  const sku = input.sku?.trim() || '';
+  if (!sku) return { error: 'A SKU code is required.' };
+  if (!Number.isFinite(input.qty) || input.qty < 0) return { error: 'Qty must be a number ≥ 0.' };
+  const urgency = input.urgency && ['low', 'mid', 'high'].includes(input.urgency) ? input.urgency : null;
+  const { data: cat } = await supabase.from('catalogue').select('item_code').eq('item_code', sku).maybeSingle();
+  const item_code = cat ? sku : null;        // exact catalogue match → FK
+  const item_code_raw = cat ? null : sku;    // otherwise a placeholder, resolved at Inbound receive
+  const { error } = await supabase
+    .from('purchase_orders')
+    .update({ item_code, item_code_raw, qty: Math.round(input.qty), urgency, item_note: input.item_note?.trim() || null })
+    .eq('po_id', input.po_id)
+    .eq('status', 'Planned');
+  return { error: error ? `Couldn't update item: ${error.message}` : null };
+}
+
 // ── PR73: set the qty of a manual (Planned) buy-list item — the card's editable ± stepper. Reuses the
 // guarded updatePO path (blocked once Received; qty must be a number ≥ 0). ──
 export async function setPlannedQty(poId: number, qty: number): Promise<void> {
