@@ -24,6 +24,11 @@ const PencilIcon = () => (
 // PR237 — order-id copy chip icons, matching the Pending/History detail header.
 const CopyIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
 const CheckIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>);
+// PR238 — the send actions carry symmetric arrows (→ forward to Outbound, ← back to Pending), matching
+// the icon convention used by Pending's "Send ready items" (→) and To-buy's "Done buying".
+const arrow = { viewBox: '0 0 24 24', width: 16, height: 16, fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+const ArrowRightIcon = () => (<svg {...arrow}><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>);
+const ArrowLeftIcon = () => (<svg {...arrow}><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>);
 
 export default function FulfillBoard({
   initialQueue,
@@ -327,7 +332,7 @@ export default function FulfillBoard({
                   {detail.lines.map((l) => (
                     <li key={l.line_id} className="ff-line pend-line-card">
                       <div className="pend-line">
-                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.smd} />
+                        <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
                         <div className="pend-line-main">
                           <span className="ff-code">{l.item_code || '—'}</span>
                           <span className="ff-name">{l.name}</span>
@@ -385,9 +390,9 @@ export default function FulfillBoard({
               {/* Commit bar — Send back (left) · Send to Outbound. No Delete here: an order in Fulfill is
                   already cut/ready; deletion belongs to Pending (PR224). Disabled until address + courier set. */}
               <div className="fd-commit fd-commit-row">
-                <button className="btn-brown" onClick={sendBack} disabled={committing}>↩ Send back to pending</button>
-                <button className="btn-primary" onClick={sendOut} disabled={!canSend}>
-                  {committing ? 'Sending…' : 'Send to Outbound'}
+                <button className="btn-brown btn-ico" onClick={sendBack} disabled={committing}><ArrowLeftIcon />Send back to pending</button>
+                <button className="btn-primary btn-ico" onClick={sendOut} disabled={!canSend}>
+                  <ArrowRightIcon />{committing ? 'Sending…' : 'Send to Outbound'}
                 </button>
                 {!canSend && !committing && (
                   <span className="warn-text">{addressId == null ? 'pick an address' : courierId == null ? 'pick a courier' : isIntl && exportCourierId == null ? 'pick an export courier' : ''}</span>
