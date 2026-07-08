@@ -28,6 +28,7 @@ import {
   setPlannedQty,
   setPOStatus,
   setSoldOut,
+  updatePlannedItem,
 } from '@/app/purchasing/actions';
 import type { PlannedItemRow, PreorderRow, SoldOutRow, SkuStockInfo, Urgency } from '@/app/purchasing/types';
 import type { SkuHit } from '@/app/purchasing/types';
@@ -129,6 +130,16 @@ export default function ToBuyBoard({
   // Loaded lazily when the overlay opens, keyed on the SKU code.
   const [buySources, setBuySources] = useState<string[]>([]);
   const [buyLoading, setBuyLoading] = useState(false);
+
+  // PR240 — inline edit of a Manual buy-list item (SKU / qty / priority / note). Writes only to the PO,
+  // never the catalogue (the SKU is resolved server-side; unknown codes stay placeholders for Inbound).
+  const [editing, setEditing] = useState(false);
+  const [eSku, setESku] = useState('');
+  const [eQty, setEQty] = useState(0);
+  const [ePrio, setEPrio] = useState<Urgency | null>(null);
+  const [eNote, setENote] = useState('');
+  const [eBusy, setEBusy] = useState(false);
+  const [eErr, setEErr] = useState<string | null>(null);
 
   // delete-confirm overlay (Manual + Out-of-Stock): holds the po_id awaiting a Yes/No
   const [confirmDelId, setConfirmDelId] = useState<number | null>(null);
@@ -324,6 +335,26 @@ export default function ToBuyBoard({
   // a new/unknown manual SKU has no catalogue name (and no image / nothing to edit) — drive the header off this.
   const detailHasName = detail ? isRealName(detail.name, detail.item_code) : false;
 
+  // PR240 — inline edit (Manual only). Seeds the draft from the current row; saves to the PO only.
+  function openEdit() {
+    if (!detail) return;
+    setESku(detail.code); setEQty(detail.qty); setEPrio(detail.urgency); setENote(detail.note ?? '');
+    setEErr(null); setEditing(true);
+  }
+  function cancelEdit() { setEditing(false); setEErr(null); }
+  async function saveEdit() {
+    if (!detail || detail.po_id == null) return;
+    const sku = eSku.trim();
+    if (!sku) { setEErr('A SKU code is required.'); return; }
+    setEBusy(true); setEErr(null);
+    const { error: err } = await updatePlannedItem({ po_id: detail.po_id, sku, qty: eQty, urgency: ePrio, item_note: eNote.trim() || null });
+    if (err) { setEErr(err); setEBusy(false); return; }
+    await refresh();
+    setEBusy(false); setEditing(false);
+  }
+  // leaving the overlay (or switching rows) drops edit mode.
+  useEffect(() => { setEditing(false); }, [sel]);
+
   // overlay qty stepper: optimistic local update in the right list (manual → planned, oos → soldOut)
   function setDetailQty(q: number) {
     if (!detail || detail.po_id == null) return;
@@ -469,68 +500,106 @@ export default function ToBuyBoard({
                 <span className="sc-modal-title">{detail.code || '—'}</span>
                 {detailHasName && <div className="ff-name td-name">{detail.name}</div>}
               </div>
-              {/* Edit → the Catalog editor, but only for a known SKU: a brand-new/unknown manual code has
-                  no catalogue entry to edit (and its SKU can't be changed here anyway). */}
-              {detail.item_code && detailHasName && (
-                <a className="td-edit" href={`/catalog?sku=${encodeURIComponent(detail.item_code)}`} target="_blank" rel="noreferrer" title="Edit in Catalog">Edit</a>
+              {/* PR240 — Edit is an INLINE editor (Manual only): change SKU / qty / priority / note without
+                  ever writing to the catalogue. From-Sales items are read-only (driven by the sale). */}
+              {!editing && detail.kind === 'manual' && detail.po_id != null && (
+                <button className="td-edit" onClick={openEdit} title="Edit item">Edit</button>
               )}
-              <button className="sc-modal-x" onClick={() => setSel(null)} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={() => { if (!eBusy) setSel(null); }} aria-label="Close">×</button>
             </div>
-            <div className="sc-modal-body">
-              {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
-              {/* image left; a tidy label→value stack to its right: priority, qty-to-buy, stock. */}
-              <div className="td-head2">
-                <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : detail.code} size={SKU_IMG.md} />
-                <div className="td-side">
-                  {detail.urgency && (
-                    <div className={`td-prio td-prio-${detail.urgency}`}><span className="td-prio-dot" />{detail.urgency[0].toUpperCase() + detail.urgency.slice(1)} priority</div>
-                  )}
-                  <div className="td-row">
-                    <span className="td-row-k">Qty to buy</span>
-                    {detail.qtyEditable && detail.po_id != null ? (
-                      <span className="qty-step">
-                        <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty - 1)} disabled={detail.qty <= 0} aria-label="decrease">−</button>
-                        <input
-                          type="number" inputMode="numeric" min={0} value={detail.qty}
-                          onChange={(e) => setDetailQty(parseInt(e.target.value, 10) || 0)}
-                          onBlur={(e) => changeQty(detail.po_id!, Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        />
-                        <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty + 1)} aria-label="increase">+</button>
-                      </span>
-                    ) : (
-                      <span className="qty-ro" aria-label="quantity">×{detail.qty}</span>
-                    )}
+
+            {editing ? (
+              /* ── edit mode (Manual) — SKU / qty / priority / note; writes to the PO only ── */
+              <>
+                <div className="sc-modal-body">
+                  {eErr && <div className="validation err" style={{ marginBottom: 10 }}>{eErr}</div>}
+                  <div className="le-field">
+                    <label>SKU code</label>
+                    <input type="text" value={eSku} onChange={(e) => setESku(e.target.value)} placeholder="type the SKU code" disabled={eBusy} autoComplete="off" data-1p-ignore="true" data-lpignore="true" />
+                    <span className="hint" style={{ marginTop: 4 }}>A new/unknown code is kept as-is and matched to a real SKU at Inbound — no catalogue entry is created here.</span>
                   </div>
-                  <div className="td-row">
-                    <span className="td-row-k">Stock</span>
-                    <span className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} /></span>
+                  <div className="le-row">
+                    <div className="le-field">
+                      <label>Qty</label>
+                      <span className="qty-step">
+                        <button type="button" onClick={() => setEQty((q) => Math.max(0, q - 1))} disabled={eBusy || eQty <= 0} aria-label="decrease">−</button>
+                        <input type="number" inputMode="numeric" min={0} value={eQty} onChange={(e) => setEQty(Math.max(0, parseInt(e.target.value, 10) || 0))} disabled={eBusy} />
+                        <button type="button" onClick={() => setEQty((q) => q + 1)} disabled={eBusy} aria-label="increase">+</button>
+                      </span>
+                    </div>
+                    <div className="le-field grow">
+                      <label>Priority</label>
+                      <div className="urg-toggle" role="group" aria-label="Priority">
+                        {URGENCY_OPTS.map((u) => (
+                          <button key={u.key} type="button" className={`urg-btn urg-${u.key} ${ePrio === u.key ? 'active' : ''}`} aria-pressed={ePrio === u.key} onClick={() => setEPrio(ePrio === u.key ? null : u.key)} disabled={eBusy}>{u.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="le-field le-note">
+                    <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                    <input type="text" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="e.g. confirm colour" disabled={eBusy} autoComplete="off" />
                   </div>
                 </div>
-              </div>
+                <div className="sc-modal-foot le-foot">
+                  <button className="btn-primary" onClick={saveEdit} disabled={eBusy || !eSku.trim()}>{eBusy ? 'Saving…' : 'Save'}</button>
+                  <button className="btn-secondary" onClick={cancelEdit} disabled={eBusy}>Cancel</button>
+                </div>
+              </>
+            ) : (
+              /* ── view mode — image, context (PO#/customer · priority · note), qty+pill, where-to-buy ── */
+              <>
+                <div className="sc-modal-body">
+                  {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
+                  <div className="td-head2">
+                    <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : detail.code} size={SKU_IMG.md} />
+                    <div className="td-info">
+                      <div className="td-ctx">{detail.context}</div>
+                      {detail.urgency && (
+                        <div className={`td-prio td-prio-${detail.urgency}`}><span className="td-prio-dot" />{detail.urgency[0].toUpperCase() + detail.urgency.slice(1)} priority</div>
+                      )}
+                      {detail.note && <div className="td-ctx td-note">{detail.note}</div>}
+                    </div>
+                    <div className="td-controls">
+                      {detail.qtyEditable && detail.po_id != null ? (
+                        <span className="qty-step">
+                          <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty - 1)} disabled={detail.qty <= 0} aria-label="decrease">−</button>
+                          <input
+                            type="number" inputMode="numeric" min={0} value={detail.qty}
+                            onChange={(e) => setDetailQty(parseInt(e.target.value, 10) || 0)}
+                            onBlur={(e) => changeQty(detail.po_id!, Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          />
+                          <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty + 1)} aria-label="increase">+</button>
+                        </span>
+                      ) : (
+                        <span className="qty-ro" aria-label="quantity">×{detail.qty}</span>
+                      )}
+                      <span className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} combined /></span>
+                    </div>
+                  </div>
 
-              <div className="td-context hint">{detail.context}</div>
-              {detail.note && <div className="hint td-note">{detail.note}</div>}
-
-              <div className="fd-section-head td-links-head">Where to buy</div>
-              <div className="buy-links">
-                {detail.target.product_link && <BuyLink url={detail.target.product_link} primary />}
-                {buyLoading && <div className="hint">Loading catalogue sources…</div>}
-                {!buyLoading && buySources.map((url) => <BuyLink key={url} url={url} />)}
-                {!buyLoading && !detail.target.product_link && buySources.length === 0 && (
-                  <div className="hint">No links on file for this SKU.</div>
-                )}
-              </div>
-            </div>
-            {/* Actions — icon buttons (Sales style): out of stock · done buying (left) + delete PO (right). */}
-            <div className="sc-modal-foot td-actions">
-              {detail.kind !== 'oos' && (
-                <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
-              )}
-              <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}><BagIcon />Done buying</button>
-              {detail.canDelete && detail.po_id != null && (
-                <button className="btn-danger btn-ico td-del" onClick={() => { const id = detail.po_id!; setSel(null); setConfirmDelId(id); }} disabled={busy}><TrashIcon />Delete PO</button>
-              )}
-            </div>
+                  <div className="fd-section-head td-links-head">Where to buy</div>
+                  <div className="buy-links">
+                    {detail.target.product_link && <BuyLink url={detail.target.product_link} primary />}
+                    {buyLoading && <div className="hint">Loading catalogue sources…</div>}
+                    {!buyLoading && buySources.map((url) => <BuyLink key={url} url={url} />)}
+                    {!buyLoading && !detail.target.product_link && buySources.length === 0 && (
+                      <div className="hint">No links on file for this SKU.</div>
+                    )}
+                  </div>
+                </div>
+                {/* Actions — the standard scrollable row: out of stock · done buying · delete PO (last). */}
+                <div className="sc-modal-foot td-actions">
+                  {detail.kind !== 'oos' && (
+                    <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
+                  )}
+                  <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}><BagIcon />Done buying</button>
+                  {detail.canDelete && detail.po_id != null && (
+                    <button className="btn-danger btn-ico td-del" onClick={() => { const id = detail.po_id!; setSel(null); setConfirmDelId(id); }} disabled={busy}><TrashIcon />Delete PO</button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
