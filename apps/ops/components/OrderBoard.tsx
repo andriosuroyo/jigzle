@@ -21,6 +21,7 @@ import {
 import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { StoreIcon } from '@/components/AddIcons';
+import { isRealName } from '@/components/skuName';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import TrashButton from '@/components/TrashButton';
@@ -780,11 +781,11 @@ export default function OrderBoard({
                   <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
                     <div className="po-card-l1">
-                      <span className="ff-code">{po.item_code || '—'}</span>
+                      <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
                       <span className="po-card-poid">{fmtDay(po.status_since)}</span>
                     </div>
                     <div className="po-card-l2">
-                      <span className="ff-name">{po.name}</span>
+                      {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
                       <span className="po-card-qty">×{po.qty}</span>
                     </div>
                   </div>
@@ -802,11 +803,11 @@ export default function OrderBoard({
               <SkuImage status={imgMap[editPo.item_code ?? '']?.status} displayUrl={imgMap[editPo.item_code ?? '']?.displayUrl} name={editPo.name} size={SKU_IMG.smd} />
               <div className="po-bvhead-main">
                 <div className="po-card-l1">
-                  <span className="ff-code">{editPo.item_code || '—'}</span>
+                  <span className="ff-code">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
                   <span className="po-card-date">{fmtDay(editPo.input_date)}</span>
                 </div>
                 <div className="po-card-l1 po-card-mid">
-                  <span className="ff-name">{editPo.name}</span>
+                  {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <span className="ff-name">{editPo.name}</span>}
                   <span className="po-card-qty">×{editPo.qty}</span>
                 </div>
                 <div className="po-card-l2 hint">
@@ -865,11 +866,11 @@ export default function OrderBoard({
                     <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                     <div className="po-card-main">
                       <div className="po-card-l1">
-                        <span className="ff-code">{po.item_code || '—'}</span>
+                        <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
                         <span className="po-card-poid">{fmtDay(po.status_since)}</span>
                       </div>
                       <div className="po-card-l2">
-                        <span className="ff-name">{po.name}</span>
+                        {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
                         <span className="po-card-qty">×{po.qty}</span>
                       </div>
                       {shortFromShip(po) && (
@@ -902,11 +903,11 @@ export default function OrderBoard({
               <SkuImage status={imgMap[editPo!.item_code ?? '']?.status} displayUrl={imgMap[editPo!.item_code ?? '']?.displayUrl} name={editPo!.name} size={SKU_IMG.smd} />
               <div className="po-bvhead-main">
                 <div className="po-card-l1">
-                  <span className="ff-code">{editPo!.item_code || '—'}</span>
+                  <span className="ff-code">{editPo!.item_code ?? editPo!.item_code_raw ?? '—'}</span>
                   <span className="po-card-date">{fmtDay(editPo!.status_since)}</span>
                 </div>
                 <div className="po-card-l1 po-card-mid">
-                  <span className="ff-name">{editPo!.name}</span>
+                  {isRealName(editPo!.name, editPo!.item_code ?? editPo!.item_code_raw) && <span className="ff-name">{editPo!.name}</span>}
                   <span className="po-card-qty">×{editPo!.qty}</span>
                 </div>
                 <div className="po-card-l2 hint">PO #{editPo!.po_id}</div>

@@ -39,6 +39,7 @@ import StockPills from '@/components/StockPills';
 import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
+import { isRealName } from '@/components/skuName';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
@@ -78,10 +79,6 @@ const BanIcon = () => (<svg {..._ic}><circle cx="12" cy="12" r="9" /><line x1="5
 const BagIcon = () => (<svg {..._ic}><path d="M6 2 3 6v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>);
 const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
 
-// a "real" catalogue name — not blank, not the em-dash placeholder, and not just the raw item code
-// (a manual buy-list item can be a brand-new/unknown code that has no catalogue name yet).
-const isRealName = (name: string | null | undefined, code: string | null | undefined): boolean =>
-  !!name && name.trim() !== '' && name.trim() !== '—' && name.trim() !== (code ?? '').trim();
 
 // the active "Buy" overlay target — enough to load + render its links and run the right write-backs.
 type BuyTarget = {
