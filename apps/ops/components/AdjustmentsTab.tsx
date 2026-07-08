@@ -17,6 +17,9 @@ import {
 import type { AdjustmentFilter, AdjustmentRow, SkuHit } from '@/app/stock-check/types';
 import SearchInput from '@/components/SearchInput';
 import TrashButton from '@/components/TrashButton';
+import { SKU_IMG } from '@/components/skuImageSizes';
+import { isRealName } from '@/components/skuName';
+import { PlusCircleIcon } from '@/components/AddIcons';
 
 function fmt(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
@@ -156,7 +159,7 @@ export default function AdjustmentsTab() {
             {!to && <span className="sc-adj-dateph">To date</span>}
           </span>
         </div>
-        <button className="btn-primary sc-adj-newbtn" onClick={() => { setError(null); setShowNew(true); }}>+ Manual adjustment</button>
+        <button className="btn-brown btn-ico sc-adj-newbtn" onClick={() => { setError(null); setShowNew(true); }}><PlusCircleIcon />Manual adjustment</button>
       </div>
 
       {/* PR175 — the whole new-adjustment flow (search SKU → set delta/note → save) lives in an overlay */}
@@ -182,14 +185,14 @@ export default function AdjustmentsTab() {
         {!loading && rows.length === 0 && <div className="sc-empty">No adjustments match.</div>}
         {rows.map((r) => (
           <button key={r.adjustment_id} className="adj-card" onClick={() => setSelId(r.adjustment_id)}>
-            <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={44} />
+            <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
             <div className="adj-card-main">
               <div className="adj-card-l1">
                 <span className="ff-code">{r.item_code}</span>
                 <span className="adj-card-date">{fmtDay(r.created_at)}</span>
               </div>
               <div className="adj-card-l2">
-                <span className="ff-name">{r.name}</span>
+                {isRealName(r.name, r.item_code) && <span className="ff-name">{r.name}</span>}
                 <span className="adj-pills">
                   <span className={`sc-delta ${r.delta >= 0 ? 'pos' : 'neg'}`}>{fmt(r.delta)}</span>
                   <span className={`sc-src ${r.source}`}>{srcLabel(r.source)}</span>
@@ -211,9 +214,9 @@ export default function AdjustmentsTab() {
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
               <div className="adj-detail-head">
-                <SkuImage status={imgMap[sel.item_code]?.status} displayUrl={imgMap[sel.item_code]?.displayUrl} name={sel.name} size={72} />
+                <SkuImage status={imgMap[sel.item_code]?.status} displayUrl={imgMap[sel.item_code]?.displayUrl} name={sel.name} size={SKU_IMG.md} />
                 <div className="adj-detail-main">
-                  <span className="ff-name">{sel.name}</span>
+                  {isRealName(sel.name, sel.item_code) && <span className="ff-name">{sel.name}</span>}
                   <span className="adj-pills">
                     <span className={`sc-delta ${sel.delta >= 0 ? 'pos' : 'neg'}`}>{fmt(sel.delta)}</span>
                     <span className={`sc-src ${sel.source}`}>{srcLabel(sel.source)}</span>

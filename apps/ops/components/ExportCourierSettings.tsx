@@ -102,12 +102,12 @@ export default function ExportCourierSettings({ embedded = false }: { embedded?:
 
       {addLabel !== null ? (
         <div className="subform" style={{ marginTop: 8 }}>
-          <div className="subform-label">+ add export courier</div>
+          <div className="subform-label">Add export courier</div>
           <input type="text" placeholder="courier name (e.g. Repack)" value={addLabel} autoFocus disabled={busy}
             onChange={(e) => setAddLabel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submitAdd(); }} />
           <div className="subform-actions">
             <button className="btn-link" onClick={() => setAddLabel(null)} disabled={busy}>cancel</button>
-            <button className="btn-secondary" onClick={submitAdd} disabled={busy}>add</button>
+            <button className="btn-primary" onClick={submitAdd} disabled={busy}>add</button>
           </div>
         </div>
       ) : (

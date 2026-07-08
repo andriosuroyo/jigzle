@@ -98,12 +98,12 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
 
       {addName !== null ? (
         <div className="subform" style={{ marginTop: 8 }}>
-          <div className="subform-label">+ add declaration user</div>
+          <div className="subform-label">Add declaration user</div>
           <input type="text" placeholder="full name (e.g. Andrio Suroyo)" value={addName} autoFocus disabled={busy}
             onChange={(e) => setAddName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submitAdd(); }} />
           <div className="subform-actions">
             <button className="btn-link" onClick={() => setAddName(null)} disabled={busy}>cancel</button>
-            <button className="btn-secondary" onClick={submitAdd} disabled={busy}>add</button>
+            <button className="btn-primary" onClick={submitAdd} disabled={busy}>add</button>
           </div>
         </div>
       ) : (

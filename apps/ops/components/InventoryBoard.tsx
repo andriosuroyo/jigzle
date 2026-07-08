@@ -10,6 +10,7 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import { isRealName } from '@/components/skuName';
 import { IconOnOrder, IconShipped, IconWarehouse } from '@/components/StockStats';
 import AdjustmentsTab from '@/components/AdjustmentsTab';
 import StockCheckBoard from '@/components/StockCheckBoard';
@@ -238,7 +239,7 @@ export default function InventoryBoard({
                   <SkuImage status={imgMap[ledger.item_code]?.status} displayUrl={imgMap[ledger.item_code]?.displayUrl} name={ledger.name || ''} size={SKU_IMG.md} />
                   <div className="ledg-head-main">
                     <div className="inv-card-code">{ledger.item_code}</div>
-                    <div className="inv-card-name">{ledger.name || '—'}</div>
+                    {isRealName(ledger.name, ledger.item_code) && <div className="inv-card-name">{ledger.name}</div>}
                     <div className="ledg-now">In stock <b>{ledger.physical}</b>{ledger.available !== ledger.physical ? ` · available ${ledger.available}` : ''}</div>
                   </div>
                 </div>
@@ -277,7 +278,7 @@ export default function InventoryBoard({
                   <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={SKU_IMG.sm} />
                   <div className="inv-card-main">
                     <div className="inv-card-code">{r.item_code}</div>
-                    <div className="inv-card-name">{r.name || '—'}</div>
+                    {isRealName(r.name, r.item_code) && <div className="inv-card-name">{r.name}</div>}
                   </div>
                   <svg className="inv-card-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M9 18l6-6-6-6" />
@@ -340,7 +341,7 @@ export default function InventoryBoard({
               <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name || ''} size={SKU_IMG.sm} />
               <div className="inv-card-main">
                 <div className="inv-card-code">{r.item_code}</div>
-                <div className="inv-card-name">{r.name || '—'}</div>
+                {isRealName(r.name, r.item_code) && <div className="inv-card-name">{r.name}</div>}
               </div>
               <div className="inv-card-stats">
                 <span className={`inv-stat ${r.pending ? '' : 'zero'}`} title="On order"><IconOnOrder />{r.pending}</span>

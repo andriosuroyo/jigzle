@@ -110,7 +110,7 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
 
       {adding ? (
         <div className="subform" style={{ marginTop: 8 }}>
-          <div className="subform-label">+ add supplier</div>
+          <div className="subform-label">Add supplier</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div className="sup-flag-cell">
               <FlagSelect value={adding.flag || null} onChange={({ flag, country }) => setAdding((a) => (a ? { ...a, flag, country } : a))} />
@@ -119,7 +119,7 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
           </div>
           <div className="subform-actions">
             <button className="btn-link" onClick={() => setAdding(null)} disabled={busy}>cancel</button>
-            <button className="btn-secondary" onClick={submitAdd} disabled={busy}>add</button>
+            <button className="btn-primary" onClick={submitAdd} disabled={busy}>add</button>
           </div>
         </div>
       ) : (
