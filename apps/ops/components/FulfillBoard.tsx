@@ -21,6 +21,9 @@ const PencilIcon = () => (
     <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
   </svg>
 );
+// PR237 — order-id copy chip icons, matching the Pending/History detail header.
+const CopyIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
+const CheckIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>);
 
 export default function FulfillBoard({
   initialQueue,
@@ -66,6 +69,7 @@ export default function FulfillBoard({
   const [noteDraft, setNoteDraft] = useState('');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteErr, setNoteErr] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState(false); // PR237 — order-id copy feedback
   const reqIdRef = useRef(0);
 
   // FT-1: filter the queue by customer name OR SKU code (client-side over the loaded worklist)
@@ -209,6 +213,12 @@ export default function FulfillBoard({
     }
   }
 
+  // PR237 — one-tap copy of the order id (header chip), matching Pending/History.
+  async function copyOrderId() {
+    if (!detail) return;
+    try { await navigator.clipboard.writeText(detail.sales_id); setCopiedId(true); setTimeout(() => setCopiedId(false), 1400); } catch { /* clipboard unavailable */ }
+  }
+
   // PR227 — note-only per-item editor. Opens from the square pencil; saves the line note and reflects it
   // back into the loaded detail (no full refetch). SKU / qty / delete are intentionally not offered here.
   function openNote(l: FulfillLine) { setNoteEdit(l); setNoteDraft(l.line_note ?? ''); setNoteErr(null); }
@@ -280,12 +290,17 @@ export default function FulfillBoard({
 
           {detail && (
             <>
-              {/* PR144 header: customer id left, order date right; the sales id moved to the bottom. */}
+              {/* PR237 header: customer left, date right; the order id sits just below as a copyable chip
+                  — the same style as the Pending / History detail. */}
               <div className="fd-head">
                 <div className="fd-head-row">
                   <div className="fd-title fd-title-plain">{detail.customer_name || '—'}</div>
                   {detail.order_date && <span className="fd-date">{detail.order_date.slice(0, 10)}</span>}
                 </div>
+                <button className="fd-orderid-chip" onClick={copyOrderId} aria-label={copiedId ? 'Order ID copied' : 'Copy order ID'} title="Copy order ID">
+                  <span className="fd-orderid-code">{detail.sales_id}</span>
+                  {copiedId ? <CheckIcon /> : <CopyIcon />}
+                </button>
               </div>
 
               {/* Address (FT-6: radio + needs-address flag) */}
@@ -379,7 +394,6 @@ export default function FulfillBoard({
                 )}
               </div>
 
-              <div className="fd-orderid">{detail.sales_id}</div>
 
               {/* PR227 — note-only per-item editor (no SKU / qty / delete on a cut order). */}
               {noteEdit && (
