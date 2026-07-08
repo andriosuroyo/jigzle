@@ -3,36 +3,43 @@
 Monorepo (npm workspaces + turbo). The main app is **`apps/ops`** (Next.js 14 App Router,
 Supabase). Shared packages live under `packages/*` (`@jigzle/db`, `@jigzle/lib`, `@jigzle/ui`).
 
-## Default development workflow — "ship every build"
+## Development workflow — pool changes, ship on command
 
-When a unit of work is complete, **ship it end-to-end without waiting to be asked** — push,
-merge, deploy. Concretely, for every build:
+Do **not** auto-merge every unit. **Pool** small changes on the feature branch and ship them in
+batches; the user decides when they go live. For every unit of work:
 
-1. **Branch.** Do the work on a feature branch (never commit straight to `main`).
-2. **Verify locally (the merge gate).** For each app touched, run from its directory
-   (e.g. `apps/ops`):
-   - `../../node_modules/.bin/tsc --noEmit` (typecheck)
-   - `../../node_modules/.bin/next build` (production build — also runs ESLint)
-   If deps aren't installed yet, run `npm install` at the repo root first.
-   **Only proceed if both pass.** A red build must never reach `main`.
-3. **PR.** Open a pull request into `main` with a clear title + body. The PR gives a paper
-   trail and a Vercel **preview** deployment URL. **Continue the PR sequence:** before
-   opening, check the repo's most recent PR number and number this work as the next one
-   (e.g. last is #52 → this is #53). Code comments reference work by that number (`PR53`).
-4. **Merge.** Once the gate is green, **squash-merge the PR into `main` automatically** — no
-   need to ask first. (This is the standing instruction; it overrides the usual
-   "don't merge without asking".)
-5. **Deploy.** Deployment is automatic via Vercel's Git integration — there is **no deploy
-   command** to run. Merging to `main` triggers the **production** deploy
-   (`jigzle.vercel.app`); each branch/PR gets a **preview** deploy.
+1. **Branch.** Work on the designated feature branch (never commit straight to `main`).
+2. **Verify — the merge gate.** From each app dir touched (e.g. `apps/ops`):
+   - `../../node_modules/.bin/tsc --noEmit`
+   - `../../node_modules/.bin/next build` (also runs ESLint)
+   Both must pass before anything merges — a red build must never reach `main`. (`npm install` at
+   the repo root first if deps are missing.)
+3. **Commit + push to preserve — but hold the merge.** Commit the unit and push the branch. The
+   push costs nothing (Vercel skips all non-`main` builds — see Deploy facts), so it safely
+   preserves work against container reclaim and keeps the Stop hook quiet. Do **not** open/merge a
+   PR yet for a small change.
+4. **Ship when signalled.** Open the PR + squash-merge **only** when the user says "ship it" — OR
+   immediately when the change is genuinely **big** (≳300 changed lines, or a full screen/nav
+   redesign). Pool guardrail: don't let a batch exceed ~800 lines or blend unrelated areas.
+   - **PR sequence:** number each PR as the next in sequence (last is #52 → this is `PR53`); code
+     comments reference work by that number.
+   - **Merge = squash-merge into `main`.** That is the only thing that deploys.
+5. **After the squash-merge: the empty-commit resync** (the dedicated note just below). Mandatory —
+   it is what keeps *both* the Vercel production deploy and the Stop hook healthy.
 
-Notes:
-- If the local build/typecheck fails, stop and fix it — do not merge. Report the failure.
-- The ops app is a PWA with a service worker, so after a production deploy a hard reload (or
-  reopening the installed app) may be needed to drop the cached old bundle.
-- This auto-merge default applies to ordinary builds. For anything destructive or
-  irreversible beyond a normal code deploy (DB migrations, data backfills, deleting/renaming
-  things you didn't create), still confirm with the user first.
+**Deploy facts (Vercel, Hobby plan) — the hard-won rules, so a fresh session doesn't relearn them:**
+- **Only `main` builds.** An **Ignored Build Step** (Vercel → Settings → Build and Deployment:
+  `if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi`) skips every branch push.
+  So a PR showing a Vercel **"Ignored"** deployment is EXPECTED — it is **not** a production stall.
+- **Production deploys on merge to `main`**, automatically (no deploy command) → `jigzle.vercel.app`.
+- The Hobby **100-deploys/day** cap (`api-deployments-free-per-day`) is now only touched by `main`
+  merges (previews are skipped), so it won't bite at a normal cadence. It's a rolling 24h window;
+  if you ever hit it, wait it out or retry. Do **not** re-create the deleted **`jigzle-calculator`**
+  Vercel project — it was a duplicate wired to this repo that once doubled the deploy volume.
+- The ops app is a PWA (no service worker; staleness handled by `Cache-Control: no-store` on
+  documents, PR232) — after a prod deploy a hard reload may still be needed to drop a cached bundle.
+- Destructive/irreversible beyond a normal code deploy (DB migrations, data backfills, deleting or
+  renaming things you didn't create) — confirm with the user first.
 - **After the squash-merge, resync to `main`, then put ONE empty verified commit on the branch and
   push that** — do **NOT** force-push the branch to main's exact merge SHA:
   ```
