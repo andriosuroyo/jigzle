@@ -137,8 +137,22 @@ input, textarea, select, button { font-family: inherit; }
 .td-links-head { margin-top: 14px; }
 /* PR239 — the standard detail action bar: left-aligned, one horizontally-scrollable row (slides on
    mobile), destructive button LAST in the group (not pushed to the far edge). Mirrors Pending's .fd-actions. */
-.tobuy-detail .td-actions { justify-content: flex-start; align-items: center; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+.tobuy-detail .td-actions { justify-content: flex-start; align-items: center; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 22px; }
 .tobuy-detail .td-actions > button { flex-shrink: 0; }
+/* PR248 — action-bar standard base: Purchasing → To-forwarder detail uses a bare .td-actions row
+   (not under .tobuy-detail), so it needs the flex + horizontal-scroll layout here. */
+.td-actions { display: flex; justify-content: flex-start; align-items: center; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 4px; padding-bottom: 2px; }
+.td-actions > button { flex-shrink: 0; }
+/* PR248 — To-forwarder batch overlay */
+.po-batchbar { display: flex; margin-bottom: 10px; }
+.batch-modal { max-width: 560px; }
+.batch-picklist { max-height: 46vh; overflow-y: auto; }
+.batch-pickrow { cursor: pointer; padding: 4px 0; }
+.batch-pickcard { pointer-events: none; }
+.batch-items { display: flex; flex-direction: column; gap: 12px; }
+.batch-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--cream); }
+.batch-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.batch-item-detail { margin-left: auto; font-size: 12px; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .po-card-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-card-l1 .ff-name { flex: 1; }

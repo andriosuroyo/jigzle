@@ -20,12 +20,15 @@ import {
 } from '@/app/purchasing/actions';
 import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
-import { StoreIcon } from '@/components/AddIcons';
+import { StoreIcon, TruckIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
+
+// PR248 — trash glyph for the "Delete PO" action button (Sales-style: btn-danger btn-ico + text).
+const TrashIcon = () => (<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -203,6 +206,18 @@ export default function OrderBoard({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState(false); // inline delete-order confirm (edit pane)
+
+  // PR248 — To-forwarder BATCH flow: pick several items, then apply ONE supplier / local courier /
+  // tracking / notes as a group (unit cost + item link stay per item), and confirm them all → To ship.
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchStep, setBatchStep] = useState<'pick' | 'fill'>('pick');
+  const [batchIds, setBatchIds] = useState<Set<number>>(new Set());
+  const [batchSupplier, setBatchSupplier] = useState<number | ''>('');
+  const [batchMethod, setBatchMethod] = useState('');
+  const [batchTracking, setBatchTracking] = useState('');
+  const [batchNote, setBatchNote] = useState('');
+  const [batchPer, setBatchPer] = useState<Record<number, { cost: string; link: string }>>({});
+  const [batchBusy, setBatchBusy] = useState(false);
 
   // PR153: a bucketed bodyview detail is open → the shell hides the pipeline tabs.
   const bvDetailOpen = !!bucket && mode === 'edit' && !!editPo;
@@ -456,6 +471,79 @@ export default function OrderBoard({
       setError(e instanceof Error ? e.message : 'Failed to delete.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  // ── To-forwarder BATCH: open the picker, toggle items, and confirm a whole group at once ──
+  function openBatch() {
+    resetMessages();
+    setBatchOpen(true);
+    setBatchStep('pick');
+    setBatchIds(new Set());
+    setBatchSupplier('');
+    setBatchMethod('');
+    setBatchTracking('');
+    setBatchNote('');
+    setBatchPer({});
+  }
+  function closeBatch() {
+    setBatchOpen(false);
+    setBatchIds(new Set());
+    setBatchPer({});
+  }
+  function toggleBatch(poId: number) {
+    setBatchIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(poId)) next.delete(poId);
+      else next.add(poId);
+      return next;
+    });
+  }
+  // advance to step 2, seeding per-item cost / link from each PO's current values
+  function batchNext() {
+    if (batchIds.size === 0) return;
+    const per: Record<number, { cost: string; link: string }> = {};
+    for (const po of shownFiltered) {
+      if (!batchIds.has(po.po_id)) continue;
+      per[po.po_id] = {
+        cost: po.item_cost != null ? String(po.item_cost) : '',
+        link: po.product_link ?? '',
+      };
+    }
+    setBatchPer(per);
+    setBatchStep('fill');
+  }
+  // jump from the batch into a single item's full detail (per-item everything). Keeps the picked set.
+  function batchOpenDetail(po: OpenPORow) {
+    setBatchOpen(false);
+    openEdit(po);
+  }
+  // apply the shared fields + per-item cost/link to every picked PO, then advance them all → To ship.
+  async function submitBatch() {
+    if (batchIds.size === 0) return;
+    resetMessages();
+    setBatchBusy(true);
+    try {
+      const ids = [...batchIds];
+      for (const id of ids) {
+        const per = batchPer[id] ?? { cost: '', link: '' };
+        await updatePO(id, {
+          supplier_id: batchSupplier ? Number(batchSupplier) : undefined,
+          method: batchMethod.trim() || null,
+          tracking_to_forwarder: batchTracking.trim() || null,
+          item_note: batchNote.trim() || null,
+          item_cost: numOrNull(per.cost),
+          product_link: per.link.trim() || null,
+        });
+        await setPOStatus(id, 'With Forwarder');
+      }
+      setSuccess(`${ids.length} item${ids.length === 1 ? '' : 's'} confirmed → To ship.`);
+      closeBatch();
+      await refreshQueue();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Batch confirm failed.');
+    } finally {
+      setBatchBusy(false);
     }
   }
 
@@ -773,6 +861,11 @@ export default function OrderBoard({
 
       {!(mode === 'edit' && editPo) ? (
         <>
+          {shownFiltered.length > 0 && (
+            <div className="po-batchbar">
+              <button className="btn-brown btn-ico" onClick={openBatch}><TruckIcon />Batch confirm</button>
+            </div>
+          )}
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
             {shownFiltered.map((po) => (
@@ -820,6 +913,7 @@ export default function OrderBoard({
           </div>
         </>
       )}
+      {batchOpen && renderBatchModal()}
     </div>
   );
 
@@ -1089,6 +1183,121 @@ export default function OrderBoard({
     );
   }
 
+  // ── PR248 — the two-step BATCH overlay. Step 1: tick items that share a supplier + local courier.
+  // Step 2: supplier / courier / tracking / notes apply to the whole group; unit cost + item link are
+  // per item (or open a single item's full detail). Confirm advances them all → To ship. ──
+  function renderBatchModal() {
+    const picked = shownFiltered.filter((po) => batchIds.has(po.po_id));
+    return (
+      <div className="sc-modal-backdrop" onClick={closeBatch}>
+        <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Batch to forwarder" onClick={(e) => e.stopPropagation()}>
+          <div className="sc-modal-head sc-modal-head-row">
+            <div className="sc-modal-title">{batchStep === 'pick' ? 'Batch confirm · pick items' : `Batch confirm · ${batchIds.size} item${batchIds.size === 1 ? '' : 's'}`}</div>
+            <button className="sc-modal-x" onClick={closeBatch} aria-label="Close">×</button>
+          </div>
+
+          {batchStep === 'pick' ? (
+            <>
+              <div className="sc-modal-body">
+                <div className="hint" style={{ marginBottom: 8 }}>Tick items that share one supplier &amp; local courier. Unit cost and item link are set per item on the next step.</div>
+                {picked.length === 0 && shownFiltered.length === 0 && <div className="hint">Nothing to batch.</div>}
+                <ul className="po-cards po-cards-compact batch-picklist">
+                  {shownFiltered.map((po) => (
+                    <li key={po.po_id}>
+                      <label className="po-row-wrap batch-pickrow">
+                        <input type="checkbox" className="po-check" checked={batchIds.has(po.po_id)} onChange={() => toggleBatch(po.po_id)} aria-label={`select PO ${po.po_id}`} />
+                        <span className="po-card batch-pickcard" style={{ flex: 1, minWidth: 0 }}>
+                          <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                          <div className="po-card-main">
+                            <div className="po-card-l1">
+                              <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
+                              <span className="po-card-poid">{fmtDay(po.status_since)}</span>
+                            </div>
+                            <div className="po-card-l2">
+                              {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
+                              <span className="po-card-qty">×{po.qty}</span>
+                            </div>
+                          </div>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="sc-modal-foot">
+                <button className="btn-secondary" onClick={closeBatch}>Cancel</button>
+                <button className="btn-primary" onClick={batchNext} disabled={batchIds.size === 0}>Next · {batchIds.size} selected</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="sc-modal-body">
+                {/* group fields — applied to every picked item */}
+                <div className="fd-section-head">Applies to all {batchIds.size} items</div>
+                <div className="po-field">
+                  <label>Supplier</label>
+                  <select value={batchSupplier} onChange={(e) => setBatchSupplier(e.target.value ? Number(e.target.value) : '')}>
+                    <option value="">— pick a supplier —</option>
+                    {suppliers.map((s) => (
+                      <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="po-field">
+                  <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <div className="po-inline2">
+                    <input type="text" list="batch-methods" placeholder="courier" value={batchMethod} onChange={(e) => setBatchMethod(e.target.value)} />
+                    <input type="text" placeholder="tracking number" value={batchTracking} onChange={(e) => setBatchTracking(e.target.value)} />
+                  </div>
+                  <datalist id="batch-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
+                </div>
+                <div className="po-field">
+                  <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <textarea value={batchNote} onChange={(e) => setBatchNote(e.target.value)} />
+                </div>
+
+                {/* per-item — unit cost + item link (or open the full single-item detail) */}
+                <div className="fd-section-head">Per item — unit cost &amp; item link</div>
+                <ul className="batch-items">
+                  {picked.map((po) => (
+                    <li key={po.po_id} className="batch-item">
+                      <div className="batch-item-head">
+                        <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
+                        <span className="po-card-qty">×{po.qty}</span>
+                        <button className="btn-link batch-item-detail" onClick={() => batchOpenDetail(po)}>edit all fields →</button>
+                      </div>
+                      <div className="po-inline2">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="any"
+                          placeholder="unit cost"
+                          value={batchPer[po.po_id]?.cost ?? ''}
+                          onChange={(e) => setBatchPer((p) => ({ ...p, [po.po_id]: { cost: e.target.value, link: p[po.po_id]?.link ?? '' } }))}
+                        />
+                        <input
+                          type="text"
+                          placeholder="item link"
+                          value={batchPer[po.po_id]?.link ?? ''}
+                          onChange={(e) => setBatchPer((p) => ({ ...p, [po.po_id]: { cost: p[po.po_id]?.cost ?? '', link: e.target.value } }))}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="sc-modal-foot">
+                <button className="btn-secondary" onClick={() => setBatchStep('pick')}>← Back</button>
+                <button className="btn-primary btn-ico" onClick={submitBatch} disabled={batchBusy || batchIds.size === 0}><TruckIcon />{batchBusy ? 'Confirming…' : `Ready to Ship · ${batchIds.size}`}</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── the To-forwarder detail form: record what was bought, then confirm it to To ship. No Save
   // button — every field auto-saves on blur/change (mirrors the Settings editors). Fields, in fill
   // order: Supplier · Item link · Unit cost · Courier · Tracking # · Marketplace ID · Notes. ──
@@ -1192,20 +1401,24 @@ export default function OrderBoard({
           />
         </div>
 
-        {/* PR190 — Confirm → To ship (left) shares one row with Delete (right, via fd-commit's
-            space-between); edits auto-save on blur. */}
-        <div className="fd-commit">
-          <button className="btn-primary" onClick={confirmOne} disabled={busy}>{busy ? '…' : 'Confirm → To ship'}</button>
-          {!confirmDel ? (
-            <TrashButton onClick={() => setConfirmDel(true)} disabled={busy} ariaLabel="Delete order" />
-          ) : (
-            <span className="rcv-reverse-ask">
-              Delete PO #{editPo?.po_id}? This removes the order entirely.
-              <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
-              <button className="btn-primary danger" onClick={doDelete} disabled={busy}>{busy ? 'Deleting…' : 'Yes, delete'}</button>
-            </span>
-          )}
+        {/* PR248 — action-bar standard: left-aligned, slides on mobile; primary then destructive.
+            Delete opens a Sales-style modal confirm. Edits auto-save on blur. */}
+        <div className="td-actions">
+          <button className="btn-primary btn-ico" onClick={confirmOne} disabled={busy}><TruckIcon />{busy ? '…' : 'Ready to Ship'}</button>
+          <button className="btn-danger btn-ico" onClick={() => setConfirmDel(true)} disabled={busy}><TrashIcon />Delete PO</button>
         </div>
+        {confirmDel && (
+          <div className="sc-modal-backdrop" onClick={() => setConfirmDel(false)}>
+            <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Delete PO" onClick={(e) => e.stopPropagation()}>
+              <div className="sc-modal-head"><div className="sc-modal-title">Delete PO #{editPo?.po_id}?</div></div>
+              <div className="sc-modal-body">This removes the order entirely.</div>
+              <div className="sc-modal-foot">
+                <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
+                <button className="btn-primary danger" onClick={doDelete} disabled={busy}>{busy ? 'Deleting…' : 'Delete PO'}</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
