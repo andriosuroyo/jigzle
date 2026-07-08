@@ -33,16 +33,21 @@ Notes:
 - This auto-merge default applies to ordinary builds. For anything destructive or
   irreversible beyond a normal code deploy (DB migrations, data backfills, deleting/renaming
   things you didn't create), still confirm with the user first.
-- **After the squash-merge, keep the branch and its remote in lock-step.** The squash creates a
-  *new* commit on `main` (authored by `GitHub <noreply@github.com>`). If you resync the feature
-  branch to it (`git fetch origin main && git checkout -B <branch> origin/main`) but leave
-  `origin/<branch>` pointing at the old pre-merge commit, then `origin/<branch>..HEAD` contains
-  GitHub's merge commit — a commit you didn't author locally — and the Stop hook flags it as
-  "Unverified" (a false positive). **Fix: right after the resync, also push the branch so the
-  remote matches** — `git push --force-with-lease origin <branch>` (force-with-lease is correct
-  here: the branch holds only already-merged history). That leaves `origin/<branch>..HEAD` empty
-  and the hook has nothing to flag. Do this every time, so a turn never ends with the local branch
-  ahead of its remote by GitHub's merge commit.
+- **After the squash-merge, resync the local branch to `main` — but do NOT force-push the feature
+  branch onto main's merge commit.** The squash creates a *new* commit on `main` (authored by
+  `GitHub <noreply@github.com>`); resync locally so the next build starts from it
+  (`git fetch origin main && git checkout -B <branch> origin/main`). Leave `origin/<branch>` alone.
+  - **Why not force-push (PR242 — the Vercel-stall root cause).** Vercel **deduplicates deployments
+    by commit SHA**: it builds any given commit exactly once. If you force-push the feature branch to
+    main's brand-new merge SHA, Vercel sees that SHA on the *branch* first, builds it as a **Preview**,
+    then dedupes main's push to the same SHA and **never creates the Production deployment** — so
+    production silently stalls with no error (this stranded PR238–241). Keeping the merge commit
+    **unique to `main`** lets the production deploy fire normally.
+  - **The stop-hook no longer needs the force-push.** `~/.claude/stop-hook-git-check.sh` excludes
+    commits reachable from `origin/main`/`master`/`HEAD` (`base_excludes`), so GitHub's merge commit
+    sitting in `origin/<branch>..HEAD` is not flagged as "Unverified"/"unpushed". (That hook is
+    session-local and resets each session; re-apply the `base_excludes` patch if a fresh session
+    starts flagging merged commits again.)
 
 ## Conventions
 
