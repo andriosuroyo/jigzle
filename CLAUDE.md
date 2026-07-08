@@ -33,21 +33,24 @@ Notes:
 - This auto-merge default applies to ordinary builds. For anything destructive or
   irreversible beyond a normal code deploy (DB migrations, data backfills, deleting/renaming
   things you didn't create), still confirm with the user first.
-- **After the squash-merge, resync the local branch to `main` — but do NOT force-push the feature
-  branch onto main's merge commit.** The squash creates a *new* commit on `main` (authored by
-  `GitHub <noreply@github.com>`); resync locally so the next build starts from it
-  (`git fetch origin main && git checkout -B <branch> origin/main`). Leave `origin/<branch>` alone.
-  - **Why not force-push (PR242 — the Vercel-stall root cause).** Vercel **deduplicates deployments
-    by commit SHA**: it builds any given commit exactly once. If you force-push the feature branch to
-    main's brand-new merge SHA, Vercel sees that SHA on the *branch* first, builds it as a **Preview**,
-    then dedupes main's push to the same SHA and **never creates the Production deployment** — so
-    production silently stalls with no error (this stranded PR238–241). Keeping the merge commit
-    **unique to `main`** lets the production deploy fire normally.
-  - **The stop-hook no longer needs the force-push.** `~/.claude/stop-hook-git-check.sh` excludes
-    commits reachable from `origin/main`/`master`/`HEAD` (`base_excludes`), so GitHub's merge commit
-    sitting in `origin/<branch>..HEAD` is not flagged as "Unverified"/"unpushed". (That hook is
-    session-local and resets each session; re-apply the `base_excludes` patch if a fresh session
-    starts flagging merged commits again.)
+- **After the squash-merge, resync the local branch to `main` AND force-push `origin/<branch>` up to
+  match** (`git fetch origin main && git checkout -B <branch> origin/main && git push --force-with-lease
+  origin <branch>`). This keeps `origin/<branch>` == `origin/main`, so `origin/<branch>..HEAD` is empty
+  and the Stop hook has nothing to flag — the **permanent, session-proof fix** for the recurring
+  "Unverified"/"unpushed" false positive on GitHub's squash-merge commit (authored by
+  `GitHub <noreply@github.com>`). It lives in git state + this file, not in the ephemeral hook.
+  - **Why this is safe now — and why it wasn't (PR242 → PR247).** Vercel **deduplicates deployments by
+    commit SHA**. Before, force-pushing the branch to main's merge SHA made Vercel build that SHA as a
+    **Preview** first, then dedupe main's push and **never create the Production deploy** — stranding
+    PR238–241. The fix was the **Ignored Build Step** (Vercel → Settings → Build and Deployment):
+    `if [ "$VERCEL_GIT_COMMIT_REF" = "main" ]; then exit 1; else exit 0; fi` — **only `main` builds; every
+    branch push is skipped.** With previews disabled, the branch force-push can no longer create a preview,
+    so it can't dedupe away production. The force-push is safe again, and it also zeroes out preview
+    deploy-quota burn (Hobby's 100/day cap is then only ever touched by `main` merges).
+  - **Do NOT hand-patch `~/.claude/stop-hook-git-check.sh`.** The harness restores that file to its
+    unpatched version every turn, so edits never hold. The force-push above makes the *unpatched* hook
+    pass by construction — that's the durable path. (If the Ignored Build Step is ever turned off, the
+    force-push becomes unsafe again — re-read the PR242 note before doing so.)
 
 ## Conventions
 
