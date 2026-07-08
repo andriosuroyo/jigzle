@@ -170,6 +170,7 @@ export default function OrderBoard({
   localCouriers = [],
   onDetailOpenChange,
   onCountChange,
+  batchSignal = 0,
 }: {
   initialQueue: OpenPORow[];
   suppliers: Supplier[];
@@ -184,6 +185,8 @@ export default function OrderBoard({
   // PR153: report when a bucket's bodyview DETAIL is open (the shell hides the pipeline tabs).
   onDetailOpenChange?: (open: boolean) => void;
   onCountChange?: (n: number) => void;
+  // PR250 — a bumped counter from the shell's tab-row "Batch confirm" button opens the batch overlay.
+  batchSignal?: number;
 }) {
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
@@ -218,6 +221,11 @@ export default function OrderBoard({
   const [batchNote, setBatchNote] = useState('');
   const [batchPer, setBatchPer] = useState<Record<number, { cost: string; link: string }>>({});
   const [batchBusy, setBatchBusy] = useState(false);
+  // open the batch overlay when the shell's tab-row button bumps the signal (skip the initial 0)
+  useEffect(() => {
+    if (batchSignal) openBatch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchSignal]);
 
   // PR153: a bucketed bodyview detail is open → the shell hides the pipeline tabs.
   const bvDetailOpen = !!bucket && mode === 'edit' && !!editPo;
@@ -512,11 +520,6 @@ export default function OrderBoard({
     }
     setBatchPer(per);
     setBatchStep('fill');
-  }
-  // jump from the batch into a single item's full detail (per-item everything). Keeps the picked set.
-  function batchOpenDetail(po: OpenPORow) {
-    setBatchOpen(false);
-    openEdit(po);
   }
   // apply the shared fields + per-item cost/link to every picked PO, then advance them all → To ship.
   async function submitBatch() {
@@ -861,11 +864,6 @@ export default function OrderBoard({
 
       {!(mode === 'edit' && editPo) ? (
         <>
-          {shownFiltered.length > 0 && (
-            <div className="po-batchbar">
-              <button className="btn-brown btn-ico" onClick={openBatch}><TruckIcon />Batch confirm</button>
-            </div>
-          )}
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
             {shownFiltered.map((po) => (
@@ -1192,14 +1190,14 @@ export default function OrderBoard({
       <div className="sc-modal-backdrop" onClick={closeBatch}>
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Batch to forwarder" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <div className="sc-modal-title">{batchStep === 'pick' ? 'Batch confirm · pick items' : `Batch confirm · ${batchIds.size} item${batchIds.size === 1 ? '' : 's'}`}</div>
+            <div className="sc-modal-title">{batchStep === 'pick' ? 'Batch confirm · step 1 of 2' : 'Batch confirm · step 2 of 2'}</div>
             <button className="sc-modal-x" onClick={closeBatch} aria-label="Close">×</button>
           </div>
 
           {batchStep === 'pick' ? (
             <>
               <div className="sc-modal-body">
-                <div className="hint" style={{ marginBottom: 8 }}>Tick items that share one supplier &amp; local courier. Unit cost and item link are set per item on the next step.</div>
+                <div className="hint" style={{ marginBottom: 8 }}>Tick items that share one supplier &amp; local courier.</div>
                 {picked.length === 0 && shownFiltered.length === 0 && <div className="hint">Nothing to batch.</div>}
                 <ul className="po-cards po-cards-compact batch-picklist">
                   {shownFiltered.map((po) => (
@@ -1232,59 +1230,60 @@ export default function OrderBoard({
           ) : (
             <>
               <div className="sc-modal-body">
-                {/* group fields — applied to every picked item */}
-                <div className="fd-section-head">Applies to all {batchIds.size} items</div>
-                <div className="po-field">
-                  <label>Supplier</label>
-                  <select value={batchSupplier} onChange={(e) => setBatchSupplier(e.target.value ? Number(e.target.value) : '')}>
+                {/* group fields — each its own subheader; applied to every picked item */}
+                <div className="batch-group">
+                  <div className="fd-section-head">Supplier</div>
+                  <select className="batch-field" value={batchSupplier} onChange={(e) => setBatchSupplier(e.target.value ? Number(e.target.value) : '')}>
                     <option value="">— pick a supplier —</option>
                     {suppliers.map((s) => (
                       <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
                     ))}
                   </select>
                 </div>
-                <div className="po-field">
-                  <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                <div className="batch-group">
+                  <div className="fd-section-head">Local courier &amp; tracking</div>
                   <div className="po-inline2">
-                    <input type="text" list="batch-methods" placeholder="courier" value={batchMethod} onChange={(e) => setBatchMethod(e.target.value)} />
-                    <input type="text" placeholder="tracking number" value={batchTracking} onChange={(e) => setBatchTracking(e.target.value)} />
+                    <input className="batch-field" type="text" list="batch-methods" placeholder="courier" value={batchMethod} onChange={(e) => setBatchMethod(e.target.value)} />
+                    <input className="batch-field" type="text" placeholder="tracking number" value={batchTracking} onChange={(e) => setBatchTracking(e.target.value)} />
                   </div>
                   <datalist id="batch-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
                 </div>
-                <div className="po-field">
-                  <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  <textarea value={batchNote} onChange={(e) => setBatchNote(e.target.value)} />
+                <div className="batch-group">
+                  <div className="fd-section-head">Notes</div>
+                  <textarea className="batch-field" value={batchNote} onChange={(e) => setBatchNote(e.target.value)} />
                 </div>
 
-                {/* per-item — unit cost + item link (or open the full single-item detail) */}
-                <div className="fd-section-head">Per item — unit cost &amp; item link</div>
+                {/* item list — image (36) + two lines: SKU ×qty / unit cost · name / item link */}
+                <div className="fd-section-head batch-items-head">Item list, costs &amp; links</div>
                 <ul className="batch-items">
-                  {picked.map((po) => (
-                    <li key={po.po_id} className="batch-item">
-                      <div className="batch-item-head">
-                        <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
-                        <span className="po-card-qty">×{po.qty}</span>
-                        <button className="btn-link batch-item-detail" onClick={() => batchOpenDetail(po)}>edit all fields →</button>
-                      </div>
-                      <div className="po-inline2">
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          min={0}
-                          step="any"
-                          placeholder="unit cost"
-                          value={batchPer[po.po_id]?.cost ?? ''}
-                          onChange={(e) => setBatchPer((p) => ({ ...p, [po.po_id]: { cost: e.target.value, link: p[po.po_id]?.link ?? '' } }))}
-                        />
-                        <input
-                          type="text"
-                          placeholder="item link"
-                          value={batchPer[po.po_id]?.link ?? ''}
-                          onChange={(e) => setBatchPer((p) => ({ ...p, [po.po_id]: { cost: p[po.po_id]?.cost ?? '', link: e.target.value } }))}
-                        />
-                      </div>
-                    </li>
-                  ))}
+                  {picked.map((po) => {
+                    const code = po.item_code ?? po.item_code_raw ?? '—';
+                    return (
+                      <li key={po.po_id} className="batch-item">
+                        <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                        <div className="batch-item-body">
+                          <div className="batch-item-row">
+                            <span className="batch-item-id"><span className="ff-code">{code}</span><span className="po-card-qty">×{po.qty}</span></span>
+                            <input
+                              className="batch-field batch-cost"
+                              type="number" inputMode="decimal" min={0} step="any" placeholder="unit cost"
+                              value={batchPer[po.po_id]?.cost ?? ''}
+                              onChange={(e) => setBatchPer((p) => ({ ...p, [po.po_id]: { cost: e.target.value, link: p[po.po_id]?.link ?? '' } }))}
+                            />
+                          </div>
+                          <div className="batch-item-row">
+                            <span className="ff-name batch-item-name">{isRealName(po.name, code) ? po.name : ''}</span>
+                            <input
+                              className="batch-field batch-link"
+                              type="text" placeholder="item link"
+                              value={batchPer[po.po_id]?.link ?? ''}
+                              onChange={(e) => setBatchPer((p) => ({ ...p, [po.po_id]: { cost: p[po.po_id]?.cost ?? '', link: e.target.value } }))}
+                            />
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
               <div className="sc-modal-foot">

@@ -143,16 +143,26 @@ input, textarea, select, button { font-family: inherit; }
    (not under .tobuy-detail), so it needs the flex + horizontal-scroll layout here. */
 .td-actions { display: flex; justify-content: flex-start; align-items: center; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 4px; padding-bottom: 2px; }
 .td-actions > button { flex-shrink: 0; }
-/* PR248 — To-forwarder batch overlay */
-.po-batchbar { display: flex; margin-bottom: 10px; }
+/* PR250 — To-forwarder batch overlay */
 .batch-modal { max-width: 560px; }
-.batch-picklist { max-height: 46vh; overflow-y: auto; }
-.batch-pickrow { cursor: pointer; padding: 4px 0; }
+.batch-picklist { max-height: 48vh; overflow-y: auto; gap: 5px; }
+.batch-picklist > li .po-card { padding: 6px 8px; }
+.batch-pickrow { cursor: pointer; padding: 2px 0; }
 .batch-pickcard { pointer-events: none; }
-.batch-items { display: flex; flex-direction: column; gap: 12px; }
-.batch-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--cream); }
-.batch-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.batch-item-detail { margin-left: auto; font-size: 12px; }
+/* the standard form-field look (white fill, hairline border, 8px radius, 16px text = no iOS zoom) */
+.batch-field { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; color: var(--ink); }
+.batch-group { margin-bottom: 14px; }
+.batch-group .fd-section-head { margin-bottom: 6px; }
+.batch-group textarea.batch-field { min-height: 60px; resize: vertical; }
+.batch-items-head { margin-top: 4px; }
+.batch-items { display: flex; flex-direction: column; gap: 10px; }
+.batch-item { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--cream); }
+.batch-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.batch-item-row { display: flex; align-items: center; gap: 8px; }
+.batch-item-id { display: flex; align-items: baseline; gap: 6px; flex: 1; min-width: 0; }
+.batch-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-cost { flex: 0 0 108px; }
+.batch-link { flex: 0 0 55%; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .po-card-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-card-l1 .ff-name { flex: 1; }
@@ -192,6 +202,8 @@ input, textarea, select, button { font-family: inherit; }
 .po-card .ff-name { color: var(--ink); }
 .po-card-poid { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--muted); }
 .po-card-qty { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--brown-dark); }
+/* PR250 — qty promoted to the SKU row (top-right of the card side): a touch larger, ink-coloured. */
+.po-card-qty-lg { font-size: 15px; color: var(--ink); }
 /* a muted date at the top-right of a To-buy card's first line (create / order date) */
 .po-card-date { flex-shrink: 0; margin-left: auto; font-size: 11px; font-weight: 700; color: var(--muted); }  /* PR158: right-aligned */
 /* quickview list: cap at ~6 cards then scroll (the rest of the page stays put) */
@@ -1631,6 +1643,8 @@ img.sku-img { background: #e8e8e8; }
 .le-field.grow { flex: 1; }
 .le-note { margin-top: 14px; }
 .le-field input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; }
+/* PR250 — a catalogue SKU's code can't be recoded here: locked look (greyed fill, muted text, not-allowed). */
+.le-field input.le-locked { background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1; }
 /* the price input fills its (grow) field in the editor — overrides the narrow fixed .edit-price width */
 .le-field .edit-price { width: 100%; height: auto; text-align: left; padding: 9px 10px; font-size: 16px; }
 .le-foot { display: flex; align-items: center; gap: 10px; }
@@ -1649,6 +1663,8 @@ img.sku-img { background: #e8e8e8; }
    them — never its own wasteful row. */
 .orders-bar { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; }
 .orders-tabs { display: flex; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+/* PR250 — right-aligned action on the tab row (Purchasing → To forwarder "Batch confirm"). */
+.orders-bar-action { flex-shrink: 0; }
 .orders-tab { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 8px 14px; border: 1px solid var(--line); border-radius: 20px; background: white; color: var(--muted); cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 .orders-tab.active { background: var(--orange-tint); border-color: var(--orange); color: #8A5A1A; }
 .orders-tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; background: var(--paper); color: var(--brown-dark); min-width: 20px; text-align: center; }
