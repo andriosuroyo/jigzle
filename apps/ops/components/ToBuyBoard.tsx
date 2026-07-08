@@ -390,10 +390,12 @@ export default function ToBuyBoard({
                     {isRealName(p.name, code) && <span className="ff-name po-card-name">{p.name}</span>}
                   </div>
                   <div className="po-card-side">
-                    <span className="po-card-date">{fmtDate(p.input_date)}</span>
+                    {/* PR250 — qty sits on the SKU row (top-right), like Inbound's unmatched rows;
+                        date + stock pills drop to the row below. */}
+                    <span className="po-card-qty po-card-qty-lg">×{p.qty}</span>
                     <div className="po-card-meta">
+                      <span className="po-card-date">{fmtDate(p.input_date)}</span>
                       <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} combined />
-                      <span className="po-card-qty">×{p.qty}</span>
                     </div>
                   </div>
                   <span className="po-chev" aria-hidden>›</span>
@@ -422,10 +424,10 @@ export default function ToBuyBoard({
                     {isRealName(p.name, code) && <span className="ff-name po-card-name">{p.name}</span>}
                   </div>
                   <div className="po-card-side">
-                    <span className="po-card-date">{fmtDate(p.order_date)}</span>
+                    <span className="po-card-qty po-card-qty-lg">×{p.qty}</span>
                     <div className="po-card-meta">
+                      <span className="po-card-date">{fmtDate(p.order_date)}</span>
                       <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
-                      <span className="po-card-qty">×{p.qty}</span>
                     </div>
                   </div>
                   <span className="po-chev" aria-hidden>›</span>
@@ -453,12 +455,12 @@ export default function ToBuyBoard({
                     {isRealName(p.name, code) && <span className="ff-name po-card-name">{p.name}</span>}
                   </div>
                   <div className="po-card-side">
-                    <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
+                    <span className="po-card-qty po-card-qty-lg">×{p.qty}</span>
                     <div className="po-card-meta">
+                      <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
                       {p.origin === 'sales'
                         ? <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
                         : <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} combined />}
-                      <span className="po-card-qty">×{p.qty}</span>
                     </div>
                   </div>
                   <span className="po-chev" aria-hidden>›</span>
@@ -555,15 +557,17 @@ export default function ToBuyBoard({
                   </div>
                 </div>
                 {/* Actions — the standard scrollable row: out of stock · done buying · delete PO (last). */}
+                {/* PR250 — order: Edit PO · Done buying · Mark out of stock · Delete PO. The rare
+                    cautionary "out of stock" moves off the prominent far-left and clusters with the
+                    negative actions on the right; Delete PO stays last (destructive-last). */}
                 <div className="sc-modal-foot td-actions">
-                  {detail.kind !== 'oos' && (
-                    <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
-                  )}
-                  {/* PR249 — Edit (Manual only) sits left of Done buying, action-bar order: secondary → primary → destructive. */}
                   {detail.kind === 'manual' && detail.po_id != null && (
                     <button className="btn-secondary btn-ico" onClick={openEdit} disabled={busy}><PencilIcon />Edit PO</button>
                   )}
                   <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}><BagIcon />Done buying</button>
+                  {detail.kind !== 'oos' && (
+                    <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
+                  )}
                   {detail.canDelete && detail.po_id != null && (
                     <button className="btn-danger btn-ico td-del" onClick={() => { const id = detail.po_id!; setSel(null); setConfirmDelId(id); }} disabled={busy}><TrashIcon />Delete PO</button>
                   )}

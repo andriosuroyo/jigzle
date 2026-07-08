@@ -192,6 +192,8 @@ input, textarea, select, button { font-family: inherit; }
 .po-card .ff-name { color: var(--ink); }
 .po-card-poid { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--muted); }
 .po-card-qty { flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--brown-dark); }
+/* PR250 — qty promoted to the SKU row (top-right of the card side): a touch larger, ink-coloured. */
+.po-card-qty-lg { font-size: 15px; color: var(--ink); }
 /* a muted date at the top-right of a To-buy card's first line (create / order date) */
 .po-card-date { flex-shrink: 0; margin-left: auto; font-size: 11px; font-weight: 700; color: var(--muted); }  /* PR158: right-aligned */
 /* quickview list: cap at ~6 cards then scroll (the rest of the page stays put) */
