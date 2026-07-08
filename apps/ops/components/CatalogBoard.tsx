@@ -849,7 +849,7 @@ export default function CatalogBoard({
                           onChange={(e) => setNewBarcode(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); doAddBarcode(); } }}
                         />
-                        <button className="btn-primary" onClick={doAddBarcode} disabled={busy || !newBarcode.trim()}>+ add</button>
+                        <button className="btn-primary" onClick={doAddBarcode} disabled={busy || !newBarcode.trim()}>Add</button>
                       </div>
                       {bcOwners.length > 0 && (
                         <div className="validation warn" style={{ marginTop: 8 }}>
@@ -1081,7 +1081,7 @@ export default function CatalogBoard({
                                 </div>
                                 <div className="fq-row-bot">
                                   <span>{r.pieces ? `${r.pieces} pc` : '—'} · est <b>{r.est_weight} g</b></span>
-                                  <button className="btn-secondary" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: 12 }} onClick={() => acceptWeight(r.item_code)} disabled={busy}>accept</button>
+                                  <button className="btn-brown" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: 12 }} onClick={() => acceptWeight(r.item_code)} disabled={busy}>accept</button>
                                 </div>
                               </div>
                             </div>
