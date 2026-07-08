@@ -792,14 +792,14 @@ export default function InboundBoard({
                 {/* D2 unknown barcode → minimal stub (inline; the Manual-add modal owns its own stub form) */}
                 {stub && !manualAdd && (
                   <div className="rcv-stub">
-                    <div className="subform-label">+ add new SKU (flagged needs review)</div>
+                    <div className="subform-label">Add new SKU (flagged needs review)</div>
                     <div className="hint">barcode {stub.barcode}</div>
                     <input type="text" placeholder="item code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
                     <input type="text" placeholder="name" value={stub.name} onChange={(e) => setStub({ ...stub, name: e.target.value })} />
                     <input type="text" placeholder="brand prefix (optional)" value={stub.brand} onChange={(e) => setStub({ ...stub, brand: e.target.value })} />
                     <div className="subform-actions">
                       <button className="btn-link" onClick={() => setStub(null)}>cancel</button>
-                      <button className="btn-secondary" onClick={createStub}>create + add</button>
+                      <button className="btn-primary" onClick={createStub}>create + add</button>
                     </div>
                   </div>
                 )}
