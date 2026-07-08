@@ -12,7 +12,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import OrderBoard from '@/components/OrderBoard';
 import ToBuyBoard from '@/components/ToBuyBoard';
 import PurchasingHistoryBoard from '@/components/PurchasingHistoryBoard';
-import { TruckIcon } from '@/components/AddIcons';
+import { TruckIcon, PackageIcon } from '@/components/AddIcons';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier } from '@jigzle/db/types';
 import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ShipmentHistoryRow, SoldOutRow } from '@/app/purchasing/types';
 
@@ -55,6 +55,10 @@ export default function PurchasingShell({
   // PR250 — the To-forwarder "Batch confirm" entry lives on the tab row (right-aligned); a bumped
   // counter tells the mounted forwarder OrderBoard to open its batch overlay (mirrors Inbound's adhocSignal).
   const [batchSignal, setBatchSignal] = useState(0);
+  // PR251 — To-ship: "Create shipment ID" lives on the tab row; it opens the group overlay for the
+  // items ticked in the list. The board reports its selection count so the button disables at 0.
+  const [groupSignal, setGroupSignal] = useState(0);
+  const [shipSelCount, setShipSelCount] = useState(0);
 
   // tab badges from the initial server load (static for step 1; refreshes on reload)
   const forwarderCount = useMemo(() => initialQueue.filter((p) => FORWARDER_STATUSES.includes(p.status as POOpenStatus)).length, [initialQueue]);
@@ -85,6 +89,16 @@ export default function PurchasingShell({
         </nav>
         {tab === 'forwarder' && (
           <button className="btn-brown btn-ico orders-bar-action" onClick={() => setBatchSignal((n) => n + 1)}><TruckIcon />Batch confirm</button>
+        )}
+        {tab === 'ship' && (
+          <button
+            className="btn-brown btn-ico orders-bar-action"
+            onClick={() => setGroupSignal((n) => n + 1)}
+            disabled={shipSelCount === 0}
+            title={shipSelCount === 0 ? 'Tick items in the list first' : `Create a shipment from ${shipSelCount} selected`}
+          >
+            <PackageIcon />Create shipment ID{shipSelCount > 0 ? ` · ${shipSelCount}` : ''}
+          </button>
         )}
       </div>
       )}
@@ -120,6 +134,8 @@ export default function PurchasingShell({
             forwarders={forwarders}
             shipments={shipments}
             onDetailOpenChange={setDetailOpen}
+            groupSignal={groupSignal}
+            onSelCountChange={setShipSelCount}
             userEmail={userEmail}
           />
         </div>
