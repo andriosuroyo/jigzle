@@ -276,6 +276,14 @@ export default function OrderBoard({
     [forwarders]
   );
 
+  // PR254 — open shipments offered as tap-to-pick chips in the group overlay's Ship ID field. Once a
+  // forwarder is chosen, scope to that forwarder's open shipments (else show all) so "add to an existing
+  // shipment" is a reliable tap rather than a fiddly datalist.
+  const openShipmentChoices = useMemo(
+    () => shipments.filter((s) => !grpForwarder || s.forwarder_prefix === grpForwarder),
+    [shipments, grpForwarder]
+  );
+
   const selectedCount = selectedPoIds.size;
   const selectedPOs = useMemo(() => queue.filter((p) => selectedPoIds.has(p.po_id)), [queue, selectedPoIds]);
   // effective ship qty for a selected PO (defaults to its full qty; clamped 1..qty)
@@ -854,7 +862,7 @@ export default function OrderBoard({
         origin_country: grpOrigin.trim() || null,
         ship_date: grpDate || null,
       });
-      setSuccess(`Grouped ${totalItems} item${totalItems === 1 ? '' : 's'} into ${grpShipId.trim()} → With Forwarder.`);
+      setSuccess(`Successfully grouped ${totalItems} item${totalItems === 1 ? '' : 's'} into ${grpShipId.trim()}.`);
       setSelectedPoIds(new Set());
       setGrpQty({});
       setMode(null);
@@ -883,23 +891,29 @@ export default function OrderBoard({
         <>
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
-            {shownFiltered.map((po) => (
+            {shownFiltered.map((po) => {
+              const code = po.item_code ?? po.item_code_raw ?? '—';
+              return (
               <li key={po.po_id}>
-                <button className="po-card po-card-btn" onClick={() => openEdit(po)}>
+                {/* PR254 — the To-buy card standard: SKU (+ name) vertically centred on the left, qty
+                    ABOVE the date on the right. Keeps a nameless SKU centred (no drop under the code). */}
+                <button className="po-card po-card-btn po-card-mini" onClick={() => openEdit(po)}>
                   <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
-                    <div className="po-card-l1">
-                      <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
-                      <span className="po-card-poid">{fmtDay(po.status_since)}</span>
-                    </div>
-                    <div className="po-card-l2">
-                      {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
-                      <span className="po-card-qty">×{po.qty}</span>
+                    <span className="ff-code">{code}</span>
+                    {isRealName(po.name, code) && <span className="ff-name po-card-name">{po.name}</span>}
+                  </div>
+                  <div className="po-card-side">
+                    <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
+                    <div className="po-card-meta">
+                      <span className="po-card-date">{fmtDay(po.status_since)}</span>
                     </div>
                   </div>
+                  <span className="po-chev" aria-hidden>›</span>
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </>
       ) : (
@@ -961,7 +975,9 @@ export default function OrderBoard({
           )}
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
-            {shownFiltered.map((po) => (
+            {shownFiltered.map((po) => {
+              const code = po.item_code ?? po.item_code_raw ?? '—';
+              return (
               <li key={po.po_id}>
                 <div className="po-row-wrap">
                   <input
@@ -971,25 +987,26 @@ export default function OrderBoard({
                     onChange={() => toggleSelect(po.po_id)}
                     aria-label={`select PO ${po.po_id}`}
                   />
-                  <button className="po-card po-card-btn" style={{ flex: 1, minWidth: 0 }} onClick={() => openEdit(po)}>
+                  {/* PR254 — same To-buy card standard as To forwarder: qty above date, SKU centred. */}
+                  <button className="po-card po-card-btn po-card-mini" style={{ flex: 1, minWidth: 0 }} onClick={() => openEdit(po)}>
                     <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                     <div className="po-card-main">
-                      <div className="po-card-l1">
-                        <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
-                        <span className="po-card-poid">{fmtDay(po.status_since)}</span>
-                      </div>
-                      <div className="po-card-l2">
-                        {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
-                        <span className="po-card-qty">×{po.qty}</span>
-                      </div>
-                      {shortFromShip(po) && (
-                        <div className="po-card-l2"><span className="badge short">Short · from {shortFromShip(po)}</span></div>
-                      )}
+                      <span className="ff-code">{code}</span>
+                      {isRealName(po.name, code) && <span className="ff-name po-card-name">{po.name}</span>}
+                      {shortFromShip(po) && <span className="badge short">Short · from {shortFromShip(po)}</span>}
                     </div>
+                    <div className="po-card-side">
+                      <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
+                      <div className="po-card-meta">
+                        <span className="po-card-date">{fmtDay(po.status_since)}</span>
+                      </div>
+                    </div>
+                    <span className="po-chev" aria-hidden>›</span>
                   </button>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
 
         </>
@@ -1661,8 +1678,23 @@ export default function OrderBoard({
             </div>
             <div className="batch-group">
               <div className="fd-section-head">Ship ID</div>
-              <input className="field" type="text" list="po-shipids" placeholder="pick an open shipment or type a new ID" value={grpShipId} onChange={(e) => pickExistingShipment(e.target.value)} />
-              <datalist id="po-shipids">{shipments.map((s) => <option key={s.ship_id} value={s.ship_id} />)}</datalist>
+              <input className="field" type="text" placeholder='type a new ID, e.g. "SUB 192"' value={grpShipId} onChange={(e) => setGrpShipId(e.target.value)} />
+              {/* PR254 — tap an open shipment to add these items to it (reliable pick vs. a datalist). */}
+              {openShipmentChoices.length > 0 && (
+                <div className="grp-shipid-picks">
+                  <span className="grp-shipid-lead">or add to an open shipment:</span>
+                  {openShipmentChoices.map((s) => (
+                    <button
+                      key={s.ship_id}
+                      type="button"
+                      className={`chip ${grpShipId.trim() === s.ship_id ? 'active' : ''}`}
+                      onClick={() => pickExistingShipment(s.ship_id)}
+                    >
+                      {s.ship_id}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="sc-modal-foot">

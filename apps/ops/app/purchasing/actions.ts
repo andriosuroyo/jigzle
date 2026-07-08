@@ -305,6 +305,35 @@ export async function setShipmentBoxes(shipId: string, boxes: ShipmentBox[]): Pr
   return { error: error ? `setShipmentBoxes: ${error.message}` : null };
 }
 
+// ── PR254: delete an ACTIVE shipment (Purchasing History detail). Ungroups it — every grouped PO goes
+// back to To forwarder (status → Processing, ship link cleared) so nothing is lost — then drops the
+// shipment ledger + box rows. Refuses a completed/received shipment (its goods are already in inventory).
+// Error returned as data (PR145 convention). ──
+export async function deleteShipment(shipId: string): Promise<{ error: string | null }> {
+  const sid = shipId?.trim();
+  if (!sid) return { error: 'A ship id is required.' };
+  const supabase = createSupabaseServerClient();
+  // guard: a completed shipment (or any Received line) can't be deleted — the stock was already received.
+  const { data: sh } = await supabase.from('shipments').select('status').eq('ship_id', sid).maybeSingle();
+  if ((sh as { status: string | null } | null)?.status === 'completed') {
+    return { error: 'This shipment is already received and can no longer be deleted.' };
+  }
+  const { data: recv } = await supabase.from('purchase_orders').select('po_id').eq('ship_id', sid).eq('status', 'Received').limit(1);
+  if (recv && (recv as unknown[]).length) {
+    return { error: 'This shipment has received items and can no longer be deleted.' };
+  }
+  // ungroup: send every grouped PO back to To forwarder (Processing), clearing the ship link.
+  const { error: uErr } = await supabase
+    .from('purchase_orders')
+    .update({ status: 'Processing', status_since: todayJakarta(), ship_id: null })
+    .eq('ship_id', sid);
+  if (uErr) return { error: `Couldn't ungroup shipment: ${uErr.message}` };
+  // drop box rows (best-effort — table may be absent pre-0069) then the shipments ledger row.
+  await supabase.from('shipment_boxes').delete().eq('ship_id', sid);
+  const { error: dErr } = await supabase.from('shipments').delete().eq('ship_id', sid);
+  return { error: dErr ? `Couldn't delete shipment: ${dErr.message}` : null };
+}
+
 // ── SKU search (catalogue text + barcode + brand name), with live available + incoming (D3) ──
 // (SkuHit in ./types). PR73: the add-item search also matches on brand — brands.name → brand_prefix →
 // catalogue.brand_prefix — so "lego", a piece count, a code, a name, or a barcode all resolve a SKU.
