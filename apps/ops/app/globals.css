@@ -152,6 +152,12 @@ input, textarea, select, button { font-family: inherit; }
 /* .batch-field derives from the shared .field standard (defined once, near .le-field). */
 .batch-group { margin-bottom: 14px; }
 .batch-group .fd-section-head { margin-bottom: 6px; }
+/* PR254 — tap-to-pick open-shipment chips under the group overlay's Ship ID field */
+.grp-shipid-picks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.grp-shipid-lead { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.chip { flex-shrink: 0; background: white; border: 1px solid var(--line); border-radius: 20px; padding: 5px 12px; font-size: 13px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--brown-dark); cursor: pointer; }
+.chip:active { background: var(--paper); }
+.chip.active { background: var(--orange-tint); border-color: var(--orange); color: var(--brown-dark); }
 .batch-group textarea.batch-field { min-height: 60px; resize: vertical; }
 .batch-items-head { margin-top: 4px; }
 .batch-items { display: flex; flex-direction: column; gap: 10px; }
@@ -1652,6 +1658,9 @@ img.sku-img { background: #e8e8e8; }
 }
 /* PR250 — a catalogue SKU's code can't be recoded here: locked look (greyed fill, muted text, not-allowed). */
 .le-field input.le-locked { background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1; }
+/* PR254 — the Qty stepper in the Edit PO row keeps its natural width; without this the full-width
+   .le-field input standard (above) stretches the stepper and starves Priority (mirrors line ~697). */
+.le-field .qty-step input[type=number] { width: 46px; padding: 0; border-radius: 0; font-size: 14px; background: white; }
 /* the price input fills its (grow) field in the editor — overrides the narrow fixed .edit-price width */
 .le-field .edit-price { width: 100%; height: auto; text-align: left; padding: 9px 10px; font-size: 16px; }
 .le-foot { display: flex; align-items: center; gap: 10px; }
@@ -1705,6 +1714,13 @@ img.sku-img { background: #e8e8e8; }
 .fd-section-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .ship-note-text { font-size: 13px; color: var(--ink); white-space: pre-wrap; }
 .ship-note-edit textarea { width: 100%; }
+/* PR254 — read-only display of the shipment courier line + saved boxes (History detail view mode). */
+.ship-ro { font-size: 14px; font-weight: 600; color: var(--ink); }
+.ship-box-ro { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ship-box-ro > li { font-size: 13px; color: var(--ink); background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+/* PR254 — a non-clickable card (History items list): keep the default cursor, no press feedback. */
+.po-card-static { cursor: default; }
+.po-card-static:active { background: var(--cream); }
 @media (max-width: 760px) { .orders-tab, .orders-new { min-height: 44px; } }
 
 /* Warehouse staff picker (0052) — header subtext row on Inbound + Outbound. */

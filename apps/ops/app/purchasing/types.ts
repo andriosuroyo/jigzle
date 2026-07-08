@@ -114,6 +114,7 @@ export interface PreorderRow {
   qty: number;
   available: number; // live stock_check.available (≤ 0 for a preorder)
   urgency: Urgency | null; // from the order (orders.urgency)
+  line_note: string | null; // the order line's note (order_lines.line_note) — editable via Edit PO (PR254)
   product_link: string | null; // the order line's item_link, if any (used by the Buy overlay)
 }
 
