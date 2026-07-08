@@ -305,6 +305,32 @@ export async function setShipmentBoxes(shipId: string, boxes: ShipmentBox[]): Pr
   return { error: error ? `setShipmentBoxes: ${error.message}` : null };
 }
 
+// ── PR255: edit a shipment item's captured detail from Purchasing History (local courier + tracking,
+// marketplace id, unit cost, item link, note). Only descriptive metadata — never qty / status / stock —
+// so it's allowed even on a Received (completed) shipment as a correction. Error returned as data. ──
+export async function updateShipmentPO(poId: number, patch: {
+  supplier_id?: number | null;
+  item_cost?: number | null;
+  method?: string | null;
+  tracking_to_forwarder?: string | null;
+  marketplace_order_id?: string | null;
+  item_note?: string | null;
+  product_link?: string | null;
+}): Promise<{ error: string | null }> {
+  const supabase = createSupabaseServerClient();
+  const upd: Record<string, unknown> = {};
+  if (patch.supplier_id !== undefined) upd.supplier_id = patch.supplier_id ?? null;
+  if (patch.item_cost !== undefined) upd.item_cost = patch.item_cost;
+  if (patch.method !== undefined) upd.method = patch.method?.trim() || null;
+  if (patch.tracking_to_forwarder !== undefined) upd.tracking_to_forwarder = patch.tracking_to_forwarder?.trim() || null;
+  if (patch.marketplace_order_id !== undefined) upd.marketplace_order_id = patch.marketplace_order_id?.trim() || null;
+  if (patch.item_note !== undefined) upd.item_note = patch.item_note?.trim() || null;
+  if (patch.product_link !== undefined) upd.product_link = patch.product_link?.trim() || null;
+  if (Object.keys(upd).length === 0) return { error: null };
+  const { error } = await supabase.from('purchase_orders').update(upd).eq('po_id', poId);
+  return { error: error ? `Couldn't update item: ${error.message}` : null };
+}
+
 // ── PR254: delete an ACTIVE shipment (Purchasing History detail). Ungroups it — every grouped PO goes
 // back to To forwarder (status → Processing, ship link cleared) so nothing is lost — then drops the
 // shipment ledger + box rows. Refuses a completed/received shipment (its goods are already in inventory).
@@ -1218,10 +1244,14 @@ export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,item_code_raw,qty,item_cost,supplier_id')
+    .select('po_id,item_code,item_code_raw,qty,item_cost,supplier_id,method,tracking_to_forwarder,marketplace_order_id,item_note,product_link,input_date')
     .eq('ship_id', sid)
     .order('po_id', { ascending: false });
-  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; item_cost: number | null; supplier_id: number | null }[];
+  const rows = (data ?? []) as {
+    po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; item_cost: number | null;
+    supplier_id: number | null; method: string | null; tracking_to_forwarder: string | null;
+    marketplace_order_id: string | null; item_note: string | null; product_link: string | null; input_date: string | null;
+  }[];
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -1230,12 +1260,16 @@ export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[
     const { data: cat } = await supabase.from('catalogue').select('item_code,translate_name,original_name,self_code').in('item_code', codes);
     for (const c of (cat ?? []) as CatNameRow[]) nameByCode.set(c.item_code, nameOf(c, c.item_code));
   }
-  // per-line currency from the supplier's country (China → yuan, Japan → yen …), for the "each" label.
+  // per-line currency (yuan / yen …) + supplier name from the supplier's country/name (for the detail card).
   const supIds = [...new Set(rows.map((r) => r.supplier_id).filter((id): id is number => id != null))];
   const supCcy = new Map<number, string | null>();
+  const supName = new Map<number, string | null>();
   if (supIds.length) {
-    const { data: sup } = await supabase.from('suppliers').select('supplier_id,country').in('supplier_id', supIds);
-    for (const s of (sup ?? []) as { supplier_id: number; country: string | null }[]) supCcy.set(s.supplier_id, currencyForCountry(s.country));
+    const { data: sup } = await supabase.from('suppliers').select('supplier_id,country,name').in('supplier_id', supIds);
+    for (const s of (sup ?? []) as { supplier_id: number; country: string | null; name: string | null }[]) {
+      supCcy.set(s.supplier_id, currencyForCountry(s.country));
+      supName.set(s.supplier_id, s.name);
+    }
   }
   return rows.map((r) => ({
     po_id: r.po_id,
@@ -1244,6 +1278,14 @@ export async function getShipmentItems(shipId: string): Promise<ShipmentItemRow[
     qty: r.qty,
     item_cost: r.item_cost,
     currency: r.supplier_id != null ? supCcy.get(r.supplier_id) ?? null : null,
+    supplier_id: r.supplier_id,
+    supplier_name: r.supplier_id != null ? supName.get(r.supplier_id) ?? null : null,
+    method: r.method,
+    tracking_to_forwarder: r.tracking_to_forwarder,
+    marketplace_order_id: r.marketplace_order_id,
+    item_note: r.item_note,
+    product_link: r.product_link,
+    input_date: r.input_date,
   }));
 }
 
