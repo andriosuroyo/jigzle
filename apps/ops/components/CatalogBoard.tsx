@@ -1129,7 +1129,7 @@ export default function CatalogBoard({
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
               <div className="po-form">
                 <div className="po-field">
-                  <label>Item code</label>
+                  <label>SKU code</label>
                   <input type="text" placeholder="e.g. BR-000123" value={newCode} onChange={(e) => setNewCode(e.target.value)} disabled={busy} />
                 </div>
                 <div className="po-field">

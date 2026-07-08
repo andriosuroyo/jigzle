@@ -622,7 +622,7 @@ export default function OrderEntry({
                   ref={skuInputRef}
                   value={skuQuery}
                   onChange={(v) => { setSkuQuery(v); setSkuSearched(false); if (!v.trim()) setSkuResults([]); }}
-                  placeholder="Code, name, or piece count…"
+                  placeholder="SKU, name, or piece count…"
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSkuSearch(); } }}
                   disabled={!customer}
                   onClear={clearSkuSearch}

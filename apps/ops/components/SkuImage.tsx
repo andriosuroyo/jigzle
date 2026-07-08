@@ -6,7 +6,8 @@
 //                operator never sees a broken-image icon.
 //   not_found  → solid grey + a faint muted marker ("no picture is coming").
 //   pending    → solid light-grey fill, no icon ("slot waiting for its picture").
-//   status undefined → render nothing (pre-0021 / pre-importer safety).
+//   status undefined → the same neutral grey box (PR251) — placeholders (a not-yet-catalogued
+//                code) and not-yet-loaded rows keep a uniform thumbnail slot instead of collapsing.
 
 import { useEffect, useState } from 'react';
 import type { ImageStatus } from '@jigzle/db/types';
@@ -29,7 +30,6 @@ export default function SkuImage({
     setErrored(false);
   }, [displayUrl]);
 
-  if (!status) return null;
   const dim = { width: size, height: size, minWidth: size };
 
   if (status === 'has_image' && displayUrl && !errored) {

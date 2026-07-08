@@ -794,7 +794,7 @@ export default function InboundBoard({
                   <div className="rcv-stub">
                     <div className="subform-label">Add new SKU (flagged needs review)</div>
                     <div className="hint">barcode {stub.barcode}</div>
-                    <input type="text" placeholder="item code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
+                    <input type="text" placeholder="SKU code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
                     <input type="text" placeholder="name" value={stub.name} onChange={(e) => setStub({ ...stub, name: e.target.value })} />
                     <input type="text" placeholder="brand prefix (optional)" value={stub.brand} onChange={(e) => setStub({ ...stub, brand: e.target.value })} />
                     <div className="subform-actions">
@@ -878,7 +878,7 @@ export default function InboundBoard({
                     <SearchInput
                       ref={skuInputRef}
                       autoFocus
-                      placeholder="Code, name, or piece count…"
+                      placeholder="SKU, name, or piece count…"
                       value={skuQuery}
                       onChange={(v) => { setSkuQuery(v); setSkuSearched(false); }}
                       onClear={clearSearch}
@@ -933,7 +933,7 @@ export default function InboundBoard({
                 // Manual add: create a new SKU (needs-review stub) — like Purchasing → manual
                 <div className="rcv-stub">
                   <div className="subform-label">+ add new SKU (flagged needs review)</div>
-                  <input type="text" placeholder="item code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
+                  <input type="text" placeholder="SKU code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
                   <input type="text" placeholder="name" value={stub.name} onChange={(e) => setStub({ ...stub, name: e.target.value })} />
                   <input type="text" placeholder="brand prefix (optional)" value={stub.brand} onChange={(e) => setStub({ ...stub, brand: e.target.value })} />
                   <div className="subform-actions">
