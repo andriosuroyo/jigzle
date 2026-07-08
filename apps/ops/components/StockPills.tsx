@@ -31,7 +31,24 @@ function BoxIcon() {
   );
 }
 
-export default function StockPills({ wf, otw, avail }: { wf: number; otw: number; avail: number }) {
+// PR239 — `combined` renders the three figures inside ONE pill (a single border/background with three
+// icon+number cells) instead of three separate pills, so the quickview cards stay compact.
+export default function StockPills({ wf, otw, avail, combined }: { wf: number; otw: number; avail: number; combined?: boolean }) {
+  if (combined) {
+    const cell = (n: number, icon: React.ReactNode, label: string) => (
+      <span className={`stock-cell ${n > 0 ? '' : 'zero'}`} title={label} aria-label={`${label}: ${n}`}>
+        {icon}
+        {n}
+      </span>
+    );
+    return (
+      <span className="stock-pill stock-pill-combined">
+        {cell(wf, <FactoryIcon />, 'At forwarder')}
+        {cell(otw, <PlaneIcon />, 'Shipped')}
+        {cell(avail, <BoxIcon />, 'Warehouse')}
+      </span>
+    );
+  }
   const pill = (n: number, icon: React.ReactNode, label: string) => (
     <span className={`stock-pill ${n > 0 ? '' : 'zero'}`} title={label} aria-label={`${label}: ${n}`}>
       {icon}

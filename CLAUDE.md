@@ -70,6 +70,12 @@ Notes:
   Icon convention: reserve a bare leading **"+"** for the top-level **New order** entry; give secondary
   add buttons a meaningful icon instead (e.g. a notepad for Add note). Apply this to any new button;
   don't invent a per-request colour.
+- **Detail action-bar layout (PR239) — one standard everywhere.** A detail view's action row is a single
+  **left-aligned, horizontally-scrollable** row (it *slides* on mobile, never wraps): `display:flex;
+  gap:8px; overflow-x:auto` with `> button { flex-shrink:0 }`. Order the buttons **secondary → primary →
+  destructive**, all grouped together on the left; the destructive button is simply **last in the group**
+  — never pushed to the far edge with `margin-left:auto`. Reference impl: `.fd-actions` (Sales → Pending);
+  `.td-actions` (Purchasing → To buy), `.ob-return` (History), `.fd-commit-row` (Fulfill) all follow it.
 
 ## Supabase migrations — how they get applied
 

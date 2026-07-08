@@ -366,25 +366,28 @@ export default function ToBuyBoard({
           <button className="btn-brown btn-ico po-add-full" onClick={openAdd}><PackageIcon />add item</button>
           {planned.length === 0 && <div className="hint">Nothing planned. Use “+ add item” to start a buy-list.</div>}
           <ul className="po-cards">
-            {planned.map((p) => (
+            {planned.map((p) => {
+              const code = p.item_code ?? p.item_code_raw ?? '—';
+              return (
               <li key={p.po_id}>
                 <button className={`po-card po-card-btn po-card-mini${urgClass(p.urgency)}`} onClick={() => setSel({ kind: 'manual', id: p.po_id })}>
                   <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
-                    <div className="po-card-l1">
-                      <span className="ff-code">{p.item_code ?? p.item_code_raw ?? '—'}</span>
-                      <span className="ff-name po-card-name">{p.name}</span>
-                      <span className="po-card-date">{fmtDate(p.input_date)}</span>
-                    </div>
+                    <span className="ff-code">{code}</span>
+                    {isRealName(p.name, code) && <span className="ff-name po-card-name">{p.name}</span>}
+                  </div>
+                  <div className="po-card-side">
+                    <span className="po-card-date">{fmtDate(p.input_date)}</span>
                     <div className="po-card-meta">
-                      <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />
+                      <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} combined />
                       <span className="po-card-qty">×{p.qty}</span>
                     </div>
                   </div>
                   <span className="po-chev" aria-hidden>›</span>
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       )}
@@ -395,16 +398,18 @@ export default function ToBuyBoard({
           {preorders.length === 0 && <div className="hint">No preorders — every ordered SKU is in stock.</div>}
           <ul className="po-cards">
             {/* PR150 card: l1 SKU + date, l2 name + customer id (no order id), l3 qty/Buy/Done. */}
-            {preorders.map((p) => (
+            {preorders.map((p) => {
+              const code = p.item_code || '—';
+              return (
               <li key={p.line_id}>
                 <button className={`po-card po-card-btn po-card-mini${urgClass(p.urgency)}`} onClick={() => setSel({ kind: 'sales', id: p.line_id })}>
                   <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
-                    <div className="po-card-l1">
-                      <span className="ff-code">{p.item_code || '—'}</span>
-                      <span className="ff-name po-card-name">{p.name}</span>
-                      <span className="po-card-date">{fmtDate(p.order_date)}</span>
-                    </div>
+                    <span className="ff-code">{code}</span>
+                    {isRealName(p.name, code) && <span className="ff-name po-card-name">{p.name}</span>}
+                  </div>
+                  <div className="po-card-side">
+                    <span className="po-card-date">{fmtDate(p.order_date)}</span>
                     <div className="po-card-meta">
                       <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
                       <span className="po-card-qty">×{p.qty}</span>
@@ -413,7 +418,8 @@ export default function ToBuyBoard({
                   <span className="po-chev" aria-hidden>›</span>
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       )}
@@ -423,27 +429,30 @@ export default function ToBuyBoard({
         <section className="fd-section">
           {soldOut.length === 0 && <div className="hint">Nothing marked out of stock.</div>}
           <ul className="po-cards">
-            {soldOut.map((p) => (
+            {soldOut.map((p) => {
+              const code = p.item_code ?? p.item_code_raw ?? '—';
+              return (
               <li key={p.po_id}>
                 <button className={`po-card po-card-btn po-card-mini${urgClass(p.urgency)}`} onClick={() => setSel({ kind: 'oos', id: p.po_id })}>
                   <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
                   <div className="po-card-main">
-                    <div className="po-card-l1">
-                      <span className="ff-code">{p.item_code ?? p.item_code_raw ?? '—'}</span>
-                      <span className="ff-name po-card-name">{p.name}</span>
-                      <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
-                    </div>
+                    <span className="ff-code">{code}</span>
+                    {isRealName(p.name, code) && <span className="ff-name po-card-name">{p.name}</span>}
+                  </div>
+                  <div className="po-card-side">
+                    <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
                     <div className="po-card-meta">
                       {p.origin === 'sales'
                         ? <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
-                        : <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} />}
+                        : <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} combined />}
                       <span className="po-card-qty">×{p.qty}</span>
                     </div>
                   </div>
                   <span className="po-chev" aria-hidden>›</span>
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       )}
