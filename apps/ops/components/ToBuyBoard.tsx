@@ -492,8 +492,7 @@ export default function ToBuyBoard({
                   {eErr && <div className="validation err" style={{ marginBottom: 10 }}>{eErr}</div>}
                   <div className="le-field">
                     <label>SKU code</label>
-                    <input type="text" value={eSku} onChange={(e) => setESku(e.target.value)} placeholder="type the SKU code" disabled={eBusy || detail.item_code != null} autoComplete="off" data-1p-ignore="true" data-lpignore="true" />
-                    {detail.item_code != null && <span className="hint" style={{ marginTop: 4 }}>In the catalogue — the code is fixed here (change it in Database → Catalog).</span>}
+                    <input type="text" className={detail.item_code != null ? 'le-locked' : undefined} value={eSku} onChange={(e) => setESku(e.target.value)} placeholder="type the SKU code" disabled={eBusy || detail.item_code != null} autoComplete="off" data-1p-ignore="true" data-lpignore="true" />
                   </div>
                   <div className="le-row">
                     <div className="le-field">
