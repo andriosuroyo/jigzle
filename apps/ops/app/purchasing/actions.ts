@@ -574,6 +574,9 @@ export async function updatePlannedItem(input: {
   qty: number;
   urgency: Urgency | null;
   item_note: string | null;
+  // PR254 — an Out-of-Stock PO ('Sold out'): guard on that status and write the note to sold_out_note
+  // (the reason shown on the OOS card) rather than item_note, so the edit round-trips.
+  soldOut?: boolean;
 }): Promise<{ error: string | null }> {
   const supabase = createSupabaseServerClient();
   const sku = input.sku?.trim() || '';
@@ -583,12 +586,37 @@ export async function updatePlannedItem(input: {
   const { data: cat } = await supabase.from('catalogue').select('item_code').eq('item_code', sku).maybeSingle();
   const item_code = cat ? sku : null;        // exact catalogue match → FK
   const item_code_raw = cat ? null : sku;    // otherwise a placeholder, resolved at Inbound receive
+  const note = input.item_note?.trim() || null;
+  const base = { item_code, item_code_raw, qty: Math.round(input.qty), urgency };
+  const patch = input.soldOut ? { ...base, sold_out_note: note } : { ...base, item_note: note };
   const { error } = await supabase
     .from('purchase_orders')
-    .update({ item_code, item_code_raw, qty: Math.round(input.qty), urgency, item_note: input.item_note?.trim() || null })
+    .update(patch)
     .eq('po_id', input.po_id)
-    .eq('status', 'Planned');
+    .eq('status', input.soldOut ? 'Sold out' : 'Planned');
   return { error: error ? `Couldn't update item: ${error.message}` : null };
+}
+
+// PR254 — edit a From-Sales preorder (no PO exists yet): only its ORDER's priority and the order line's
+// note are editable — the SKU + qty mirror the sale and stay fixed. Errors returned as data.
+export async function updatePreorderLine(input: {
+  line_id: string;
+  sales_id: string | null;
+  urgency: Urgency | null;
+  line_note: string | null;
+}): Promise<{ error: string | null }> {
+  const supabase = createSupabaseServerClient();
+  const urgency = input.urgency && ['low', 'mid', 'high'].includes(input.urgency) ? input.urgency : null;
+  // priority lives on the order (the preorder card reads its order's urgency)
+  if (input.sales_id) {
+    const { error: oErr } = await supabase.from('orders').update({ urgency }).eq('sales_id', input.sales_id);
+    if (oErr) return { error: `Couldn't update priority: ${oErr.message}` };
+  }
+  const { error } = await supabase
+    .from('order_lines')
+    .update({ line_note: input.line_note?.trim() || null })
+    .eq('line_id', input.line_id);
+  return { error: error ? `Couldn't update note: ${error.message}` : null };
 }
 
 // ── PR73: set the qty of a manual (Planned) buy-list item — the card's editable ± stepper. Reuses the
@@ -975,12 +1003,12 @@ export async function getPreorders(): Promise<PreorderRow[]> {
 
   // unfulfilled, live order lines with a resolved SKU (no stock gate exists for code-less lines).
   // Paged (PostgREST caps a response at 1000) with a stable order so nothing is silently dropped.
-  type LineRow = { line_id: string; sales_id: string; item_code: string; qty: number; item_link: string | null };
+  type LineRow = { line_id: string; sales_id: string; item_code: string; qty: number; item_link: string | null; line_note: string | null };
   const rows: LineRow[] = [];
   for (let from = 0; from < 8000; from += 1000) {
     const { data: lines } = await supabase
       .from('order_lines')
-      .select('line_id,sales_id,item_code,qty,item_link')
+      .select('line_id,sales_id,item_code,qty,item_link,line_note')
       .is('fulfilled_at', null)
       .eq('is_cancelled', false)
       .not('item_code', 'is', null)
@@ -1053,6 +1081,7 @@ export async function getPreorders(): Promise<PreorderRow[]> {
       qty: r.qty,
       available,
       urgency: order.urgency,
+      line_note: r.line_note,
       product_link: r.item_link,
     });
   }

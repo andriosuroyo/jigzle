@@ -1652,6 +1652,9 @@ img.sku-img { background: #e8e8e8; }
 }
 /* PR250 — a catalogue SKU's code can't be recoded here: locked look (greyed fill, muted text, not-allowed). */
 .le-field input.le-locked { background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1; }
+/* PR254 — the Qty stepper in the Edit PO row keeps its natural width; without this the full-width
+   .le-field input standard (above) stretches the stepper and starves Priority (mirrors line ~697). */
+.le-field .qty-step input[type=number] { width: 46px; padding: 0; border-radius: 0; font-size: 14px; background: white; }
 /* the price input fills its (grow) field in the editor — overrides the narrow fixed .edit-price width */
 .le-field .edit-price { width: 100%; height: auto; text-align: left; padding: 9px 10px; font-size: 16px; }
 .le-foot { display: flex; align-items: center; gap: 10px; }

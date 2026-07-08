@@ -28,6 +28,7 @@ import {
   setPOStatus,
   setSoldOut,
   updatePlannedItem,
+  updatePreorderLine,
 } from '@/app/purchasing/actions';
 import type { PlannedItemRow, PreorderRow, SoldOutRow, SkuStockInfo, Urgency } from '@/app/purchasing/types';
 import type { SkuHit } from '@/app/purchasing/types';
@@ -294,7 +295,7 @@ export default function ToBuyBoard({
       const p = preorders.find((x) => x.line_id === sel.id);
       if (!p) return null;
       return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, code: p.item_code ?? '', name: p.name, qty: p.qty, urgency: p.urgency,
-        wf: 0, otw: 0, avail: p.available, context: `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}`, note: null as string | null,
+        wf: 0, otw: 0, avail: p.available, context: `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}`, note: p.line_note as string | null,
         qtyEditable: false, canDelete: false,
         target: { kind: 'sales' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link } };
     }
@@ -324,7 +325,8 @@ export default function ToBuyBoard({
   // a new/unknown manual SKU has no catalogue name (and no image / nothing to edit) — drive the header off this.
   const detailHasName = detail ? isRealName(detail.name, detail.item_code) : false;
 
-  // PR240 — inline edit (Manual only). Seeds the draft from the current row; saves to the PO only.
+  // PR240 — inline edit (all tabs; PR254). Seeds the draft from the current row; saveEdit routes the
+  // write by kind (Manual/OOS → the PO; From Sales → its order priority + line note).
   function openEdit() {
     if (!detail) return;
     setESku(detail.code); setEQty(detail.qty); setEPrio(detail.urgency); setENote(detail.note ?? '');
@@ -332,11 +334,23 @@ export default function ToBuyBoard({
   }
   function cancelEdit() { setEditing(false); setEErr(null); }
   async function saveEdit() {
-    if (!detail || detail.po_id == null) return;
+    if (!detail) return;
+    // From Sales is a preorder (no PO yet): only its order's priority + the line's note are editable.
+    if (detail.kind === 'sales') {
+      if (!sel) return;
+      setEBusy(true); setEErr(null);
+      const { error: err } = await updatePreorderLine({ line_id: String(sel.id), sales_id: detail.target.sales_id, urgency: ePrio, line_note: eNote.trim() || null });
+      if (err) { setEErr(err); setEBusy(false); return; }
+      await refresh();
+      setEBusy(false); setEditing(false);
+      return;
+    }
+    // Manual + Out-of-Stock are real POs → full edit (OOS writes the note to sold_out_note).
+    if (detail.po_id == null) return;
     const sku = eSku.trim();
     if (!sku) { setEErr('A SKU code is required.'); return; }
     setEBusy(true); setEErr(null);
-    const { error: err } = await updatePlannedItem({ po_id: detail.po_id, sku, qty: eQty, urgency: ePrio, item_note: eNote.trim() || null });
+    const { error: err } = await updatePlannedItem({ po_id: detail.po_id, sku, qty: eQty, urgency: ePrio, item_note: eNote.trim() || null, soldOut: detail.kind === 'oos' });
     if (err) { setEErr(err); setEBusy(false); return; }
     await refresh();
     setEBusy(false); setEditing(false);
@@ -488,7 +502,8 @@ export default function ToBuyBoard({
             </div>
 
             {editing ? (
-              /* ── edit mode (Manual) — SKU / qty / priority / note; writes to the PO only ── */
+              /* ── edit mode — SKU / qty / priority / note. Manual + OOS write the PO; From Sales edits
+                   only its order priority + line note (SKU + qty read-only, mirroring the sale). ── */
               <>
                 <div className="sc-modal-body">
                   {eErr && <div className="validation err" style={{ marginBottom: 10 }}>{eErr}</div>}
@@ -499,11 +514,16 @@ export default function ToBuyBoard({
                   <div className="le-row">
                     <div className="le-field">
                       <label>Qty</label>
-                      <span className="qty-step">
-                        <button type="button" onClick={() => setEQty((q) => Math.max(0, q - 1))} disabled={eBusy || eQty <= 0} aria-label="decrease">−</button>
-                        <input type="number" inputMode="numeric" min={0} value={eQty} onChange={(e) => setEQty(Math.max(0, parseInt(e.target.value, 10) || 0))} disabled={eBusy} />
-                        <button type="button" onClick={() => setEQty((q) => q + 1)} disabled={eBusy} aria-label="increase">+</button>
-                      </span>
+                      {detail.kind === 'sales' ? (
+                        /* preorder qty mirrors the sale — read-only here (edit it on the order) */
+                        <span className="qty-ro" aria-label="quantity">×{eQty}</span>
+                      ) : (
+                        <span className="qty-step">
+                          <button type="button" onClick={() => setEQty((q) => Math.max(0, q - 1))} disabled={eBusy || eQty <= 0} aria-label="decrease">−</button>
+                          <input type="number" inputMode="numeric" min={0} value={eQty} onChange={(e) => setEQty(Math.max(0, parseInt(e.target.value, 10) || 0))} disabled={eBusy} />
+                          <button type="button" onClick={() => setEQty((q) => q + 1)} disabled={eBusy} aria-label="increase">+</button>
+                        </span>
+                      )}
                     </div>
                     <div className="le-field grow">
                       <label>Priority</label>
@@ -561,9 +581,10 @@ export default function ToBuyBoard({
                     cautionary "out of stock" moves off the prominent far-left and clusters with the
                     negative actions on the right; Delete PO stays last (destructive-last). */}
                 <div className="sc-modal-foot td-actions">
-                  {detail.kind === 'manual' && detail.po_id != null && (
-                    <button className="btn-secondary btn-ico" onClick={openEdit} disabled={busy}><PencilIcon />Edit PO</button>
-                  )}
+                  {/* PR254 — Edit PO on every tab: Manual/OOS edit the real PO; From Sales edits only
+                      its order priority + line note (SKU + qty mirror the sale and stay locked). */}
+                  <button className="btn-secondary btn-ico" onClick={openEdit} disabled={busy}><PencilIcon />Edit PO</button>
+
                   <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}><BagIcon />Done buying</button>
                   {detail.kind !== 'oos' && (
                     <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
