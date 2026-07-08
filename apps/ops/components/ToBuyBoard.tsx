@@ -37,6 +37,7 @@ import { SKU_IMG } from '@/components/skuImageSizes';
 import StockPills from '@/components/StockPills';
 import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
+import { PackageIcon } from '@/components/AddIcons';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
@@ -362,7 +363,7 @@ export default function ToBuyBoard({
           "Manual buy-list" header row is gone; "+ add item" is a full-width button at the top. */}
       {tab === 'manual' && (
         <section className="fd-section">
-          <button className="btn-brown po-add-full" onClick={openAdd}>+ add item</button>
+          <button className="btn-brown btn-ico po-add-full" onClick={openAdd}><PackageIcon />add item</button>
           {planned.length === 0 && <div className="hint">Nothing planned. Use “+ add item” to start a buy-list.</div>}
           <ul className="po-cards">
             {planned.map((p) => (

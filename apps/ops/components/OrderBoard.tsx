@@ -20,6 +20,7 @@ import {
 } from '@/app/purchasing/actions';
 import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
+import { StoreIcon } from '@/components/AddIcons';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import TrashButton from '@/components/TrashButton';
@@ -1224,7 +1225,7 @@ export default function OrderBoard({
                 ))}
               </select>
             </div>
-            <button className="btn-brown" onClick={() => setSupForm(supForm ? null : { name: '', country: '', flag: '', type: 'Taobao account' })}>+ add</button>
+            <button className="btn-brown btn-ico" onClick={() => setSupForm(supForm ? null : { name: '', country: '', flag: '', type: 'Taobao account' })}><StoreIcon />add supplier</button>
           </div>
           {supForm && (
             <div className="subform" style={{ marginTop: 8 }}>

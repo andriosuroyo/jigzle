@@ -7,6 +7,7 @@ import { getPending, sendReadyItems, deleteOrder, markOrderPaid, addOrderLine, u
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
 import SearchInput from '@/components/SearchInput';
 import SkuSearchAdd from '@/components/SkuSearchAdd';
+import { PackageIcon } from '@/components/AddIcons';
 import type { OrderDot, PendingOrder, PendingLine } from '@/app/pending/types';
 import type { CommonNote } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
@@ -369,7 +370,7 @@ export default function PendingBoard({
                     </li>
                   ))}
                 </ul>
-                <button className="btn-brown edit-additem" onClick={openLineAdd} disabled={busy}>+ Add item</button>
+                <button className="btn-brown btn-ico edit-additem" onClick={openLineAdd} disabled={busy}><PackageIcon />Add item</button>
               </section>
 
               {/* Payment — totals only; balance right-aligned, green when clear. The settle reminder lives

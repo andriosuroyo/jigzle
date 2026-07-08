@@ -5,6 +5,7 @@
 // a per-person address (the address on the declaration changes with the signer). Self-loads on mount.
 
 import { useEffect, useState } from 'react';
+import { UserIcon } from '@/components/AddIcons';
 import { addDeclarationUser, deleteDeclarationUser, getDeclarationUsers, reorderDeclarationUsers, updateDeclarationUser } from '@/app/settings/actions';
 import type { DeclarationUser } from '@/app/settings/types';
 
@@ -107,7 +108,7 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-brown" onClick={() => setAddName('')} disabled={busy}>+ Add declaration user</button>
+          <button className="btn-brown btn-ico" onClick={() => setAddName('')} disabled={busy}><UserIcon />Add declaration user</button>
         </div>
       )}
     </Wrap>
