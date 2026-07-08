@@ -1641,9 +1641,17 @@ img.sku-img { background: #e8e8e8; }
 /* Clickable "unresolved — click to map SKU" line. color:inherit kills the iOS default button-blue so
    the code matches the other SKU codes (brown ff-code). */
 .rcv-unres-btn { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; text-align: left; cursor: pointer; padding: 0; font: inherit; color: inherit; -webkit-appearance: none; appearance: none; }
-/* Map modal: optional barcode capture field. */
-.rcv-map-barcode { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
-.rcv-map-barcode input { width: 100%; }
+/* Map modal (PR243): intro line + labelled field (barcode / pre-filled SKU code). */
+.rcv-map-intro { margin-bottom: 10px; }
+.rcv-map-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.rcv-map-field input { width: 100%; }
+/* PR243 — Inbound detail header: shipment-id + tracking copy chips row (mirrors Sales fd-orderid-chip). */
+.fd-idchips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fd-idchip-empty { font-size: 13px; color: var(--muted); }
+/* PR243 — Inbound detail items row: Sales-styled search + Manual-add button beside it (slides on mobile). */
+.rcv-scan-row { display: flex; gap: 8px; align-items: center; }
+.rcv-scan-search { flex: 1; min-width: 0; }
+.rcv-scan-row > button { flex-shrink: 0; }
 /* History detail: title + "Edit ship id" on one row. */
 .fd-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 /* Inbound receive: Purchasing's per-Ship-ID note callout. */
