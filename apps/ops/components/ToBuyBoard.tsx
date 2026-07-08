@@ -25,7 +25,6 @@ import {
   getSoldOutItems,
   markSkuSoldOut,
   searchSkus,
-  setPlannedQty,
   setPOStatus,
   setSoldOut,
   updatePlannedItem,
@@ -78,6 +77,7 @@ const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', stroke
 const BanIcon = () => (<svg {..._ic}><circle cx="12" cy="12" r="9" /><line x1="5.6" y1="5.6" x2="18.4" y2="18.4" /></svg>);
 const BagIcon = () => (<svg {..._ic}><path d="M6 2 3 6v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>);
 const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 
 
 // the active "Buy" overlay target — enough to load + render its links and run the right write-backs.
@@ -230,14 +230,6 @@ export default function ToBuyBoard({
   }
 
   // ── manual qty ± stepper: optimistic local update + a guarded server write ──
-  async function changeQty(po_id: number, next: number) {
-    const q = Math.max(0, next);
-    // po_id is unique to one list; updating both keeps the manual + manual-origin OOS steppers live
-    setPlanned((prev) => prev.map((p) => (p.po_id === po_id ? { ...p, qty: q } : p)));
-    setSoldOutList((prev) => prev.map((p) => (p.po_id === po_id ? { ...p, qty: q } : p)));
-    try { await setPlannedQty(po_id, q); } catch (e) { setError(e instanceof Error ? e.message : 'Failed to set qty.'); }
-  }
-
   // remove the acted row from its list locally (optimistic) — avoids a full 3-list refetch on the hot path.
   function removeRow(s: { kind: SubTab; id: number | string }) {
     if (s.kind === 'manual') setPlanned((prev) => prev.filter((p) => p.po_id !== Number(s.id)));
@@ -352,13 +344,6 @@ export default function ToBuyBoard({
   // leaving the overlay (or switching rows) drops edit mode.
   useEffect(() => { setEditing(false); }, [sel]);
 
-  // overlay qty stepper: optimistic local update in the right list (manual → planned, oos → soldOut)
-  function setDetailQty(q: number) {
-    if (!detail || detail.po_id == null) return;
-    const v = Math.max(0, q);
-    if (detail.kind === 'manual') setPlanned((prev) => prev.map((x) => (x.po_id === detail.po_id ? { ...x, qty: v } : x)));
-    else setSoldOutList((prev) => prev.map((x) => (x.po_id === detail.po_id ? { ...x, qty: v } : x)));
-  }
 
   // sub-tab counts
   const counts = { manual: planned.length, sales: preorders.length, oos: soldOut.length };
@@ -497,11 +482,6 @@ export default function ToBuyBoard({
                 <span className="sc-modal-title">{detail.code || '—'}</span>
                 {detailHasName && <div className="ff-name td-name">{detail.name}</div>}
               </div>
-              {/* PR240 — Edit is an INLINE editor (Manual only): change SKU / qty / priority / note without
-                  ever writing to the catalogue. From-Sales items are read-only (driven by the sale). */}
-              {!editing && detail.kind === 'manual' && detail.po_id != null && (
-                <button className="td-edit" onClick={openEdit} title="Edit item">Edit</button>
-              )}
               <button className="sc-modal-x" onClick={() => { if (!eBusy) setSel(null); }} aria-label="Close">×</button>
             </div>
 
@@ -512,8 +492,8 @@ export default function ToBuyBoard({
                   {eErr && <div className="validation err" style={{ marginBottom: 10 }}>{eErr}</div>}
                   <div className="le-field">
                     <label>SKU code</label>
-                    <input type="text" value={eSku} onChange={(e) => setESku(e.target.value)} placeholder="type the SKU code" disabled={eBusy} autoComplete="off" data-1p-ignore="true" data-lpignore="true" />
-                    <span className="hint" style={{ marginTop: 4 }}>A new/unknown code is kept as-is and matched to a real SKU at Inbound — no catalogue entry is created here.</span>
+                    <input type="text" value={eSku} onChange={(e) => setESku(e.target.value)} placeholder="type the SKU code" disabled={eBusy || detail.item_code != null} autoComplete="off" data-1p-ignore="true" data-lpignore="true" />
+                    {detail.item_code != null && <span className="hint" style={{ marginTop: 4 }}>In the catalogue — the code is fixed here (change it in Database → Catalog).</span>}
                   </div>
                   <div className="le-row">
                     <div className="le-field">
@@ -558,19 +538,9 @@ export default function ToBuyBoard({
                       {detail.note && <div className="td-ctx td-note">{detail.note}</div>}
                     </div>
                     <div className="td-controls">
-                      {detail.qtyEditable && detail.po_id != null ? (
-                        <span className="qty-step">
-                          <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty - 1)} disabled={detail.qty <= 0} aria-label="decrease">−</button>
-                          <input
-                            type="number" inputMode="numeric" min={0} value={detail.qty}
-                            onChange={(e) => setDetailQty(parseInt(e.target.value, 10) || 0)}
-                            onBlur={(e) => changeQty(detail.po_id!, Math.max(0, parseInt(e.target.value, 10) || 0))}
-                          />
-                          <button type="button" onClick={() => changeQty(detail.po_id!, detail.qty + 1)} aria-label="increase">+</button>
-                        </span>
-                      ) : (
-                        <span className="qty-ro" aria-label="quantity">×{detail.qty}</span>
-                      )}
+                      {/* PR249 — qty is read-only here; edit it via Edit PO (removes the redundant
+                          second qty editor that sat beside the Edit button). */}
+                      <span className="qty-ro" aria-label="quantity">×{detail.qty}</span>
                       <span className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} combined /></span>
                     </div>
                   </div>
@@ -589,6 +559,10 @@ export default function ToBuyBoard({
                 <div className="sc-modal-foot td-actions">
                   {detail.kind !== 'oos' && (
                     <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
+                  )}
+                  {/* PR249 — Edit (Manual only) sits left of Done buying, action-bar order: secondary → primary → destructive. */}
+                  {detail.kind === 'manual' && detail.po_id != null && (
+                    <button className="btn-secondary btn-ico" onClick={openEdit} disabled={busy}><PencilIcon />Edit PO</button>
                   )}
                   <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}><BagIcon />Done buying</button>
                   {detail.canDelete && detail.po_id != null && (

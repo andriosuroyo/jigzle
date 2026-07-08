@@ -395,7 +395,7 @@ export default function PendingBoard({
                   <button className="btn-brown btn-ico" onClick={doMarkPaid} disabled={busy}><CoinIcon />{busy ? 'Saving…' : 'Mark as paid'}</button>
                 )}
                 <button className="btn-primary btn-ico" onClick={doSendReady} disabled={busy || sel.ready_count === 0 || sel.balance > 0}>
-                  <ArrowIcon />{busy ? 'Working…' : `Send ready items${sel.ready_count ? ` (${sel.ready_count})` : ''}`}
+                  <ArrowIcon />{busy ? 'Working…' : `Send to fulfill${sel.ready_count ? ` (${sel.ready_count})` : ''}`}
                 </button>
                 <button className="btn-danger btn-ico" onClick={() => { setDelErr(null); setConfirmDel(true); }} disabled={busy}><TrashIcon />Delete order</button>
               </div>
