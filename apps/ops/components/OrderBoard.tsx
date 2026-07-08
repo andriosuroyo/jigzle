@@ -20,7 +20,7 @@ import {
 } from '@/app/purchasing/actions';
 import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
-import { StoreIcon, TruckIcon } from '@/components/AddIcons';
+import { StoreIcon, TruckIcon, PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -171,6 +171,8 @@ export default function OrderBoard({
   onDetailOpenChange,
   onCountChange,
   batchSignal = 0,
+  groupSignal = 0,
+  onSelCountChange,
 }: {
   initialQueue: OpenPORow[];
   suppliers: Supplier[];
@@ -187,6 +189,10 @@ export default function OrderBoard({
   onCountChange?: (n: number) => void;
   // PR250 — a bumped counter from the shell's tab-row "Batch confirm" button opens the batch overlay.
   batchSignal?: number;
+  // PR251 — To-ship: a bumped counter from the tab-row "Create shipment ID" opens the group overlay;
+  // onSelCountChange reports the checkbox selection count so the shell can enable/disable that button.
+  groupSignal?: number;
+  onSelCountChange?: (n: number) => void;
 }) {
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
@@ -226,6 +232,16 @@ export default function OrderBoard({
     if (batchSignal) openBatch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batchSignal]);
+  // To-ship: the tab-row "Create shipment ID" bumps groupSignal → open the group overlay.
+  useEffect(() => {
+    if (groupSignal) openGroup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupSignal]);
+  // report the checkbox selection count up to the shell (drives the tab-row button's enabled state).
+  useEffect(() => {
+    onSelCountChange?.(selectedPoIds.size);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPoIds]);
 
   // PR153: a bucketed bodyview detail is open → the shell hides the pipeline tabs.
   const bvDetailOpen = !!bucket && mode === 'edit' && !!editPo;
@@ -550,26 +566,27 @@ export default function OrderBoard({
     }
   }
 
-  // Ticking the first row opens the group panel automatically (no separate "Group into shipment"
-  // button); clearing the last row closes it. Ticking more rows just updates the selected list.
+  // PR251 — checkboxes just toggle selection; the grouping form is opened separately by the tab-row
+  // "Create shipment ID" button (it renders as an overlay, not an inline panel).
   function toggleSelect(poId: number) {
     setSelectedPoIds((prev) => {
       const next = new Set(prev);
       if (next.has(poId)) next.delete(poId);
       else next.add(poId);
-      if (next.size > 0 && mode !== 'group') {
-        resetMessages();
-        setMode('group');
-        setGrpForwarder('');
-        setGrpShipId('');
-        setGrpOrigin('');
-        setGrpDate(todayStr());
-        setGrpQty({});
-      } else if (next.size === 0 && mode === 'group') {
-        setMode(null);
-      }
       return next;
     });
+  }
+
+  // open the group overlay for the current selection (seeds fresh forwarder / ship id / date / qty)
+  function openGroup() {
+    if (selectedPoIds.size === 0) return;
+    resetMessages();
+    setGrpForwarder('');
+    setGrpShipId('');
+    setGrpOrigin('');
+    setGrpDate(todayStr());
+    setGrpQty({});
+    setMode('group');
   }
 
   // pick a forwarder in the group panel → load its LAST ship id into the Ship id field (editable free
@@ -975,16 +992,6 @@ export default function OrderBoard({
             ))}
           </ul>
 
-          {/* group panel opens under the list when rows are ticked (selection stays visible above) */}
-          {mode === 'group' && (
-            <div className="bv-detail" style={{ marginTop: 12 }}>
-              <div className="fd-head">
-                <div className="fd-title">Group into shipment</div>
-                <div className="fd-sub">Ship date: {fmtNiceDate(grpDate)}</div>
-              </div>
-              {renderGroupForm()}
-            </div>
-          )}
         </>
       ) : (
         <>
@@ -1009,6 +1016,7 @@ export default function OrderBoard({
           </div>
         </>
       )}
+      {mode === 'group' && renderGroupModal()}
     </div>
   );
 
@@ -1093,15 +1101,7 @@ export default function OrderBoard({
             </>
           ) : null}
 
-          {mode === 'group' && (
-            <>
-              <div className="fd-head">
-                <div className="fd-title">Group into shipment</div>
-                <div className="fd-sub">Ship date: {fmtNiceDate(grpDate)}</div>
-              </div>
-              {renderGroupForm()}
-            </>
-          )}
+          {mode === 'group' && renderGroupModal()}
         </main>
       </div>
     </>
@@ -1601,85 +1601,73 @@ export default function OrderBoard({
     );
   }
 
-  // ── the group-into-shipment form ──
-  function renderGroupForm() {
+  // ── PR251 — the group-into-shipment OVERLAY (opened by the tab-row "Create shipment ID"): the picked
+  // POs (with a per-PO ship-qty stepper), the forwarder, and the Ship ID picker. Buttons carry icons. ──
+  function renderGroupModal() {
     const setSend = (po: OpenPORow, n: number) => {
       const v = Math.max(1, Math.min(po.qty, Math.floor(n) || 1));
       setGrpQty((prev) => ({ ...prev, [po.po_id]: v }));
     };
+    const close = () => { if (!busy) setMode(null); };
     return (
-      <div className="po-form">
-        {/* Selected POs — two-line cards; a PO with qty>1 gets a stepper to ship fewer than all (the
-            rest stays in To ship). Header shows the total item count being shipped. */}
-        <div className="po-field">
-          <label>Selected POs <em style={{ fontStyle: 'normal', opacity: 0.7 }}>({totalItems} item{totalItems === 1 ? '' : 's'})</em></label>
-          <ul className="po-cards po-cards-compact">
-            {selectedPOs.map((po) => (
-              <li key={po.po_id}>
-                <div className="po-card">
-                  <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                  <div className="po-card-main">
-                    <div className="po-card-l1"><span className="ff-code">{po.item_code || '—'}</span></div>
-                    <div className="po-card-l2">
-                      <span className="ff-name">{po.name}</span>
-                      {po.qty > 1 ? (
-                        <span className="grp-qty">
-                          <span className="qty-step">
-                            <button type="button" aria-label="one fewer" onClick={() => setSend(po, sendQty(po) - 1)} disabled={sendQty(po) <= 1}>−</button>
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              min={1}
-                              max={po.qty}
-                              value={sendQty(po)}
-                              onChange={(e) => setSend(po, Number(e.target.value))}
-                            />
-                            <button type="button" aria-label="one more" onClick={() => setSend(po, sendQty(po) + 1)} disabled={sendQty(po) >= po.qty}>+</button>
-                          </span>
-                          <span className="grp-qty-of">/ {po.qty}</span>
-                        </span>
-                      ) : (
-                        <span className="po-card-qty">×1</span>
-                      )}
+      <div className="sc-modal-backdrop" onClick={close}>
+        <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Create shipment" onClick={(e) => e.stopPropagation()}>
+          <div className="sc-modal-head sc-modal-head-row">
+            <div className="sc-modal-title">Create shipment · {totalItems} item{totalItems === 1 ? '' : 's'}</div>
+            <button className="sc-modal-x" onClick={close} aria-label="Close">×</button>
+          </div>
+          <div className="sc-modal-body">
+            {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
+
+            <div className="batch-group">
+              <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
+              <ul className="po-cards po-cards-compact">
+                {selectedPOs.map((po) => (
+                  <li key={po.po_id}>
+                    <div className="po-card">
+                      <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                      <div className="po-card-main">
+                        <div className="po-card-l1"><span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span></div>
+                        <div className="po-card-l2">
+                          {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
+                          {po.qty > 1 ? (
+                            <span className="grp-qty">
+                              <span className="qty-step">
+                                <button type="button" aria-label="one fewer" onClick={() => setSend(po, sendQty(po) - 1)} disabled={sendQty(po) <= 1}>−</button>
+                                <input type="number" inputMode="numeric" min={1} max={po.qty} value={sendQty(po)} onChange={(e) => setSend(po, Number(e.target.value))} />
+                                <button type="button" aria-label="one more" onClick={() => setSend(po, sendQty(po) + 1)} disabled={sendQty(po) >= po.qty}>+</button>
+                              </span>
+                              <span className="grp-qty-of">/ {po.qty}</span>
+                            </span>
+                          ) : (
+                            <span className="po-card-qty">×1</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-        {/* Forwarder + Ship id on one row. Forwarders (flag + acronym, grouped by country) are managed
-            in Settings → Forwarders. Picking one loads its last ship id into the field, which stays
-            editable — keep it to add to that shipment, or bump the number for a new one. */}
-        <div className="po-inline">
-          <div className="po-field">
-            <label>Forwarder</label>
-            <select value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
-              <option value="">— pick —</option>
-              {forwardersSorted.map((f) => (
-                <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
-              ))}
-            </select>
+            <div className="batch-group">
+              <div className="fd-section-head">Forwarder</div>
+              <select className="field" value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
+                <option value="">— pick —</option>
+                {forwardersSorted.map((f) => (
+                  <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
+                ))}
+              </select>
+            </div>
+            <div className="batch-group">
+              <div className="fd-section-head">Ship ID</div>
+              <input className="field" type="text" list="po-shipids" placeholder="pick an open shipment or type a new ID" value={grpShipId} onChange={(e) => pickExistingShipment(e.target.value)} />
+              <datalist id="po-shipids">{shipments.map((s) => <option key={s.ship_id} value={s.ship_id} />)}</datalist>
+            </div>
           </div>
-          <div className="po-field">
-            <label>Ship id</label>
-            <input
-              type="text"
-              list="po-shipids"
-              className="rcv-shipid"
-              placeholder="Last Shipment ID"
-              value={grpShipId}
-              onChange={(e) => pickExistingShipment(e.target.value)}
-            />
-            <datalist id="po-shipids">{shipments.map((s) => <option key={s.ship_id} value={s.ship_id} />)}</datalist>
-          </div>
-        </div>
-
-        <div className="fd-commit">
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
-            <button className="btn-secondary" onClick={() => { setSelectedPoIds(new Set()); setGrpQty({}); setMode(null); }}>Cancel</button>
-            <button className="btn-primary" onClick={submitGroup} disabled={busy || selectedCount === 0}>{busy ? 'Grouping…' : 'Group shipment'}</button>
+          <div className="sc-modal-foot">
+            <button className="btn-secondary" onClick={close} disabled={busy}>Cancel</button>
+            <button className="btn-primary btn-ico" onClick={submitGroup} disabled={busy || selectedCount === 0}><PackageIcon />{busy ? 'Grouping…' : 'Group shipment'}</button>
           </div>
         </div>
       </div>

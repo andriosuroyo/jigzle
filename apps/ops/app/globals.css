@@ -149,8 +149,7 @@ input, textarea, select, button { font-family: inherit; }
 .batch-picklist > li .po-card { padding: 6px 8px; }
 .batch-pickrow { cursor: pointer; padding: 2px 0; }
 .batch-pickcard { pointer-events: none; }
-/* the standard form-field look (white fill, hairline border, 8px radius, 16px text = no iOS zoom) */
-.batch-field { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; color: var(--ink); }
+/* .batch-field derives from the shared .field standard (defined once, near .le-field). */
 .batch-group { margin-bottom: 14px; }
 .batch-group .fd-section-head { margin-bottom: 6px; }
 .batch-group textarea.batch-field { min-height: 60px; resize: vertical; }
@@ -644,7 +643,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .rcv-le-check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink); font-weight: 600; cursor: pointer; }
 .rcv-le-excl { display: flex; gap: 10px; align-items: flex-end; }
 .rcv-le-field { display: flex; flex-direction: column; gap: 4px; flex: 1; }
-.rcv-le-field input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: white; }
+/* .rcv-le-field input derives from the shared .field standard. */
 .rcv-le-field .icon-select { width: 100%; }
 .rcv-le-field-sm { flex: 0 0 auto; }
 .rcv-le-field-sm .rcv-qty { width: 88px; }
@@ -692,9 +691,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-form { display: flex; flex-direction: column; }
 .po-field { margin-bottom: 12px; }
 .po-field > label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field select, .po-field textarea {
-  width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream);
-}
+/* .po-field inputs derive from the shared .field standard (defined once, near .le-field). */
 .po-field textarea { min-height: 48px; resize: vertical; }
 /* the qty ± stepper inside the add-item form keeps its own compact box (not the full-width input rule) */
 .po-field .qty-step input[type=number] { width: 46px; padding: 0; border-radius: 0; background: white; }
@@ -1642,7 +1639,17 @@ img.sku-img { background: #e8e8e8; }
 .le-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .le-field.grow { flex: 1; }
 .le-note { margin-top: 14px; }
-.le-field input { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; }
+/* THE form-field standard (PR251) — ONE definition. White fill, hairline border, 8px radius,
+   16px text (prevents iOS focus-zoom), full width. Every form input/select/textarea derives from
+   this; context-specific tweaks (width, min-height, locked look) layer on top. */
+.field,
+.le-field input,
+.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field select, .po-field textarea,
+.rcv-le-field input,
+.rcv-map-field input,
+.batch-field {
+  width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: white; color: var(--ink);
+}
 /* PR250 — a catalogue SKU's code can't be recoded here: locked look (greyed fill, muted text, not-allowed). */
 .le-field input.le-locked { background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1; }
 /* the price input fills its (grow) field in the editor — overrides the narrow fixed .edit-price width */

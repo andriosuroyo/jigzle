@@ -206,7 +206,7 @@ export function QuickAddForm({
       <div className="sc-qa-title">New SKU — partial, admin completes it later</div>
 
       <label className="sc-qa-field">
-        <span>Item code</span>
+        <span>SKU code</span>
         <input value={code} onChange={(e) => { setCode(e.target.value); setExists(null); }} placeholder="e.g. ACR-12345" />
       </label>
       <label className="sc-qa-field">
