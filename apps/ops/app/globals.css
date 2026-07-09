@@ -423,6 +423,12 @@ button.po-pick-btn:active { background: var(--paper); }
 .badge { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 20px; margin-left: auto; }
 .badge.ready { background: var(--green-tint); color: #3D6B26; }
 .badge.short { background: var(--yellow-tint); color: #9C6F1C; }
+/* PR259 — "in-progress" draft badge on an Inbound queue row; sits next to the ship id (not pushed right). */
+.badge.draft { background: var(--orange-tint); color: var(--brown-dark); margin-left: 0; }
+/* PR259 — resume-draft entry on the Inbound list + the "restored N lines" banner in the detail */
+.rcv-resume-draft { margin: 0 0 12px; }
+.rcv-restored { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rcv-restored .btn-link { margin-left: auto; }
 
 .fd-pane { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-height: 300px; min-width: 0; }
 .fd-empty { color: var(--muted); font-size: 14px; padding: 40px 0; text-align: center; }
