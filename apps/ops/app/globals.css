@@ -1716,6 +1716,16 @@ img.sku-img { background: #e8e8e8; }
 .rcv-ship-note { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--paper); border: 1px solid var(--line); font-size: 13px; color: var(--ink); white-space: pre-wrap; }
 /* Purchasing History detail: Shipment notes section. */
 .fd-section-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+/* PR257 — Inbound detail: the Edit-items entry (section-head right) + the overlay's line list */
+.rcv-edit-items { display: inline-flex; align-items: center; gap: 5px; }
+.rcv-edit-items svg { width: 13px; height: 13px; }
+.ei-lines { display: flex; flex-direction: column; gap: 10px; max-height: 56vh; overflow-y: auto; }
+.ei-row { display: flex; align-items: center; gap: 10px; }
+.ei-row > .btn-link { flex-shrink: 0; }
+.ei-row .rcv-exp { flex-shrink: 0; }
+.ei-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ei-main .ff-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ei-search { margin: 8px 0 2px 46px; }
 /* PR255 — the total item cost sits on the right of the "ITEMS (n)" section head; render it as a value
    (not uppercased/spaced like the label). */
 .fd-items-cost { text-transform: none; letter-spacing: 0; font-weight: 700; color: var(--brown-dark); }

@@ -503,6 +503,63 @@ export async function mapPlaceholderPO(shipId: string, rawCode: string, itemCode
   return { updated: (data ?? []).length };
 }
 
+// ── PR257 — Edit items (receive detail): re-point a shipment's not-yet-received PO lines from one
+// RESOLVED SKU to another (the resolved-code sibling of mapPlaceholderPO). The target must already
+// exist in the catalogue. Contents-only lines (no PO) can't be re-pointed — updated comes back 0.
+// Returns errors as data (PR145): this is awaited by a button handler, and thrown Error messages
+// are redacted in production.
+export async function remapShipmentSku(shipId: string, fromCode: string, toCode: string): Promise<{ updated: number; error: string | null }> {
+  const sid = shipId.trim();
+  const from = fromCode.trim();
+  const to = toCode.trim();
+  if (!sid || !from || !to) return { updated: 0, error: 'Ship id, current and new item code are required.' };
+  if (from === to) return { updated: 0, error: null };
+  const supabase = createSupabaseServerClient();
+
+  const { data: cat } = await supabase.from('catalogue').select('item_code').eq('item_code', to).maybeSingle();
+  if (!cat) return { updated: 0, error: `${to} is not in the catalogue.` };
+
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .update({ item_code: to })
+    .eq('ship_id', sid)
+    .eq('item_code', from)
+    .or('status.is.null,status.neq.Received')
+    .select('po_id');
+  if (error) return { updated: 0, error: error.message };
+  return { updated: (data ?? []).length, error: null };
+}
+
+// ── PR257 — best-effort translate a native-language product name to English (fills the stub form's
+// Translated name from the Original name). Uses the public Google Translate web endpoint; ANY
+// failure (network, rate limit, shape change) returns null and the operator just types it. ──
+export async function translateToEnglish(text: string): Promise<{ text: string | null }> {
+  const q = text.trim();
+  if (!q) return { text: null };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const res = await fetch(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(q)}`,
+      { cache: 'no-store', signal: ctrl.signal }
+    );
+    if (!res.ok) return { text: null };
+    const data: unknown = await res.json();
+    let out = '';
+    if (Array.isArray(data) && Array.isArray(data[0])) {
+      for (const seg of data[0] as unknown[]) {
+        if (Array.isArray(seg) && typeof seg[0] === 'string') out += seg[0];
+      }
+    }
+    const t = out.trim();
+    return { text: t || null };
+  } catch {
+    return { text: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── link a barcode to a SKU (used when mapping a placeholder at receive: the box's barcode is the
 // identifier, so linking it means future receives of the same item auto-resolve via the scan path).
 // Idempotent: a duplicate (barcode, item_code) link (0020 composite PK) is a no-op, not an error.
@@ -521,7 +578,8 @@ export async function linkBarcode(barcode: string, itemCode: string): Promise<{ 
 export async function createCatalogueStub(input: StubInput): Promise<SkuHit> {
   const supabase = createSupabaseServerClient();
   const item_code = input.item_code.trim();
-  const name = input.name?.trim() || null;
+  const name = input.name?.trim() || null; // the English side → translate_name
+  const original_name = input.original_name?.trim() || null; // PR257 — native-language side
   if (!item_code) throw new Error('createCatalogueStub: item_code is required');
 
   // never overwrite an existing SKU
@@ -539,7 +597,7 @@ export async function createCatalogueStub(input: StubInput): Promise<SkuHit> {
 
   const { error } = await supabase
     .from('catalogue')
-    .insert({ item_code, brand_prefix, self_code: brand_prefix, translate_name: name, needs_review: true });
+    .insert({ item_code, brand_prefix, self_code: brand_prefix, translate_name: name, original_name, needs_review: true });
   if (error) throw new Error(`createCatalogueStub: ${error.message}`);
 
   // link the scanned barcode so the line resolves now and future scans hit this SKU
@@ -549,7 +607,7 @@ export async function createCatalogueStub(input: StubInput): Promise<SkuHit> {
     if (bcErr && bcErr.code !== '23505') throw new Error(`createCatalogueStub (barcode): ${bcErr.message}`);
   }
 
-  return { item_code, name: name ?? item_code, available: 0, on_the_way: 0 };
+  return { item_code, name: name ?? original_name ?? item_code, available: 0, on_the_way: 0 };
 }
 
 // ── allocate the next ad-hoc 📦YYMMXXX id (advisory-locked, server-side) ──
