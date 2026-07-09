@@ -1689,8 +1689,6 @@ img.sku-img { background: #e8e8e8; }
    them — never its own wasteful row. */
 .orders-bar { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; max-width: 1100px; margin: 0 auto; padding: 12px 16px 0; }
 .orders-tabs { display: flex; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; }
-/* PR250 — right-aligned action on the tab row (Purchasing → To forwarder "Batch confirm"). */
-.orders-bar-action { flex-shrink: 0; }
 .orders-tab { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 8px 14px; border: 1px solid var(--line); border-radius: 20px; background: white; color: var(--muted); cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 .orders-tab.active { background: var(--orange-tint); border-color: var(--orange); color: #8A5A1A; }
 .orders-tab-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; background: var(--paper); color: var(--brown-dark); min-width: 20px; text-align: center; }

@@ -173,9 +173,6 @@ export default function OrderBoard({
   localCouriers = [],
   onDetailOpenChange,
   onCountChange,
-  batchSignal = 0,
-  groupSignal = 0,
-  onSelCountChange,
 }: {
   initialQueue: OpenPORow[];
   suppliers: Supplier[];
@@ -190,12 +187,6 @@ export default function OrderBoard({
   // PR153: report when a bucket's bodyview DETAIL is open (the shell hides the pipeline tabs).
   onDetailOpenChange?: (open: boolean) => void;
   onCountChange?: (n: number) => void;
-  // PR250 — a bumped counter from the shell's tab-row "Batch confirm" button opens the batch overlay.
-  batchSignal?: number;
-  // PR251 — To-ship: a bumped counter from the tab-row "Create shipment ID" opens the group overlay;
-  // onSelCountChange reports the checkbox selection count so the shell can enable/disable that button.
-  groupSignal?: number;
-  onSelCountChange?: (n: number) => void;
 }) {
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
@@ -233,21 +224,8 @@ export default function OrderBoard({
   const [batchNote, setBatchNote] = useState('');
   const [batchPer, setBatchPer] = useState<Record<number, { cost: string; link: string }>>({});
   const [batchBusy, setBatchBusy] = useState(false);
-  // open the batch overlay when the shell's tab-row button bumps the signal (skip the initial 0)
-  useEffect(() => {
-    if (batchSignal) openBatch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchSignal]);
-  // To-ship: the tab-row "Create shipment ID" bumps groupSignal → open the group overlay.
-  useEffect(() => {
-    if (groupSignal) openGroup();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupSignal]);
-  // report the checkbox selection count up to the shell (drives the tab-row button's enabled state).
-  useEffect(() => {
-    onSelCountChange?.(selectedPoIds.size);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPoIds]);
+  // PR263 — Batch confirm / Create shipment ID are now in-list entry buttons (openBatch / openGroup
+  // called directly); the old shell tab-row buttons + signal plumbing are gone.
 
   // PR153: a bucketed bodyview detail is open → the shell hides the pipeline tabs.
   const bvDetailOpen = !!bucket && mode === 'edit' && !!editPo;
@@ -909,6 +887,8 @@ export default function OrderBoard({
 
       {!(mode === 'edit' && editPo) ? (
         <>
+          {/* PR263 — Batch confirm is an entry button at the top of the list (like To-buy's "add item"). */}
+          <button className="btn-brown btn-ico po-add-full" onClick={openBatch}><TruckIcon />Batch confirm</button>
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
             {shownFiltered.map((po) => {
@@ -993,6 +973,16 @@ export default function OrderBoard({
               ))}
             </div>
           )}
+          {/* PR263 — Create shipment ID is an entry button at the top of the list (mirrors Batch confirm);
+              disabled until rows are ticked. */}
+          <button
+            className="btn-brown btn-ico po-add-full"
+            onClick={openGroup}
+            disabled={selectedCount === 0}
+            title={selectedCount === 0 ? 'Tick items in the list first' : `Create a shipment from ${selectedCount} selected`}
+          >
+            <PackageIcon />Create shipment ID{selectedCount > 0 ? ` · ${selectedCount}` : ''}
+          </button>
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
             {shownFiltered.map((po) => {
