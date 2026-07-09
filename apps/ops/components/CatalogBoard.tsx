@@ -32,6 +32,7 @@ import { missingForComplete } from '@/app/catalog/types';
 import type { CatalogueListRow, SkuDetail } from '@/app/catalog/types';
 import type { OffListRow, DupGroup, MissingWeightRow } from '@/app/catalog/actions';
 import CatalogBrowse from '@/components/CatalogBrowse';
+import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
 import SearchSelect from '@/components/SearchSelect';
 import SearchInput from '@/components/SearchInput';
 import SkuImage from '@/components/SkuImage';
@@ -142,6 +143,26 @@ function initForm(sku: CatalogueRow): FormState {
   return f;
 }
 
+// PR260 — draft persistence keys. An in-progress SKU edit is keyed by item_code; the "+ New SKU"
+// overlay uses one fixed key. Persisted so a reload (a deploy force-reloading the tab, PWA relaunch,
+// the Refresh button) doesn't lose typing.
+const CAT_DRAFT_SKU_PREFIX = 'jz:catalog:draft:sku:';
+const CAT_DRAFT_NEW_KEY = 'jz:catalog:draft:new';
+const catDraftKey = (code: string) => CAT_DRAFT_SKU_PREFIX + code;
+type CatalogDraft = { form: FormState; imageUrls: string[]; sources: string[]; round: boolean; imgUnavailable: boolean };
+type CatalogNewDraft = { newCode: string; newName: string; newType: string | null };
+// the server baseline for an open SKU — a draft is only saved when the edit state diverges from this
+// (so merely viewing a SKU never writes a draft).
+function catServerSnapshot(sku: CatalogueRow, origSources: string[]): string {
+  return JSON.stringify({
+    form: initForm(sku),
+    imageUrls: sku.image_urls ?? [],
+    sources: origSources,
+    round: sku.image_type === 'Round',
+    imgUnavailable: !!sku.image_unavailable,
+  });
+}
+
 function buildPatch(orig: CatalogueRow, form: FormState): Partial<CatalogueRow> {
   const patch: Record<string, unknown> = {};
   for (const g of GROUPS)
@@ -244,6 +265,31 @@ export default function CatalogBoard({
   const [success, setSuccess] = useState<string | null>(null);
   const reqRef = useRef(0);
   const searchSeq = useRef(0); // stale-response guard for the debounced catalogue search
+  // PR260 — draft persistence. `catHydratingRef` gates the persist effect while a SKU loads/restores.
+  const catHydratingRef = useRef(false);
+  const [catRestored, setCatRestored] = useState(false); // editor "restored a draft" banner
+  const [newRestored, setNewRestored] = useState(false); // "+ New SKU" overlay restore banner
+
+  // persist the in-progress SKU edit whenever it diverges from the loaded server state (gated while a
+  // SKU is loading/restoring so the fresh server seed can't wipe the draft being restored).
+  useEffect(() => {
+    if (mode !== 'sku' || !detail || catHydratingRef.current) return;
+    const key = catDraftKey(detail.sku.item_code);
+    const current = JSON.stringify({ form, imageUrls, sources, round, imgUnavailable });
+    if (current !== catServerSnapshot(detail.sku, origSources)) {
+      saveDraft<CatalogDraft>(key, { form, imageUrls, sources, round, imgUnavailable });
+    } else {
+      clearDraft(key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, detail, form, imageUrls, sources, round, imgUnavailable, origSources]);
+
+  // persist the "+ New SKU" overlay draft (deliberate close discards it; a reload preserves it)
+  useEffect(() => {
+    if (!newOpen) return;
+    if (newCode.trim() || newName.trim() || newType) saveDraft<CatalogNewDraft>(CAT_DRAFT_NEW_KEY, { newCode, newName, newType });
+    else clearDraft(CAT_DRAFT_NEW_KEY);
+  }, [newOpen, newCode, newName, newType]);
 
   function resetMsg() {
     setError(null);
@@ -353,6 +399,8 @@ export default function CatalogBoard({
     setDetail(null);
     setNewBarcode(''); setBarcodeOpen(false); setBcOwners([]);
     const myReq = ++reqRef.current;
+    catHydratingRef.current = true; // gate persistence until the server seed + any draft restore lands
+    setCatRestored(false);
     setLoadingDetail(true);
     try {
       const d = await getSku(code);
@@ -360,10 +408,28 @@ export default function CatalogBoard({
       setDetail(d);
       if (d) {
         setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
-        getSkuSources(code).then((s) => { if (reqRef.current === myReq) { setSources(s); setOrigSources(s); } }).catch(() => {});
+        // PR260 — seed sources, then overlay any saved draft on top of the server state before ungating.
+        const applyDraft = (srv: string[]) => {
+          if (reqRef.current !== myReq) return;
+          setSources(srv); setOrigSources(srv);
+          const draft = loadDraft<CatalogDraft>(catDraftKey(d.sku.item_code));
+          if (draft) {
+            if (draft.form) setForm(draft.form);
+            if (draft.imageUrls) setImageUrls(draft.imageUrls);
+            if (draft.sources) setSources(draft.sources);
+            if (typeof draft.round === 'boolean') setRound(draft.round);
+            if (typeof draft.imgUnavailable === 'boolean') setImgUnavailable(draft.imgUnavailable);
+            setCatRestored(true);
+          }
+          catHydratingRef.current = false;
+        };
+        getSkuSources(code).then(applyDraft).catch(() => applyDraft([]));
+      } else if (reqRef.current === myReq) {
+        catHydratingRef.current = false;
       }
     } catch (e) {
       if (reqRef.current !== myReq) return;
+      catHydratingRef.current = false;
       setError(e instanceof Error ? e.message : 'Failed to load SKU.');
     } finally {
       if (reqRef.current === myReq) setLoadingDetail(false);
@@ -375,12 +441,16 @@ export default function CatalogBoard({
   // started mid-mutation can't be clobbered by a stale reload.
   async function reloadDetail(code: string) {
     const myReq = ++reqRef.current;
+    catHydratingRef.current = true; // PR260 — re-seeding server state must not write a spurious draft
     const d = await getSku(code);
     if (reqRef.current !== myReq) return;
     setDetail(d);
     if (d) {
-      setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setImgUnavailable(!!d.sku.image_unavailable);
-      getSkuSources(code).then((s) => { if (reqRef.current === myReq) { setSources(s); setOrigSources(s); } }).catch(() => {});
+      setForm(initForm(d.sku)); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
+      const done = (s: string[]) => { if (reqRef.current === myReq) { setSources(s); setOrigSources(s); catHydratingRef.current = false; } };
+      getSkuSources(code).then(done).catch(() => done([]));
+    } else if (reqRef.current === myReq) {
+      catHydratingRef.current = false;
     }
   }
 
@@ -403,8 +473,21 @@ export default function CatalogBoard({
   // ── PR191: "+ New SKU" — item code + name + product type → a partial (needs-review) SKU, then open it ──
   function openNewSku() {
     if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
-    setNewCode(''); setNewName(''); setNewType(null); setError(null);
+    setError(null);
+    // PR260 — restore a draft left by a reload; else start blank.
+    const draft = loadDraft<CatalogNewDraft>(CAT_DRAFT_NEW_KEY);
+    if (draft && (draft.newCode.trim() || draft.newName.trim() || draft.newType)) {
+      setNewCode(draft.newCode); setNewName(draft.newName); setNewType(draft.newType); setNewRestored(true);
+    } else {
+      setNewCode(''); setNewName(''); setNewType(null); setNewRestored(false);
+    }
     setNewOpen(true);
+  }
+  // deliberate dismissal of the New-SKU overlay discards its draft (a reload preserves it)
+  function closeNewSku() {
+    clearDraft(CAT_DRAFT_NEW_KEY);
+    setNewRestored(false);
+    setNewOpen(false);
   }
   async function submitNewSku() {
     const code = newCode.trim();
@@ -414,10 +497,12 @@ export default function CatalogBoard({
     try {
       const res = await quickAddSku({ item_code: code, name: newName.trim(), product_type: newType });
       if (!res.ok) {
-        if (res.reason === 'exists') { setNewOpen(false); await openSku(res.existing.item_code); setError(`That code already exists — opened ${res.existing.item_code}.`); }
+        if (res.reason === 'exists') { clearDraft(CAT_DRAFT_NEW_KEY); setNewRestored(false); setNewOpen(false); await openSku(res.existing.item_code); setError(`That code already exists — opened ${res.existing.item_code}.`); }
         else setError(res.message ?? 'Could not create the SKU.');
         return;
       }
+      clearDraft(CAT_DRAFT_NEW_KEY); // PR260 — SKU created; drop the new-overlay draft
+      setNewRestored(false);
       setNewOpen(false);
       await refreshNeeds();
       await openSku(res.item_code);
@@ -475,6 +560,8 @@ export default function CatalogBoard({
       }
 
       const n = Object.keys(patch).length;
+      clearDraft(catDraftKey(detail.sku.item_code)); // PR260 — edits committed; drop the draft
+      setCatRestored(false);
       await reloadDetail(detail.sku.item_code);
       await refreshNeeds();
       setSuccess((n ? `Saved ${n} field${n === 1 ? '' : 's'}.` : 'Saved (updated_at stamped).') + srcWarn);
@@ -622,6 +709,19 @@ export default function CatalogBoard({
 
           {mode === 'sku' && detail && (
             <div className="cat-detail">
+              {/* PR260 — restored unsaved edits (e.g. a deploy reloaded the tab mid-edit). */}
+              {catRestored && (
+                <div className="validation ok rcv-restored">
+                  <span>Restored your unsaved edits.</span>
+                  <button className="btn-link" onClick={() => {
+                    if (!detail) return;
+                    clearDraft(catDraftKey(detail.sku.item_code));
+                    setForm(initForm(detail.sku)); setImageUrls(detail.sku.image_urls ?? []); setSources(origSources);
+                    setRound(detail.sku.image_type === 'Round'); setImgUnavailable(!!detail.sku.image_unavailable);
+                    setCatRestored(false);
+                  }}>discard</button>
+                </div>
+              )}
               {/* PR188/PR189 — big square hero (height-capped so panoramas don't blow up), then SKU + name.
                   Manual Google-Drive URLs drive the hero + thumbnail strip; otherwise the pipeline image. */}
               {(() => {
@@ -1119,14 +1219,20 @@ export default function CatalogBoard({
       {/* PR191 — "+ New SKU" overlay: minimal identity (code + name + product type), needs-review, then
           opens the new SKU's bodyview to complete the rest. */}
       {newOpen && (
-        <div className="sc-modal-backdrop" onClick={() => setNewOpen(false)}>
+        <div className="sc-modal-backdrop" onClick={closeNewSku}>
           <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="New SKU" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <span className="sc-modal-title">New SKU</span>
-              <button className="sc-modal-x" onClick={() => setNewOpen(false)} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={closeNewSku} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
+              {newRestored && (
+                <div className="validation ok rcv-restored" style={{ marginBottom: 10 }}>
+                  <span>Restored your unsaved new SKU.</span>
+                  <button className="btn-link" onClick={() => { clearDraft(CAT_DRAFT_NEW_KEY); setNewCode(''); setNewName(''); setNewType(null); setNewRestored(false); }}>discard</button>
+                </div>
+              )}
               <div className="po-form">
                 <div className="po-field">
                   <label>SKU code</label>

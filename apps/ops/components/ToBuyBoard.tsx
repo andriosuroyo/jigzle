@@ -40,10 +40,17 @@ import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
+import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 
 type SubTab = 'manual' | 'sales' | 'oos';
+
+// PR260 — the "add planned item" overlay draft: the typed content only (picked SKU + qty/link/note/
+// urgency). One at a time, so a single fixed key. A deliberate close discards it; only an involuntary
+// reload (deploy / PWA relaunch) preserves it, and reopening the overlay restores it.
+const TOBUY_DRAFT_KEY = 'jz:tobuy:draft:add';
+type ToBuyDraft = { skuQuery: string; picked: { item_code: string; name: string } | null; qty: number; link: string; note: string; addUrgency: Urgency | null };
 
 const URGENCY_OPTS: { key: Urgency; label: string }[] = [
   { key: 'low', label: 'Low' },
@@ -123,6 +130,9 @@ export default function ToBuyBoard({
   const [link, setLink] = useState('');
   const [note, setNote] = useState('');
   const [addUrgency, setAddUrgency] = useState<Urgency | null>(null);
+  // PR260 — draft persistence for the add overlay (survives a reload mid-entry)
+  const hydratingRef = useRef(false);
+  const [addRestored, setAddRestored] = useState(false);
 
   // PR221 — "where to buy" links now live inline in the detail overlay (the separate Buy step is gone).
   // Loaded lazily when the overlay opens, keyed on the SKU code.
@@ -165,9 +175,29 @@ export default function ToBuyBoard({
   // ── add-item overlay ──
   function openAdd() {
     setAdding(true);
-    setSkuQuery(''); setSkuHits([]); setSearched(false); setPicked(null); setPickedStock(null);
-    setQty(1); setLink(''); setNote(''); setAddUrgency(null);
+    setSkuHits([]); setSearched(false); setPickedStock(null);
     setError(null);
+    // PR260 — restore a draft left by a reload; else start blank.
+    const draft = loadDraft<ToBuyDraft>(TOBUY_DRAFT_KEY);
+    if (draft && (draft.picked || draft.skuQuery.trim() || draft.link.trim() || draft.note.trim() || draft.addUrgency || draft.qty !== 1)) {
+      hydratingRef.current = true;
+      setSkuQuery(draft.skuQuery); setPicked(draft.picked);
+      setQty(draft.qty); setLink(draft.link); setNote(draft.note); setAddUrgency(draft.addUrgency);
+      setAddRestored(true);
+      if (draft.picked) { getSkuStock(draft.picked.item_code).then(setPickedStock).catch(() => {}); }
+      // release the gate after this render commits so subsequent edits persist
+      setTimeout(() => { hydratingRef.current = false; }, 0);
+    } else {
+      setSkuQuery(''); setPicked(null);
+      setQty(1); setLink(''); setNote(''); setAddUrgency(null);
+      setAddRestored(false);
+    }
+  }
+  // deliberate dismissal discards the draft (only an involuntary reload preserves it)
+  function closeAdd() {
+    clearDraft(TOBUY_DRAFT_KEY);
+    setAddRestored(false);
+    setAdding(false);
   }
 
   // a search that returns nothing means the typed text is a brand-new SKU code (the code IS the
@@ -195,6 +225,15 @@ export default function ToBuyBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skuQuery]);
 
+  // PR260 — persist the add-overlay draft as fields change (gated during restore; cleared when empty)
+  useEffect(() => {
+    if (!adding || hydratingRef.current) return;
+    const hasContent = !!picked || skuQuery.trim() !== '' || link.trim() !== '' || note.trim() !== '' || addUrgency !== null || qty !== 1;
+    if (hasContent) saveDraft<ToBuyDraft>(TOBUY_DRAFT_KEY, { skuQuery, picked, qty, link, note, addUrgency });
+    else clearDraft(TOBUY_DRAFT_KEY);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adding, picked, skuQuery, qty, link, note, addUrgency]);
+
   async function pick(hit: SkuHit) {
     setPicked({ item_code: hit.item_code, name: hit.name });
     setSkuHits([]); setSearched(false);
@@ -220,7 +259,7 @@ export default function ToBuyBoard({
         item_note: note.trim() || null,
         urgency: addUrgency,
       });
-      setAdding(false);
+      closeAdd(); // PR260 — item saved; drop its draft
       await refresh();
       setTab('manual');
     } catch (e) {
@@ -601,14 +640,20 @@ export default function ToBuyBoard({
 
       {/* "+ add item" overlay (Manual only) — dimmed-backdrop modal */}
       {adding && (
-        <div className="sc-modal-backdrop" onClick={() => setAdding(false)}>
+        <div className="sc-modal-backdrop" onClick={closeAdd}>
           <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Add planned item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <span className="sc-modal-title">Add planned item</span>
-              <button className="sc-modal-x" onClick={() => setAdding(false)} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={closeAdd} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
+              {addRestored && (
+                <div className="validation ok rcv-restored" style={{ marginBottom: 10 }}>
+                  <span>Restored your unsaved item.</span>
+                  <button className="btn-link" onClick={() => { clearDraft(TOBUY_DRAFT_KEY); setAddRestored(false); setSkuQuery(''); setPicked(null); setPickedStock(null); setQty(1); setLink(''); setNote(''); setAddUrgency(null); }}>discard</button>
+                </div>
+              )}
 
               {/* search — code / name / piece count / brand */}
               <div className="scan-row">
