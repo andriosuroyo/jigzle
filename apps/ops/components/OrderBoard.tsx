@@ -888,7 +888,7 @@ export default function OrderBoard({
       {!(mode === 'edit' && editPo) ? (
         <>
           {/* PR263 — Batch confirm is an entry button at the top of the list (like To-buy's "add item"). */}
-          <button className="btn-brown btn-ico po-add-full" onClick={openBatch}><TruckIcon />Batch confirm</button>
+          <button className="btn-brown btn-ico po-add-full po-add-toplist" onClick={openBatch}><TruckIcon />Batch confirm</button>
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
             {shownFiltered.map((po) => {
@@ -973,15 +973,15 @@ export default function OrderBoard({
               ))}
             </div>
           )}
-          {/* PR263 — Create shipment ID is an entry button at the top of the list (mirrors Batch confirm);
+          {/* PR263 — Create shipment is an entry button at the top of the list (mirrors Batch confirm);
               disabled until rows are ticked. */}
           <button
-            className="btn-brown btn-ico po-add-full"
+            className="btn-brown btn-ico po-add-full po-add-toplist"
             onClick={openGroup}
             disabled={selectedCount === 0}
             title={selectedCount === 0 ? 'Tick items in the list first' : `Create a shipment from ${selectedCount} selected`}
           >
-            <PackageIcon />Create shipment ID{selectedCount > 0 ? ` · ${selectedCount}` : ''}
+            <PackageIcon />Create shipment{selectedCount > 0 ? ` · ${selectedCount}` : ''}
           </button>
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
