@@ -13,6 +13,9 @@ export default function Breadcrumbs({ items }: { items: Crumb[] }) {
   // PR220 — manual refresh (right of the trail). The boards hold their own client state seeded from
   // server props, so a hard reload is the reliable way to pull fresh data on demand — and it only
   // runs when the operator asks for it, instead of automatic background refetches.
+  // PR258 — this is `window.location.reload()`: it reloads ONLY the tab it's clicked in. There is no
+  // realtime channel / broadcast anywhere in the app, so one operator's refresh can never reach
+  // another device. Keep it that way — never wire this button to a shared/server-push mechanism.
   const [refreshing, setRefreshing] = useState(false);
   return (
     <nav className="crumbs" aria-label="Breadcrumb">
