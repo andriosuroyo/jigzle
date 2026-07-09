@@ -133,6 +133,7 @@ export default function PurchasingShell({
             suppliers={suppliers}
             forwarders={forwarders}
             shipments={shipments}
+            localCouriers={localCouriers}
             onDetailOpenChange={setDetailOpen}
             groupSignal={groupSignal}
             onSelCountChange={setShipSelCount}

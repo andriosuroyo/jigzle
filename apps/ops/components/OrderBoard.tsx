@@ -24,11 +24,14 @@ import { StoreIcon, TruckIcon, PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
-import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
 
 // PR248 — trash glyph for the "Delete PO" action button (Sales-style: btn-danger btn-ico + text).
 const TrashIcon = () => (<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+// PR256 — To-ship detail: Edit toggle + easy-copy (unit cost / item link) glyphs.
+const PencilIcon = () => (<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
+const CopyIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
+const CheckIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>);
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -209,6 +212,8 @@ export default function OrderBoard({
   const [editPo, setEditPo] = useState<OpenPORow | null>(null);
   const [shipNote, setShipNote] = useState(''); // the edited PO's Ship-ID note (To-ship), seeded on open
   const [attachShipId, setAttachShipId] = useState(''); // PR152: To-ship attach-to-open-shipment pick
+  const [shipEditing, setShipEditing] = useState(false); // PR256: To-ship detail edit mode (fields unlocked)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null); // PR256: which easy-copy chip just fired
   const [form, setForm] = useState<PoForm>(emptyForm());
 
   const [busy, setBusy] = useState(false);
@@ -224,6 +229,7 @@ export default function OrderBoard({
   const [batchSupplier, setBatchSupplier] = useState<number | ''>('');
   const [batchMethod, setBatchMethod] = useState('');
   const [batchTracking, setBatchTracking] = useState('');
+  const [batchMarketplace, setBatchMarketplace] = useState(''); // PR256: one marketplace order id for the group
   const [batchNote, setBatchNote] = useState('');
   const [batchPer, setBatchPer] = useState<Record<number, { cost: string; link: string }>>({});
   const [batchBusy, setBatchBusy] = useState(false);
@@ -421,6 +427,8 @@ export default function OrderBoard({
     setEditPo(po);
     setShipNote((po.ship_id ? shipmentById.get(po.ship_id)?.note : '') ?? '');
     setAttachShipId('');
+    setShipEditing(false);
+    setCopiedKey(null);
     setForm(formFromPO(po));
     setSkuQuery('');
     setSkuHits([]);
@@ -444,6 +452,11 @@ export default function OrderBoard({
     }
   }
 
+  // PR256 — easy-copy a To-ship detail value. Best-effort — falls back silently if clipboard is blocked.
+  async function copyVal(text: string, key: string) {
+    try { await navigator.clipboard.writeText(text); setCopiedKey(key); setTimeout(() => setCopiedKey(null), 1400); } catch { /* clipboard unavailable */ }
+  }
+
   // ── To forwarder: auto-save one field (there's no Save button — fields persist as you fill them,
   // mirroring the Settings editors). Merges the change back into the queue + the open edit row. ──
   async function autoSaveForwarder(patch: UpdatePOPatch) {
@@ -462,6 +475,11 @@ export default function OrderBoard({
   async function confirmOne() {
     if (!editPo) return;
     resetMessages();
+    // PR256 — a supplier is the one thing To-forwarder must record before an item can move on.
+    if (!form.supplier_id) {
+      setError('Pick a supplier before Ready to Ship.');
+      return;
+    }
     setBusy(true);
     try {
       // persist any field edits made in the detail view before advancing (fields auto-save on blur,
@@ -515,6 +533,7 @@ export default function OrderBoard({
     setBatchSupplier('');
     setBatchMethod('');
     setBatchTracking('');
+    setBatchMarketplace('');
     setBatchNote('');
     setBatchPer({});
   }
@@ -558,6 +577,7 @@ export default function OrderBoard({
           supplier_id: batchSupplier ? Number(batchSupplier) : undefined,
           method: batchMethod.trim() || null,
           tracking_to_forwarder: batchTracking.trim() || null,
+          marketplace_order_id: batchMarketplace.trim() || null,
           item_note: batchNote.trim() || null,
           item_cost: numOrNull(per.cost),
           product_link: per.link.trim() || null,
@@ -1132,25 +1152,137 @@ export default function OrderBoard({
     </div>
   );
 
-  // ── PR152: the To-ship detail — LOCKED reference view. One line summarises what To-forwarder
-  // recorded (supplier · unit cost · local courier · local tracking · marketplace id); the only
-  // editable thing is the Shipment ID: attach to an already-open Ship ID, or detach. SKU, qty,
-  // customer and status are all fixed at this stage (status flows from grouping / receiving). ──
+  // ── PR152 → PR256: the To-ship detail. A read-only recap of EVERYTHING To-forwarder recorded
+  // (supplier · item link · unit cost · local courier & tracking · marketplace id · notes), with
+  // easy-copy on the unit cost and item link; the Edit button unlocks the same auto-save-on-blur
+  // fields as To forwarder. SKU, qty, customer and status stay fixed at this stage (status flows
+  // from grouping / receiving); the Shipment ID attach / detach keeps working either way. ──
   function renderShipDetail() {
     if (!editPo) return null;
     const sup = suppliers.find((s) => s.supplier_id === editPo.supplier_id);
     const ccy = currencyForCountry(sup?.country);
-    const parts = [
-      editPo.supplier_name || sup?.name || null,
-      editPo.item_cost != null ? `${ccy ? ccy.symbol : ''}${editPo.item_cost}` : null,
-      editPo.method || null,
-      editPo.tracking_to_forwarder ? `#${editPo.tracking_to_forwarder}` : null,
-      editPo.marketplace_order_id ? `MP ${editPo.marketplace_order_id}` : null,
-    ].filter(Boolean);
+    // prefer the live lookup by id — an Edit-mode supplier change patches supplier_id only,
+    // so editPo.supplier_name can be stale
+    const supplierName = sup?.name || editPo.supplier_name || null;
+    const costText = editPo.item_cost != null ? `${ccy ? ccy.symbol : ''}${editPo.item_cost}` : null;
+    const courierText = [editPo.method || null, editPo.tracking_to_forwarder ? `#${editPo.tracking_to_forwarder}` : null].filter(Boolean).join(' · ');
+    // edit mode: the unit-cost symbol filler follows the supplier currently picked in the form
+    const editSup = suppliers.find((s) => s.supplier_id === Number(form.supplier_id));
+    const editCcy = currencyForCountry(editSup?.country);
     return (
       <div className="po-form">
-        {/* what was set in To forwarder — read-only */}
-        <div className="po-ship-info">{parts.length ? parts.join(' · ') : 'Nothing recorded in To forwarder yet.'}</div>
+        {!shipEditing ? (
+          /* what was set in To forwarder — read-only rows; unit cost + item link are easy-copy */
+          <div className="po-roview">
+            <div className="po-rorow"><span className="po-rok">Supplier</span><span className="po-rov">{supplierName || '—'}</span></div>
+            <div className="po-rorow">
+              <span className="po-rok">Item link</span>
+              <span className="po-rov">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
+              {editPo.product_link && (
+                <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
+                  {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}
+                </button>
+              )}
+            </div>
+            <div className="po-rorow">
+              <span className="po-rok">Unit cost</span>
+              <span className="po-rov">{costText || '—'}</span>
+              {editPo.item_cost != null && (
+                <button className="po-rocopy" onClick={() => copyVal(String(editPo.item_cost), 'cost')} aria-label={copiedKey === 'cost' ? 'Unit cost copied' : 'Copy unit cost'} title="Copy unit cost">
+                  {copiedKey === 'cost' ? <CheckIcon /> : <CopyIcon />}
+                </button>
+              )}
+            </div>
+            <div className="po-rorow"><span className="po-rok">Local courier</span><span className="po-rov">{courierText || '—'}</span></div>
+            <div className="po-rorow"><span className="po-rok">Marketplace ID</span><span className="po-rov">{editPo.marketplace_order_id || '—'}</span></div>
+            <div className="po-rorow"><span className="po-rok">Notes</span><span className="po-rov">{editPo.item_note || '—'}</span></div>
+          </div>
+        ) : (
+          <>
+            {/* Edit mode — the To-forwarder field set, auto-saving on blur/change */}
+            <div className="po-field">
+              <label>Supplier</label>
+              <select
+                value={form.supplier_id}
+                onChange={(e) => {
+                  const supplier_id = e.target.value ? Number(e.target.value) : '';
+                  setForm((f) => ({ ...f, supplier_id }));
+                  autoSaveForwarder({ supplier_id: supplier_id ? Number(supplier_id) : undefined });
+                }}
+              >
+                <option value="">— pick a supplier —</option>
+                {suppliers.map((s) => (
+                  <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="po-field">
+              <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <input
+                type="text"
+                placeholder="https://…"
+                value={form.product_link}
+                onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
+                onBlur={(e) => autoSaveForwarder({ product_link: e.target.value.trim() || null })}
+              />
+            </div>
+            <div className="po-field">
+              <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <div className="po-cost-row">
+                {editCcy && <span className="po-cost-ccy">{editCcy.symbol}</span>}
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="any"
+                  placeholder="0"
+                  value={form.item_cost}
+                  onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
+                  onBlur={(e) => autoSaveForwarder({ item_cost: numOrNull(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="po-field">
+              <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <div className="po-inline2">
+                <input
+                  type="text"
+                  list="ship-methods"
+                  placeholder="courier"
+                  value={form.method}
+                  onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
+                  onBlur={(e) => autoSaveForwarder({ method: e.target.value.trim() || null })}
+                />
+                <input
+                  type="text"
+                  placeholder="tracking number"
+                  value={form.tracking_to_forwarder}
+                  onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))}
+                  onBlur={(e) => autoSaveForwarder({ tracking_to_forwarder: e.target.value.trim() || null })}
+                />
+              </div>
+              <datalist id="ship-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
+            </div>
+            <div className="po-field">
+              <label>Marketplace ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <input
+                type="text"
+                placeholder="marketplace order id"
+                value={form.marketplace_order_id}
+                onChange={(e) => setForm((f) => ({ ...f, marketplace_order_id: e.target.value }))}
+                onBlur={(e) => autoSaveForwarder({ marketplace_order_id: e.target.value.trim() || null })}
+              />
+            </div>
+            <div className="po-field">
+              <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <textarea
+                value={form.item_note}
+                onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
+                onBlur={(e) => autoSaveForwarder({ item_note: e.target.value.trim() || null })}
+              />
+            </div>
+          </>
+        )}
 
         {/* Shipment — attach / detach an open Ship ID; its warehouse note rides along when attached */}
         <div className="po-field">
@@ -1183,17 +1315,26 @@ export default function OrderBoard({
           )}
         </div>
 
-        <div className="ob-return">
-          {!confirmDel ? (
-            <TrashButton onClick={() => setConfirmDel(true)} disabled={busy} ariaLabel="Delete order" />
-          ) : (
-            <span className="rcv-reverse-ask">
-              Delete PO #{editPo.po_id}? This removes the order entirely.
-              <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
-              <button className="btn-primary danger" onClick={doDelete} disabled={busy}>{busy ? 'Deleting…' : 'Yes, delete'}</button>
-            </span>
-          )}
+        {/* PR256 — the Sales / To-forwarder action-bar standard: secondary (Edit) then destructive
+            last; Delete opens a modal confirm instead of the old bare trash + inline ask. */}
+        <div className="td-actions">
+          <button className="btn-secondary btn-ico" onClick={() => setShipEditing((v) => !v)} disabled={busy}>
+            <PencilIcon />{shipEditing ? 'Done' : 'Edit'}
+          </button>
+          <button className="btn-danger btn-ico" onClick={() => setConfirmDel(true)} disabled={busy}><TrashIcon />Delete PO</button>
         </div>
+        {confirmDel && (
+          <div className="sc-modal-backdrop" onClick={() => setConfirmDel(false)}>
+            <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Delete PO" onClick={(e) => e.stopPropagation()}>
+              <div className="sc-modal-head"><div className="sc-modal-title">Delete PO #{editPo.po_id}?</div></div>
+              <div className="sc-modal-body">This removes the order entirely.</div>
+              <div className="sc-modal-foot">
+                <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
+                <button className="btn-primary danger" onClick={doDelete} disabled={busy}>{busy ? 'Deleting…' : 'Delete PO'}</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1266,18 +1407,23 @@ export default function OrderBoard({
                   <datalist id="batch-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
                 </div>
                 <div className="batch-group">
+                  <div className="fd-section-head">Marketplace ID</div>
+                  <input className="batch-field" type="text" placeholder="marketplace order id" value={batchMarketplace} onChange={(e) => setBatchMarketplace(e.target.value)} />
+                </div>
+                <div className="batch-group">
                   <div className="fd-section-head">Notes</div>
                   <textarea className="batch-field" value={batchNote} onChange={(e) => setBatchNote(e.target.value)} />
                 </div>
 
-                {/* item list — image (36) + two lines: SKU ×qty / unit cost · name / item link */}
+                {/* item list (PR256) — plain flush-left rows (no card box): 54px image + two lines,
+                    SKU ×qty / unit cost (no spinner) · name / item link */}
                 <div className="fd-section-head batch-items-head">Item list, costs &amp; links</div>
                 <ul className="batch-items">
                   {picked.map((po) => {
                     const code = po.item_code ?? po.item_code_raw ?? '—';
                     return (
                       <li key={po.po_id} className="batch-item">
-                        <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                        <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.smd} />
                         <div className="batch-item-body">
                           <div className="batch-item-row">
                             <span className="batch-item-id"><span className="ff-code">{code}</span><span className="po-card-qty">×{po.qty}</span></span>

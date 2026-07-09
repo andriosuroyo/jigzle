@@ -160,13 +160,17 @@ input, textarea, select, button { font-family: inherit; }
 .chip.active { background: var(--orange-tint); border-color: var(--orange); color: var(--brown-dark); }
 .batch-group textarea.batch-field { min-height: 60px; resize: vertical; }
 .batch-items-head { margin-top: 4px; }
-.batch-items { display: flex; flex-direction: column; gap: 10px; }
-.batch-item { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--cream); }
+.batch-items { display: flex; flex-direction: column; gap: 14px; }
+/* PR256 — plain flush-left media rows (the old cream card box + left padding is gone): a 54px image
+   vertically centred beside the SKU/cost and name/link lines. */
+.batch-item { display: flex; align-items: center; gap: 10px; }
 .batch-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .batch-item-row { display: flex; align-items: center; gap: 8px; }
 .batch-item-id { display: flex; align-items: baseline; gap: 6px; flex: 1; min-width: 0; }
 .batch-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.batch-cost { flex: 0 0 108px; }
+/* the unit-cost input drops the number-spinner (+/−) chrome — typed entry only */
+.batch-cost { flex: 0 0 108px; -moz-appearance: textfield; }
+.batch-cost::-webkit-outer-spin-button, .batch-cost::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .batch-link { flex: 0 0 55%; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .po-card-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -1802,7 +1806,15 @@ img.sku-img { background: #e8e8e8; }
 .po-inline2 input, .po-inline2 select { flex: 1; min-width: 0; }
 .po-inline2 .btn-secondary { flex-shrink: 0; }
 /* PR152 — To-ship locked detail: the recorded-in-forwarder summary line + attached-shipment box */
-.po-ship-info { font-size: 13px; color: var(--ink); background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-bottom: 12px; word-break: break-word; }
+/* PR256 — To-ship detail read-only recap (replaces the one-line .po-ship-info): label/value rows in
+   the cream info box; the unit cost + item link rows carry an easy-copy button. */
+.po-roview { display: flex; flex-direction: column; gap: 7px; font-size: 13px; color: var(--ink); background: var(--cream); border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px; margin-bottom: 12px; }
+.po-rorow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.po-rok { flex: 0 0 96px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.po-rov { flex: 1; min-width: 0; word-break: break-word; }
+.po-rov a { color: var(--brown-dark); }
+.po-rocopy { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--brown-light); cursor: pointer; }
+.po-rocopy:active { background: var(--paper); }
 .po-shipbox { display: flex; align-items: center; gap: 12px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); }
 .po-shipbox .btn-link { margin-left: auto; }
 
