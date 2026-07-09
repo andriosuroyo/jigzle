@@ -16,12 +16,13 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
 
-// PR206: box editor draft rows (string inputs) ⇄ ShipmentBox (numbers/null).
-type BoxDraft = { p: string; l: string; t: string; w: string; tracking: string };
-const emptyBoxDraft = (): BoxDraft => ({ p: '', l: '', t: '', w: '', tracking: '' });
+// PR206/PR261: box editor draft rows (string inputs) ⇄ ShipmentBox (numbers/null). real_weight is kg
+// (the CN Packing List reads kg). PR261 adds a per-box local courier alongside the tracking number.
+type BoxDraft = { p: string; l: string; t: string; w: string; courier: string; tracking: string };
+const emptyBoxDraft = (): BoxDraft => ({ p: '', l: '', t: '', w: '', courier: '', tracking: '' });
 const numOrNull = (s: string): number | null => (s.trim() === '' ? null : Number(s));
-const boxToDraft = (b: ShipmentBox): BoxDraft => ({ p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', w: b.real_weight?.toString() ?? '', tracking: b.tracking ?? '' });
-const draftToBox = (d: BoxDraft): ShipmentBox => ({ dim_p: numOrNull(d.p), dim_l: numOrNull(d.l), dim_t: numOrNull(d.t), real_weight: numOrNull(d.w), tracking: d.tracking.trim() || null });
+const boxToDraft = (b: ShipmentBox): BoxDraft => ({ p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', w: b.real_weight?.toString() ?? '', courier: b.courier ?? '', tracking: b.tracking ?? '' });
+const draftToBox = (d: BoxDraft): ShipmentBox => ({ dim_p: numOrNull(d.p), dim_l: numOrNull(d.l), dim_t: numOrNull(d.t), real_weight: numOrNull(d.w), courier: d.courier.trim() || null, tracking: d.tracking.trim() || null });
 
 // action-button icons (edit / delete), matching the To-buy detail style.
 const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 16, height: 16, 'aria-hidden': true };
@@ -29,24 +30,27 @@ const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a
 const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
-// one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg · ZTO123"
+// one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg · ZTO ZTO123"
 const boxSummary = (b: ShipmentBox): string => {
   const dims = [b.dim_p, b.dim_l, b.dim_t];
   const parts: string[] = [];
   if (dims.some((d) => d != null)) parts.push(`${dims.map((d) => (d ?? '–')).join(' × ')} cm`);
   if (b.real_weight != null) parts.push(`${b.real_weight} kg`);
-  if (b.tracking) parts.push(b.tracking);
+  const ct = [b.courier, b.tracking].filter(Boolean).join(' ');
+  if (ct) parts.push(ct);
   return parts.join(' · ') || '—';
 };
+// PR261 — compact currency: the yuan symbol 元 for "yuan", else the currency word (space-prefixed).
+const ccyTag = (ccy: string | null | undefined): string => (ccy ? (ccy.trim().toLowerCase() === 'yuan' ? '元' : ` ${ccy}`) : '');
 // Active = shipped date; Completed = received date.
 const dateLabel = (s: ShipmentHistoryRow): string =>
   s.completed ? `received ${fmtDate(s.received_date || s.ship_date)}` : `shipped ${fmtDate(s.ship_date)}`;
 const fmtCost = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 // quickview card cost label (list view) — kept as "Total Cost" is only used in the list, not the detail.
 const costLabel = (s: { total_cost: number | null; currency: string | null }): string | null =>
-  s.total_cost == null ? null : `Total Cost: ${fmtCost(s.total_cost)}${s.currency ? ` ${s.currency}` : ''}`;
+  s.total_cost == null ? null : `Total Cost: ${fmtCost(s.total_cost)}${ccyTag(s.currency)}`;
 const costText = (total: number | null, ccy: string | null): string | null =>
-  total == null ? null : `${fmtCost(total)}${ccy ? ` ${ccy}` : ''}`;
+  total == null ? null : `${fmtCost(total)}${ccyTag(ccy)}`;
 
 export default function PurchasingHistoryBoard({
   initialShipments,
@@ -94,9 +98,8 @@ export default function PurchasingHistoryBoard({
   const [courierErr, setCourierErr] = useState<string | null>(null);
   // PR206 (0069): per-box dims/weight/tracking drafts (saved as a set; pre-fill the CN Packing List)
   const [boxDraft, setBoxDraft] = useState<BoxDraft[]>([]);
-  const [savingBoxes, setSavingBoxes] = useState(false);
   const [boxErr, setBoxErr] = useState<string | null>(null);
-  const [boxSaved, setBoxSaved] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false); // PR261 — Done saves boxes + note together
 
   // PR255 — per-item detail overlay: the tapped item + editable drafts for its captured To-forwarder data.
   const [selItem, setSelItem] = useState<ShipmentItemRow | null>(null);
@@ -171,7 +174,6 @@ export default function PurchasingHistoryBoard({
     setTrackingDraft(s.tracking ?? '');
     setCourierErr(null);
     setBoxErr(null);
-    setBoxSaved(false);
     setBoxDraft([]);
     setShipItems([]);
     setShipItemsLoading(true);
@@ -185,37 +187,47 @@ export default function PurchasingHistoryBoard({
     }
   }
 
-  // PR206: save the whole box set for the open shipment (replaces existing rows).
-  async function saveBoxes() {
-    if (!openShip) return;
-    setSavingBoxes(true); setBoxErr(null); setBoxSaved(false);
+  // PR206: save the whole box set for the open shipment (replaces existing rows). Returns success.
+  async function saveBoxes(): Promise<boolean> {
+    if (!openShip) return true;
+    setBoxErr(null);
     const { error } = await setShipmentBoxes(openShip.ship_id, boxDraft.map(draftToBox));
-    setSavingBoxes(false);
-    if (error) { setBoxErr(error); return; }
-    setBoxSaved(true);
+    if (error) { setBoxErr(error); return false; }
+    return true;
   }
 
-  // save the per-Ship-ID note from the detail view (works even when starting empty).
-  async function saveNote() {
-    if (!openShip) return;
+  // save the per-Ship-ID note from the detail view (works even when starting empty). Returns success.
+  async function saveNote(): Promise<boolean> {
+    if (!openShip) return true;
     setSavingNote(true);
     try {
       await setShipmentNote(openShip.ship_id, noteDraft);
       const v = noteDraft.trim() || null;
       setShips((prev) => prev.map((s) => (s.ship_id === openShip.ship_id ? { ...s, note: v } : s)));
       setOpenShip((prev) => (prev ? { ...prev, note: v } : prev));
+      return true;
     } catch {
-      /* keep the editor open on a transient error */
+      return false; // keep the editor open on a transient error
     } finally {
       setSavingNote(false);
     }
+  }
+
+  // PR261 — the Done button persists boxes + note together (their per-control Save buttons are gone),
+  // then closes. The shipment courier/tracking already auto-saves on change/blur, so it needs no step.
+  async function saveAndCloseEdit() {
+    setSavingEdit(true);
+    const okBoxes = await saveBoxes();
+    const okNote = await saveNote();
+    setSavingEdit(false);
+    if (okBoxes && okNote) setEditingShip(false);
   }
 
   // PR254 — enter edit mode (seed the note draft from the current value); other drafts seeded on select.
   function enterEdit() {
     if (!openShip) return;
     setNoteDraft(openShip.note ?? '');
-    setBoxErr(null); setBoxSaved(false); setCourierErr(null);
+    setBoxErr(null); setCourierErr(null);
     setEditingShip(true);
   }
 
@@ -349,7 +361,7 @@ export default function PurchasingHistoryBoard({
                       <span className="po-card-qty po-card-qty-lg">×{it.qty}</span>
                       {it.item_cost != null && (
                         <div className="po-card-meta">
-                          <span className="po-card-date">each {it.item_cost}{it.currency ? ` ${it.currency}` : ''}</span>
+                          <span className="po-card-date">{it.item_cost}{ccyTag(it.currency)} each</span>
                         </div>
                       )}
                     </div>
@@ -386,7 +398,8 @@ export default function PurchasingHistoryBoard({
               </div>
               <div className="sc-modal-body">
                 <div className="po-field">
-                  <label>Shipment courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  {/* PR261 — subheaders styled like the detail view (uppercase .fd-section-head) */}
+                  <div className="fd-section-head">Shipment courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
                   {courierErr && <div className="validation err" style={{ marginBottom: 8 }}>{courierErr}</div>}
                   <div className="po-inline2">
                     <select value={courierDraft} onChange={(e) => { setCourierDraft(e.target.value); void saveCourier(e.target.value, trackingDraft); }}>
@@ -398,37 +411,38 @@ export default function PurchasingHistoryBoard({
                   </div>
                 </div>
                 <div className="po-field">
-                  <label>Boxes — dimensions &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <div className="fd-section-head">Boxes — dimensions &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
                   {boxErr && <div className="validation err">{boxErr}</div>}
-                  <div className="sb-grid sb-grid-head">
-                    <span>L (cm)</span><span>W (cm)</span><span>H (cm)</span><span>Real wt (kg)</span><span>Box tracking</span><span />
-                  </div>
-                  {boxDraft.map((b, i) => (
-                    <div className="sb-grid" key={i}>
-                      <input type="text" inputMode="decimal" value={b.p} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, p: e.target.value } : r)))} />
-                      <input type="text" inputMode="decimal" value={b.l} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, l: e.target.value } : r)))} />
-                      <input type="text" inputMode="decimal" value={b.t} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, t: e.target.value } : r)))} />
-                      <input type="text" inputMode="decimal" value={b.w} onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, w: e.target.value } : r)))} />
-                      <input type="text" value={b.tracking} placeholder="ZTO …" onChange={(e) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, tracking: e.target.value } : r)))} />
-                      <button className="set-del" aria-label="Remove box" onClick={() => setBoxDraft((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : prev))}>✕</button>
-                    </div>
-                  ))}
-                  <div className="po-inline2" style={{ marginTop: 6, gap: 8 }}>
-                    <button className="btn-link" onClick={() => setBoxDraft((prev) => [...prev, emptyBoxDraft()])}>+ Add box</button>
-                    <button className="btn-secondary" onClick={saveBoxes} disabled={savingBoxes}>{savingBoxes ? 'Saving…' : 'Save boxes'}</button>
-                    {boxSaved && <span className="hint" style={{ alignSelf: 'center' }}>Saved.</span>}
-                  </div>
+                  {/* PR261 — each box is a card: line 1 = L/W/H + real weight (kg); line 2 = local
+                      courier + tracking + a compact delete. Add box is full-width below the cards. */}
+                  {boxDraft.map((b, i) => {
+                    const upd = (patch: Partial<BoxDraft>) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+                    return (
+                      <div className="sb-card" key={i}>
+                        <div className="sb-card-r1">
+                          <label className="sb-f"><span>L (cm)</span><input type="text" inputMode="decimal" value={b.p} onChange={(e) => upd({ p: e.target.value })} /></label>
+                          <label className="sb-f"><span>W (cm)</span><input type="text" inputMode="decimal" value={b.l} onChange={(e) => upd({ l: e.target.value })} /></label>
+                          <label className="sb-f"><span>H (cm)</span><input type="text" inputMode="decimal" value={b.t} onChange={(e) => upd({ t: e.target.value })} /></label>
+                          <label className="sb-f"><span>Real wt (kg)</span><input type="text" inputMode="decimal" value={b.w} onChange={(e) => upd({ w: e.target.value })} /></label>
+                        </div>
+                        <div className="sb-card-r2">
+                          <input type="text" list="sb-box-couriers" placeholder="local courier" value={b.courier} onChange={(e) => upd({ courier: e.target.value })} />
+                          <input type="text" placeholder="tracking number" value={b.tracking} onChange={(e) => upd({ tracking: e.target.value })} />
+                          <button className="set-del" aria-label="Remove box" onClick={() => setBoxDraft((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : [emptyBoxDraft()]))}><TrashIcon /></button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <datalist id="sb-box-couriers">{localCouriers.map((c) => <option key={c} value={c} />)}</datalist>
+                  <button className="btn-brown sb-addbox" onClick={() => setBoxDraft((prev) => [...prev, emptyBoxDraft()])}>+ Add box</button>
                 </div>
                 <div className="po-field">
-                  <label>Shipment notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  <textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder="Note for this Ship ID — shown on Inbound receiving" rows={3} disabled={savingNote} />
-                  <div className="subform-actions">
-                    <button className="btn-secondary" onClick={saveNote} disabled={savingNote}>{savingNote ? 'Saving…' : 'Save note'}</button>
-                  </div>
+                  <div className="fd-section-head">Shipment notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  <textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder="Notes for this shipment ID" rows={3} disabled={savingNote} />
                 </div>
               </div>
               <div className="sc-modal-foot">
-                <button className="btn-primary" onClick={() => setEditingShip(false)}>Done</button>
+                <button className="btn-primary" onClick={saveAndCloseEdit} disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Done'}</button>
               </div>
             </div>
           </div>
