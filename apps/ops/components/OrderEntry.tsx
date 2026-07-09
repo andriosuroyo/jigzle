@@ -23,6 +23,7 @@ import PhoneCountrySelect from '@/components/PhoneCountrySelect';
 import CountrySelect from '@/components/CountrySelect';
 import { dialOf } from '@/components/countries';
 import { useSkuImages } from '@/components/useSkuImages';
+import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
 import PostcodeAutofill from '@/components/PostcodeAutofill';
@@ -40,6 +41,20 @@ const URGENCY_OPTS: { key: Urgency; label: string }[] = [
 ];
 
 type Line = { item_code: string; name: string; qty: number; unit_price_idr: number; available: number; on_the_way: number };
+
+// PR260 — the persisted "new order" draft: the typed/selected content only (server-loaded loyalty +
+// addresses are re-fetched from the customer id on restore). One draft per operator (create-only, no
+// order id exists until save), namespaced by email so a shared browser profile doesn't collide.
+type OrderDraft = {
+  customer: CustomerHit | null;
+  addressId: number | null;
+  confirmLater: boolean;
+  lines: Line[];
+  payMode: 'none' | 'full' | 'dp';
+  payAmount: string;
+  payMethod: string;
+  urgency: Urgency | null;
+};
 
 // PR194: the ID-specific geo fields (autofill / kecamatan / kelurahan) only apply to Indonesian
 // addresses — hidden for an international ship-to, whose negara then drives the export flow (Fulfill).
@@ -162,6 +177,51 @@ export default function OrderEntry({
   useEffect(() => {
     onDirtyChange?.(!result && (!!customer || lines.length > 0));
   }, [customer, lines, result, onDirtyChange]);
+
+  // ── PR260 — draft persistence: survive a reload (a deploy force-reloading the tab, PWA relaunch,
+  // the Refresh button) without losing an in-progress order. `hydratingRef` starts true so the persist
+  // effect can't clear the saved draft before the restore below runs. ──
+  const draftKey = `jz:sales:draft:neworder:${userEmail || '_'}`;
+  const hydratingRef = useRef(true);
+  const [restored, setRestored] = useState(false);
+
+  // restore once on mount (this screen is create-only and mounts fresh on a hard reload)
+  useEffect(() => {
+    const draft = loadDraft<OrderDraft>(draftKey);
+    if (!draft || (!draft.customer && (draft.lines?.length ?? 0) === 0)) { hydratingRef.current = false; return; }
+    (async () => {
+      setCustomer(draft.customer);
+      setLines(draft.lines ?? []);
+      setPayMode(draft.payMode ?? 'none');
+      setPayAmount(draft.payAmount ?? '');
+      setPayMethod(draft.payMethod || (paymentMethods[0]?.label ?? ''));
+      setConfirmLater(!!draft.confirmLater);
+      setUrgency(draft.urgency ?? null);
+      // re-load the customer's server data (loyalty + addresses) so the saved addressId resolves
+      if (draft.customer) {
+        try {
+          const [loy, addrs] = await Promise.all([getLoyalty(draft.customer.id), getCustomerAddresses(draft.customer.id)]);
+          setLoyalty(loy);
+          setAddresses(addrs);
+        } catch { /* best-effort — the picker still works */ }
+      }
+      setAddressId(draft.addressId ?? null);
+      setRestored(true);
+      hydratingRef.current = false;
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // persist the typed/selected content as it changes (skipped while hydrating; cleared once not dirty)
+  useEffect(() => {
+    if (hydratingRef.current) return;
+    if (!result && (!!customer || lines.length > 0)) {
+      saveDraft<OrderDraft>(draftKey, { customer, addressId, confirmLater, lines, payMode, payAmount, payMethod, urgency });
+    } else {
+      clearDraft(draftKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer, addressId, confirmLater, lines, payMode, payAmount, payMethod, urgency, result]);
 
   // ── derived totals ──
   const subtotal = useMemo(() => lines.reduce((s, l) => s + l.qty * l.unit_price_idr, 0), [lines]);
@@ -375,6 +435,8 @@ export default function OrderEntry({
         payment: paid > 0 ? { amount_idr: paid, method: payMethod || null } : null,
       });
       setResult({ sales_id: res.sales_id, total: subtotal, routed: res.routed, pay: payStatus });
+      clearDraft(draftKey); // PR260 — order committed; drop its draft so it can't be restored later
+      setRestored(false);
       onSaved?.(res.sales_id, res.routed); // JZ-001: notify the Orders shell (toast + count refresh)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save order.');
@@ -392,6 +454,7 @@ export default function OrderEntry({
     setPayMode('none'); setPayAmount(''); setPayMethod(paymentMethods[0]?.label ?? '');
     setUrgency(null);
     setError(null); setResult(null);
+    clearDraft(draftKey); setRestored(false); // PR260 — explicit "New order" / discard wipes the draft
   }
 
   // ── success screen (SA-3: shows where the order went) ──
@@ -427,6 +490,14 @@ export default function OrderEntry({
       <div className="ops-layout">
         <main className="ops-main">
           {error && <div className="validation err">{error}</div>}
+
+          {/* PR260 — a restored in-progress order (e.g. a deploy reloaded the tab mid-entry). */}
+          {restored && (
+            <div className="validation ok rcv-restored">
+              <span>Restored your unsaved order.</span>
+              <button className="btn-link" onClick={resetAll}>discard &amp; start fresh</button>
+            </div>
+          )}
 
           {/* Panel 1 — Customer */}
           <section className="panel">
