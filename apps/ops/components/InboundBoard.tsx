@@ -10,7 +10,6 @@ import {
   searchSkus,
   createCatalogueStub,
   mapPlaceholderPO,
-  remapShipmentSku,
   translateToEnglish,
   linkBarcode,
   newAdhocShipId,
@@ -49,9 +48,12 @@ const CheckIcon = () => (<svg {...csvg}><polyline points="20 6 9 17 4 12" /></sv
 const asvg = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
 const PencilIcon = () => (<svg {...asvg}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 const TrashIcon = () => (<svg {...asvg}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+// PR262 — the "Mark received / Save inbound" commit-button glyph (an inbox — goods into stock).
+const InboxIcon = () => (<svg {...asvg}><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>);
 
 // PR257 — a name that's blank or just repeats the item_code is NOT shown (the old "Unmatched item"
-// filler is gone): the code stands alone and the SKU is fixed via Edit items / the map flow instead.
+// filler is gone): the code stands alone. A placeholder line is resolved via the per-line "map SKU"
+// here; correcting an already-resolved line's SKU lives in Purchasing → History (PR262).
 // The shared isRealName (PR241) is the rule; rows render the name line conditionally.
 
 function todayStr(): string {
@@ -192,17 +194,8 @@ export default function InboundBoard({
   // remove), keyed by item_code. The line data itself stays live in `received`; this just gates the modal.
   const [lineEditCode, setLineEditCode] = useState<string | null>(null);
 
-  // PR257 — the "Edit items" overlay: batch-fix the shipment's lines for ONE thing — the SKU. Each
-  // line gets a Change → inline search; a pick re-points the not-yet-received PO lines (resolved code
-  // via remapShipmentSku, placeholder via mapPlaceholderPO) and reloads the expected list.
-  const [editItems, setEditItems] = useState(false);
-  const [eiTarget, setEiTarget] = useState<{ key: string; item_code: string | null; raw: string | null } | null>(null);
-  const [eiQuery, setEiQuery] = useState('');
-  const [eiHits, setEiHits] = useState<SkuHit[]>([]);
-  const [eiSearching, setEiSearching] = useState(false);
-  const [eiBusy, setEiBusy] = useState(false);
-  const [eiMsg, setEiMsg] = useState<string | null>(null);
-  const eiSeq = useRef(0);
+  // PR262 — SKU corrections for a shipment line moved to Purchasing → History → item detail. Inbound
+  // keeps only the per-line "map SKU" for unresolved/placeholder lines (identifying an arriving box).
 
   // PR154: bodyview — the shell hides the tab bar while the receive detail is open.
   useEffect(() => { onDetailOpenChange?.(!!selected); }, [selected, onDetailOpenChange]);
@@ -259,10 +252,9 @@ export default function InboundBoard({
     detail?.expected.forEach((e) => { if (e.item_code) set.add(e.item_code); });
     received.forEach((_v, k) => set.add(k));
     skuHits.forEach((h) => set.add(h.item_code));
-    eiHits.forEach((h) => set.add(h.item_code));
     picker?.forEach((p) => set.add(p.item_code));
     return [...set];
-  }, [detail, received, skuHits, eiHits, picker]);
+  }, [detail, received, skuHits, picker]);
   const imgMap = useSkuImages(imgCodes);
 
   // PR259 — persist the in-progress count as it changes (skipped while a session is hydrating). A
@@ -302,7 +294,6 @@ export default function InboundBoard({
     setShowConfirm(false);
     setReverseAsk(false);
     setReverseMsg(null);
-    closeEditItems();
   }
 
   // PR259 — throw away the current session's saved + in-memory draft (from the "restored" banner).
@@ -553,64 +544,6 @@ export default function InboundBoard({
     }
   }
 
-  // ── PR257 — Edit items: open/close the overlay and re-point one line's SKU ──
-  function openEditItems() {
-    setEiTarget(null);
-    setEiQuery('');
-    setEiHits([]);
-    setEiSearching(false);
-    setEiMsg(null);
-    setEditItems(true);
-  }
-  function closeEditItems() {
-    setEditItems(false);
-    setEiTarget(null);
-    setEiQuery('');
-    setEiHits([]);
-    setEiMsg(null);
-  }
-  async function eiPick(hit: SkuHit) {
-    const shipId = detail?.ship_id;
-    if (!shipId || !eiTarget) return;
-    const fromLabel = eiTarget.item_code ?? eiTarget.raw ?? '';
-    setEiBusy(true);
-    setEiMsg(null);
-    try {
-      let updated = 0;
-      if (eiTarget.item_code) {
-        const res = await remapShipmentSku(shipId, eiTarget.item_code, hit.item_code);
-        if (res.error) { setEiMsg(res.error); return; }
-        updated = res.updated;
-        // a count already entered under the old code follows the re-point (merging if needed)
-        const oldCode = eiTarget.item_code;
-        setReceived((prev) => {
-          const cur = prev.get(oldCode);
-          if (!cur) return prev;
-          const next = new Map(prev);
-          next.delete(oldCode);
-          const tgt = next.get(hit.item_code);
-          next.set(hit.item_code, tgt ? { ...tgt, qty: tgt.qty + cur.qty } : { ...cur, item_code: hit.item_code, name: hit.name });
-          return next;
-        });
-      } else if (eiTarget.raw) {
-        const { updated: u } = await mapPlaceholderPO(shipId, eiTarget.raw, hit.item_code);
-        updated = u;
-      }
-      const d = await getShipmentForReceive(shipId);
-      setDetail(d);
-      setEiMsg(updated > 0
-        ? `✓ ${fromLabel} → ${hit.item_code} (${updated} order line${updated === 1 ? '' : 's'})`
-        : `No open order line to update for ${fromLabel} — a contents-only or already-received line stays as is.`);
-      setEiTarget(null);
-      setEiQuery('');
-      setEiHits([]);
-    } catch (e) {
-      setEiMsg(e instanceof Error ? e.message : 'SKU change failed.');
-    } finally {
-      setEiBusy(false);
-    }
-  }
-
   // ── PR257 — best-effort auto-fill of the stub's Translated name from the Original name (on blur).
   // Only fills an EMPTY translated field — never clobbers something the operator typed. ──
   async function autoTranslate(original: string) {
@@ -667,22 +600,6 @@ export default function InboundBoard({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skuQuery]);
-
-  // PR257 — the Edit-items inline SKU search (same debounce + 3-char floor + stale guard)
-  useEffect(() => {
-    const q = eiQuery.trim();
-    if (q.length < 3) { setEiHits([]); setEiSearching(false); return; }
-    const t = setTimeout(async () => {
-      const _id = ++eiSeq.current;
-      setEiSearching(true);
-      let hits: SkuHit[] = [];
-      try { hits = await searchSkus(q); } catch { hits = []; }
-      if (eiSeq.current !== _id) return;
-      setEiHits(hits);
-      setEiSearching(false);
-    }, 220);
-    return () => clearTimeout(t);
-  }, [eiQuery]);
 
   // clear the manual-search field + results and refocus it (W3). Used by the Clear link and after add.
   function clearSearch() {
@@ -980,13 +897,7 @@ export default function InboundBoard({
                   auto-return) submits a scan; the counter shows received/expected (0/X), directly
                   editable, and each scan +1s the matching line. */}
               <section className="fd-section">
-                {/* PR257 — Edit items (head-right): batch-fix the lines' SKUs in one overlay */}
-                <div className="fd-section-head fd-section-head-row">
-                  <span>Items</span>
-                  {detail.expected.length > 0 && (
-                    <button className="btn-link rcv-edit-items" onClick={openEditItems}><PencilIcon />Edit items</button>
-                  )}
-                </div>
+                <div className="fd-section-head">Items</div>
                 <div className="rcv-scan-row">
                   <SearchInput
                     className="rcv-scan-search"
@@ -1051,8 +962,8 @@ export default function InboundBoard({
               {/* Commit bar → opens the §6 confirmation window, where staff + receive date are picked
                   alongside the received/short recap before saving. */}
               <div className="fd-commit">
-                <button className="btn-primary" onClick={openConfirm} disabled={committing || saveLines.length === 0 || !shipIdForSave}>
-                  {canClose ? 'Mark received' : 'Save inbound'}
+                <button className="btn-primary btn-ico" onClick={openConfirm} disabled={committing || saveLines.length === 0 || !shipIdForSave}>
+                  <InboxIcon />{canClose ? 'Mark received' : 'Save inbound'}
                 </button>
               </div>
             </>
@@ -1166,76 +1077,6 @@ export default function InboundBoard({
             </div>
             <div className="sc-modal-foot">
               <button className="btn-secondary" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); setMapBarcode(''); }}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PR257 — Edit items: every shipment line with a Change → inline SKU search. A pick re-points
-          the not-yet-received PO lines to the chosen SKU and reloads the expected list; the overlay
-          stays open so several lines can be fixed in a row. */}
-      {editItems && detail && (
-        <div className="sc-modal-backdrop" onClick={() => { if (!eiBusy) closeEditItems(); }}>
-          <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Edit items" onClick={(e) => e.stopPropagation()}>
-            <div className="sc-modal-head sc-modal-head-row">
-              <div className="sc-modal-title">Edit items · SKU</div>
-              <button className="sc-modal-x" onClick={closeEditItems} aria-label="Close" disabled={eiBusy}>×</button>
-            </div>
-            <div className="sc-modal-body">
-              <div className="hint" style={{ marginBottom: 8 }}>Tap Change to re-point a line to a different SKU (not-yet-received order lines only).</div>
-              {eiMsg && <div className="hint scan-msg">{eiMsg}</div>}
-              <ul className="ei-lines">
-                {detail.expected.map((e, i) => {
-                  const code = e.item_code ?? e.raw ?? '—';
-                  const key = e.item_code ?? `raw:${e.raw ?? i}`;
-                  const active = eiTarget?.key === key;
-                  return (
-                    <li key={key} className="ei-line">
-                      <div className="ei-row">
-                        <SkuImage status={imgMap[e.item_code ?? '']?.status} displayUrl={imgMap[e.item_code ?? '']?.displayUrl} name={e.name} size={SKU_IMG.sm} />
-                        <div className="ei-main">
-                          <span className="ff-code">{code}</span>
-                          {isRealName(e.name, code) && <span className="ff-name">{e.name}</span>}
-                        </div>
-                        <span className="rcv-exp">×{e.expected_qty}</span>
-                        <button
-                          className="btn-link"
-                          onClick={() => { setEiTarget(active ? null : { key, item_code: e.item_code, raw: e.raw }); setEiQuery(''); setEiHits([]); }}
-                          disabled={eiBusy}
-                        >
-                          {active ? 'cancel' : 'Change'}
-                        </button>
-                      </div>
-                      {active && (
-                        <div className="ei-search">
-                          <SearchInput autoFocus placeholder="search SKU by code / name" value={eiQuery} onChange={setEiQuery} />
-                          {eiSearching && <div className="hint">Searching…</div>}
-                          {!eiSearching && eiQuery.trim().length >= 3 && eiHits.length === 0 && <div className="hint"><em>No results.</em></div>}
-                          {eiHits.length > 0 && (
-                            <ul className="result-list" style={{ marginTop: 6 }}>
-                              {eiHits.map((h) => (
-                                <li key={h.item_code}>
-                                  <button className="result-item ff-card" onClick={() => eiPick(h)} disabled={eiBusy}>
-                                    <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
-                                    <div className="ff-card-info">
-                                      <div className="ff-card-code">{h.item_code}</div>
-                                      {isRealName(h.name, h.item_code) && <div className="ff-card-name">{h.name}</div>}
-                                      <div className="ff-card-status">{eiBusy ? 'working…' : 'tap to use this SKU'}</div>
-                                    </div>
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-            <div className="sc-modal-foot">
-              <button className="btn-secondary" onClick={closeEditItems} disabled={eiBusy}>Close</button>
             </div>
           </div>
         </div>
