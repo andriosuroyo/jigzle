@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
 import type { ExpectedLine, ReceiveLine, ReceiveQueueRow } from '@jigzle/db/types';
 import {
@@ -37,6 +37,7 @@ import ReceiveConfirm from '@/components/ReceiveConfirm';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { getActiveStaff, setActiveStaff } from '@/components/staffStore';
+import { saveDraft, loadDraft, clearDraft, listDraftKeys } from '@/components/draftStore';
 import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
 
@@ -62,6 +63,21 @@ function todayStr(): string {
 
 // the synthetic detail for an ad-hoc receive (no shipments-ledger row, no expected list)
 const ADHOC_SENTINEL = '__adhoc__';
+
+// PR259 — draft persistence keys. A real shipment's in-progress count is keyed by its ship_id (so
+// juggling several open shipments each keeps its own draft); the unmarked/ad-hoc receive uses ONE
+// fixed key (you do one at a time) so it can be resumed after a reload even though its id regenerates.
+const DRAFT_PREFIX = 'jz:inbound:draft:';
+const DRAFT_SHIP_PREFIX = DRAFT_PREFIX + 'ship:';
+const ADHOC_DRAFT_KEY = DRAFT_PREFIX + 'adhoc';
+const draftKeyForShip = (shipId: string) => DRAFT_SHIP_PREFIX + shipId;
+// what a persisted receive draft holds — the counts plus the header choices, replayed on restore.
+type InboundDraft = {
+  received: [string, ReceiveLine][]; // Map entries
+  receiveDate: string;
+  closeShipment: boolean;
+  adhocShipId?: string; // ad-hoc mode only — resume keeps the original id
+};
 
 // effective excluded count for a draft line: explicit excluded_qty, else the legacy whole-line flag.
 function excludedOf(l: ReceiveLine): number {
@@ -104,6 +120,23 @@ export default function InboundBoard({
 
   // what physically arrived, keyed by item_code (1 line → 1 inbound row on save)
   const [received, setReceived] = useState<Map<string, ReceiveLine>>(new Map());
+
+  // PR259 — draft persistence. `hydratingRef` gates the persist effect while a session is opening, so
+  // resetDraft()'s momentary empty map can't clobber the very draft we're about to restore.
+  // `restoredCount` drives the "restored N lines" banner; `draftIndex` badges list rows / resume ad-hoc.
+  const hydratingRef = useRef(false);
+  const [restoredCount, setRestoredCount] = useState(0);
+  const [draftIndex, setDraftIndex] = useState<{ ships: Set<string>; adhoc: boolean }>({ ships: new Set(), adhoc: false });
+  const refreshDraftIndex = useCallback(() => {
+    const ships = new Set<string>();
+    let adhoc = false;
+    for (const k of listDraftKeys(DRAFT_PREFIX)) {
+      if (k === ADHOC_DRAFT_KEY) adhoc = true;
+      else if (k.startsWith(DRAFT_SHIP_PREFIX)) ships.add(k.slice(DRAFT_SHIP_PREFIX.length));
+    }
+    setDraftIndex({ ships, adhoc });
+  }, []);
+  useEffect(() => { refreshDraftIndex(); }, [refreshDraftIndex]);
 
   const [scan, setScan] = useState('');
   const [scanMsg, setScanMsg] = useState<string | null>(null);
@@ -232,6 +265,25 @@ export default function InboundBoard({
   }, [detail, received, skuHits, eiHits, picker]);
   const imgMap = useSkuImages(imgCodes);
 
+  // PR259 — persist the in-progress count as it changes (skipped while a session is hydrating). A
+  // non-empty draft is saved under the session's key; emptying it (or committing) clears the draft.
+  useEffect(() => {
+    if (!selected || hydratingRef.current) return;
+    const key = mode === 'adhoc' ? ADHOC_DRAFT_KEY : draftKeyForShip(selected);
+    if (received.size > 0) {
+      saveDraft<InboundDraft>(key, {
+        received: [...received.entries()],
+        receiveDate,
+        closeShipment,
+        adhocShipId: mode === 'adhoc' ? adhocShipId : undefined,
+      });
+    } else {
+      clearDraft(key);
+    }
+    refreshDraftIndex();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [received, receiveDate, closeShipment, adhocShipId, selected, mode]);
+
   function resetDraft() {
     setReceived(new Map());
     setScan('');
@@ -253,8 +305,17 @@ export default function InboundBoard({
     closeEditItems();
   }
 
+  // PR259 — throw away the current session's saved + in-memory draft (from the "restored" banner).
+  function discardDraft() {
+    if (selected) clearDraft(mode === 'adhoc' ? ADHOC_DRAFT_KEY : draftKeyForShip(selected));
+    setReceived(new Map());
+    setRestoredCount(0);
+    refreshDraftIndex();
+  }
+
   async function openShipment(shipId: string) {
     const myReq = ++reqIdRef.current;
+    hydratingRef.current = true; // gate the persist effect until this session's draft is restored
     setSelected(shipId);
     setMode('shipment');
     setAdhocShipId('');
@@ -263,21 +324,32 @@ export default function InboundBoard({
     setCloseShipment(true);
     setSuggestions(null);
     setFindMsg(null);
+    setRestoredCount(0);
     setLoadingDetail(true);
     try {
       const d = await getShipmentForReceive(shipId);
       if (reqIdRef.current !== myReq) return; // superseded by a newer selection
       setDetail(d);
+      // PR259 — restore any saved in-progress count for this shipment (survives deploy reloads etc.)
+      const draft = loadDraft<InboundDraft>(draftKeyForShip(shipId));
+      if (draft && draft.received.length) {
+        setReceived(new Map(draft.received));
+        setReceiveDate(draft.receiveDate || todayStr());
+        setCloseShipment(draft.closeShipment);
+        setRestoredCount(draft.received.length);
+      }
     } catch (e) {
       if (reqIdRef.current !== myReq) return;
       setError(e instanceof Error ? e.message : 'Failed to load shipment.');
     } finally {
-      if (reqIdRef.current === myReq) setLoadingDetail(false);
+      // only the latest selection clears the gate (rapid switching: an older call mustn't ungate a newer)
+      if (reqIdRef.current === myReq) { setLoadingDetail(false); hydratingRef.current = false; }
     }
   }
 
   async function startAdhoc() {
     const myReq = ++reqIdRef.current;
+    hydratingRef.current = true;
     setSelected(ADHOC_SENTINEL);
     setMode('adhoc');
     setDetail({ ship_id: '', origin_country: null, ship_date: null, tracking: null, courier: null, note: null, is_shipment: false, expected: [], barcodes: [] });
@@ -286,6 +358,19 @@ export default function InboundBoard({
     setAdhocShipId('');
     setSuggestions(null);
     setFindMsg(null);
+    setRestoredCount(0);
+
+    // PR259 — resume a saved unmarked receive if one exists (keep its original id; don't allocate anew).
+    const draft = loadDraft<InboundDraft>(ADHOC_DRAFT_KEY);
+    if (draft && draft.received.length && draft.adhocShipId) {
+      setReceived(new Map(draft.received));
+      setReceiveDate(draft.receiveDate || todayStr());
+      setAdhocShipId(draft.adhocShipId);
+      setRestoredCount(draft.received.length);
+      hydratingRef.current = false;
+      return;
+    }
+
     setLoadingDetail(true);
     try {
       const id = await newAdhocShipId();
@@ -295,7 +380,7 @@ export default function InboundBoard({
       if (reqIdRef.current !== myReq) return;
       setError(e instanceof Error ? e.message : 'Failed to allocate an ad-hoc id.');
     } finally {
-      if (reqIdRef.current === myReq) setLoadingDetail(false);
+      if (reqIdRef.current === myReq) { setLoadingDetail(false); hydratingRef.current = false; }
     }
   }
 
@@ -697,8 +782,12 @@ export default function InboundBoard({
       setReverseMsg(null);
       setReverseAsk(false);
       setShowConfirm(false);
-      // the inbound rows are now persisted — clear the draft so nothing is double-counted
+      // the inbound rows are now persisted — clear the draft so nothing is double-counted (both the
+      // in-memory map and its localStorage copy, incl. when the shipment closes and detail is dropped).
+      clearDraft(mode === 'adhoc' ? ADHOC_DRAFT_KEY : draftKeyForShip(shipIdForSave));
       setReceived(new Map());
+      setRestoredCount(0);
+      refreshDraftIndex();
       // refresh the queue; drop the shipment if it was closed
       try {
         setQueue(await getReceiveQueue());
@@ -785,6 +874,13 @@ export default function InboundBoard({
             {reverseMsg && <div className="validation ok">{reverseMsg}</div>}
             {result && renderResultBanner()}
 
+            {/* PR259 — a saved unmarked receive from a prior session (e.g. a deploy reloaded the tab). */}
+            {draftIndex.adhoc && (
+              <button className="btn-brown btn-ico rcv-resume-draft" onClick={() => startAdhoc()}>
+                <PackageIcon />Resume your in-progress unmarked receive
+              </button>
+            )}
+
             {sortedQueue.length === 0 && <div className="hint fq-empty">No open shipments.</div>}
             <ul className="fq-list">
               {sortedQueue.map((q) => (
@@ -793,7 +889,9 @@ export default function InboundBoard({
                     {/* top: ship id (left) · shipped date (right — mirrors Purchasing History Active) */}
                     <div className="fq-row-top">
                       <span className="fq-id">{q.ship_id}</span>
-                      <span className="fq-id-sub">shipped {q.ship_date || '—'}</span>
+                      {/* PR259 — badge a shipment that has an unsaved in-progress count waiting to resume */}
+                      {draftIndex.ships.has(q.ship_id) && <span className="badge draft">in-progress</span>}
+                      <span className="fq-id-sub" style={{ marginLeft: 'auto' }}>shipped {q.ship_date || '—'}</span>
                     </div>
                     {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
                     <div className="fq-row-bot">
@@ -855,6 +953,14 @@ export default function InboundBoard({
               </div>
 
               {error && <div className="validation err">{error}</div>}
+
+              {/* PR259 — restored a saved in-progress count (e.g. a deploy reloaded the tab mid-receive). */}
+              {restoredCount > 0 && (
+                <div className="validation ok rcv-restored">
+                  <span>Restored {restoredCount} in-progress line{restoredCount === 1 ? '' : 's'} from your last session.</span>
+                  <button className="btn-link" onClick={discardDraft}>discard</button>
+                </div>
+              )}
 
               {/* Ad-hoc id (editable; operator can override with free text) */}
               {mode === 'adhoc' && (

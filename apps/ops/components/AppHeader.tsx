@@ -10,7 +10,16 @@ export default function AppHeader({ active, userEmail }: { active?: string; user
   const [open, setOpen] = useState(false);
 
   async function signOut() {
-    await supabase.auth.signOut();
+    // PR258 — scope: 'local' clears ONLY this device's session. The default ('global') revokes the
+    // account's refresh tokens on EVERY device, so when two operators shared an account one signing
+    // out silently bounced the other to /login mid-task (read as "the refresh hit everyone"). Local
+    // sign-out leaves other devices' sessions untouched. Fall back to a plain sign-out if the arg
+    // isn't honoured, so a failure never strands the operator signed-in.
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      await supabase.auth.signOut();
+    }
     window.location.href = '/login';
   }
 
