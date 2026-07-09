@@ -282,13 +282,32 @@ export async function getShipmentBoxes(shipId: string): Promise<ShipmentBox[]> {
   const sid = shipId.trim();
   if (!sid) return [];
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
+  // PR261 — prefer the courier column; if it isn't applied yet, retry without it (graceful degrade).
+  let rows: Record<string, unknown>[] | null = null;
+  const withCourier = await supabase
     .from('shipment_boxes')
-    .select('dim_p,dim_l,dim_t,real_weight,tracking')
+    .select('dim_p,dim_l,dim_t,real_weight,courier,tracking')
     .eq('ship_id', sid)
     .order('sort_order', { ascending: true });
-  if (error || !data) return []; // table not yet created → degrade
-  return data as ShipmentBox[];
+  if (withCourier.error) {
+    const noCourier = await supabase
+      .from('shipment_boxes')
+      .select('dim_p,dim_l,dim_t,real_weight,tracking')
+      .eq('ship_id', sid)
+      .order('sort_order', { ascending: true });
+    if (noCourier.error || !noCourier.data) return []; // table not yet created → degrade
+    rows = noCourier.data as Record<string, unknown>[];
+  } else {
+    rows = withCourier.data as Record<string, unknown>[];
+  }
+  return rows.map((b) => ({
+    dim_p: (b.dim_p as number | null) ?? null,
+    dim_l: (b.dim_l as number | null) ?? null,
+    dim_t: (b.dim_t as number | null) ?? null,
+    real_weight: (b.real_weight as number | null) ?? null,
+    courier: (b.courier as string | null) ?? null,
+    tracking: (b.tracking as string | null) ?? null,
+  }));
 }
 
 export async function setShipmentBoxes(shipId: string, boxes: ShipmentBox[]): Promise<{ error: string | null }> {
@@ -298,10 +317,14 @@ export async function setShipmentBoxes(shipId: string, boxes: ShipmentBox[]): Pr
   const { error: delErr } = await supabase.from('shipment_boxes').delete().eq('ship_id', sid);
   if (delErr) return { error: `setShipmentBoxes: ${delErr.message}` };
   const rows = boxes
-    .filter((b) => b.dim_p != null || b.dim_l != null || b.dim_t != null || b.real_weight != null || (b.tracking ?? '').trim())
-    .map((b, i) => ({ ship_id: sid, dim_p: b.dim_p, dim_l: b.dim_l, dim_t: b.dim_t, real_weight: b.real_weight, tracking: (b.tracking ?? '').trim() || null, sort_order: i }));
+    .filter((b) => b.dim_p != null || b.dim_l != null || b.dim_t != null || b.real_weight != null || (b.courier ?? '').trim() || (b.tracking ?? '').trim())
+    .map((b, i) => ({ ship_id: sid, dim_p: b.dim_p, dim_l: b.dim_l, dim_t: b.dim_t, real_weight: b.real_weight, courier: (b.courier ?? '').trim() || null, tracking: (b.tracking ?? '').trim() || null, sort_order: i }));
   if (rows.length === 0) return { error: null };
-  const { error } = await supabase.from('shipment_boxes').insert(rows);
+  let { error } = await supabase.from('shipment_boxes').insert(rows);
+  // PR261 — if the courier column isn't applied yet, retry without it so a save still lands.
+  if (error && /courier/i.test(error.message)) {
+    ({ error } = await supabase.from('shipment_boxes').insert(rows.map(({ courier, ...r }) => r)));
+  }
   return { error: error ? `setShipmentBoxes: ${error.message}` : null };
 }
 
