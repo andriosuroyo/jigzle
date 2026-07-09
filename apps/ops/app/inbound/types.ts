@@ -40,7 +40,8 @@ export interface SkuHit {
 // ── D2: create a minimal needs_review SKU stub for an unknown barcode ──
 export interface StubInput {
   item_code: string;
-  name: string;
+  name: string; // the English (translate_name) side
+  original_name?: string | null; // PR257 — native-language name (CJK), kept alongside the translation
   brand_prefix?: string | null;
   barcode?: string | null; // the scanned barcode to link to the new SKU
 }
