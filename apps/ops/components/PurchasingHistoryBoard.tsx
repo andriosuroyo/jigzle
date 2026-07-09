@@ -184,7 +184,7 @@ export default function PurchasingHistoryBoard({
     setBoxDraft([]);
     setShipItems([]);
     setShipItemsLoading(true);
-    getShipmentBoxes(s.ship_id).then((rows) => setBoxDraft(rows.length ? rows.map(boxToDraft) : [emptyBoxDraft()])).catch(() => setBoxDraft([emptyBoxDraft()]));
+    getShipmentBoxes(s.ship_id).then((rows) => setBoxDraft([rows.length ? boxToDraft(rows[0]) : emptyBoxDraft()])).catch(() => setBoxDraft([emptyBoxDraft()]));
     try {
       setShipItems(await getShipmentItems(s.ship_id));
     } catch {
@@ -366,11 +366,11 @@ export default function PurchasingHistoryBoard({
             <div className={courierLine ? 'ship-ro' : 'hint'}>{courierLine || 'No courier / tracking set.'}</div>
           </section>
 
-          {/* Boxes — display only */}
+          {/* Box — display only (one box per shipment) */}
           <section className="fd-section">
-            <div className="fd-section-head">Boxes — dimensions &amp; tracking</div>
+            <div className="fd-section-head">Box dimensions &amp; tracking</div>
             {savedBoxes.length === 0
-              ? <div className="hint">No boxes recorded.</div>
+              ? <div className="hint">No box recorded.</div>
               : <ul className="ship-box-ro">{savedBoxes.map((b, i) => <li key={i}>{boxSummary(b)}</li>)}</ul>}
           </section>
 
@@ -446,14 +446,15 @@ export default function PurchasingHistoryBoard({
                   </div>
                 </div>
                 <div className="po-field">
-                  <div className="fd-section-head">Boxes — dimensions &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  <div className="fd-section-head">Box dimensions &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
                   {boxErr && <div className="validation err">{boxErr}</div>}
-                  {/* PR261 — each box is a card: line 1 = L/W/H + real weight (kg); line 2 = local
-                      courier + tracking + a compact delete. Add box is full-width below the cards. */}
-                  {boxDraft.map((b, i) => {
-                    const upd = (patch: Partial<BoxDraft>) => setBoxDraft((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+                  {/* PR265 — one box per shipment: a single card (L/W/H + real weight; then local courier
+                      + tracking + a compact clear). No add/remove — a shipment always has one box. */}
+                  {(() => {
+                    const b = boxDraft[0] ?? emptyBoxDraft();
+                    const upd = (patch: Partial<BoxDraft>) => setBoxDraft((prev) => [{ ...(prev[0] ?? emptyBoxDraft()), ...patch }]);
                     return (
-                      <div className="sb-card" key={i}>
+                      <div className="sb-card">
                         <div className="sb-card-r1">
                           <label className="sb-f"><span>L (cm)</span><input type="text" inputMode="decimal" value={b.p} onChange={(e) => upd({ p: e.target.value })} /></label>
                           <label className="sb-f"><span>W (cm)</span><input type="text" inputMode="decimal" value={b.l} onChange={(e) => upd({ l: e.target.value })} /></label>
@@ -463,13 +464,12 @@ export default function PurchasingHistoryBoard({
                         <div className="sb-card-r2">
                           <input type="text" list="sb-box-couriers" placeholder="local courier" value={b.courier} onChange={(e) => upd({ courier: e.target.value })} />
                           <input type="text" placeholder="tracking number" value={b.tracking} onChange={(e) => upd({ tracking: e.target.value })} />
-                          <button className="set-del" aria-label="Remove box" onClick={() => setBoxDraft((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : [emptyBoxDraft()]))}><TrashIcon /></button>
+                          <button className="set-del" aria-label="Clear box" onClick={() => setBoxDraft([emptyBoxDraft()])}><TrashIcon /></button>
                         </div>
                       </div>
                     );
-                  })}
+                  })()}
                   <datalist id="sb-box-couriers">{localCouriers.map((c) => <option key={c} value={c} />)}</datalist>
-                  <button className="btn-brown sb-addbox" onClick={() => setBoxDraft((prev) => [...prev, emptyBoxDraft()])}>+ Add box</button>
                 </div>
                 <div className="po-field">
                   <div className="fd-section-head">Shipment notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
