@@ -42,6 +42,8 @@ const boxSummary = (b: ShipmentBox): string => {
 };
 // PR261 — compact currency: the yuan symbol 元 for "yuan", else the currency word (space-prefixed).
 const ccyTag = (ccy: string | null | undefined): string => (ccy ? (ccy.trim().toLowerCase() === 'yuan' ? '元' : ` ${ccy}`) : '');
+// PR266 — currency SYMBOL for the cost-input prefix (front, like $10 / ¥100). Yuan → 元; else the word.
+const ccySymbol = (ccy: string | null | undefined): string => (ccy ? (ccy.trim().toLowerCase() === 'yuan' ? '元' : ccy) : '');
 // Active = shipped date; Completed = received date.
 const dateLabel = (s: ShipmentHistoryRow): string =>
   s.completed ? `received ${fmtDate(s.received_date || s.ship_date)}` : `shipped ${fmtDate(s.ship_date)}`;
@@ -496,45 +498,41 @@ export default function PurchasingHistoryBoard({
               </div>
               <div className="sc-modal-body">
                 {itErr && <div className="validation err" style={{ marginBottom: 10 }}>{itErr}</div>}
-                {/* PR262 — SKU: display + change (re-point a not-yet-received line to a different SKU).
-                    Only offered on Active shipments; a received line's SKU is locked (it's stock now). */}
-                <div className="po-field">
-                  <label>SKU</label>
-                  {!siChanging ? (
-                    <div className="po-current">
-                      <span className="ff-code">{selItem.item_code || '—'}</span>
-                      {isRealName(selItem.name, selItem.item_code) && <span className="ff-name">{selItem.name}</span>}
-                      {!openShip.completed && (
-                        <button className="btn-link po-detach" onClick={() => { setSiChanging(true); setSiQuery(''); setSiHits([]); }} disabled={itSaving || siBusy}>Change</button>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="po-inline2">
-                        <SearchInput value={siQuery} onChange={setSiQuery} placeholder="search SKU by code / name" ariaLabel="Search a SKU" />
-                        <button className="btn-link" onClick={() => { setSiChanging(false); setSiQuery(''); setSiHits([]); }} disabled={siBusy}>cancel</button>
-                      </div>
-                      {siSearching && <div className="hint" style={{ marginTop: 6 }}>Searching…</div>}
-                      {!siSearching && siQuery.trim().length >= 3 && siHits.length === 0 && <div className="hint" style={{ marginTop: 6 }}>No matching SKUs.</div>}
-                      {siHits.length > 0 && (
-                        <ul className="result-list" style={{ marginTop: 6 }}>
-                          {siHits.map((h) => (
-                            <li key={h.item_code}>
-                              <button className="result-item ff-card" onClick={() => changeItemSku(h)} disabled={siBusy}>
-                                <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
-                                <div className="ff-card-info">
-                                  <div className="ff-card-code">{h.item_code}</div>
-                                  {isRealName(h.name, h.item_code) && <div className="ff-card-name">{h.name}</div>}
-                                  <div className="ff-card-status">{siBusy ? 'working…' : 'tap to use this SKU'}</div>
-                                </div>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </>
-                  )}
-                </div>
+                {/* PR266 — SKU change (Active shipments only). The current SKU is already in the header,
+                    so this is just the Change control (no repeated code/name); locked once received. */}
+                {!openShip.completed && (
+                  <div className="po-field">
+                    <label>SKU</label>
+                    {!siChanging ? (
+                      <button className="btn-secondary btn-ico" onClick={() => { setSiChanging(true); setSiQuery(''); setSiHits([]); }} disabled={itSaving || siBusy}><PencilIcon />Change SKU</button>
+                    ) : (
+                      <>
+                        <div className="po-inline2">
+                          <SearchInput value={siQuery} onChange={setSiQuery} placeholder="search SKU by code / name" ariaLabel="Search a SKU" />
+                          <button className="btn-link" onClick={() => { setSiChanging(false); setSiQuery(''); setSiHits([]); }} disabled={siBusy}>cancel</button>
+                        </div>
+                        {siSearching && <div className="hint" style={{ marginTop: 6 }}>Searching…</div>}
+                        {!siSearching && siQuery.trim().length >= 3 && siHits.length === 0 && <div className="hint" style={{ marginTop: 6 }}>No matching SKUs.</div>}
+                        {siHits.length > 0 && (
+                          <ul className="result-list" style={{ marginTop: 6 }}>
+                            {siHits.map((h) => (
+                              <li key={h.item_code}>
+                                <button className="result-item ff-card" onClick={() => changeItemSku(h)} disabled={siBusy}>
+                                  <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
+                                  <div className="ff-card-info">
+                                    <div className="ff-card-code">{h.item_code}</div>
+                                    {isRealName(h.name, h.item_code) && <div className="ff-card-name">{h.name}</div>}
+                                    <div className="ff-card-status">{siBusy ? 'working…' : 'tap to use this SKU'}</div>
+                                  </div>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
                 <div className="po-field">
                   <label>Supplier</label>
                   <select value={itSupplier} onChange={(e) => setItSupplier(e.target.value)} disabled={itSaving}>
@@ -544,9 +542,11 @@ export default function PurchasingHistoryBoard({
                 </div>
                 <div className="po-field">
                   <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  {/* PR266 — currency symbol in FRONT of the input (like ¥100 / $10); "each" trails it. */}
                   <div className="po-cost-row">
+                    {selItem.currency && <span className="po-cost-ccy">{ccySymbol(selItem.currency)}</span>}
                     <input type="number" inputMode="decimal" min={0} step="any" placeholder="0" value={itCost} onChange={(e) => setItCost(e.target.value)} disabled={itSaving} />
-                    {selItem.currency && <span className="po-cost-ccy">{selItem.currency} / each</span>}
+                    <span className="po-cost-ccy">each</span>
                   </div>
                 </div>
                 <div className="po-field">
