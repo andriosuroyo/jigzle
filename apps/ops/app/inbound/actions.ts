@@ -503,33 +503,6 @@ export async function mapPlaceholderPO(shipId: string, rawCode: string, itemCode
   return { updated: (data ?? []).length };
 }
 
-// ── PR257 — Edit items (receive detail): re-point a shipment's not-yet-received PO lines from one
-// RESOLVED SKU to another (the resolved-code sibling of mapPlaceholderPO). The target must already
-// exist in the catalogue. Contents-only lines (no PO) can't be re-pointed — updated comes back 0.
-// Returns errors as data (PR145): this is awaited by a button handler, and thrown Error messages
-// are redacted in production.
-export async function remapShipmentSku(shipId: string, fromCode: string, toCode: string): Promise<{ updated: number; error: string | null }> {
-  const sid = shipId.trim();
-  const from = fromCode.trim();
-  const to = toCode.trim();
-  if (!sid || !from || !to) return { updated: 0, error: 'Ship id, current and new item code are required.' };
-  if (from === to) return { updated: 0, error: null };
-  const supabase = createSupabaseServerClient();
-
-  const { data: cat } = await supabase.from('catalogue').select('item_code').eq('item_code', to).maybeSingle();
-  if (!cat) return { updated: 0, error: `${to} is not in the catalogue.` };
-
-  const { data, error } = await supabase
-    .from('purchase_orders')
-    .update({ item_code: to })
-    .eq('ship_id', sid)
-    .eq('item_code', from)
-    .or('status.is.null,status.neq.Received')
-    .select('po_id');
-  if (error) return { updated: 0, error: error.message };
-  return { updated: (data ?? []).length, error: null };
-}
-
 // ── PR257 — best-effort translate a native-language product name to English (fills the stub form's
 // Translated name from the Original name). Uses the public Google Translate web endpoint; ANY
 // failure (network, rate limit, shape change) returns null and the operator just types it. ──

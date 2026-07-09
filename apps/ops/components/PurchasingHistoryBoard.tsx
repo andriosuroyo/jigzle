@@ -7,8 +7,8 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO } from '@/app/purchasing/actions';
-import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO, searchSkus, setShipmentItemSku } from '@/app/purchasing/actions';
+import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox, SkuHit } from '@/app/purchasing/types';
 import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
 import { isRealName } from '@/components/skuName';
@@ -112,13 +112,20 @@ export default function PurchasingHistoryBoard({
   const [itNote, setItNote] = useState('');
   const [itSaving, setItSaving] = useState(false);
   const [itErr, setItErr] = useState<string | null>(null);
+  // PR262 — change a not-yet-received line's SKU from the item overlay (Active shipments only).
+  const [siChanging, setSiChanging] = useState(false);
+  const [siQuery, setSiQuery] = useState('');
+  const [siHits, setSiHits] = useState<SkuHit[]>([]);
+  const [siSearching, setSiSearching] = useState(false);
+  const [siBusy, setSiBusy] = useState(false);
+  const siSeq = useRef(0);
 
   // PR153: tell the shell when a detail is open (it hides the pipeline tabs, keeps the breadcrumb)
   useEffect(() => { onDetailOpenChange?.(!!openShip); }, [openShip, onDetailOpenChange]);
 
   const imgCodes = useMemo(
-    () => (openShip ? shipItems.map((i) => i.item_code).filter((c): c is string => !!c) : []),
-    [openShip, shipItems]
+    () => (openShip ? [...shipItems.map((i) => i.item_code).filter((c): c is string => !!c), ...siHits.map((h) => h.item_code)] : []),
+    [openShip, shipItems, siHits]
   );
   const imgMap = useSkuImages(imgCodes);
 
@@ -265,6 +272,34 @@ export default function PurchasingHistoryBoard({
     setItLink(it.product_link ?? '');
     setItNote(it.item_note ?? '');
     setItErr(null);
+    setSiChanging(false); setSiQuery(''); setSiHits([]); setSiSearching(false);
+  }
+
+  // PR262 — the item overlay's SKU search (debounced, 3-char floor, stale-response guard).
+  useEffect(() => {
+    if (!siChanging) return;
+    const q = siQuery.trim();
+    if (q.length < 3) { setSiHits([]); setSiSearching(false); return; }
+    const t = setTimeout(async () => {
+      const _id = ++siSeq.current;
+      setSiSearching(true);
+      let hits: SkuHit[] = [];
+      try { hits = await searchSkus(q); } catch { hits = []; }
+      if (siSeq.current !== _id) return;
+      setSiHits(hits); setSiSearching(false);
+    }, 220);
+    return () => clearTimeout(t);
+  }, [siQuery, siChanging]);
+
+  // PR262 — re-point the open line to the chosen SKU, then reflect it in the loaded list + header.
+  async function changeItemSku(hit: SkuHit) {
+    if (!selItem || !openShip) return;
+    setSiBusy(true); setItErr(null);
+    const { error } = await setShipmentItemSku(selItem.po_id, hit.item_code);
+    if (error) { setItErr(error); setSiBusy(false); return; }
+    setShipItems((prev) => prev.map((r) => (r.po_id === selItem.po_id ? { ...r, item_code: hit.item_code, name: hit.name } : r)));
+    setSelItem((prev) => (prev ? { ...prev, item_code: hit.item_code, name: hit.name } : prev));
+    setSiBusy(false); setSiChanging(false); setSiQuery(''); setSiHits([]);
   }
 
   // PR255 — save the per-item detail (descriptive metadata only), reflected in the loaded list.
@@ -461,6 +496,45 @@ export default function PurchasingHistoryBoard({
               </div>
               <div className="sc-modal-body">
                 {itErr && <div className="validation err" style={{ marginBottom: 10 }}>{itErr}</div>}
+                {/* PR262 — SKU: display + change (re-point a not-yet-received line to a different SKU).
+                    Only offered on Active shipments; a received line's SKU is locked (it's stock now). */}
+                <div className="po-field">
+                  <label>SKU</label>
+                  {!siChanging ? (
+                    <div className="po-current">
+                      <span className="ff-code">{selItem.item_code || '—'}</span>
+                      {isRealName(selItem.name, selItem.item_code) && <span className="ff-name">{selItem.name}</span>}
+                      {!openShip.completed && (
+                        <button className="btn-link po-detach" onClick={() => { setSiChanging(true); setSiQuery(''); setSiHits([]); }} disabled={itSaving || siBusy}>Change</button>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="po-inline2">
+                        <SearchInput value={siQuery} onChange={setSiQuery} placeholder="search SKU by code / name" ariaLabel="Search a SKU" />
+                        <button className="btn-link" onClick={() => { setSiChanging(false); setSiQuery(''); setSiHits([]); }} disabled={siBusy}>cancel</button>
+                      </div>
+                      {siSearching && <div className="hint" style={{ marginTop: 6 }}>Searching…</div>}
+                      {!siSearching && siQuery.trim().length >= 3 && siHits.length === 0 && <div className="hint" style={{ marginTop: 6 }}>No matching SKUs.</div>}
+                      {siHits.length > 0 && (
+                        <ul className="result-list" style={{ marginTop: 6 }}>
+                          {siHits.map((h) => (
+                            <li key={h.item_code}>
+                              <button className="result-item ff-card" onClick={() => changeItemSku(h)} disabled={siBusy}>
+                                <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
+                                <div className="ff-card-info">
+                                  <div className="ff-card-code">{h.item_code}</div>
+                                  {isRealName(h.name, h.item_code) && <div className="ff-card-name">{h.name}</div>}
+                                  <div className="ff-card-status">{siBusy ? 'working…' : 'tap to use this SKU'}</div>
+                                </div>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
+                  )}
+                </div>
                 <div className="po-field">
                   <label>Supplier</label>
                   <select value={itSupplier} onChange={(e) => setItSupplier(e.target.value)} disabled={itSaving}>

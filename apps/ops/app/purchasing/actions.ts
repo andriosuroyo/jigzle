@@ -354,6 +354,27 @@ export async function updateShipmentPO(poId: number, patch: {
   return { error: error ? `Couldn't update item: ${error.message}` : null };
 }
 
+// ── PR262: re-point ONE shipment line to a different SKU from Purchasing → History (Active shipments).
+// This is where SKU corrections live (the Inbound "Edit items" batch tool was removed — Purchasing owns
+// "what was ordered"). Guarded to not-yet-received lines; the target SKU must exist in the catalogue.
+// Resolves a placeholder line too (sets item_code; item_code_raw stays as provenance). Error as data. ──
+export async function setShipmentItemSku(poId: number, itemCode: string): Promise<{ error: string | null }> {
+  const code = itemCode.trim();
+  if (!poId || !code) return { error: 'A line and a target item code are required.' };
+  const supabase = createSupabaseServerClient();
+  const { data: cat } = await supabase.from('catalogue').select('item_code').eq('item_code', code).maybeSingle();
+  if (!cat) return { error: `${code} is not in the catalogue.` };
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .update({ item_code: code })
+    .eq('po_id', poId)
+    .or('status.is.null,status.neq.Received')
+    .select('po_id');
+  if (error) return { error: `Couldn't change the SKU: ${error.message}` };
+  if (!data || data.length === 0) return { error: 'This line is already received — its SKU is locked.' };
+  return { error: null };
+}
+
 // ── PR254: delete an ACTIVE shipment (Purchasing History detail). Ungroups it — every grouped PO goes
 // back to To forwarder (status → Processing, ship link cleared) so nothing is lost — then drops the
 // shipment ledger + box rows. Refuses a completed/received shipment (its goods are already in inventory).
