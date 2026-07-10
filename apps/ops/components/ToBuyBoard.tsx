@@ -41,8 +41,9 @@ import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
 import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
+import { fmtNiceDate } from '@jigzle/lib';
 
-const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
+const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 
 type SubTab = 'manual' | 'sales' | 'oos';
 

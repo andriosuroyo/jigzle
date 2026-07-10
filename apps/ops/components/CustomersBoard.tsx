@@ -19,7 +19,7 @@ import PostcodeAutofill from '@/components/PostcodeAutofill';
 import IconSelect, { type IconOption } from '@/components/IconSelect';
 import MergeDuplicates from '@/components/MergeDuplicates';
 import type { ChannelOption } from '@/app/settings/types';
-import { customerLabel, fmtRpCompact, type Tier } from '@jigzle/lib';
+import { customerLabel, fmtRpCompact, fmtNiceDate, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
   addCustomerAddress,
@@ -41,7 +41,7 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 const CHANNEL_SLOTS = 3;
 const blankChannels = (): ChannelEntry[] => Array.from({ length: CHANNEL_SLOTS }, () => ({ platform: '', handle: '' }));
-const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '—');
+const fmtDay = (s: string | null): string => fmtNiceDate(s) || '—';
 function daysSince(s: string | null): number | null {
   if (!s) return null;
   const t = Date.parse(s);

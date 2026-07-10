@@ -7,7 +7,7 @@
 // weight filled in; ✅ marks barcode-scanned items, ○ manually checked ones.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { volWeight } from '@jigzle/lib';
+import { volWeight, fmtNiceDate } from '@jigzle/lib';
 import { getOutboundHistory, cancelShipment, dispatchSend, getOutboundNote, setOutboundNote } from '@/app/outbound/actions';
 import type { ShipmentHistoryRow, ShipmentHistoryBox } from '@/app/outbound/types';
 import type { BoxPreset } from '@/app/settings/types';
@@ -16,7 +16,7 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
 
-const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
+const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 
 export default function OutboundHistoryBoard({
   initialOrders,

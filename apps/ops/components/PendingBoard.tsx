@@ -8,6 +8,7 @@ import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
 import SearchInput from '@/components/SearchInput';
 import SkuSearchAdd from '@/components/SkuSearchAdd';
 import { PackageIcon } from '@/components/AddIcons';
+import { fmtNiceDate } from '@jigzle/lib';
 import type { OrderDot, PendingOrder, PendingLine } from '@/app/pending/types';
 import type { CommonNote } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
@@ -317,7 +318,7 @@ export default function PendingBoard({
                 <button className="fq-row" onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className="fq-headline">{o.customer_name || '—'}</span>
-                    <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
+                    <span className="ord-date">{fmtNiceDate(o.order_date) || '—'}</span>
                   </div>
                   <div className="fq-row-bot">
                     <span>{o.lines.length} {o.lines.length === 1 ? 'item' : 'items'}</span>
@@ -341,7 +342,7 @@ export default function PendingBoard({
               <div className="fd-head">
                 <div className="fd-head-row">
                   <div className="fd-title fd-title-plain">{sel.customer_name || '—'}</div>
-                  {sel.order_date && <span className="fd-date">{sel.order_date.slice(0, 10)}</span>}
+                  {sel.order_date && <span className="fd-date">{fmtNiceDate(sel.order_date)}</span>}
                 </div>
                 <button className="fd-orderid-chip" onClick={copyOrderId} aria-label={copied ? 'Order ID copied' : 'Copy order ID'} title="Copy order ID">
                   <span className="fd-orderid-code">{sel.sales_id}</span>

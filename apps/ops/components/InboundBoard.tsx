@@ -39,6 +39,7 @@ import { getActiveStaff, setActiveStaff } from '@/components/staffStore';
 import { saveDraft, loadDraft, clearDraft, listDraftKeys } from '@/components/draftStore';
 import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
+import { fmtNiceDate } from '@jigzle/lib';
 
 // PR243 — copy/check glyphs for the header id chips (mirrors Sales → Pending/History).
 const csvg = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
@@ -778,7 +779,7 @@ export default function InboundBoard({
                     <li key={s.ship_id}>
                       <button className="rcv-suggest-opt" onClick={() => { setSuggestions(null); setFindScan(''); openShipment(s.ship_id); }}>
                         <span className="fq-id">{s.ship_id}</span>
-                        <span>{s.origin_country || '—'}{s.ship_date ? ` · ${s.ship_date}` : ''}</span>
+                        <span>{s.origin_country || '—'}{s.ship_date ? ` · ${fmtNiceDate(s.ship_date)}` : ''}</span>
                         <span className="badge ready" style={{ marginLeft: 'auto' }}>order {s.open_qty}</span>
                       </button>
                     </li>
@@ -808,7 +809,7 @@ export default function InboundBoard({
                       <span className="fq-id">{q.ship_id}</span>
                       {/* PR259 — badge a shipment that has an unsaved in-progress count waiting to resume */}
                       {draftIndex.ships.has(q.ship_id) && <span className="badge draft">in-progress</span>}
-                      <span className="fq-id-sub" style={{ marginLeft: 'auto' }}>shipped {q.ship_date || '—'}</span>
+                      <span className="fq-id-sub" style={{ marginLeft: 'auto' }}>shipped {fmtNiceDate(q.ship_date) || '—'}</span>
                     </div>
                     {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
                     <div className="fq-row-bot">
@@ -846,7 +847,7 @@ export default function InboundBoard({
               <div className="fd-head">
                 <div className="fd-head-row">
                   <div className="fd-title">{headerTitle}</div>
-                  {mode === 'shipment' && detail.ship_date && <span className="fd-date">{detail.ship_date}</span>}
+                  {mode === 'shipment' && detail.ship_date && <span className="fd-date">{fmtNiceDate(detail.ship_date)}</span>}
                 </div>
                 {mode === 'shipment' ? (
                   <div className="fd-idchips">
