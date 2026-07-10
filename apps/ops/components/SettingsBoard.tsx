@@ -15,6 +15,7 @@ import SupplierSettings from '@/components/SupplierSettings';
 import ForwarderSettings from '@/components/ForwarderSettings';
 import ExportCourierSettings from '@/components/ExportCourierSettings';
 import DeclarationUserSettings from '@/components/DeclarationUserSettings';
+import FlagSelect from '@/components/FlagSelect';
 import type { Supplier, Forwarder } from '@jigzle/db/types';
 import {
   addSetting,
@@ -45,6 +46,7 @@ type SectionDef = {
   rowClass?: string; // extra class on each .set-row (e.g. box presets pack all dims on one line)
   colHeader?: boolean; // show the column captions once as a fixed header (instead of above every row)
   noIcon?: boolean; // hide the per-row icon cell (e.g. box presets — the code is identifier enough)
+  hasFlag?: boolean; // PR275: show a leading country-flag picker (saves flag + derived country)
 };
 
 const SECTIONS: SectionDef[] = [
@@ -115,17 +117,25 @@ const SECTIONS: SectionDef[] = [
   },
   {
     kind: 'local_courier',
-    title: 'Local couriers',
-    sub: 'Domestic (supplier-side) couriers suggested in Purchasing → Forward. Separate from the outbound Couriers list.',
-    cols: [{ key: 'label', label: 'Label', type: 'text', grow: true }],
+    title: 'Local & consolidator couriers',
+    sub: 'Domestic couriers for the local leg (Purchasing → Forward) AND the consolidator leg (Purchasing → Ship / History). One shared list. Separate from the outbound Couriers list.',
+    hasFlag: true,
+    cols: [
+      { key: 'prefix', label: 'Prefix', type: 'text' },
+      { key: 'label', label: 'Local & consolidator courier name', type: 'text', grow: true },
+    ],
     sortKey: 'label',
     blank: { label: '' },
   },
   {
     kind: 'ship_courier',
-    title: 'Shipment couriers',
-    sub: 'International couriers carrying forwarder shipments (DHL, FedEx, MTE…) — picked on Purchasing → History.',
-    cols: [{ key: 'label', label: 'Label', type: 'text', grow: true }],
+    title: 'Shipper couriers',
+    sub: 'International shippers carrying the goods to our warehouse (DHL, FedEx, MTE, Japan Post…) — picked as the Shipment courier on Purchasing → History.',
+    hasFlag: true,
+    cols: [
+      { key: 'prefix', label: 'Prefix', type: 'text' },
+      { key: 'label', label: 'Shipper courier name', type: 'text', grow: true },
+    ],
     sortKey: 'label',
     blank: { label: '' },
   },
@@ -167,7 +177,7 @@ const CATEGORIES: Category[] = [
   { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
   { key: 'shipping', title: 'Shipping', sub: 'Couriers, box presets and export couriers used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }, { custom: 'export_courier' }] },
   { key: 'inbound', title: 'Inbound', sub: 'Labels for the receiving flow and warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'inbound_labels' }, { kind: 'staff' }] },
-  { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers, forwarders, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
+  { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers, consolidators, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
   { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists (Product / Sub / Piece type) for the Catalog item editor.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }] },
 ];
@@ -244,7 +254,7 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
   }
   function tabLabel(t: CatTab): string {
     if ('kind' in t) return SECTION_BY_KIND[t.kind].title;
-    if (t.custom === 'forwarders') return 'Forwarders';
+    if (t.custom === 'forwarders') return 'Consolidators';
     if (t.custom === 'suppliers') return 'Suppliers';
     if (t.custom === 'declaration_user') return 'Declaration users';
     return 'Export couriers';
@@ -570,8 +580,14 @@ function SettingRowEditor({
     setIconOpen(false);
   }
 
+  const flag = (val(row, 'flag') as string | null) ?? null;
+
   return (
     <div className={`set-row ${sec.rowClass ?? ''}`}>
+      {/* PR275 — leading country flag (saves flag + derived country), for the courier / consolidator lists */}
+      {sec.hasFlag && (
+        <FlagSelect value={flag} disabled={busy} onChange={({ flag, country }) => onSave({ flag, country })} />
+      )}
       {/* icon cell — tap to set an emoji or upload an image (hidden for lists that don't use icons) */}
       {!sec.noIcon && (
         <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">

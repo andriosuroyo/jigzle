@@ -7,7 +7,7 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, setConsolidatorTracking, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO, sendPoBackToShip } from '@/app/purchasing/actions';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, setConsolidator, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO, sendPoBackToShip } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
 import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
@@ -33,14 +33,12 @@ const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d
 const BackIcon = () => (<svg {..._ic}><polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" /></svg>);
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
-// one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg · ZTO ZTO123"
+// one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg" (PR273 — box is dims only)
 const boxSummary = (b: ShipmentBox): string => {
   const dims = [b.dim_p, b.dim_l, b.dim_t];
   const parts: string[] = [];
   if (dims.some((d) => d != null)) parts.push(`${dims.map((d) => (d ?? '–')).join(' × ')} cm`);
   if (b.real_weight != null) parts.push(`${b.real_weight} kg`);
-  const ct = [b.courier, b.tracking].filter(Boolean).join(' ');
-  if (ct) parts.push(ct);
   return parts.join(' · ') || '—';
 };
 // PR261 — compact currency: the yuan symbol 元 for "yuan", else the currency word (space-prefixed).
@@ -108,7 +106,8 @@ export default function PurchasingHistoryBoard({
   const [courierDraft, setCourierDraft] = useState('');
   const [trackingDraft, setTrackingDraft] = useState('');
   const [courierErr, setCourierErr] = useState<string | null>(null);
-  // PR272: consolidator tracking draft (auto-save on blur, like courier/tracking)
+  // PR272/PR274: consolidator courier + tracking drafts (auto-save on blur/change, like the shipper leg)
+  const [consolCourierDraft, setConsolCourierDraft] = useState('');
   const [consolTrackDraft, setConsolTrackDraft] = useState('');
   // PR206 (0069): per-box dims/weight/tracking drafts (saved as a set; pre-fill the CN Packing List)
   const [boxDraft, setBoxDraft] = useState<BoxDraft[]>([]);
@@ -191,6 +190,7 @@ export default function PurchasingHistoryBoard({
     setSelItem(null);
     setCourierDraft(s.courier ?? '');
     setTrackingDraft(s.tracking ?? '');
+    setConsolCourierDraft(s.consolidator_courier ?? '');
     setConsolTrackDraft(s.consolidator_tracking ?? '');
     setCourierErr(null);
     setBoxErr(null);
@@ -274,15 +274,16 @@ export default function PurchasingHistoryBoard({
     setOpenShip((prev) => (prev ? { ...prev, courier: c, tracking: t } : prev));
   }
 
-  // PR272: persist the consolidator tracking (Consolidator → Shipper leg), auto-save on blur.
-  async function saveConsolTrack(tracking: string) {
+  // PR272/PR274: persist the consolidator courier + tracking (Consolidator → Shipper leg), auto-save.
+  async function saveConsolidator(courier: string, tracking: string) {
     if (!openShip) return;
     setCourierErr(null);
-    const { error } = await setConsolidatorTracking(openShip.ship_id, tracking);
+    const { error } = await setConsolidator(openShip.ship_id, courier, tracking);
     if (error) { setCourierErr(error); return; }
+    const cc = courier.trim() || null;
     const t = tracking.trim() || null;
-    setShips((prev) => prev.map((s) => (s.ship_id === openShip.ship_id ? { ...s, consolidator_tracking: t } : s)));
-    setOpenShip((prev) => (prev ? { ...prev, consolidator_tracking: t } : prev));
+    setShips((prev) => prev.map((s) => (s.ship_id === openShip.ship_id ? { ...s, consolidator_courier: cc, consolidator_tracking: t } : s)));
+    setOpenShip((prev) => (prev ? { ...prev, consolidator_courier: cc, consolidator_tracking: t } : prev));
   }
 
   // PR255 — open the per-item detail overlay, seeding the editable drafts from the tapped line.
@@ -354,7 +355,9 @@ export default function PurchasingHistoryBoard({
   // per-PO detail overlay (the To-forwarder data — courier, tracking, marketplace id, cost, note). ──
   if (openShip) {
     const courierLine = [openShip.courier, openShip.tracking].filter(Boolean).join(' ');
-    const savedBoxes = boxDraft.map(draftToBox).filter((b) => b.dim_p != null || b.dim_l != null || b.dim_t != null || b.real_weight != null || b.tracking);
+    // PR274 — consolidator leg: courier + tracking (mirrors the shipper leg's "courier tracking").
+    const consolLine = [openShip.consolidator_courier, openShip.consolidator_tracking].filter(Boolean).join(' ');
+    const savedBoxes = boxDraft.map(draftToBox).filter((b) => b.dim_p != null || b.dim_l != null || b.dim_t != null || b.real_weight != null);
     // header item-cost, recomputed live from the loaded lines (Σ cost×qty) so an item edit reflects at once.
     const loadedCost = shipItems.some((it) => it.item_cost != null) ? shipItems.reduce((n, it) => n + (it.item_cost ?? 0) * it.qty, 0) : null;
     const itemsCost = costText(shipItems.length ? loadedCost : openShip.total_cost, shipItems.find((it) => it.currency)?.currency ?? openShip.currency);
@@ -373,19 +376,8 @@ export default function PurchasingHistoryBoard({
             </div>
           </div>
 
-          {/* Shipment courier & tracking — display only */}
-          <section className="fd-section">
-            <div className="fd-section-head">Shipment courier &amp; tracking</div>
-            <div className={courierLine ? 'ship-ro' : 'hint'}>{courierLine || 'No courier / tracking set.'}</div>
-          </section>
-
-          {/* Box — display only (one box per shipment) */}
-          <section className="fd-section">
-            <div className="fd-section-head">Box dimensions &amp; tracking</div>
-            {savedBoxes.length === 0
-              ? <div className="hint">No box recorded.</div>
-              : <ul className="ship-box-ro">{savedBoxes.map((b, i) => <li key={i}>{boxSummary(b)}</li>)}</ul>}
-          </section>
+          {/* PR273 — display-only detail mirrors the Edit overlay's flow: Items, then Consolidator,
+              Shipment, Box, Notes (same section order as Edit, with Items on top). */}
 
           {/* Items — count + total item cost in the header; tap a card for its captured detail */}
           <section className="fd-section">
@@ -420,6 +412,26 @@ export default function PurchasingHistoryBoard({
             </ul>
           </section>
 
+          {/* Consolidator courier & tracking — display only (Consolidator → Shipper leg) */}
+          <section className="fd-section">
+            <div className="fd-section-head">Consolidator courier &amp; tracking</div>
+            <div className={consolLine ? 'ship-ro' : 'hint'}>{consolLine || 'No courier / tracking set.'}</div>
+          </section>
+
+          {/* Shipment courier & tracking — display only (Shipper → Jigzle leg) */}
+          <section className="fd-section">
+            <div className="fd-section-head">Shipment courier &amp; tracking</div>
+            <div className={courierLine ? 'ship-ro' : 'hint'}>{courierLine || 'No courier / tracking set.'}</div>
+          </section>
+
+          {/* Box — display only (one box per shipment, dimensions only) */}
+          <section className="fd-section">
+            <div className="fd-section-head">Box dimensions</div>
+            {savedBoxes.length === 0
+              ? <div className="hint">No box recorded.</div>
+              : <ul className="ship-box-ro">{savedBoxes.map((b, i) => <li key={i}>{boxSummary(b)}</li>)}</ul>}
+          </section>
+
           {/* Shipment notes — display only */}
           <section className="fd-section">
             <div className="fd-section-head">Shipment notes</div>
@@ -446,9 +458,14 @@ export default function PurchasingHistoryBoard({
               </div>
               <div className="sc-modal-body">
                 <div className="po-field">
-                  {/* PR272 — consolidator tracking (Consolidator → Shipper leg), before the shipper leg. */}
-                  <div className="fd-section-head">Consolidator tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
-                  <input type="text" placeholder="consolidator tracking" value={consolTrackDraft} onChange={(e) => setConsolTrackDraft(e.target.value)} onBlur={(e) => void saveConsolTrack(e.target.value)} />
+                  {/* PR274 — consolidator courier + tracking (Consolidator → Shipper leg), before the
+                      shipper leg. Courier uses the shared LOCAL + CONSOLIDATOR list (localCouriers). */}
+                  <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  <div className="po-inline2">
+                    <input type="text" list="hist-consol-couriers" placeholder="courier" value={consolCourierDraft} onChange={(e) => setConsolCourierDraft(e.target.value)} onBlur={(e) => void saveConsolidator(e.target.value, consolTrackDraft)} />
+                    <input type="text" placeholder="consolidator tracking" value={consolTrackDraft} onChange={(e) => setConsolTrackDraft(e.target.value)} onBlur={(e) => void saveConsolidator(consolCourierDraft, e.target.value)} />
+                  </div>
+                  <datalist id="hist-consol-couriers">{localCouriers.map((m) => <option key={m} value={m} />)}</datalist>
                 </div>
                 <div className="po-field">
                   {/* PR261 — subheaders styled like the detail view (uppercase .fd-section-head) */}
@@ -464,10 +481,10 @@ export default function PurchasingHistoryBoard({
                   </div>
                 </div>
                 <div className="po-field">
-                  <div className="fd-section-head">Box dimensions &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  {/* PR273 — box is dimensions only: local courier/tracking removed (the leg's tracking
+                      lives in the Consolidator/Shipment sections), and no delete (one box per shipment). */}
+                  <div className="fd-section-head">Box dimensions <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
                   {boxErr && <div className="validation err">{boxErr}</div>}
-                  {/* PR265 — one box per shipment: a single card (L/W/H + real weight; then local courier
-                      + tracking + a compact clear). No add/remove — a shipment always has one box. */}
                   {(() => {
                     const b = boxDraft[0] ?? emptyBoxDraft();
                     const upd = (patch: Partial<BoxDraft>) => setBoxDraft((prev) => [{ ...(prev[0] ?? emptyBoxDraft()), ...patch }]);
@@ -479,15 +496,9 @@ export default function PurchasingHistoryBoard({
                           <label className="sb-f"><span>H (cm)</span><input type="text" inputMode="decimal" value={b.t} onChange={(e) => upd({ t: e.target.value })} /></label>
                           <label className="sb-f"><span>Real wt (kg)</span><input type="text" inputMode="decimal" value={b.w} onChange={(e) => upd({ w: e.target.value })} /></label>
                         </div>
-                        <div className="sb-card-r2">
-                          <input type="text" list="sb-box-couriers" placeholder="local courier" value={b.courier} onChange={(e) => upd({ courier: e.target.value })} />
-                          <input type="text" placeholder="tracking number" value={b.tracking} onChange={(e) => upd({ tracking: e.target.value })} />
-                          <button className="set-del" aria-label="Clear box" onClick={() => setBoxDraft([emptyBoxDraft()])}><TrashIcon /></button>
-                        </div>
                       </div>
                     );
                   })()}
-                  <datalist id="sb-box-couriers">{localCouriers.map((c) => <option key={c} value={c} />)}</datalist>
                 </div>
                 <div className="po-field">
                   <div className="fd-section-head">Shipment notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>

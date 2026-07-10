@@ -83,13 +83,15 @@ export interface NewForwarderInput {
   name?: string | null;
   country?: string | null;
   flag?: string | null;
+  logo?: string | null;
 }
 
-// Settings → Forwarders edit patch (all fields optional on update; prefix is the immutable PK)
+// Settings → Consolidators edit patch (all optional; prefix is renamed via renameConsolidatorPrefix)
 export interface UpdateForwarderPatch {
   name?: string | null;
   country?: string | null;
   flag?: string | null;
+  logo?: string | null;
 }
 
 // one existing open shipment, for the "group into an existing ship_id" datalist
@@ -232,6 +234,7 @@ export interface ShipmentHistoryRow {
   ship_date: string | null;
   received_date: string | null;
   tracking: string | null;              // PR272: shipment tracking (Shipper → Jigzle leg)
+  consolidator_courier: string | null;  // PR274: consolidator courier (Consolidator → Shipper leg)
   consolidator_tracking: string | null; // PR272: consolidator tracking (Consolidator → Shipper leg)
   courier: string | null;    // PR153: the international carrier (DHL/MTE…) — shown beside tracking
   completed: boolean;        // shipment status = completed (Completed tab) vs open (Active tab)

@@ -201,14 +201,23 @@ export async function getForwarders(): Promise<Forwarder[]> {
   const supabase = createSupabaseServerClient();
   // active forwarders only (soft-deleted ones stay resolvable for history but drop from the pickers),
   // in the manual Settings order (sort_order, then prefix as a stable tiebreak).
-  const { data, error } = await supabase
+  // PR276: prefer the logo column; if 0081 isn't applied yet, retry without it (graceful degrade) so the
+  // Consolidators list + Create-shipment picker still load.
+  const BASE = 'prefix,name,country,flag,sort_order,is_active,created_at';
+  const withLogo = await supabase
     .from('forwarders')
-    .select('prefix,name,country,flag,sort_order,is_active,created_at')
+    .select(`${BASE},logo`)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('prefix', { ascending: true });
-  if (error || !data) return [];
-  return data as Forwarder[];
+  if (!withLogo.error && withLogo.data) return withLogo.data as Forwarder[];
+  const { data } = await supabase
+    .from('forwarders')
+    .select(BASE)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('prefix', { ascending: true });
+  return ((data ?? []) as Omit<Forwarder, 'logo'>[]).map((f) => ({ ...f, logo: null }));
 }
 
 // ── the LAST (highest) ship_id used for a forwarder prefix — the To-ship group panel pre-fills it into
@@ -275,22 +284,23 @@ export async function setShipmentCourier(
   return { error: error ? `setShipmentCourier: ${error.message}` : null };
 }
 
-// ── PR272: set the shipment's consolidator tracking (Consolidator → Shipper leg). Set at Create
-// shipment and editable in History. Error as data (PR145); degrades silently if 0078 isn't applied
-// yet (the column is missing → treat as a no-op so grouping/edit isn't blocked). Empty → NULL. ──
-export async function setConsolidatorTracking(
+// ── PR272/PR274: set the shipment's consolidator courier + tracking (Consolidator → Shipper leg). Set
+// at Create shipment and editable in History. Error as data (PR145); degrades silently if 0078/0079
+// isn't applied yet (missing column → no-op so grouping/edit isn't blocked). Empty → NULL. ──
+export async function setConsolidator(
   shipId: string,
+  courier: string,
   tracking: string
 ): Promise<{ error: string | null }> {
   const sid = shipId.trim();
-  if (!sid) return { error: 'setConsolidatorTracking: a ship id is required' };
+  if (!sid) return { error: 'setConsolidator: a ship id is required' };
   const supabase = createSupabaseServerClient();
   const { error } = await supabase
     .from('shipments')
-    .update({ consolidator_tracking: tracking.trim() || null })
+    .update({ consolidator_courier: courier.trim() || null, consolidator_tracking: tracking.trim() || null })
     .eq('ship_id', sid);
-  // 42703 = undefined_column (0078 not applied yet) → no-op rather than surfacing an error.
-  if (error && error.code !== '42703') return { error: `setConsolidatorTracking: ${error.message}` };
+  // 42703 = undefined_column (0078/0079 not applied yet) → no-op rather than surfacing an error.
+  if (error && error.code !== '42703') return { error: `setConsolidator: ${error.message}` };
   return { error: null };
 }
 
@@ -1041,6 +1051,7 @@ export async function addForwarder(input: NewForwarderInput): Promise<Forwarder>
       name: input.name?.trim() || null,
       country: input.country?.trim() || null,
       flag: input.flag?.trim() || null,
+      logo: input.logo?.trim() || null,
       sort_order: nextOrder,
     })
     .select('*')
@@ -1062,9 +1073,24 @@ export async function updateForwarder(prefix: string, patch: UpdateForwarderPatc
   if (patch.name !== undefined) upd.name = patch.name?.trim() || null;
   if (patch.country !== undefined) upd.country = patch.country?.trim() || null;
   if (patch.flag !== undefined) upd.flag = patch.flag?.trim() || null;
+  if (patch.logo !== undefined) upd.logo = patch.logo?.trim() || null;
   const { data, error } = await supabase.from('forwarders').update(upd).eq('prefix', prefix).select('*').single();
   if (error) throw new Error(`updateForwarder: ${error.message}`);
   return data as Forwarder;
+}
+
+// ── PR276: rename a consolidator's prefix, cascading to every owned ship_id (RPC 0081). Error as data
+// (PR145) — a thrown message would be masked in production. Degrades if 0081 isn't applied yet. ──
+export async function renameConsolidatorPrefix(oldPrefix: string, newPrefix: string): Promise<{ error: string | null; touched: number }> {
+  const oldP = oldPrefix?.trim();
+  const newP = newPrefix?.trim().toUpperCase();
+  if (!oldP || !newP) return { error: 'renameConsolidatorPrefix: both prefixes are required', touched: 0 };
+  if (oldP === newP) return { error: null, touched: 0 };
+  const supabase = createSupabaseServerClient();
+  // 0082's function returns the count of ship_ids rewritten; 0081's returned void (→ null) — tolerate both.
+  const { data, error } = await supabase.rpc('rename_consolidator_prefix', { p_old: oldP, p_new: newP });
+  if (error) return { error: `renameConsolidatorPrefix: ${error.message}`, touched: 0 };
+  return { error: null, touched: typeof data === 'number' ? data : 0 };
 }
 
 // ── reorder forwarders (Settings → Forwarders): persist the manual order (index → sort_order). ──
@@ -1446,6 +1472,12 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     const { data: ct } = await supabase.from('shipments').select('ship_id,consolidator_tracking').not('consolidator_tracking', 'is', null).limit(5000);
     for (const c of (ct ?? []) as { ship_id: string; consolidator_tracking: string | null }[]) if (c.consolidator_tracking) consolTrackByShip.set(c.ship_id, c.consolidator_tracking);
   }
+  // PR274: consolidator courier — its own degrade query so a not-yet-applied 0079 can't hide 0078's tracking.
+  const consolCourierByShip = new Map<string, string>();
+  {
+    const { data: cc } = await supabase.from('shipments').select('ship_id,consolidator_courier').not('consolidator_courier', 'is', null).limit(5000);
+    for (const c of (cc ?? []) as { ship_id: string; consolidator_courier: string | null }[]) if (c.consolidator_courier) consolCourierByShip.set(c.ship_id, c.consolidator_courier);
+  }
 
   const shipIds = ships.map((s) => s.ship_id);
   // items per ship = distinct identifiers from PO lines (item_code ?? raw) ∪ inbound-received codes, so a
@@ -1516,6 +1548,7 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
       ship_date: s.ship_date,
       received_date: recvOf(s),
       tracking: s.tracking,
+      consolidator_courier: consolCourierByShip.get(s.ship_id) ?? null,
       consolidator_tracking: consolTrackByShip.get(s.ship_id) ?? null,
       courier: courierByShip.get(s.ship_id) ?? null,
       completed: s.status === 'completed',
