@@ -1286,10 +1286,13 @@ img.sku-img { background: #e8e8e8; }
 .sup-flag-cell { flex-shrink: 0; width: 46px; }
 .set-colhead-sup .sup-flag-cell { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
 .set-colhead-sup .set-f { text-align: left; }
+/* match the header's inner gap to the rows' so the name column starts at the same x */
+.set-colhead-sup .set-fields { gap: 6px; }
 /* Consolidators / couriers: fixed-width mono prefix cell (the ship-id series), name takes the rest.
-   PR278 — the prefix header + field are CENTER-aligned; everything else left. */
+   PR278 — the prefix header + field are CENTER-aligned; everything else left. The header cell must
+   restate the 84px width, else `.set-colhead .set-f { flex: 1 1 0 }` stretches it out of alignment. */
 .fwd-prefix-cell { flex: 0 0 84px; }
-.set-colhead-sup .fwd-prefix-cell { text-align: center; }
+.set-colhead-sup .fwd-prefix-cell { flex: 0 0 84px; text-align: center; }
 .fwd-prefix-cell input { text-align: center; }
 .fwd-prefix { font-family: var(--mono, ui-monospace, monospace); font-weight: 700; letter-spacing: 0.02em; }
 /* the consolidator prefix is a rename button styled as a centered pill, same footprint as the input */
