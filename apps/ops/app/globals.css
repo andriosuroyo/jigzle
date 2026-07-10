@@ -1259,6 +1259,8 @@ img.sku-img { background: #e8e8e8; }
 .set-list { display: flex; flex-direction: column; gap: 6px; }
 /* compact single-line row: narrower field(s) + three buttons to the right (up · down · remove) */
 .set-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); }
+/* PR280 — a read-only name line (Declaration users): fills the row, ellipsised, controls to the right */
+.set-decl-name { flex: 1 1 auto; min-width: 0; padding: 6px 4px; font-size: 14px; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-fields { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .set-f { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .set-f.grow { flex: 1 1 120px; }
