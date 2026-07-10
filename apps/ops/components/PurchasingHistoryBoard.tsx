@@ -33,14 +33,12 @@ const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d
 const BackIcon = () => (<svg {..._ic}><polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" /></svg>);
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
-// one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg · ZTO ZTO123"
+// one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg" (PR273 — box is dims only)
 const boxSummary = (b: ShipmentBox): string => {
   const dims = [b.dim_p, b.dim_l, b.dim_t];
   const parts: string[] = [];
   if (dims.some((d) => d != null)) parts.push(`${dims.map((d) => (d ?? '–')).join(' × ')} cm`);
   if (b.real_weight != null) parts.push(`${b.real_weight} kg`);
-  const ct = [b.courier, b.tracking].filter(Boolean).join(' ');
-  if (ct) parts.push(ct);
   return parts.join(' · ') || '—';
 };
 // PR261 — compact currency: the yuan symbol 元 for "yuan", else the currency word (space-prefixed).
@@ -354,7 +352,9 @@ export default function PurchasingHistoryBoard({
   // per-PO detail overlay (the To-forwarder data — courier, tracking, marketplace id, cost, note). ──
   if (openShip) {
     const courierLine = [openShip.courier, openShip.tracking].filter(Boolean).join(' ');
-    const savedBoxes = boxDraft.map(draftToBox).filter((b) => b.dim_p != null || b.dim_l != null || b.dim_t != null || b.real_weight != null || b.tracking);
+    // PR272/PR273 — consolidator leg: the consolidator (ship_id prefix) + its onward tracking.
+    const consolLine = [openShip.forwarder_prefix, openShip.consolidator_tracking].filter(Boolean).join(' ');
+    const savedBoxes = boxDraft.map(draftToBox).filter((b) => b.dim_p != null || b.dim_l != null || b.dim_t != null || b.real_weight != null);
     // header item-cost, recomputed live from the loaded lines (Σ cost×qty) so an item edit reflects at once.
     const loadedCost = shipItems.some((it) => it.item_cost != null) ? shipItems.reduce((n, it) => n + (it.item_cost ?? 0) * it.qty, 0) : null;
     const itemsCost = costText(shipItems.length ? loadedCost : openShip.total_cost, shipItems.find((it) => it.currency)?.currency ?? openShip.currency);
@@ -373,19 +373,8 @@ export default function PurchasingHistoryBoard({
             </div>
           </div>
 
-          {/* Shipment courier & tracking — display only */}
-          <section className="fd-section">
-            <div className="fd-section-head">Shipment courier &amp; tracking</div>
-            <div className={courierLine ? 'ship-ro' : 'hint'}>{courierLine || 'No courier / tracking set.'}</div>
-          </section>
-
-          {/* Box — display only (one box per shipment) */}
-          <section className="fd-section">
-            <div className="fd-section-head">Box dimensions &amp; tracking</div>
-            {savedBoxes.length === 0
-              ? <div className="hint">No box recorded.</div>
-              : <ul className="ship-box-ro">{savedBoxes.map((b, i) => <li key={i}>{boxSummary(b)}</li>)}</ul>}
-          </section>
+          {/* PR273 — display-only detail mirrors the Edit overlay's flow: Items, then Consolidator,
+              Shipment, Box, Notes (same section order as Edit, with Items on top). */}
 
           {/* Items — count + total item cost in the header; tap a card for its captured detail */}
           <section className="fd-section">
@@ -418,6 +407,26 @@ export default function PurchasingHistoryBoard({
                 </li>
               ))}
             </ul>
+          </section>
+
+          {/* Consolidator courier & tracking — display only (Consolidator → Shipper leg) */}
+          <section className="fd-section">
+            <div className="fd-section-head">Consolidator courier &amp; tracking</div>
+            <div className={consolLine ? 'ship-ro' : 'hint'}>{consolLine || 'No consolidator set.'}</div>
+          </section>
+
+          {/* Shipment courier & tracking — display only (Shipper → Jigzle leg) */}
+          <section className="fd-section">
+            <div className="fd-section-head">Shipment courier &amp; tracking</div>
+            <div className={courierLine ? 'ship-ro' : 'hint'}>{courierLine || 'No courier / tracking set.'}</div>
+          </section>
+
+          {/* Box — display only (one box per shipment, dimensions only) */}
+          <section className="fd-section">
+            <div className="fd-section-head">Box dimensions</div>
+            {savedBoxes.length === 0
+              ? <div className="hint">No box recorded.</div>
+              : <ul className="ship-box-ro">{savedBoxes.map((b, i) => <li key={i}>{boxSummary(b)}</li>)}</ul>}
           </section>
 
           {/* Shipment notes — display only */}
@@ -464,10 +473,10 @@ export default function PurchasingHistoryBoard({
                   </div>
                 </div>
                 <div className="po-field">
-                  <div className="fd-section-head">Box dimensions &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  {/* PR273 — box is dimensions only: local courier/tracking removed (the leg's tracking
+                      lives in the Consolidator/Shipment sections), and no delete (one box per shipment). */}
+                  <div className="fd-section-head">Box dimensions <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
                   {boxErr && <div className="validation err">{boxErr}</div>}
-                  {/* PR265 — one box per shipment: a single card (L/W/H + real weight; then local courier
-                      + tracking + a compact clear). No add/remove — a shipment always has one box. */}
                   {(() => {
                     const b = boxDraft[0] ?? emptyBoxDraft();
                     const upd = (patch: Partial<BoxDraft>) => setBoxDraft((prev) => [{ ...(prev[0] ?? emptyBoxDraft()), ...patch }]);
@@ -479,15 +488,9 @@ export default function PurchasingHistoryBoard({
                           <label className="sb-f"><span>H (cm)</span><input type="text" inputMode="decimal" value={b.t} onChange={(e) => upd({ t: e.target.value })} /></label>
                           <label className="sb-f"><span>Real wt (kg)</span><input type="text" inputMode="decimal" value={b.w} onChange={(e) => upd({ w: e.target.value })} /></label>
                         </div>
-                        <div className="sb-card-r2">
-                          <input type="text" list="sb-box-couriers" placeholder="local courier" value={b.courier} onChange={(e) => upd({ courier: e.target.value })} />
-                          <input type="text" placeholder="tracking number" value={b.tracking} onChange={(e) => upd({ tracking: e.target.value })} />
-                          <button className="set-del" aria-label="Clear box" onClick={() => setBoxDraft([emptyBoxDraft()])}><TrashIcon /></button>
-                        </div>
                       </div>
                     );
                   })()}
-                  <datalist id="sb-box-couriers">{localCouriers.map((c) => <option key={c} value={c} />)}</datalist>
                 </div>
                 <div className="po-field">
                   <div className="fd-section-head">Shipment notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
