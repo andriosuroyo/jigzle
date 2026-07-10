@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { TruckIcon } from '@/components/AddIcons';
-import { addForwarder, deleteForwarder, reorderForwarders, updateForwarder, renameConsolidatorPrefix } from '@/app/purchasing/actions';
+import { addForwarder, deleteForwarder, reorderForwarders, updateForwarder, renameConsolidatorPrefix, getConsolidatorOpenShipmentCount } from '@/app/purchasing/actions';
 import { uploadSettingIcon } from '@/app/settings/actions';
 import type { Forwarder } from '@jigzle/db/types';
 import FlagSelect from '@/components/FlagSelect';
@@ -77,6 +77,8 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
   const [adding, setAdding] = useState<{ prefix: string; name: string; flag: string; country: string; logo: string | null } | null>(null);
   // PR276 — the prefix-rename dialog (rewrites every owned ship_id, so it's an explicit confirm).
   const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
+  // PR278 — the delete confirm, with the consolidator's live open-shipment count.
+  const [deleting, setDeleting] = useState<{ prefix: string; open: number } | null>(null);
 
   const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
   const note = (tone: 'ok' | 'err' | 'warn', text: string) => setNotice({ tone, text });
@@ -145,11 +147,23 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
-  async function remove(prefix: string) {
+  // PR278 — open the delete confirm, first counting the consolidator's OPEN shipments so the dialog can
+  // warn (historical/completed shipments stay resolvable regardless — this is a soft delete).
+  async function requestRemove(prefix: string) {
+    setBusy(true); setNotice(null);
+    try {
+      const open = await getConsolidatorOpenShipmentCount(prefix);
+      setDeleting({ prefix, open });
+    } catch (e) { fail(e); } finally { setBusy(false); }
+  }
+  async function commitRemove() {
+    if (!deleting) return;
+    const prefix = deleting.prefix;
     setBusy(true); setNotice(null);
     try {
       await deleteForwarder(prefix);
       setRows((prev) => prev.filter((r) => r.prefix !== prefix));
+      setDeleting(null);
       note('err', 'Removed.');
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
@@ -182,7 +196,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
             onSave={(patch) => save(f.prefix, patch)}
             onRequestRename={() => setRenaming({ from: f.prefix, to: f.prefix })}
             onMove={(dir) => move(i, dir)}
-            onRemove={() => remove(f.prefix)}
+            onRemove={() => requestRemove(f.prefix)}
           />
         ))}
       </div>
@@ -227,6 +241,29 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
             <div className="sc-modal-foot">
               <button className="btn-secondary" onClick={() => setRenaming(null)} disabled={busy}>Cancel</button>
               <button className="btn-primary" onClick={commitRename} disabled={busy || !renaming.to.trim() || renaming.to.trim().toUpperCase() === renaming.from}>{busy ? 'Renaming…' : 'Rename'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PR278 — delete confirm, warning if the consolidator still has open shipments (soft delete). */}
+      {deleting && (
+        <div className="sc-modal-backdrop" onClick={() => !busy && setDeleting(null)}>
+          <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Remove consolidator" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row"><span className="sc-modal-title">Remove {deleting.prefix}?</span><button className="sc-modal-x" onClick={() => setDeleting(null)} disabled={busy} aria-label="Close">×</button></div>
+            <div className="sc-modal-body">
+              {deleting.open > 0 ? (
+                <div className="validation warn">
+                  <b>{deleting.prefix}</b> still has <b>{deleting.open} open shipment{deleting.open === 1 ? '' : 's'}</b>. They stay resolvable in History, but you won’t be able to group new items under {deleting.prefix} once it’s removed.
+                </div>
+              ) : (
+                <div className="hint">No open shipments — safe to remove.</div>
+              )}
+              <div className="hint" style={{ marginTop: 8 }}>This is a soft delete: {deleting.prefix} just drops from the picker + this list. All historical shipments keep their ship ids and still resolve, and re-adding {deleting.prefix} later restores it.</div>
+            </div>
+            <div className="sc-modal-foot">
+              <button className="btn-secondary" onClick={() => setDeleting(null)} disabled={busy}>Cancel</button>
+              <button className="btn-primary danger" onClick={commitRemove} disabled={busy}>{busy ? 'Removing…' : 'Remove'}</button>
             </div>
           </div>
         </div>

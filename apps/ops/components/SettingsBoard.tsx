@@ -33,7 +33,7 @@ import type {
 } from '@/app/settings/types';
 
 // ── per-list column config ──
-type Col = { key: string; label: string; type: 'text' | 'number'; nullable?: boolean; grow?: boolean };
+type Col = { key: string; label: string; type: 'text' | 'number'; nullable?: boolean; grow?: boolean; cls?: string };
 
 type SectionDef = {
   kind: SettingsKind;
@@ -120,8 +120,9 @@ const SECTIONS: SectionDef[] = [
     title: 'Local & consolidator couriers',
     sub: 'Domestic couriers for the local leg (Purchasing → Forward) AND the consolidator leg (Purchasing → Ship / History). One shared list. Separate from the outbound Couriers list.',
     hasFlag: true,
+    colHeader: true,
     cols: [
-      { key: 'prefix', label: 'Prefix', type: 'text' },
+      { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
       { key: 'label', label: 'Local & consolidator courier name', type: 'text', grow: true },
     ],
     sortKey: 'label',
@@ -132,8 +133,9 @@ const SECTIONS: SectionDef[] = [
     title: 'Shipper couriers',
     sub: 'International shippers carrying the goods to our warehouse (DHL, FedEx, MTE, Japan Post…) — picked as the Shipment courier on Purchasing → History.',
     hasFlag: true,
+    colHeader: true,
     cols: [
-      { key: 'prefix', label: 'Prefix', type: 'text' },
+      { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
       { key: 'label', label: 'Shipper courier name', type: 'text', grow: true },
     ],
     sortKey: 'label',
@@ -361,12 +363,14 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
     const rows = lists[sec.kind];
     return (
       <div className="set-list">
-        {/* fixed column header (e.g. box presets) — shown once instead of above every row */}
+        {/* fixed column header (box presets; PR278 courier/consolidator lists) — shown once, not per row */}
         {sec.colHeader && rows.length > 0 && (
-          <div className={`set-colhead ${sec.rowClass ?? ''}`} aria-hidden>
+          <div className={`set-colhead ${sec.hasFlag ? 'set-colhead-sup' : ''} ${sec.rowClass ?? ''}`} aria-hidden>
+            {sec.hasFlag && <div className="sup-flag-cell">Flag</div>}
+            {sec.hasFlag && !sec.noIcon && <div className="sup-flag-cell">Logo</div>}
             <div className="set-fields">
               {sec.cols.map((c) => (
-                <div key={c.key} className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}`}>{c.label}</div>
+                <div key={c.key} className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}${c.cls ? ' ' + c.cls : ''}`}>{c.label}</div>
               ))}
             </div>
             <div className="set-colhead-ctl" />
@@ -582,29 +586,32 @@ function SettingRowEditor({
 
   const flag = (val(row, 'flag') as string | null) ?? null;
 
+  const iconBtn = (
+    <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">
+      {icon ? (
+        isIconUrl(icon)
+          // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
+          ? <img className="set-ico-img" src={icon} alt="" />
+          : <span className="set-ico-emoji">{icon}</span>
+      ) : (
+        <span className="set-ico-add">+</span>
+      )}
+    </button>
+  );
+
   return (
-    <div className={`set-row ${sec.rowClass ?? ''}`}>
+    <div className={`set-row${sec.hasFlag ? ' set-row-sup' : ''} ${sec.rowClass ?? ''}`}>
       {/* PR275 — leading country flag (saves flag + derived country), for the courier / consolidator lists */}
       {sec.hasFlag && (
-        <FlagSelect value={flag} disabled={busy} onChange={({ flag, country }) => onSave({ flag, country })} />
+        <div className="sup-flag-cell"><FlagSelect value={flag} disabled={busy} onChange={({ flag, country }) => onSave({ flag, country })} /></div>
       )}
-      {/* icon cell — tap to set an emoji or upload an image (hidden for lists that don't use icons) */}
-      {!sec.noIcon && (
-        <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">
-          {icon ? (
-            isIconUrl(icon)
-              // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
-              ? <img className="set-ico-img" src={icon} alt="" />
-              : <span className="set-ico-emoji">{icon}</span>
-          ) : (
-            <span className="set-ico-add">+</span>
-          )}
-        </button>
-      )}
+      {/* icon cell — tap to set an emoji or upload an image (hidden for lists that don't use icons).
+          PR278: the flag lists box it in a sup-flag-cell so its width lines up with the Consolidators list. */}
+      {!sec.noIcon && (sec.hasFlag ? <div className="sup-flag-cell">{iconBtn}</div> : iconBtn)}
 
       <div className="set-fields">
         {sec.cols.map((c) => (
-          <div className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}`} key={c.key}>
+          <div className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}${c.cls ? ' ' + c.cls : ''}`} key={c.key}>
             {showCaptions && <label>{c.label}</label>}
             <input
               type={c.type === 'number' ? 'number' : 'text'}
