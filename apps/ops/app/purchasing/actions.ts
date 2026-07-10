@@ -201,14 +201,23 @@ export async function getForwarders(): Promise<Forwarder[]> {
   const supabase = createSupabaseServerClient();
   // active forwarders only (soft-deleted ones stay resolvable for history but drop from the pickers),
   // in the manual Settings order (sort_order, then prefix as a stable tiebreak).
-  const { data, error } = await supabase
+  // PR276: prefer the logo column; if 0081 isn't applied yet, retry without it (graceful degrade) so the
+  // Consolidators list + Create-shipment picker still load.
+  const BASE = 'prefix,name,country,flag,sort_order,is_active,created_at';
+  const withLogo = await supabase
     .from('forwarders')
-    .select('prefix,name,country,flag,sort_order,is_active,created_at')
+    .select(`${BASE},logo`)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('prefix', { ascending: true });
-  if (error || !data) return [];
-  return data as Forwarder[];
+  if (!withLogo.error && withLogo.data) return withLogo.data as Forwarder[];
+  const { data } = await supabase
+    .from('forwarders')
+    .select(BASE)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('prefix', { ascending: true });
+  return ((data ?? []) as Omit<Forwarder, 'logo'>[]).map((f) => ({ ...f, logo: null }));
 }
 
 // ── the LAST (highest) ship_id used for a forwarder prefix — the To-ship group panel pre-fills it into
@@ -1042,6 +1051,7 @@ export async function addForwarder(input: NewForwarderInput): Promise<Forwarder>
       name: input.name?.trim() || null,
       country: input.country?.trim() || null,
       flag: input.flag?.trim() || null,
+      logo: input.logo?.trim() || null,
       sort_order: nextOrder,
     })
     .select('*')
@@ -1063,9 +1073,22 @@ export async function updateForwarder(prefix: string, patch: UpdateForwarderPatc
   if (patch.name !== undefined) upd.name = patch.name?.trim() || null;
   if (patch.country !== undefined) upd.country = patch.country?.trim() || null;
   if (patch.flag !== undefined) upd.flag = patch.flag?.trim() || null;
+  if (patch.logo !== undefined) upd.logo = patch.logo?.trim() || null;
   const { data, error } = await supabase.from('forwarders').update(upd).eq('prefix', prefix).select('*').single();
   if (error) throw new Error(`updateForwarder: ${error.message}`);
   return data as Forwarder;
+}
+
+// ── PR276: rename a consolidator's prefix, cascading to every owned ship_id (RPC 0081). Error as data
+// (PR145) — a thrown message would be masked in production. Degrades if 0081 isn't applied yet. ──
+export async function renameConsolidatorPrefix(oldPrefix: string, newPrefix: string): Promise<{ error: string | null }> {
+  const oldP = oldPrefix?.trim();
+  const newP = newPrefix?.trim().toUpperCase();
+  if (!oldP || !newP) return { error: 'renameConsolidatorPrefix: both prefixes are required' };
+  if (oldP === newP) return { error: null };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.rpc('rename_consolidator_prefix', { p_old: oldP, p_new: newP });
+  return { error: error ? `renameConsolidatorPrefix: ${error.message}` : null };
 }
 
 // ── reorder forwarders (Settings → Forwarders): persist the manual order (index → sort_order). ──

@@ -83,13 +83,15 @@ export interface NewForwarderInput {
   name?: string | null;
   country?: string | null;
   flag?: string | null;
+  logo?: string | null;
 }
 
-// Settings → Forwarders edit patch (all fields optional on update; prefix is the immutable PK)
+// Settings → Consolidators edit patch (all optional; prefix is renamed via renameConsolidatorPrefix)
 export interface UpdateForwarderPatch {
   name?: string | null;
   country?: string | null;
   flag?: string | null;
+  logo?: string | null;
 }
 
 // one existing open shipment, for the "group into an existing ship_id" datalist
