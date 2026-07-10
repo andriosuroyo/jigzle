@@ -774,7 +774,7 @@ export async function markSkuSoldOut(input: { item_code: string; customer_id: nu
 
 // ── Buy a preorder (decision #2): create a Processing PO linked to the customer who ordered it, so it
 // enters To forwarder and drops off the preorder list (covered by an open PO for that SKU + customer). ──
-export async function buyPreorder(input: { item_code: string; qty: number; customer_id: number | null }): Promise<{ po_id: number }> {
+export async function buyPreorder(input: { item_code: string; qty: number; customer_id: number | null; supplier_id?: number | null }): Promise<{ po_id: number }> {
   const supabase = createSupabaseServerClient();
   const item_code = input.item_code?.trim();
   if (!item_code) throw new Error('buyPreorder: an item code is required');
@@ -789,11 +789,21 @@ export async function buyPreorder(input: { item_code: string; qty: number; custo
       status_since: today,
       input_date: today,
       customer_id: input.customer_id ?? null,
+      supplier_id: input.supplier_id ?? null, // PR283: Source captured in Buy
     })
     .select('po_id')
     .single();
   if (error) throw new Error(`buyPreorder: ${error.message}`);
   return { po_id: (data as { po_id: number }).po_id };
+}
+
+// ── PR283: set a PO's Source (supplier_id) from the Buy detail. Auto-saves on pick for a real PO
+// (manual / out-of-stock); From-Sales items have no PO yet, so their Source rides buyPreorder at Done.
+// Error as data (PR145). ──
+export async function setPOSource(poId: number, supplierId: number | null): Promise<{ error: string | null }> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('purchase_orders').update({ supplier_id: supplierId }).eq('po_id', poId);
+  return { error: error ? `setPOSource: ${error.message}` : null };
 }
 
 // ── mark / unmark a PO sold out. soldOut=true → status 'Sold out' (auto-date + optional reason);
@@ -850,11 +860,11 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,item_code_raw,qty,product_link,item_note,urgency,status,status_since,input_date')
+    .select('po_id,item_code,item_code_raw,qty,product_link,item_note,urgency,status,status_since,input_date,supplier_id')
     .eq('status', 'Planned')
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
-  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null; input_date: string | null }[];
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null; input_date: string | null; supplier_id: number | null }[];
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -877,6 +887,7 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
       item_note: r.item_note,
       urgency: r.urgency,
       input_date: r.input_date,
+      supplier_id: r.supplier_id,
       available: p.available,
       on_the_way: p.on_the_way,
       with_forwarder: p.with_forwarder,
@@ -889,14 +900,14 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
-    .select('po_id,item_code,item_code_raw,qty,product_link,urgency,sold_out_date,sold_out_note,customer_id,marketplace_order_id,status,input_date')
+    .select('po_id,item_code,item_code_raw,qty,product_link,urgency,sold_out_date,sold_out_note,customer_id,marketplace_order_id,status,input_date,supplier_id')
     .eq('status', 'Sold out')
     .order('sold_out_date', { ascending: false, nullsFirst: false })
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
   const rows = (data ?? []) as {
     po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; product_link: string | null; urgency: Urgency | null;
-    sold_out_date: string | null; sold_out_note: string | null; customer_id: number | null; marketplace_order_id: string | null; input_date: string | null;
+    sold_out_date: string | null; sold_out_note: string | null; customer_id: number | null; marketplace_order_id: string | null; input_date: string | null; supplier_id: number | null;
   }[];
   if (!rows.length) return [];
 
@@ -945,6 +956,7 @@ export async function getSoldOutItems(): Promise<SoldOutRow[]> {
       customer_name: r.customer_id != null ? customerById.get(r.customer_id) ?? null : null,
       order_date: r.marketplace_order_id ? orderDateById.get(r.marketplace_order_id) ?? null : null,
       input_date: r.input_date,
+      supplier_id: r.supplier_id,
       available: p.available,
       with_forwarder: p.with_forwarder,
       on_the_way: p.on_the_way,

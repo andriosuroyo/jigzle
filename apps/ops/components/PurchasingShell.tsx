@@ -91,7 +91,7 @@ export default function PurchasingShell({
           preserves each board's own post-delete state across tab switches. */}
       <div className="orders-panels">
         <div hidden={tab !== 'tobuy'}>
-          <ToBuyBoard planned={planned} preorders={preorders} soldOut={soldOut} />
+          <ToBuyBoard planned={planned} preorders={preorders} soldOut={soldOut} suppliers={suppliers} />
         </div>
         <div hidden={tab !== 'forwarder'}>
           <OrderBoard

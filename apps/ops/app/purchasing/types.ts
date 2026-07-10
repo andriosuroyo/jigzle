@@ -142,6 +142,7 @@ export interface PlannedItemRow {
   item_note: string | null;
   urgency: Urgency | null;
   input_date: string | null; // create date (when the item was added to the buy-list)
+  supplier_id: number | null; // PR283 — the Source (mandatory before Done)
   available: number;     // live stock_check.available (warehouse)
   on_the_way: number;    // Σ 'On the way' PO qty (shipped, en route)
   with_forwarder: number; // Σ 'With Forwarder' PO qty (in forwarder)
@@ -166,6 +167,7 @@ export interface SoldOutRow {
   customer_name: string | null;
   order_date: string | null;
   input_date: string | null; // create date (manual origin) — the date kept from before it went out of stock
+  supplier_id: number | null; // PR283 — the Source (mandatory before Done)
   available: number;
   with_forwarder: number;
   on_the_way: number;

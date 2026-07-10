@@ -25,6 +25,7 @@ import {
   getSoldOutItems,
   markSkuSoldOut,
   searchSkus,
+  setPOSource,
   setPOStatus,
   setSoldOut,
   updatePlannedItem,
@@ -32,6 +33,7 @@ import {
 } from '@/app/purchasing/actions';
 import type { PlannedItemRow, PreorderRow, SoldOutRow, SkuStockInfo, Urgency } from '@/app/purchasing/types';
 import type { SkuHit } from '@/app/purchasing/types';
+import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
@@ -105,10 +107,12 @@ export default function ToBuyBoard({
   planned: initialPlanned,
   preorders: initialPreorders,
   soldOut: initialSoldOut,
+  suppliers = [],
 }: {
   planned: PlannedItemRow[];
   preorders: PreorderRow[];
   soldOut: SoldOutRow[];
+  suppliers?: Supplier[]; // PR283 — the Source pick-list for Buy
 }) {
   // PR223 — the sub-tab is mirrored to ?buy= (distinct from Purchasing's ?tab=) so a hard Refresh stays put.
   const [tab, setTab] = useUrlTab<SubTab>('buy', 'manual', ['manual', 'sales', 'oos']);
@@ -139,6 +143,9 @@ export default function ToBuyBoard({
   // Loaded lazily when the overlay opens, keyed on the SKU code.
   const [buySources, setBuySources] = useState<string[]>([]);
   const [buyLoading, setBuyLoading] = useState(false);
+  // PR283 — the picked Source for the open Buy item. For a real PO (manual/oos) it auto-saves; for a
+  // from-sales preorder it's held here and rides buyPreorder at Done. Mandatory before Done.
+  const [buySource, setBuySource] = useState('');
 
   // PR240 — inline edit of a Manual buy-list item (SKU / qty / priority / note). Writes only to the PO,
   // never the catalogue (the SKU is resolved server-side; unknown codes stay placeholders for Inbound).
@@ -282,15 +289,29 @@ export default function ToBuyBoard({
   // PR219: the row is removed locally by the caller BEFORE this runs, so we only do the single write
   // here (no heavy 3-list refetch) — the next Done is clickable as soon as that one write returns. On
   // failure we resync so the row reappears.
-  async function done(t: BuyTarget) {
+  async function done(t: BuyTarget, supplierId: number | null) {
     setBusy(true); setError(null);
     try {
-      // manual + out-of-stock are both real POs → advance to Processing (To forwarder); a from-sales
-      // preorder isn't a PO yet, so it spawns one.
+      // manual + out-of-stock are both real POs → advance to Processing (To forwarder); their Source was
+      // already saved on pick (setPOSource). A from-sales preorder isn't a PO yet, so it spawns one and
+      // carries its Source (PR283) into the new PO.
       if ((t.kind === 'manual' || t.kind === 'oos') && t.po_id != null) await setPOStatus(t.po_id, 'Processing');
-      else if (t.kind === 'sales') await buyPreorder({ item_code: t.item_code, qty: t.qty, customer_id: t.customer_id });
+      else if (t.kind === 'sales') await buyPreorder({ item_code: t.item_code, qty: t.qty, customer_id: t.customer_id, supplier_id: supplierId });
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); await refresh(); }
     finally { setBusy(false); }
+  }
+
+  // PR283 — pick the Source. A real PO (manual/oos) auto-saves the pick; a from-sales preorder holds it
+  // locally (no PO yet) and carries it into buyPreorder at Done.
+  async function changeSource(v: string) {
+    setBuySource(v);
+    const id = v ? Number(v) : null;
+    if (detail?.po_id != null) {
+      const { error: err } = await setPOSource(detail.po_id, id);
+      if (err) { setError(err); return; }
+      if (detail.kind === 'manual') setPlanned((prev) => prev.map((p) => (p.po_id === detail.po_id ? { ...p, supplier_id: id } : p)));
+      else if (detail.kind === 'oos') setSoldOutList((prev) => prev.map((p) => (p.po_id === detail.po_id ? { ...p, supplier_id: id } : p)));
+    }
   }
 
   // mark a SKU out of stock (all links sold out) — the row is removed locally first (optimistic), like Done.
@@ -326,7 +347,7 @@ export default function ToBuyBoard({
     if (sel.kind === 'manual') {
       const p = planned.find((x) => x.po_id === sel.id);
       if (!p) return null;
-      return { kind: 'manual' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency,
+      return { kind: 'manual' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: p.supplier_id,
         wf: p.with_forwarder, otw: p.on_the_way, avail: p.available, context: `PO #${p.po_id}`, note: p.item_note,
         qtyEditable: true, canDelete: true,
         target: { kind: 'manual' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link } };
@@ -334,14 +355,14 @@ export default function ToBuyBoard({
     if (sel.kind === 'sales') {
       const p = preorders.find((x) => x.line_id === sel.id);
       if (!p) return null;
-      return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, code: p.item_code ?? '', name: p.name, qty: p.qty, urgency: p.urgency,
+      return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, code: p.item_code ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: null as number | null,
         wf: 0, otw: 0, avail: p.available, context: `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}`, note: p.line_note as string | null,
         qtyEditable: false, canDelete: false,
         target: { kind: 'sales' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link } };
     }
     const p = soldOut.find((x) => x.po_id === sel.id);
     if (!p) return null;
-    return { kind: 'oos' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency,
+    return { kind: 'oos' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: p.supplier_id,
       wf: p.with_forwarder, otw: p.on_the_way, avail: p.available,
       context: p.origin === 'sales' ? `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}` : `PO #${p.po_id}`, note: p.sold_out_note,
       qtyEditable: p.origin === 'manual', canDelete: true,
@@ -361,6 +382,12 @@ export default function ToBuyBoard({
       .finally(() => { if (alive) setBuyLoading(false); });
     return () => { alive = false; };
   }, [detailCode]);
+
+  // PR283 — seed the Source picker when a new item opens (a manual/oos PO may already carry one).
+  useEffect(() => {
+    setBuySource(detail?.supplier_id != null ? String(detail.supplier_id) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel]);
 
   // a new/unknown manual SKU has no catalogue name (and no image / nothing to edit) — drive the header off this.
   const detailHasName = detail ? isRealName(detail.name, detail.item_code) : false;
@@ -615,6 +642,19 @@ export default function ToBuyBoard({
                       <div className="hint">No links on file for this SKU.</div>
                     )}
                   </div>
+
+                  {/* PR283 — Source (mandatory): who we're buying from. Links above = buying directly;
+                      a source captures the supplier/agent (or a Taobao-direct reminder). Required at Done. */}
+                  <div className="po-field" style={{ marginTop: 12 }}>
+                    <label>Source</label>
+                    <select value={buySource} onChange={(e) => changeSource(e.target.value)} disabled={busy}>
+                      <option value="">— pick a source —</option>
+                      {suppliers.map((s) => (
+                        <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
+                      ))}
+                    </select>
+                    {!buySource && <div className="hint" style={{ marginTop: 4 }}>Pick a source to finish buying.</div>}
+                  </div>
                 </div>
                 {/* Actions — the standard scrollable row: out of stock · done buying · delete PO (last). */}
                 {/* PR250 — order: Edit PO · Done buying · Mark out of stock · Delete PO. The rare
@@ -625,7 +665,7 @@ export default function ToBuyBoard({
                       its order priority + line note (SKU + qty mirror the sale and stay locked). */}
                   <button className="btn-secondary btn-ico" onClick={openEdit} disabled={busy}><PencilIcon />Edit PO</button>
 
-                  <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; setSel(null); if (s) removeRow(s); done(t); }} disabled={busy}><BagIcon />Done buying</button>
+                  <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; const src = buySource ? Number(buySource) : null; setSel(null); if (s) removeRow(s); done(t, src); }} disabled={busy || !buySource} title={!buySource ? 'Pick a source first' : undefined}><BagIcon />Done buying</button>
                   {detail.kind !== 'oos' && (
                     <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
                   )}
