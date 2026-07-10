@@ -1,13 +1,21 @@
 'use client';
 
-// Settings → Purchasing → Declaration users (PR205). Manages settings_declaration_users — the identity
-// pick-list for Doc Generator → SP Declare (Surat Pernyataan). Each person carries KTP, NPWP, phone and
-// a per-person address (the address on the declaration changes with the signer). Self-loads on mount.
+// Settings → Purchasing → Declaration users (PR205; overlay redesign PR280). Manages
+// settings_declaration_users — the identity pick-list for Doc Generator → SP Declare (Surat Pernyataan).
+// Each person carries KTP, NPWP, phone and a per-person address (the address on the declaration changes
+// with the signer). The list shows one line per person (read-only name); Edit opens an overlay with all
+// five labelled fields. Self-loads on mount.
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserIcon } from '@/components/AddIcons';
 import { addDeclarationUser, deleteDeclarationUser, getDeclarationUsers, reorderDeclarationUsers, updateDeclarationUser } from '@/app/settings/actions';
 import type { DeclarationUser } from '@/app/settings/types';
+
+// pencil (Edit) — matches the detail-view edit glyph elsewhere.
+const PencilIcon = () => (<svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
+
+type Draft = { name: string; ktp: string; npwp: string; phone: string; address: string };
+const toDraft = (r: DeclarationUser): Draft => ({ name: r.name ?? '', ktp: r.ktp ?? '', npwp: r.npwp ?? '', phone: r.phone ?? '', address: r.address ?? '' });
 
 export default function DeclarationUserSettings({ embedded = false }: { embedded?: boolean }) {
   const [rows, setRows] = useState<DeclarationUser[]>([]);
@@ -15,6 +23,9 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err' | 'warn'; text: string } | null>(null);
   const [addName, setAddName] = useState<string | null>(null);
+  // the edit overlay: which row, and its editable draft.
+  const [editing, setEditing] = useState<DeclarationUser | null>(null);
+  const [draft, setDraft] = useState<Draft>({ name: '', ktp: '', npwp: '', phone: '', address: '' });
 
   useEffect(() => {
     getDeclarationUsers().then(setRows).catch(() => {}).finally(() => setLoading(false));
@@ -22,14 +33,34 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
 
   const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
 
-  async function patch(id: number, p: Partial<DeclarationUser>) {
+  function openEdit(r: DeclarationUser) {
+    setNotice(null);
+    setEditing(r);
+    setDraft(toDraft(r));
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    const name = draft.name.trim();
+    if (!name) { setNotice({ tone: 'err', text: 'A name is required.' }); return; }
+    if (rows.some((r) => r.id !== editing.id && r.name.toLowerCase() === name.toLowerCase())) {
+      setNotice({ tone: 'err', text: `${name} already exists.` }); return;
+    }
     setBusy(true); setNotice(null);
     try {
-      const updated = await updateDeclarationUser(id, p);
-      setRows((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      const updated = await updateDeclarationUser(editing.id, {
+        name,
+        ktp: draft.ktp.trim() || null,
+        npwp: draft.npwp.trim() || null,
+        phone: draft.phone.trim() || null,
+        address: draft.address.trim() || null,
+      });
+      setRows((prev) => prev.map((r) => (r.id === editing.id ? updated : r)));
+      setEditing(null);
       setNotice({ tone: 'warn', text: 'Saved.' });
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
+
   async function persistOrder(next: DeclarationUser[]) {
     setBusy(true);
     try { await reorderDeclarationUsers(next.map((r) => r.id)); } catch (e) { fail(e); } finally { setBusy(false); }
@@ -51,7 +82,7 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
       const row = await addDeclarationUser(name);
       setRows((prev) => [...prev, row]);
       setAddName(null);
-      setNotice({ tone: 'ok', text: 'Added.' });
+      openEdit(row); // jump straight into the overlay to fill KTP / NPWP / phone / address
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
   async function remove(id: number) {
@@ -72,25 +103,13 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
         {loading && <div className="hint">Loading…</div>}
         {!loading && rows.length === 0 && <div className="hint">No declaration users yet — add one below.</div>}
         {rows.map((r, i) => (
-          <div key={r.id} className="set-row exc-row">
-            <div className="exc-main">
-              <input className="exc-label" type="text" defaultValue={r.name} placeholder="full name" disabled={busy}
-                onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== r.name) patch(r.id, { name: v }); }} />
-              <div className="set-row-ctl">
-                <button className="set-arrow" aria-label="Move up" onClick={() => move(i, -1)} disabled={busy || i === 0}>▲</button>
-                <button className="set-arrow" aria-label="Move down" onClick={() => move(i, 1)} disabled={busy || i === rows.length - 1}>▼</button>
-                <button className="set-del" aria-label="Remove" onClick={() => remove(r.id)} disabled={busy}>✕</button>
-              </div>
-            </div>
-            <div className="exc-addr">
-              <input type="text" placeholder="Nomor KTP" defaultValue={r.ktp ?? ''} disabled={busy}
-                onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (r.ktp ?? null)) patch(r.id, { ktp: v }); }} />
-              <input type="text" placeholder="NPWP" defaultValue={r.npwp ?? ''} disabled={busy}
-                onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (r.npwp ?? null)) patch(r.id, { npwp: v }); }} />
-              <input type="text" placeholder="No. HP / Email" defaultValue={r.phone ?? ''} disabled={busy}
-                onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (r.phone ?? null)) patch(r.id, { phone: v }); }} />
-              <textarea placeholder="Alamat (address)" rows={2} defaultValue={r.address ?? ''} disabled={busy}
-                onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (r.address ?? null)) patch(r.id, { address: v }); }} />
+          <div key={r.id} className="set-row">
+            <span className="set-decl-name">{r.name || '—'}</span>
+            <div className="set-row-ctl">
+              <button className="set-arrow" aria-label="Edit" onClick={() => openEdit(r)} disabled={busy}><PencilIcon /></button>
+              <button className="set-arrow" aria-label="Move up" onClick={() => move(i, -1)} disabled={busy || i === 0}>▲</button>
+              <button className="set-arrow" aria-label="Move down" onClick={() => move(i, 1)} disabled={busy || i === rows.length - 1}>▼</button>
+              <button className="set-del" aria-label="Remove" onClick={() => remove(r.id)} disabled={busy}>✕</button>
             </div>
           </div>
         ))}
@@ -109,6 +128,44 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
       ) : (
         <div className="set-toolbar">
           <button className="btn-brown btn-ico" onClick={() => setAddName('')} disabled={busy}><UserIcon />Add declaration user</button>
+        </div>
+      )}
+
+      {/* PR280 — edit overlay: all five identity fields, each with its own header. */}
+      {editing && (
+        <div className="sc-modal-backdrop" onClick={() => !busy && setEditing(null)}>
+          <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Edit declaration user" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <span className="sc-modal-title">Edit declaration user</span>
+              <button className="sc-modal-x" onClick={() => setEditing(null)} disabled={busy} aria-label="Close">×</button>
+            </div>
+            <div className="sc-modal-body">
+              <div className="po-field">
+                <label>Name</label>
+                <input type="text" value={draft.name} placeholder="full name" disabled={busy} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
+              </div>
+              <div className="po-field">
+                <label>Identity number (KTP)</label>
+                <input type="text" inputMode="numeric" value={draft.ktp} placeholder="16-digit KTP" disabled={busy} onChange={(e) => setDraft((d) => ({ ...d, ktp: e.target.value }))} />
+              </div>
+              <div className="po-field">
+                <label>Tax number (NPWP)</label>
+                <input type="text" value={draft.npwp} placeholder="NPWP" disabled={busy} onChange={(e) => setDraft((d) => ({ ...d, npwp: e.target.value }))} />
+              </div>
+              <div className="po-field">
+                <label>Phone number</label>
+                <input type="text" inputMode="tel" value={draft.phone} placeholder="No. HP" disabled={busy} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} />
+              </div>
+              <div className="po-field">
+                <label>Address (on KTP)</label>
+                <textarea rows={3} value={draft.address} placeholder="Alamat sesuai KTP" disabled={busy} onChange={(e) => setDraft((d) => ({ ...d, address: e.target.value }))} />
+              </div>
+            </div>
+            <div className="sc-modal-foot">
+              <button className="btn-secondary" onClick={() => setEditing(null)} disabled={busy}>Cancel</button>
+              <button className="btn-primary" onClick={saveEdit} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
         </div>
       )}
     </Wrap>
