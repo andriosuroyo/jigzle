@@ -1093,6 +1093,20 @@ export async function renameConsolidatorPrefix(oldPrefix: string, newPrefix: str
   return { error: null, touched: typeof data === 'number' ? data : 0 };
 }
 
+// ── PR278: how many OPEN (not-yet-received) shipments a consolidator still has — the delete confirm
+// warns before removing a consolidator with active shipments. Historical (completed) ones are unaffected. ──
+export async function getConsolidatorOpenShipmentCount(prefix: string): Promise<number> {
+  const p = prefix?.trim();
+  if (!p) return 0;
+  const supabase = createSupabaseServerClient();
+  const { count } = await supabase
+    .from('shipments')
+    .select('ship_id', { count: 'exact', head: true })
+    .eq('forwarder_prefix', p)
+    .eq('status', 'open');
+  return count ?? 0;
+}
+
 // ── reorder forwarders (Settings → Forwarders): persist the manual order (index → sort_order). ──
 export async function reorderForwarders(prefixes: string[]): Promise<void> {
   const supabase = createSupabaseServerClient();
