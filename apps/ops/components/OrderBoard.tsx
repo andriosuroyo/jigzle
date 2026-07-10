@@ -839,7 +839,7 @@ export default function OrderBoard({
       return;
     }
     if (!grpForwarder.trim()) {
-      setError('Pick a consolidator.');
+      setError('Pick a shipment code.');
       return;
     }
     if (!grpShipId.trim()) {
@@ -1804,10 +1804,10 @@ export default function OrderBoard({
             </div>
 
             <div className="batch-group">
-              {/* PR272 — Consolidator (ex-"Forwarder"): the ship_id-prefix node, e.g. Superbuy. */}
-              <div className="fd-section-head">Consolidator</div>
+              {/* PR281 — Shipment code (ex-"Consolidator" / "Forwarder"): the ship_id-series/routing lane. */}
+              <div className="fd-section-head">Shipment code</div>
               <select className="field" value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
-                <option value="">— consolidator —</option>
+                <option value="">— shipment code —</option>
                 {forwardersSorted.map((f) => (
                   <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
                 ))}

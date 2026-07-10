@@ -143,7 +143,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
       const fwd = await addForwarder({ prefix, name: adding.name.trim() || null, flag: adding.flag || null, country: adding.country || null, logo: adding.logo });
       setRows((prev) => (prev.some((r) => r.prefix === fwd.prefix) ? prev.map((r) => (r.prefix === fwd.prefix ? fwd : r)) : [...prev, fwd]));
       setAdding(null);
-      note('ok', 'Added a consolidator.');
+      note('ok', 'Added a shipment code.');
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
@@ -171,8 +171,8 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
   const Wrap = embedded ? 'div' : 'section';
   return (
     <Wrap className={embedded ? '' : 'set-sec'}>
-      {!embedded && <div className="set-sec-title">Consolidators</div>}
-      <div className="set-sec-sub">Consolidators (Superbuy / SUB, LetsGoBuy / LGB, …), picked in Purchasing → Ship → Create shipment. The prefix is the ship-id series (SUB, LGB, …) — picking a consolidator there pre-fills its last ship id (editable). The flag sets the country.</div>
+      {!embedded && <div className="set-sec-title">Shipment codes</div>}
+      <div className="set-sec-sub">The ship-id series / routing lanes (SUB, PRI, IMA, MTE, LGB, …), picked in Purchasing → Ship → Create shipment. Each code is how a batch travels to us and how you handle it — a code can belong to a supplier (Princess), a consolidator (Superbuy) or a forwarder (MTE). This is separate from the Suppliers list (who you bought from); the same name can appear on both. Picking a code pre-fills its last ship id (editable); the flag sets the country.</div>
 
       {notice && <div className={`validation ${notice.tone}`} style={{ margin: '8px 0' }}>{notice.text}</div>}
 
@@ -181,11 +181,11 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
           <div className="set-colhead set-colhead-sup" aria-hidden>
             <div className="sup-flag-cell">Flag</div>
             <div className="sup-flag-cell">Logo</div>
-            <div className="set-fields"><div className="set-f fwd-prefix-cell">Prefix</div><div className="set-f grow">Consolidator name</div></div>
+            <div className="set-fields"><div className="set-f fwd-prefix-cell">Prefix</div><div className="set-f grow">Shipment code name</div></div>
             <div className="set-colhead-ctl" />
           </div>
         )}
-        {rows.length === 0 && <div className="hint">No consolidators yet — add one below.</div>}
+        {rows.length === 0 && <div className="hint">No shipment codes yet — add one below.</div>}
         {rows.map((f, i) => (
           <ForwarderRow
             key={f.prefix}
@@ -203,7 +203,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
 
       {adding ? (
         <div className="subform" style={{ marginTop: 8 }}>
-          <div className="subform-label">Add consolidator</div>
+          <div className="subform-label">Add shipment code</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div className="sup-flag-cell">
               <FlagSelect value={adding.flag || null} onChange={({ flag, country }) => setAdding((a) => (a ? { ...a, flag, country } : a))} />
@@ -219,7 +219,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-brown btn-ico" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '', logo: null })} disabled={busy}><WarehouseIcon />Add consolidator</button>
+          <button className="btn-brown btn-ico" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '', logo: null })} disabled={busy}><WarehouseIcon />Add shipment code</button>
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}
@@ -249,7 +249,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
       {/* PR278 — delete confirm, warning if the consolidator still has open shipments (soft delete). */}
       {deleting && (
         <div className="sc-modal-backdrop" onClick={() => !busy && setDeleting(null)}>
-          <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Remove consolidator" onClick={(e) => e.stopPropagation()}>
+          <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Remove shipment code" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row"><span className="sc-modal-title">Remove {deleting.prefix}?</span><button className="sc-modal-x" onClick={() => setDeleting(null)} disabled={busy} aria-label="Close">×</button></div>
             <div className="sc-modal-body">
               {deleting.open > 0 ? (
@@ -314,7 +314,7 @@ function ForwarderRow({
           <button type="button" className="fwd-prefix fwd-prefix-btn" title="Rename this prefix (rewrites its ship ids)" onClick={onRequestRename} disabled={busy}>{fwd.prefix}</button>
         </div>
         <div className="set-f grow">
-          <input type="text" value={name} placeholder="consolidator name" onChange={(e) => setName(e.target.value)} onBlur={(e) => blurName(e.target.value)} disabled={busy} />
+          <input type="text" value={name} placeholder="shipment code name" onChange={(e) => setName(e.target.value)} onBlur={(e) => blurName(e.target.value)} disabled={busy} />
         </div>
       </div>
       <div className="set-row-ctl">
