@@ -80,7 +80,10 @@ export interface StaffMember {
 export interface LocalCourier {
   id: number;
   label: string;
-  icon: string | null;
+  icon: string | null;    // PR275: logo — emoji or uploaded-image URL
+  flag: string | null;    // PR275: country flag emoji
+  country: string | null; // PR275: derived from the flag
+  prefix: string | null;  // PR275: editable shorthand
   is_active: boolean;
   sort_order: number;
 }
@@ -90,7 +93,10 @@ export interface LocalCourier {
 export interface ShipmentCourier {
   id: number;
   label: string;
-  icon: string | null;
+  icon: string | null;    // PR275: logo — emoji or uploaded-image URL
+  flag: string | null;    // PR275: country flag emoji
+  country: string | null; // PR275: derived from the flag
+  prefix: string | null;  // PR275: editable shorthand
   is_active: boolean;
   sort_order: number;
 }

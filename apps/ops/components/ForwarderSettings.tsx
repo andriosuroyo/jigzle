@@ -63,7 +63,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
       const fwd = await addForwarder({ prefix, name: adding.name.trim() || null, flag: adding.flag || null, country: adding.country || null });
       setRows((prev) => (prev.some((r) => r.prefix === fwd.prefix) ? prev.map((r) => (r.prefix === fwd.prefix ? fwd : r)) : [...prev, fwd]));
       setAdding(null);
-      note('ok', 'Added a forwarder.');
+      note('ok', 'Added a consolidator.');
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
@@ -79,8 +79,8 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
   const Wrap = embedded ? 'div' : 'section';
   return (
     <Wrap className={embedded ? '' : 'set-sec'}>
-      {!embedded && <div className="set-sec-title">Forwarders</div>}
-      <div className="set-sec-sub">Freight forwarders, shown (flag + prefix) in the To-ship group panel. The prefix is the ship-id series (SUB, MTE, LGB, IMA, …) — picking a forwarder there pre-fills its last ship id (editable). The flag sets the country.</div>
+      {!embedded && <div className="set-sec-title">Consolidators</div>}
+      <div className="set-sec-sub">Consolidators (Superbuy / SUB, LetsGoBuy / LGB, …), picked in Purchasing → Ship → Create shipment. The prefix is the ship-id series (SUB, LGB, …) — picking a consolidator there pre-fills its last ship id (editable). The flag sets the country.</div>
 
       {notice && <div className={`validation ${notice.tone}`} style={{ margin: '8px 0' }}>{notice.text}</div>}
 
@@ -88,11 +88,11 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
         {rows.length > 0 && (
           <div className="set-colhead set-colhead-sup" aria-hidden>
             <div className="sup-flag-cell">Flag</div>
-            <div className="set-fields"><div className="set-f fwd-prefix-cell">Prefix</div><div className="set-f grow">Name</div></div>
+            <div className="set-fields"><div className="set-f fwd-prefix-cell">Prefix</div><div className="set-f grow">Consolidator name</div></div>
             <div className="set-colhead-ctl" />
           </div>
         )}
-        {rows.length === 0 && <div className="hint">No forwarders yet — add one below.</div>}
+        {rows.length === 0 && <div className="hint">No consolidators yet — add one below.</div>}
         {rows.map((f, i) => (
           <ForwarderRow
             key={f.prefix}
@@ -109,7 +109,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
 
       {adding ? (
         <div className="subform" style={{ marginTop: 8 }}>
-          <div className="subform-label">Add forwarder</div>
+          <div className="subform-label">Add consolidator</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div className="sup-flag-cell">
               <FlagSelect value={adding.flag || null} onChange={({ flag, country }) => setAdding((a) => (a ? { ...a, flag, country } : a))} />
@@ -124,7 +124,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-brown btn-ico" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '' })} disabled={busy}><TruckIcon />Add forwarder</button>
+          <button className="btn-brown btn-ico" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '' })} disabled={busy}><TruckIcon />Add consolidator</button>
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}
