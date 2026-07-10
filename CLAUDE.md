@@ -75,6 +75,19 @@ batches; the user decides when they go live. For every unit of work:
 - The primary nav is a single source of truth in `apps/ops/components/navConfig.tsx`
   (consumed by both the hub landing page and `AppHeader`).
 - Match the surrounding code's style, comment density, and naming when editing.
+- **Text & format standards (PR269) — LOCKED, apply everywhere; don't reintroduce variants.**
+  - **Capitalization — buttons / tabs / list items: sentence case.** Capitalize the first word + proper
+    nouns only ("Send back to Ship", "Mark received", "Create shipment", "Add item"). Never Title Case.
+  - **Capitalization — field labels & section subheaders: ALL-CAPS eyebrow.** Small, letter-spaced caps
+    ("SUPPLIER", "LOCAL COURIER & TRACKING"). Driven by CSS (`.po-field > label` + `.fd-section-head`),
+    so write labels in normal case in JSX and let the CSS uppercase them — don't hard-code CAPS in strings.
+  - **Dates — friendly `Mon D, YYYY` ("Jul 9, 2026")** for display. Prefer a shared formatter (extend
+    `fmtNiceDate`); avoid raw ISO `YYYY-MM-DD` in the UI (still fine as data / input values / keys).
+  - **Currency — country symbol, never the word.** ¥=JPY, 元=CNY, $=USD, £=GBP, … (`元` for yuan, NOT ¥).
+    Input fields put the symbol in FRONT (`元 108`); read-only labels attach it after the number
+    (`108元 each`). Unit costs trail with "each".
+  - Already-consistent minor rules: empty value = `—`; quantity = `×N`; thousands separators on large
+    numbers; 24-hour time.
 - **Button colour system (PR234) — role-based, never ad hoc.** Pick a button's colour from its role,
   not per request:
   - **Orange** (`btn-primary`) — the ONE primary CTA of a view/overlay (Save, Send to Outbound, Send
