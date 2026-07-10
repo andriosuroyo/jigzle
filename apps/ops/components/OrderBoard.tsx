@@ -40,7 +40,7 @@ const METHODS = ['EMS', 'ZTO', 'SF', 'YTO', 'STO', 'JD', 'Yunda', 'Best', 'China
 // supplier-country → unit-cost currency filler (To forwarder). Keyed by the supplier's country
 // (case-insensitive). Unknown / unset country → a generic "supplier ccy" label, no symbol.
 const CURRENCY_BY_COUNTRY: Record<string, { label: string; symbol: string }> = {
-  china: { label: 'yuan', symbol: '¥' },
+  china: { label: 'yuan', symbol: '元' },
   japan: { label: 'yen', symbol: '¥' },
   taiwan: { label: 'NT$', symbol: 'NT$' },
   'hong kong': { label: 'HKD', symbol: 'HK$' },
@@ -1167,7 +1167,7 @@ export default function OrderBoard({
             <div className="po-rorow"><span className="po-rok">Supplier</span><span className="po-rov">{supplierName || '—'}</span></div>
             <div className="po-rorow">
               <span className="po-rok">Item link</span>
-              <span className="po-rov">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
+              <span className="po-rov po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
               {editPo.product_link && (
                 <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
                   {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}

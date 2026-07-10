@@ -223,8 +223,8 @@ input, textarea, select, button { font-family: inherit; }
 .po-cost-row .po-cost-ccy { flex-shrink: 0; font-weight: 700; color: var(--muted); }
 .po-cost-row input { flex: 1; min-width: 0; }
 /* PR267 — "Send back to Ship" action in the History item overlay (separated from the fields above). */
-.sb-field { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
-.sb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* PR268 — a modal-foot button pinned to the LEFT (e.g. "Send back to Ship"), Cancel/Save grouped right. */
+.sc-foot-lead { margin-right: auto; }
 
 /* Settings → Suppliers: select matches the text inputs; flag column is narrow + centred */
 .set-f select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
@@ -1824,6 +1824,9 @@ img.sku-img { background: #e8e8e8; }
 .po-rok { flex: 0 0 96px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .po-rov { flex: 1; min-width: 0; word-break: break-word; }
 .po-rov a { color: var(--brown-dark); }
+/* PR268 — clamp a very long item link to at most 2 lines (Ship detail); the copy button gives the full value. */
+.po-rov-link { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.po-rov-link a { word-break: break-all; }
 .po-rocopy { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--brown-light); cursor: pointer; }
 .po-rocopy:active { background: var(--paper); }
 .po-shipbox { display: flex; align-items: center; gap: 12px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream); }

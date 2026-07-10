@@ -123,8 +123,7 @@ export default function PurchasingHistoryBoard({
   const [itNote, setItNote] = useState('');
   const [itSaving, setItSaving] = useState(false);
   const [itErr, setItErr] = useState<string | null>(null);
-  // PR267 — "Send back to Ship": detach some/all of a not-yet-received line from this shipment.
-  const [sbQty, setSbQty] = useState(1);
+  // PR267 — "Send back to Ship": detach a not-yet-received line from this shipment (whole line).
   const [sbBusy, setSbBusy] = useState(false);
 
   // PR153: tell the shell when a detail is open (it hides the pipeline tabs, keeps the breadcrumb)
@@ -279,23 +278,17 @@ export default function PurchasingHistoryBoard({
     setItLink(it.product_link ?? '');
     setItNote(it.item_note ?? '');
     setItErr(null);
-    setSbQty(Math.max(1, it.qty)); // default: send the whole line back
   }
 
-  // PR267 — send `sbQty` of the open line back to Ship (unassigned from this shipment). A partial send
-  // splits the line server-side; reflect the result in the loaded list + header, then close the overlay.
+  // PR267/PR268 — send the WHOLE line back to Ship (unassigned from this shipment) to re-group /
+  // investigate. Partial shorts (2 of 3 arrived) are handled automatically at receiving, not here.
   async function sendBack() {
     if (!selItem || !openShip) return;
-    const qty = Math.max(1, Math.min(selItem.qty, Math.floor(sbQty) || 1));
     setSbBusy(true); setItErr(null);
-    const { error } = await sendPoBackToShip(selItem.po_id, qty);
+    const { error } = await sendPoBackToShip(selItem.po_id, selItem.qty);
     if (error) { setItErr(error); setSbBusy(false); return; }
-    // update the loaded lines: drop the line if fully sent back, else reduce its qty.
-    const nextItems = qty >= selItem.qty
-      ? shipItems.filter((r) => r.po_id !== selItem.po_id)
-      : shipItems.map((r) => (r.po_id === selItem.po_id ? { ...r, qty: r.qty - qty } : r));
+    const nextItems = shipItems.filter((r) => r.po_id !== selItem.po_id);
     setShipItems(nextItems);
-    // keep the header's item count in sync (the total recomputes from the loaded lines). Full reload authoritative.
     const distinct = new Set(nextItems.map((i) => i.item_code ?? `raw:${i.po_id}`)).size;
     setOpenShip((prev) => (prev ? { ...prev, item_count: distinct } : prev));
     setSbBusy(false); setSelItem(null);
@@ -505,6 +498,11 @@ export default function PurchasingHistoryBoard({
                     {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>)}
                   </select>
                 </div>
+                {/* PR268 — Item link directly under Supplier (mirrors the Ship detail's field order). */}
+                <div className="po-field">
+                  <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <input type="text" placeholder="https://…" value={itLink} onChange={(e) => setItLink(e.target.value)} disabled={itSaving} />
+                </div>
                 <div className="po-field">
                   <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
                   {/* PR266 — currency symbol in FRONT of the input (like ¥100 / $10); "each" trails it. */}
@@ -527,36 +525,16 @@ export default function PurchasingHistoryBoard({
                   <input type="text" placeholder="marketplace order id" value={itMarket} onChange={(e) => setItMarket(e.target.value)} disabled={itSaving} />
                 </div>
                 <div className="po-field">
-                  <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  <input type="text" placeholder="https://…" value={itLink} onChange={(e) => setItLink(e.target.value)} disabled={itSaving} />
-                </div>
-                <div className="po-field">
                   <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
                   <textarea value={itNote} onChange={(e) => setItNote(e.target.value)} disabled={itSaving} rows={2} />
                 </div>
-
-                {/* PR267 — Send back to Ship (Active shipments only): unassign some/all of this line
-                    from the shipment so it returns to the Ship queue to be re-grouped / investigated. */}
-                {!openShip.completed && (
-                  <div className="po-field sb-field">
-                    <label>Send back to Ship</label>
-                    <div className="sb-row">
-                      {selItem.qty > 1 && (
-                        <span className="qty-step">
-                          <button type="button" aria-label="one fewer" onClick={() => setSbQty((q) => Math.max(1, q - 1))} disabled={sbBusy || sbQty <= 1}>−</button>
-                          <input type="number" inputMode="numeric" min={1} max={selItem.qty} value={sbQty} onChange={(e) => setSbQty(Math.max(1, Math.min(selItem.qty, parseInt(e.target.value, 10) || 1)))} />
-                          <button type="button" aria-label="one more" onClick={() => setSbQty((q) => Math.min(selItem.qty, q + 1))} disabled={sbBusy || sbQty >= selItem.qty}>+</button>
-                        </span>
-                      )}
-                      <button className="btn-brown btn-ico" onClick={sendBack} disabled={sbBusy || itSaving}><BackIcon />{sbBusy ? 'Sending…' : 'Send back to Ship'}</button>
-                    </div>
-                    <div className="hint" style={{ marginTop: 6 }}>
-                      Unassigns {selItem.qty > 1 ? `${sbQty} of ×${selItem.qty}` : 'this line'} from {openShip.ship_id} back to Ship — to re-group or investigate a short.
-                    </div>
-                  </div>
-                )}
               </div>
+              {/* PR268 — Send back to Ship shares the footer with Cancel/Save. Whole line only: the
+                  short/split (2 of 3 arrived) is handled automatically at receiving (record_receipt). */}
               <div className="sc-modal-foot">
+                {!openShip.completed && (
+                  <button className="btn-brown btn-ico sc-foot-lead" onClick={sendBack} disabled={sbBusy || itSaving} title={`Unassign this line from ${openShip.ship_id} back to Ship`}><BackIcon />{sbBusy ? 'Sending…' : 'Send back to Ship'}</button>
+                )}
                 <button className="btn-secondary" onClick={() => setSelItem(null)} disabled={itSaving || sbBusy}>Cancel</button>
                 <button className="btn-primary" onClick={saveItem} disabled={itSaving || sbBusy}>{itSaving ? 'Saving…' : 'Save'}</button>
               </div>
