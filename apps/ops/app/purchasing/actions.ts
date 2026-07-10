@@ -257,6 +257,18 @@ export async function getOpenShipments(): Promise<OpenShipmentRow[]> {
   return data as OpenShipmentRow[];
 }
 
+// ── PR285: recent ship_ids (open + completed) for the Create-shipment "Shipment ID" autocomplete —
+// typing a prefix surfaces the last-used ids (e.g. "SUB" → SUB 192), so the operator sees the next number. ──
+export async function getRecentShipIds(): Promise<string[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('shipments')
+    .select('ship_id,created_at')
+    .order('created_at', { ascending: false })
+    .limit(500);
+  return [...new Set(((data ?? []) as { ship_id: string | null }[]).map((r) => r.ship_id).filter((s): s is string => !!s))];
+}
+
 // ── set the per-Ship-ID note (To-ship). Editable from any of the shipment's POs; shown read-only on
 // the Inbound receive detail so the warehouse sees what Purchasing flagged. Empty → NULL. ──
 export async function setShipmentNote(shipId: string, note: string): Promise<void> {

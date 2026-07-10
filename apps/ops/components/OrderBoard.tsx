@@ -5,12 +5,13 @@ import AppHeader from '@/components/AppHeader';
 import { customerLabel, fmtNiceDate } from '@jigzle/lib';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
+  addForwarder,
   addSupplier,
   createPO,
   deletePO,
-  getLastShipId,
   getOpenPOs,
   getOpenShipments,
+  getRecentShipIds,
   groupIntoShipment,
   searchCustomers,
   searchSkus,
@@ -241,17 +242,11 @@ export default function OrderBoard({
   const [grpConsolCourier, setGrpConsolCourier] = useState('');   // PR274: consolidator courier (optional)
   const [grpConsolTracking, setGrpConsolTracking] = useState(''); // PR272: consolidator tracking (optional)
   const [grpShipId, setGrpShipId] = useState('');
+  const [shipIdOpts, setShipIdOpts] = useState<string[]>([]); // PR285: recent ship_ids for autocomplete
   const [grpOrigin, setGrpOrigin] = useState(''); // kept internally (from an existing shipment) — no UI field
   const [grpDate, setGrpDate] = useState(todayStr());
   const [grpQty, setGrpQty] = useState<Record<number, number>>({}); // per-PO ship qty override (partial split)
 
-  // forwarders for the group picker, grouped by flag/country first, then acronym (prefix) A–Z
-  const forwardersSorted = useMemo(
-    () => [...forwarders].sort((a, b) =>
-      (a.country || '￿').localeCompare(b.country || '￿') || a.prefix.localeCompare(b.prefix)
-    ),
-    [forwarders]
-  );
 
   // PR254 — open shipments offered as tap-to-pick chips in the group overlay's Ship ID field. Once a
   // forwarder is chosen, scope to that forwarder's open shipments (else show all) so "add to an existing
@@ -589,21 +584,8 @@ export default function OrderBoard({
     setGrpDate(todayStr());
     setGrpQty({});
     setMode('group');
-  }
-
-  // pick a forwarder in the group panel → load its LAST ship id into the Ship id field (editable free
-  // text: keep it to add to that shipment, or bump the number for a new one). Forwarder's country seeds
-  // the (hidden) origin.
-  async function pickForwarder(prefix: string) {
-    setGrpForwarder(prefix);
-    const fwd = forwarders.find((f) => f.prefix === prefix);
-    if (fwd?.country) setGrpOrigin(fwd.country);
-    if (!prefix) { setGrpShipId(''); return; }
-    try {
-      setGrpShipId(await getLastShipId(prefix));
-    } catch {
-      /* leave the field for manual entry on failure */
-    }
+    // PR285 — load recent ship_ids (open + History) so the Shipment ID field can autocomplete.
+    getRecentShipIds().then(setShipIdOpts).catch(() => {});
   }
 
   function clearSelection() {
@@ -839,21 +821,25 @@ export default function OrderBoard({
       setError('Select at least one PO.');
       return;
     }
-    if (!grpForwarder.trim()) {
-      setError('Pick a shipment code.');
-      return;
-    }
-    if (!grpShipId.trim()) {
-      setError('A ship id is required (existing or new, e.g. "SUB 192").');
+    const shipId = grpShipId.trim();
+    // PR285 — the shipment CODE is the leading letters of the Shipment ID ("SUB 193" → "SUB").
+    const prefix = (shipId.match(/^[A-Za-z]+/)?.[0] ?? '').toUpperCase();
+    if (!prefix) {
+      setError('Enter a Shipment ID that starts with a code, e.g. "SUB 193".');
       return;
     }
     setBusy(true);
     try {
+      // PR285 — ensure the code exists (FK on shipments.forwarder_prefix). addForwarder is idempotent;
+      // a brand-new code lands in Settings → Shipment codes with no flag until one is added there.
+      const known = forwarders.find((f) => f.prefix.toUpperCase() === prefix);
+      if (!known) { try { await addForwarder({ prefix }); } catch { /* non-fatal: may already exist */ } }
+      const origin = (grpOrigin.trim() || known?.country || '').trim() || null;
       const { affected } = await groupIntoShipment({
-        ship_id: grpShipId.trim(),
+        ship_id: shipId,
         items: selectedPOs.map((po) => ({ po_id: po.po_id, qty: sendQty(po) })),
-        forwarder_prefix: grpForwarder.trim(),
-        origin_country: grpOrigin.trim() || null,
+        forwarder_prefix: prefix,
+        origin_country: origin,
         ship_date: grpDate || null,
       });
       // PR272/PR274 — best-effort: stamp the consolidator courier + tracking on the shipment (degrades
@@ -1815,29 +1801,13 @@ export default function OrderBoard({
               </ul>
             </div>
 
+            {/* PR285 — Shipment ID is now the single primary field: type it (autocomplete surfaces the
+                last-used, e.g. SUB 192, so you can bump to SUB 193). The shipment CODE (the leading
+                letters) is derived from what you type — no separate picker. */}
             <div className="batch-group">
-              {/* PR281 — Shipment code (ex-"Consolidator" / "Forwarder"): the ship_id-series/routing lane. */}
-              <div className="fd-section-head">Shipment code</div>
-              <select className="field" value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
-                <option value="">— shipment code —</option>
-                {forwardersSorted.map((f) => (
-                  <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
-                ))}
-              </select>
-            </div>
-            <div className="batch-group">
-              {/* PR274 — Consolidator → Shipper leg: courier (shared local list) + tracking. */}
-              <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
-              <div className="po-inline2">
-                <input className="field" type="text" list="grp-consol-couriers" placeholder="courier" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)} />
-                <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
-              </div>
-              <datalist id="grp-consol-couriers">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
-            </div>
-            <div className="batch-group">
-              <div className="fd-section-head">Ship ID</div>
-              <input className="field" type="text" placeholder='type a new ID, e.g. "SUB 192"' value={grpShipId} onChange={(e) => setGrpShipId(e.target.value)} />
-              {/* PR254 — tap an open shipment to add these items to it (reliable pick vs. a datalist). */}
+              <div className="fd-section-head">Shipment ID</div>
+              <input className="field" type="text" list="grp-shipids" placeholder='e.g. "SUB 193"' value={grpShipId} onChange={(e) => setGrpShipId(e.target.value)} />
+              <datalist id="grp-shipids">{shipIdOpts.map((s) => <option key={s} value={s} />)}</datalist>
               {openShipmentChoices.length > 0 && (
                 <div className="grp-shipid-picks">
                   <span className="grp-shipid-lead">or add to an open shipment:</span>
@@ -1853,6 +1823,18 @@ export default function OrderBoard({
                   ))}
                 </div>
               )}
+            </div>
+            <div className="batch-group">
+              {/* PR274/PR285 — Consolidator → Shipper leg: courier (dropdown, shared local list) + tracking. */}
+              <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+              <div className="po-inline2">
+                <select className="field" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)}>
+                  <option value="">— courier —</option>
+                  {(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m}>{m}</option>)}
+                  {grpConsolCourier && !(localCouriers.length ? localCouriers : METHODS).includes(grpConsolCourier) && <option value={grpConsolCourier}>{grpConsolCourier}</option>}
+                </select>
+                <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
+              </div>
             </div>
           </div>
           <div className="sc-modal-foot">
