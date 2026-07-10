@@ -448,7 +448,7 @@ export default function OrderBoard({
     resetMessages();
     // PR256 — a supplier is the one thing To-forwarder must record before an item can move on.
     if (!form.supplier_id) {
-      setError('Pick a supplier before Ready to Ship.');
+      setError('Pick a source before Ready to Ship.');
       return;
     }
     setBusy(true);
@@ -684,7 +684,7 @@ export default function OrderBoard({
     if (!supForm) return;
     const name = supForm.name.trim();
     if (!name) {
-      setError('Supplier name is required.');
+      setError('Source name is required.');
       return;
     }
     setBusy(true);
@@ -1164,7 +1164,7 @@ export default function OrderBoard({
         {!shipEditing ? (
           /* what was set in To forwarder — read-only rows; unit cost + item link are easy-copy */
           <div className="po-roview">
-            <div className="po-rorow"><span className="po-rok">Supplier</span><span className="po-rov">{supplierName || '—'}</span></div>
+            <div className="po-rorow"><span className="po-rok">Source</span><span className="po-rov">{supplierName || '—'}</span></div>
             <div className="po-rorow">
               <span className="po-rok">Item link</span>
               <span className="po-rov po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
@@ -1191,7 +1191,7 @@ export default function OrderBoard({
           <>
             {/* Edit mode — the To-forwarder field set, auto-saving on blur/change */}
             <div className="po-field">
-              <label>Supplier</label>
+              <label>Source</label>
               <select
                 value={form.supplier_id}
                 onChange={(e) => {
@@ -1380,7 +1380,7 @@ export default function OrderBoard({
               <div className="sc-modal-body">
                 {/* group fields — each its own subheader; applied to every picked item */}
                 <div className="batch-group">
-                  <div className="fd-section-head">Supplier</div>
+                  <div className="fd-section-head">Source</div>
                   <select className="batch-field" value={batchSupplier} onChange={(e) => setBatchSupplier(e.target.value ? Number(e.target.value) : '')}>
                     <option value="">— pick a supplier —</option>
                     {suppliers.map((s) => (
@@ -1460,7 +1460,7 @@ export default function OrderBoard({
       <div className="po-form">
         {/* 1 · Supplier — managed in Settings → Suppliers (no inline add here). Flag + name, A–Z. */}
         <div className="po-field">
-          <label>Supplier</label>
+          <label>Source</label>
           <select
             value={form.supplier_id}
             onChange={(e) => {
@@ -1581,7 +1581,7 @@ export default function OrderBoard({
       <div className="po-form">
         {/* Supplier */}
         <div className="po-field">
-          <label>Supplier</label>
+          <label>Source</label>
           <div className="po-inline">
             <div className="po-field" style={{ marginBottom: 0 }}>
               <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value ? Number(e.target.value) : '' }))}>

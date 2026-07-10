@@ -58,13 +58,13 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
   async function submitAdd() {
     if (!adding) return;
     const name = adding.name.trim();
-    if (!name) { note('err', 'Supplier name is required.'); return; }
+    if (!name) { note('err', 'Source name is required.'); return; }
     setBusy(true); setNotice(null);
     try {
       const sup = await addSupplier({ name, flag: adding.flag || null, country: adding.country || null });
       setRows((prev) => (prev.some((r) => r.supplier_id === sup.supplier_id) ? prev : [...prev, sup]));
       setAdding(null);
-      note('ok', 'Added a supplier.');
+      note('ok', 'Added a source.');
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
@@ -80,8 +80,8 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
   const Wrap = embedded ? 'div' : 'section';
   return (
     <Wrap className={embedded ? '' : 'set-sec'}>
-      {!embedded && <div className="set-sec-title">Suppliers</div>}
-      <div className="set-sec-sub">Where you buy from, shown (flag + name) in the To-forwarder supplier picker. The flag sets the country, which drives the unit-cost currency and the Taobao field.</div>
+      {!embedded && <div className="set-sec-title">Sources</div>}
+      <div className="set-sec-sub">Where you buy from — both agents/suppliers you buy through (e.g. Imaginatorium) and direct marketplaces you buy from yourself (e.g. Taobao). Picked as the Source in Purchasing → Buy. The flag sets the country, which drives the unit-cost currency and the Taobao field.</div>
 
       {notice && <div className={`validation ${notice.tone}`} style={{ margin: '8px 0' }}>{notice.text}</div>}
 
@@ -93,7 +93,7 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
             <div className="set-colhead-ctl" />
           </div>
         )}
-        {rows.length === 0 && <div className="hint">No suppliers yet — add one below.</div>}
+        {rows.length === 0 && <div className="hint">No sources yet — add one below.</div>}
         {rows.map((s, i) => (
           <SupplierRow
             key={s.supplier_id}
@@ -110,7 +110,7 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
 
       {adding ? (
         <div className="subform" style={{ marginTop: 8 }}>
-          <div className="subform-label">Add supplier</div>
+          <div className="subform-label">Add source</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div className="sup-flag-cell">
               <FlagSelect value={adding.flag || null} onChange={({ flag, country }) => setAdding((a) => (a ? { ...a, flag, country } : a))} />
@@ -124,7 +124,7 @@ export default function SupplierSettings({ initial, embedded = false }: { initia
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-brown btn-ico" onClick={() => setAdding({ name: '', flag: '', country: '' })} disabled={busy}><StoreIcon />Add supplier</button>
+          <button className="btn-brown btn-ico" onClick={() => setAdding({ name: '', flag: '', country: '' })} disabled={busy}><StoreIcon />Add source</button>
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}
@@ -166,7 +166,7 @@ function SupplierRow({
       </div>
       <div className="set-fields">
         <div className="set-f grow">
-          <input type="text" value={name} placeholder="supplier name" onChange={(e) => setName(e.target.value)} onBlur={(e) => blurName(e.target.value)} disabled={busy} />
+          <input type="text" value={name} placeholder="source name" onChange={(e) => setName(e.target.value)} onBlur={(e) => blurName(e.target.value)} disabled={busy} />
         </div>
       </div>
       <div className="set-row-ctl">
