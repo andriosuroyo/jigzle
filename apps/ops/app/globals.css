@@ -294,9 +294,11 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-card-mini .po-card-meta { justify-content: flex-end; }
 .po-card-mini .po-card-meta .po-card-qty { margin-left: 0; }
 
-/* PR229 — Add-planned-item overlay: roomier field spacing, all-caps labels, left-aligned commit button. */
+/* PR229 — Add-planned-item overlay: roomier field spacing, left-aligned commit button. */
 .po-form > .po-field, .po-form > .po-field-row { margin-bottom: 18px; }
-.po-form .po-field > label { text-transform: uppercase; letter-spacing: 0.04em; }
+/* PR269 — LOCKED standard: field labels & subheaders are ALL-CAPS eyebrows. Applies to every
+   .po-field label (forms AND modal/overlay bodies), matching .fd-section-head. */
+.po-field > label { text-transform: uppercase; letter-spacing: 0.04em; }
 .po-commit-left { justify-content: flex-start; }
 
 /* ── Panels ── */
