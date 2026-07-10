@@ -7,7 +7,7 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO, sendPoBackToShip } from '@/app/purchasing/actions';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, setConsolidatorTracking, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO, sendPoBackToShip } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
 import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
@@ -108,6 +108,8 @@ export default function PurchasingHistoryBoard({
   const [courierDraft, setCourierDraft] = useState('');
   const [trackingDraft, setTrackingDraft] = useState('');
   const [courierErr, setCourierErr] = useState<string | null>(null);
+  // PR272: consolidator tracking draft (auto-save on blur, like courier/tracking)
+  const [consolTrackDraft, setConsolTrackDraft] = useState('');
   // PR206 (0069): per-box dims/weight/tracking drafts (saved as a set; pre-fill the CN Packing List)
   const [boxDraft, setBoxDraft] = useState<BoxDraft[]>([]);
   const [boxErr, setBoxErr] = useState<string | null>(null);
@@ -136,8 +138,8 @@ export default function PurchasingHistoryBoard({
   );
   const imgMap = useSkuImages(imgCodes);
 
-  // client-side filter over the loaded set: match ship_id, any SKU code, OR any item name in the
-  // shipment (PR153). Then split into the active/completed tab.
+  // client-side filter over the loaded set: match ship_id, any SKU code, any item name (PR153), OR any
+  // of the three tracking numbers (PR272 — local / consolidator / shipment). Then split by tab.
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return ships.filter((s) => {
@@ -146,7 +148,10 @@ export default function PurchasingHistoryBoard({
       return (
         s.ship_id.toLowerCase().includes(q) ||
         s.sku_codes.some((c) => c.toLowerCase().includes(q)) ||
-        s.sku_names.some((n) => n.toLowerCase().includes(q))
+        s.sku_names.some((n) => n.toLowerCase().includes(q)) ||
+        (s.tracking?.toLowerCase().includes(q) ?? false) ||
+        (s.consolidator_tracking?.toLowerCase().includes(q) ?? false) ||
+        s.local_trackings.some((t) => t.toLowerCase().includes(q))
       );
     });
   }, [ships, sub, query]);
@@ -186,6 +191,7 @@ export default function PurchasingHistoryBoard({
     setSelItem(null);
     setCourierDraft(s.courier ?? '');
     setTrackingDraft(s.tracking ?? '');
+    setConsolTrackDraft(s.consolidator_tracking ?? '');
     setCourierErr(null);
     setBoxErr(null);
     setBoxDraft([]);
@@ -266,6 +272,17 @@ export default function PurchasingHistoryBoard({
     const t = tracking.trim() || null;
     setShips((prev) => prev.map((s) => (s.ship_id === openShip.ship_id ? { ...s, courier: c, tracking: t } : s)));
     setOpenShip((prev) => (prev ? { ...prev, courier: c, tracking: t } : prev));
+  }
+
+  // PR272: persist the consolidator tracking (Consolidator → Shipper leg), auto-save on blur.
+  async function saveConsolTrack(tracking: string) {
+    if (!openShip) return;
+    setCourierErr(null);
+    const { error } = await setConsolidatorTracking(openShip.ship_id, tracking);
+    if (error) { setCourierErr(error); return; }
+    const t = tracking.trim() || null;
+    setShips((prev) => prev.map((s) => (s.ship_id === openShip.ship_id ? { ...s, consolidator_tracking: t } : s)));
+    setOpenShip((prev) => (prev ? { ...prev, consolidator_tracking: t } : prev));
   }
 
   // PR255 — open the per-item detail overlay, seeding the editable drafts from the tapped line.
@@ -429,6 +446,11 @@ export default function PurchasingHistoryBoard({
               </div>
               <div className="sc-modal-body">
                 <div className="po-field">
+                  {/* PR272 — consolidator tracking (Consolidator → Shipper leg), before the shipper leg. */}
+                  <div className="fd-section-head">Consolidator tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  <input type="text" placeholder="consolidator tracking" value={consolTrackDraft} onChange={(e) => setConsolTrackDraft(e.target.value)} onBlur={(e) => void saveConsolTrack(e.target.value)} />
+                </div>
+                <div className="po-field">
                   {/* PR261 — subheaders styled like the detail view (uppercase .fd-section-head) */}
                   <div className="fd-section-head">Shipment courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
                   {courierErr && <div className="validation err" style={{ marginBottom: 8 }}>{courierErr}</div>}
@@ -581,7 +603,7 @@ export default function PurchasingHistoryBoard({
       </div>
 
       <div className="search-row" style={{ padding: '8px 0' }}>
-        <SearchInput value={query} onChange={setQuery} placeholder="Search by SKU or item name" />
+        <SearchInput value={query} onChange={setQuery} placeholder="Search by SKU, item name, or tracking" />
       </div>
 
       <ul className="po-cards po-cards-compact">

@@ -3,6 +3,31 @@
 Monorepo (npm workspaces + turbo). The main app is **`apps/ops`** (Next.js 14 App Router,
 Supabase). Shared packages live under `packages/*` (`@jigzle/db`, `@jigzle/lib`, `@jigzle/ui`).
 
+## Purchasing route model (domain) — how a bought item reaches the warehouse
+
+A purchased item travels: **Item → Consolidator → Shipper → Jigzle** (our Indonesia warehouse).
+The two middle nodes are the LOCKED names (chosen 2026-07; don't reintroduce "Forwarder" for either):
+
+- **Consolidator** — an optional middle node that collects/consolidates purchases before onward
+  shipping (e.g. **Superbuy** / SUB in China). Some routes skip it: an item can go straight from
+  purchase to a Shipper (e.g. **Imaginatorium** / IMA in Japan → Japan Post → us). A Consolidator's
+  onward hop can go to a Shipper OR ship directly to us.
+- **Shipper** — whoever carries the goods internationally to our warehouse. This is either a
+  **forwarder** (e.g. **MTE** / Mentari Timur Ekspress in China — may have hidden extra legs we don't
+  track) or a **direct method** (e.g. Japan Post). We record only the Shipper name/method + tracking,
+  never a forwarder's internal steps.
+
+**Three tracking numbers**, and where each is stored:
+| Leg | Name | Storage |
+|---|---|---|
+| Item → Consolidator | **local tracking** | per-PO `purchase_orders.method` (courier) + `tracking_to_forwarder` (number) — the "Local courier & tracking" recorded in the **Forward** step |
+| Consolidator → Shipper | **consolidator tracking** | shipment-level `shipments.consolidator_tracking` |
+| Shipper → Jigzle | **shipment tracking** | shipment-level `shipments.tracking` (courier = `shipments.courier`) |
+
+The ship_id is grouped at the Consolidator level (`SUB 192`); `forwarders.prefix` is that node's prefix.
+NB: the legacy `forwarders` table / `tracking_to_forwarder` column keep their old names in the DB — the
+domain names above are the source of truth for UI copy.
+
 ## Development workflow — pool changes, ship on command
 
 Do **not** auto-merge every unit. **Pool** small changes on the feature branch and ship them in

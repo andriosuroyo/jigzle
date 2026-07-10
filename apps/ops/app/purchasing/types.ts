@@ -231,13 +231,15 @@ export interface ShipmentHistoryRow {
   origin_country: string | null;
   ship_date: string | null;
   received_date: string | null;
-  tracking: string | null;
+  tracking: string | null;              // PR272: shipment tracking (Shipper → Jigzle leg)
+  consolidator_tracking: string | null; // PR272: consolidator tracking (Consolidator → Shipper leg)
   courier: string | null;    // PR153: the international carrier (DHL/MTE…) — shown beside tracking
   completed: boolean;        // shipment status = completed (Completed tab) vs open (Active tab)
   note: string | null;       // the per-Ship-ID note (editable here + in To-ship; shown on Inbound too)
   item_count: number;        // distinct items on this ship_id (POs ∪ inbound-received)
   sku_codes: string[];       // the distinct item identifiers, for the SKU search
   sku_names: string[];       // the items' catalogue names (PR153 — the search matches these too)
+  local_trackings: string[]; // PR272: per-PO local trackings on this ship (Item → Consolidator), for search
   total_cost: number | null; // Σ item_cost×qty across the ship's PO lines (roll-up)
   currency: string | null;   // currency label from the forwarder's country (yuan / yen / NTD …)
   suppliers: string[];       // distinct supplier names on the ship (roll-up)

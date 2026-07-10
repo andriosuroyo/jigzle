@@ -14,6 +14,7 @@ import {
   groupIntoShipment,
   searchCustomers,
   searchSkus,
+  setConsolidatorTracking,
   setPOStatus,
   setShipmentNote,
   updatePO,
@@ -237,6 +238,7 @@ export default function OrderBoard({
 
   // group-into-shipment form (forwarders are managed in Settings → Forwarders; no inline add here)
   const [grpForwarder, setGrpForwarder] = useState('');
+  const [grpConsolTracking, setGrpConsolTracking] = useState(''); // PR272: consolidator tracking (optional)
   const [grpShipId, setGrpShipId] = useState('');
   const [grpOrigin, setGrpOrigin] = useState(''); // kept internally (from an existing shipment) — no UI field
   const [grpDate, setGrpDate] = useState(todayStr());
@@ -578,6 +580,7 @@ export default function OrderBoard({
     if (selectedPoIds.size === 0) return;
     resetMessages();
     setGrpForwarder('');
+    setGrpConsolTracking('');
     setGrpShipId('');
     setGrpOrigin('');
     setGrpDate(todayStr());
@@ -834,7 +837,7 @@ export default function OrderBoard({
       return;
     }
     if (!grpForwarder.trim()) {
-      setError('Pick a forwarder.');
+      setError('Pick a consolidator.');
       return;
     }
     if (!grpShipId.trim()) {
@@ -850,6 +853,11 @@ export default function OrderBoard({
         origin_country: grpOrigin.trim() || null,
         ship_date: grpDate || null,
       });
+      // PR272 — best-effort: stamp the consolidator tracking on the shipment (degrades silently if
+      // 0078 isn't applied). Never blocks the group itself, which already succeeded above.
+      if (grpConsolTracking.trim()) {
+        try { await setConsolidatorTracking(grpShipId.trim(), grpConsolTracking); } catch { /* non-fatal */ }
+      }
       setSuccess(`Successfully grouped ${totalItems} item${totalItems === 1 ? '' : 's'} into ${grpShipId.trim()}.`);
       setSelectedPoIds(new Set());
       setGrpQty({});
@@ -1794,13 +1802,18 @@ export default function OrderBoard({
             </div>
 
             <div className="batch-group">
-              <div className="fd-section-head">Forwarder</div>
-              <select className="field" value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
-                <option value="">— pick —</option>
-                {forwardersSorted.map((f) => (
-                  <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
-                ))}
-              </select>
+              {/* PR272 — Consolidator (ex-"Forwarder": the ship_id-prefix node, e.g. Superbuy) + its
+                  onward tracking (Consolidator → Shipper leg), combined under one header. */}
+              <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+              <div className="po-inline2">
+                <select className="field" value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
+                  <option value="">— consolidator —</option>
+                  {forwardersSorted.map((f) => (
+                    <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
+                  ))}
+                </select>
+                <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
+              </div>
             </div>
             <div className="batch-group">
               <div className="fd-section-head">Ship ID</div>

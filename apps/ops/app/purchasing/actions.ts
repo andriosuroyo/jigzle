@@ -275,6 +275,25 @@ export async function setShipmentCourier(
   return { error: error ? `setShipmentCourier: ${error.message}` : null };
 }
 
+// ── PR272: set the shipment's consolidator tracking (Consolidator → Shipper leg). Set at Create
+// shipment and editable in History. Error as data (PR145); degrades silently if 0078 isn't applied
+// yet (the column is missing → treat as a no-op so grouping/edit isn't blocked). Empty → NULL. ──
+export async function setConsolidatorTracking(
+  shipId: string,
+  tracking: string
+): Promise<{ error: string | null }> {
+  const sid = shipId.trim();
+  if (!sid) return { error: 'setConsolidatorTracking: a ship id is required' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase
+    .from('shipments')
+    .update({ consolidator_tracking: tracking.trim() || null })
+    .eq('ship_id', sid);
+  // 42703 = undefined_column (0078 not applied yet) → no-op rather than surfacing an error.
+  if (error && error.code !== '42703') return { error: `setConsolidatorTracking: ${error.message}` };
+  return { error: null };
+}
+
 // ── PR206 (0069): per-box dims/weight/tracking for an import shipment (Purchasing History detail).
 // getShipmentBoxes degrades to [] until 0069 is applied. setShipmentBoxes replaces the whole set for a
 // ship_id (delete + insert) and returns the error as data (PR145 convention). ──
@@ -1420,24 +1439,34 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     for (const c of (cr ?? []) as { ship_id: string; courier: string | null }[]) if (c.courier) courierByShip.set(c.ship_id, c.courier);
   }
 
+  // PR272: consolidator tracking in a SEPARATE query that degrades to an empty map, so History still
+  // loads (and searches shipment/local tracking) while 0078 hasn't been applied yet.
+  const consolTrackByShip = new Map<string, string>();
+  {
+    const { data: ct } = await supabase.from('shipments').select('ship_id,consolidator_tracking').not('consolidator_tracking', 'is', null).limit(5000);
+    for (const c of (ct ?? []) as { ship_id: string; consolidator_tracking: string | null }[]) if (c.consolidator_tracking) consolTrackByShip.set(c.ship_id, c.consolidator_tracking);
+  }
+
   const shipIds = ships.map((s) => s.ship_id);
   // items per ship = distinct identifiers from PO lines (item_code ?? raw) ∪ inbound-received codes, so a
   // legacy shipment with no PO rows still counts what actually arrived. Cost + suppliers from PO lines.
   const codesByShip = new Map<string, Set<string>>();
   const costByShip = new Map<string, number>();
   const supIdsByShip = new Map<string, Set<number>>();
+  const localTrackByShip = new Map<string, Set<string>>(); // PR272: per-PO local trackings, for search
   const allSupIds = new Set<number>();
   const addCode = (sid: string, code: string) => (codesByShip.get(sid) ?? codesByShip.set(sid, new Set()).get(sid)!).add(code);
   for (let i = 0; i < shipIds.length; i += 100) {
     const slice = shipIds.slice(i, i + 100);
     const { data: pos } = await supabase
       .from('purchase_orders')
-      .select('ship_id,item_code,item_code_raw,item_cost,qty,supplier_id')
+      .select('ship_id,item_code,item_code_raw,item_cost,qty,supplier_id,tracking_to_forwarder')
       .in('ship_id', slice);
-    for (const p of (pos ?? []) as { ship_id: string | null; item_code: string | null; item_code_raw: string | null; item_cost: number | null; qty: number | null; supplier_id: number | null }[]) {
+    for (const p of (pos ?? []) as { ship_id: string | null; item_code: string | null; item_code_raw: string | null; item_cost: number | null; qty: number | null; supplier_id: number | null; tracking_to_forwarder: string | null }[]) {
       if (!p.ship_id) continue;
       const code = p.item_code ?? p.item_code_raw;
       if (code) addCode(p.ship_id, code);
+      if (p.tracking_to_forwarder) (localTrackByShip.get(p.ship_id) ?? localTrackByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.tracking_to_forwarder);
       if (p.item_cost != null) costByShip.set(p.ship_id, (costByShip.get(p.ship_id) ?? 0) + Number(p.item_cost) * (Number(p.qty) || 0));
       if (p.supplier_id != null) {
         (supIdsByShip.get(p.ship_id) ?? supIdsByShip.set(p.ship_id, new Set()).get(p.ship_id)!).add(p.supplier_id);
@@ -1487,12 +1516,14 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
       ship_date: s.ship_date,
       received_date: recvOf(s),
       tracking: s.tracking,
+      consolidator_tracking: consolTrackByShip.get(s.ship_id) ?? null,
       courier: courierByShip.get(s.ship_id) ?? null,
       completed: s.status === 'completed',
       note: s.note,
       item_count: codes.length,
       sku_codes: codes,
       sku_names: codes.map((c) => nameByCode.get(c)).filter((n): n is string => !!n),
+      local_trackings: [...(localTrackByShip.get(s.ship_id) ?? [])],
       total_cost: costByShip.has(s.ship_id) ? costByShip.get(s.ship_id)! : null,
       currency: currencyOf(s),
       suppliers: [...(supIdsByShip.get(s.ship_id) ?? [])].map((id) => supName.get(id) ?? `#${id}`).sort(),
