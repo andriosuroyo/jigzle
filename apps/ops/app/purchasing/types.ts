@@ -232,6 +232,7 @@ export interface ShipmentHistoryRow {
   ship_date: string | null;
   received_date: string | null;
   tracking: string | null;              // PR272: shipment tracking (Shipper → Jigzle leg)
+  consolidator_courier: string | null;  // PR274: consolidator courier (Consolidator → Shipper leg)
   consolidator_tracking: string | null; // PR272: consolidator tracking (Consolidator → Shipper leg)
   courier: string | null;    // PR153: the international carrier (DHL/MTE…) — shown beside tracking
   completed: boolean;        // shipment status = completed (Completed tab) vs open (Active tab)

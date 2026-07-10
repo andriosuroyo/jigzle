@@ -14,7 +14,7 @@ import {
   groupIntoShipment,
   searchCustomers,
   searchSkus,
-  setConsolidatorTracking,
+  setConsolidator,
   setPOStatus,
   setShipmentNote,
   updatePO,
@@ -238,6 +238,7 @@ export default function OrderBoard({
 
   // group-into-shipment form (forwarders are managed in Settings → Forwarders; no inline add here)
   const [grpForwarder, setGrpForwarder] = useState('');
+  const [grpConsolCourier, setGrpConsolCourier] = useState('');   // PR274: consolidator courier (optional)
   const [grpConsolTracking, setGrpConsolTracking] = useState(''); // PR272: consolidator tracking (optional)
   const [grpShipId, setGrpShipId] = useState('');
   const [grpOrigin, setGrpOrigin] = useState(''); // kept internally (from an existing shipment) — no UI field
@@ -580,6 +581,7 @@ export default function OrderBoard({
     if (selectedPoIds.size === 0) return;
     resetMessages();
     setGrpForwarder('');
+    setGrpConsolCourier('');
     setGrpConsolTracking('');
     setGrpShipId('');
     setGrpOrigin('');
@@ -853,10 +855,10 @@ export default function OrderBoard({
         origin_country: grpOrigin.trim() || null,
         ship_date: grpDate || null,
       });
-      // PR272 — best-effort: stamp the consolidator tracking on the shipment (degrades silently if
-      // 0078 isn't applied). Never blocks the group itself, which already succeeded above.
-      if (grpConsolTracking.trim()) {
-        try { await setConsolidatorTracking(grpShipId.trim(), grpConsolTracking); } catch { /* non-fatal */ }
+      // PR272/PR274 — best-effort: stamp the consolidator courier + tracking on the shipment (degrades
+      // silently if 0078/0079 aren't applied). Never blocks the group itself, which already succeeded.
+      if (grpConsolCourier.trim() || grpConsolTracking.trim()) {
+        try { await setConsolidator(grpShipId.trim(), grpConsolCourier, grpConsolTracking); } catch { /* non-fatal */ }
       }
       setSuccess(`Successfully grouped ${totalItems} item${totalItems === 1 ? '' : 's'} into ${grpShipId.trim()}.`);
       setSelectedPoIds(new Set());
@@ -1802,18 +1804,23 @@ export default function OrderBoard({
             </div>
 
             <div className="batch-group">
-              {/* PR272 — Consolidator (ex-"Forwarder": the ship_id-prefix node, e.g. Superbuy) + its
-                  onward tracking (Consolidator → Shipper leg), combined under one header. */}
+              {/* PR272 — Consolidator (ex-"Forwarder"): the ship_id-prefix node, e.g. Superbuy. */}
+              <div className="fd-section-head">Consolidator</div>
+              <select className="field" value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
+                <option value="">— consolidator —</option>
+                {forwardersSorted.map((f) => (
+                  <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
+                ))}
+              </select>
+            </div>
+            <div className="batch-group">
+              {/* PR274 — Consolidator → Shipper leg: courier (shared local list) + tracking. */}
               <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
               <div className="po-inline2">
-                <select className="field" value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
-                  <option value="">— consolidator —</option>
-                  {forwardersSorted.map((f) => (
-                    <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
-                  ))}
-                </select>
+                <input className="field" type="text" list="grp-consol-couriers" placeholder="courier" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)} />
                 <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
               </div>
+              <datalist id="grp-consol-couriers">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
             </div>
             <div className="batch-group">
               <div className="fd-section-head">Ship ID</div>

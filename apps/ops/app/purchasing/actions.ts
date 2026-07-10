@@ -275,22 +275,23 @@ export async function setShipmentCourier(
   return { error: error ? `setShipmentCourier: ${error.message}` : null };
 }
 
-// ── PR272: set the shipment's consolidator tracking (Consolidator → Shipper leg). Set at Create
-// shipment and editable in History. Error as data (PR145); degrades silently if 0078 isn't applied
-// yet (the column is missing → treat as a no-op so grouping/edit isn't blocked). Empty → NULL. ──
-export async function setConsolidatorTracking(
+// ── PR272/PR274: set the shipment's consolidator courier + tracking (Consolidator → Shipper leg). Set
+// at Create shipment and editable in History. Error as data (PR145); degrades silently if 0078/0079
+// isn't applied yet (missing column → no-op so grouping/edit isn't blocked). Empty → NULL. ──
+export async function setConsolidator(
   shipId: string,
+  courier: string,
   tracking: string
 ): Promise<{ error: string | null }> {
   const sid = shipId.trim();
-  if (!sid) return { error: 'setConsolidatorTracking: a ship id is required' };
+  if (!sid) return { error: 'setConsolidator: a ship id is required' };
   const supabase = createSupabaseServerClient();
   const { error } = await supabase
     .from('shipments')
-    .update({ consolidator_tracking: tracking.trim() || null })
+    .update({ consolidator_courier: courier.trim() || null, consolidator_tracking: tracking.trim() || null })
     .eq('ship_id', sid);
-  // 42703 = undefined_column (0078 not applied yet) → no-op rather than surfacing an error.
-  if (error && error.code !== '42703') return { error: `setConsolidatorTracking: ${error.message}` };
+  // 42703 = undefined_column (0078/0079 not applied yet) → no-op rather than surfacing an error.
+  if (error && error.code !== '42703') return { error: `setConsolidator: ${error.message}` };
   return { error: null };
 }
 
@@ -1446,6 +1447,12 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
     const { data: ct } = await supabase.from('shipments').select('ship_id,consolidator_tracking').not('consolidator_tracking', 'is', null).limit(5000);
     for (const c of (ct ?? []) as { ship_id: string; consolidator_tracking: string | null }[]) if (c.consolidator_tracking) consolTrackByShip.set(c.ship_id, c.consolidator_tracking);
   }
+  // PR274: consolidator courier — its own degrade query so a not-yet-applied 0079 can't hide 0078's tracking.
+  const consolCourierByShip = new Map<string, string>();
+  {
+    const { data: cc } = await supabase.from('shipments').select('ship_id,consolidator_courier').not('consolidator_courier', 'is', null).limit(5000);
+    for (const c of (cc ?? []) as { ship_id: string; consolidator_courier: string | null }[]) if (c.consolidator_courier) consolCourierByShip.set(c.ship_id, c.consolidator_courier);
+  }
 
   const shipIds = ships.map((s) => s.ship_id);
   // items per ship = distinct identifiers from PO lines (item_code ?? raw) ∪ inbound-received codes, so a
@@ -1516,6 +1523,7 @@ export async function getShipmentHistory(query = ''): Promise<ShipmentHistoryRow
       ship_date: s.ship_date,
       received_date: recvOf(s),
       tracking: s.tracking,
+      consolidator_courier: consolCourierByShip.get(s.ship_id) ?? null,
       consolidator_tracking: consolTrackByShip.get(s.ship_id) ?? null,
       courier: courierByShip.get(s.ship_id) ?? null,
       completed: s.status === 'completed',
