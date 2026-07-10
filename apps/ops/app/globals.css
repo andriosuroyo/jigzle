@@ -712,6 +712,8 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-form { display: flex; flex-direction: column; }
 .po-field { margin-bottom: 12px; }
 .po-field > label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+/* PR284 — a read-only, locked field value (e.g. Source in Confirm, set upstream in Buy) */
+.po-ro-locked { padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); font-size: 14px; }
 /* .po-field inputs derive from the shared .field standard (defined once, near .le-field). */
 .po-field textarea { min-height: 48px; resize: vertical; }
 /* the qty ± stepper inside the add-item form keeps its own compact box (not the full-width input rule) */
