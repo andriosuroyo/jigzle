@@ -100,11 +100,11 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
     if (rows.some((r) => r.prefix.toUpperCase() === to)) { note('err', `${to} already exists.`); return; }
     setBusy(true); setNotice(null);
     try {
-      const { error } = await renameConsolidatorPrefix(from, to);
+      const { error, touched } = await renameConsolidatorPrefix(from, to);
       if (error) { note('err', error); return; }
       setRows((prev) => prev.map((r) => (r.prefix === from ? { ...r, prefix: to } : r)));
       setRenaming(null);
-      note('ok', `Renamed ${from} → ${to}.`);
+      note('ok', `Renamed ${from} → ${to} · ${touched} ship id${touched === 1 ? '' : 's'} updated.`);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 

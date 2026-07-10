@@ -1081,14 +1081,16 @@ export async function updateForwarder(prefix: string, patch: UpdateForwarderPatc
 
 // ── PR276: rename a consolidator's prefix, cascading to every owned ship_id (RPC 0081). Error as data
 // (PR145) — a thrown message would be masked in production. Degrades if 0081 isn't applied yet. ──
-export async function renameConsolidatorPrefix(oldPrefix: string, newPrefix: string): Promise<{ error: string | null }> {
+export async function renameConsolidatorPrefix(oldPrefix: string, newPrefix: string): Promise<{ error: string | null; touched: number }> {
   const oldP = oldPrefix?.trim();
   const newP = newPrefix?.trim().toUpperCase();
-  if (!oldP || !newP) return { error: 'renameConsolidatorPrefix: both prefixes are required' };
-  if (oldP === newP) return { error: null };
+  if (!oldP || !newP) return { error: 'renameConsolidatorPrefix: both prefixes are required', touched: 0 };
+  if (oldP === newP) return { error: null, touched: 0 };
   const supabase = createSupabaseServerClient();
-  const { error } = await supabase.rpc('rename_consolidator_prefix', { p_old: oldP, p_new: newP });
-  return { error: error ? `renameConsolidatorPrefix: ${error.message}` : null };
+  // 0082's function returns the count of ship_ids rewritten; 0081's returned void (→ null) — tolerate both.
+  const { data, error } = await supabase.rpc('rename_consolidator_prefix', { p_old: oldP, p_new: newP });
+  if (error) return { error: `renameConsolidatorPrefix: ${error.message}`, touched: 0 };
+  return { error: null, touched: typeof data === 'number' ? data : 0 };
 }
 
 // ── reorder forwarders (Settings → Forwarders): persist the manual order (index → sort_order). ──
