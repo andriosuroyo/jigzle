@@ -6,6 +6,7 @@ import { getToSendQueue, getOrderForFulfill, sendToOutbound, sendBackToPending }
 import { setLineNote } from '@/app/pending/actions';
 import SearchInput from '@/components/SearchInput';
 import StatusCircles, { payTone } from '@/components/StatusCircles';
+import { fmtNiceDate } from '@jigzle/lib';
 import type { FulfillDetail, ToSendQueueRow } from '@/app/fulfill/types';
 import type { CourierService, CommonNote, ExportCourier } from '@/app/settings/types';
 import IconSelect from '@/components/IconSelect';
@@ -268,7 +269,7 @@ export default function FulfillBoard({
                   {/* PR144 row: customer id + date on top (no sales id); items/SKUs + circles below. */}
                   <div className="fq-row-top">
                     <span className="fq-headline">{q.customer_name || '—'}</span>
-                    <span className="ord-date">{q.order_date ? q.order_date.slice(0, 10) : '—'}</span>
+                    <span className="ord-date">{fmtNiceDate(q.order_date) || '—'}</span>
                   </div>
                   <div className="fq-row-bot">
                     {/* SKU codes folded into the item count so a SKU search hit is obvious at a glance. */}
@@ -300,7 +301,7 @@ export default function FulfillBoard({
               <div className="fd-head">
                 <div className="fd-head-row">
                   <div className="fd-title fd-title-plain">{detail.customer_name || '—'}</div>
-                  {detail.order_date && <span className="fd-date">{detail.order_date.slice(0, 10)}</span>}
+                  {detail.order_date && <span className="fd-date">{fmtNiceDate(detail.order_date)}</span>}
                 </div>
                 <button className="fd-orderid-chip" onClick={copyOrderId} aria-label={copiedId ? 'Order ID copied' : 'Copy order ID'} title="Copy order ID">
                   <span className="fd-orderid-code">{detail.sales_id}</span>

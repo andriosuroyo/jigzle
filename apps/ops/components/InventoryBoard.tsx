@@ -15,6 +15,7 @@ import { IconOnOrder, IconShipped, IconWarehouse } from '@/components/StockStats
 import AdjustmentsTab from '@/components/AdjustmentsTab';
 import StockCheckBoard from '@/components/StockCheckBoard';
 import type { BrandOption, SessionRow } from '@/app/stock-check/types';
+import { fmtNiceDate } from '@jigzle/lib';
 
 const ROW_LIMIT = 1000; // matches the server LIMIT — used only for the "refine your search" hint
 
@@ -247,7 +248,7 @@ export default function InventoryBoard({
                   {ledger.entries.length === 0 && <li className="hint">No stock movements on record.</li>}
                   {ledger.entries.map((e, i) => (
                     <li key={i} className={`ledg-row ledg-${e.kind}`}>
-                      <span className="ledg-date">{e.date ? e.date.slice(0, 10) : '—'}</span>
+                      <span className="ledg-date">{fmtNiceDate(e.date) || '—'}</span>
                       <span className="ledg-label">{e.label}</span>
                       <span className={`ledg-delta ${e.delta >= 0 ? 'in' : 'out'}`}>{e.delta > 0 ? `+${e.delta}` : e.delta}</span>
                       <span className="ledg-bal">{e.balance}</span>

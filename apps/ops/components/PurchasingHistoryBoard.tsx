@@ -15,6 +15,7 @@ import { isRealName } from '@/components/skuName';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import { fmtNiceDate } from '@jigzle/lib';
 
 // PR206/PR261: box editor draft rows (string inputs) ⇄ ShipmentBox (numbers/null). real_weight is kg
 // (the CN Packing List reads kg). PR261 adds a per-box local courier alongside the tracking number.
@@ -31,7 +32,7 @@ const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d
 // PR267 — "send back" return arrow (arrow-uturn-left) for the Send-back-to-Ship action.
 const BackIcon = () => (<svg {..._ic}><polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" /></svg>);
 
-const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
+const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 // one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg · ZTO ZTO123"
 const boxSummary = (b: ShipmentBox): string => {
   const dims = [b.dim_p, b.dim_l, b.dim_t];

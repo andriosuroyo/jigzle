@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
-import { customerLabel } from '@jigzle/lib';
+import { customerLabel, fmtNiceDate } from '@jigzle/lib';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
   addSupplier,
@@ -59,16 +59,6 @@ function currencyForCountry(country: string | null | undefined): { label: string
 }
 const isChina = (country: string | null | undefined): boolean => (country ?? '').trim().toLowerCase() === 'china';
 
-const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '');
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-// 'YYYY-MM-DD' → 'Jul 1, 2026' (display only; avoids Date() tz surprises)
-function fmtNiceDate(s: string | null): string {
-  if (!s) return '';
-  const [y, m, d] = s.slice(0, 10).split('-');
-  const mi = parseInt(m, 10) - 1;
-  return `${MONTHS[mi] ?? m} ${parseInt(d, 10)}, ${y}`;
-}
 
 function todayStr(): string {
   const d = new Date();
@@ -906,7 +896,7 @@ export default function OrderBoard({
                   <div className="po-card-side">
                     <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
                     <div className="po-card-meta">
-                      <span className="po-card-date">{fmtDay(po.status_since)}</span>
+                      <span className="po-card-date">{fmtNiceDate(po.status_since)}</span>
                     </div>
                   </div>
                   <span className="po-chev" aria-hidden>›</span>
@@ -926,7 +916,7 @@ export default function OrderBoard({
               <div className="po-bvhead-main">
                 <div className="po-card-l1">
                   <span className="ff-code">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
-                  <span className="po-card-date">{fmtDay(editPo.input_date)}</span>
+                  <span className="po-card-date">{fmtNiceDate(editPo.input_date)}</span>
                 </div>
                 <div className="po-card-l1 po-card-mid">
                   {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <span className="ff-name">{editPo.name}</span>}
@@ -1008,7 +998,7 @@ export default function OrderBoard({
                     <div className="po-card-side">
                       <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
                       <div className="po-card-meta">
-                        <span className="po-card-date">{fmtDay(po.status_since)}</span>
+                        <span className="po-card-date">{fmtNiceDate(po.status_since)}</span>
                       </div>
                     </div>
                     <span className="po-chev" aria-hidden>›</span>
@@ -1030,7 +1020,7 @@ export default function OrderBoard({
               <div className="po-bvhead-main">
                 <div className="po-card-l1">
                   <span className="ff-code">{editPo!.item_code ?? editPo!.item_code_raw ?? '—'}</span>
-                  <span className="po-card-date">{fmtDay(editPo!.status_since)}</span>
+                  <span className="po-card-date">{fmtNiceDate(editPo!.status_since)}</span>
                 </div>
                 <div className="po-card-l1 po-card-mid">
                   {isRealName(editPo!.name, editPo!.item_code ?? editPo!.item_code_raw) && <span className="ff-name">{editPo!.name}</span>}
@@ -1357,7 +1347,7 @@ export default function OrderBoard({
                           <div className="po-card-main">
                             <div className="po-card-l1">
                               <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
-                              <span className="po-card-poid">{fmtDay(po.status_since)}</span>
+                              <span className="po-card-poid">{fmtNiceDate(po.status_since)}</span>
                             </div>
                             <div className="po-card-l2">
                               {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}

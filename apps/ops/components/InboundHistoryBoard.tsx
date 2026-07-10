@@ -11,20 +11,21 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import { fmtNiceDate } from '@jigzle/lib';
 
-const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
+const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 
-// "YYYY-MM-DD HH:MM" in Asia/Jakarta from a timestamptz (0052). Falls back to the plain receive_date
-// (date only) when there's no created_at stamp (older rows). Empty → '—'.
+// "Jul 9, 2026 14:30" in Asia/Jakarta from a timestamptz (0052) — friendly date + 24h time (PR269).
+// Falls back to the plain receive_date (date only) when there's no created_at stamp (older rows). Empty → '—'.
 function fmtDateTime(iso: string | null, fallbackDate: string | null): string {
   if (!iso) return fmtDate(fallbackDate);
   const d = new Date(iso);
   if (isNaN(d.getTime())) return fmtDate(fallbackDate);
-  const p = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(d).reduce<Record<string, string>>((a, x) => ((a[x.type] = x.value), a), {});
-  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+  return `${p.month} ${p.day}, ${p.year} ${p.hour}:${p.minute}`;
 }
 
 export default function InboundHistoryBoard({

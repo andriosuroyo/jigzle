@@ -20,6 +20,7 @@ import TrashButton from '@/components/TrashButton';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { isRealName } from '@/components/skuName';
 import { PlusCircleIcon } from '@/components/AddIcons';
+import { fmtNiceDate } from '@jigzle/lib';
 
 function fmt(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
@@ -27,9 +28,9 @@ function fmt(n: number): string {
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
-const fmtDay = (iso: string): string => (iso || '').slice(0, 10) || '—'; // YYYY-MM-DD
+const fmtDay = (iso: string): string => fmtNiceDate(iso) || '—'; // friendly "Jul 9, 2026" (PR269)
 const srcLabel = (s: AdjustmentRow['source']): string => (s === 'manual' ? 'manual' : s === 'reverse' ? 'reverse' : 'count');
 
 // PR173 — brown pencil (edit) button, mirroring TrashButton's shape

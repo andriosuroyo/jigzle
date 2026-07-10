@@ -24,3 +24,15 @@ export function fmtNum(n: number, dec = 2): string {
     maximumFractionDigits: dec,
   });
 }
+
+// Friendly date for DISPLAY only — "Jul 9, 2026" (PR269 locked standard). Data, React keys, and
+// date-picker input values stay ISO (YYYY-MM-DD); this is purely for what the user reads. Null-safe
+// and tolerant of full ISO timestamps (takes the leading date). Empty/invalid → '' (callers use —).
+const NICE_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export function fmtNiceDate(s: string | null | undefined): string {
+  if (!s) return '';
+  const [y, m, d] = s.slice(0, 10).split('-');
+  if (!y || !m || !d) return s;
+  const mi = parseInt(m, 10) - 1;
+  return `${NICE_MONTHS[mi] ?? m} ${parseInt(d, 10)}, ${y}`;
+}

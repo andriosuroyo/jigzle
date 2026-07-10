@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { volWeight } from '@jigzle/lib';
+import { volWeight, fmtNiceDate } from '@jigzle/lib';
 import AppHeader from '@/components/AppHeader';
 import { getHistory, getHistoryYears, setOrderNote } from '@/app/history/actions';
 import { getOrderSummary, deleteOrder } from '@/app/pending/actions';
@@ -320,7 +320,7 @@ export default function HistoryBoard({
                 <button className="fq-row" onClick={() => openOrder(o)}>
                   <div className="fq-row-top">
                     <span className="fq-headline">{o.customer_name || '—'}</span>
-                    <span className="ord-date">{o.order_date ? o.order_date.slice(0, 10) : '—'}</span>
+                    <span className="ord-date">{fmtNiceDate(o.order_date) || '—'}</span>
                   </div>
                   <div className="fq-row-bot">
                     {o.state !== 'complete' && <span className={`ord-state ${o.state}`}>{STATE_LABEL[o.state]}</span>}
@@ -347,7 +347,7 @@ export default function HistoryBoard({
               <div className="fd-head">
                 <div className="fd-head-row">
                   <div className="fd-title fd-title-plain">{summary.customer_name || '—'}</div>
-                  {selRow?.order_date && <span className="fd-date">{selRow.order_date.slice(0, 10)}</span>}
+                  {selRow?.order_date && <span className="fd-date">{fmtNiceDate(selRow.order_date)}</span>}
                 </div>
                 <button className="fd-orderid-chip" onClick={copyOrderId} aria-label={copiedId ? 'Order ID copied' : 'Copy order ID'} title="Copy order ID">
                   <span className="fd-orderid-code">{summary.sales_id}</span>

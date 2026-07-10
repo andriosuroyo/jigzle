@@ -11,12 +11,12 @@
 // rows — so a record that still carries its own orders is flagged and needs a second confirm.
 
 import { useEffect, useMemo, useState } from 'react';
-import { customerLabel, fmtRpCompact } from '@jigzle/lib';
+import { customerLabel, fmtRpCompact, fmtNiceDate } from '@jigzle/lib';
 import { findCustomersForMerge, getDuplicateGroups, getMergeCandidatesByIds, mergeCustomers } from '@/app/customers/actions';
 import type { DuplicateGroup, DuplicateMember, MergeResult } from '@/app/customers/types';
 import SearchInput from '@/components/SearchInput';
 
-const fmtDay = (s: string | null): string => (s ? s.slice(0, 10) : '—');
+const fmtDay = (s: string | null): string => fmtNiceDate(s) || '—';
 const SEARCH_KEY = 'search';
 
 export default function MergeDuplicates({ onClose, onMerged, initialQuery, initialIds }: { onClose: () => void; onMerged: (removedIds: number[]) => void; initialQuery?: string; initialIds?: number[] }) {
