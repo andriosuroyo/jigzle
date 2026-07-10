@@ -9,7 +9,8 @@
 import { useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import AppHeader from '@/components/AppHeader';
-import { PlusCircleIcon } from '@/components/AddIcons';
+import { PlusCircleIcon, TruckIcon, PlaneIcon } from '@/components/AddIcons';
+import type { ComponentType } from 'react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import SupplierSettings from '@/components/SupplierSettings';
 import ForwarderSettings from '@/components/ForwarderSettings';
@@ -47,6 +48,8 @@ type SectionDef = {
   colHeader?: boolean; // show the column captions once as a fixed header (instead of above every row)
   noIcon?: boolean; // hide the per-row icon cell (e.g. box presets — the code is identifier enough)
   hasFlag?: boolean; // PR275: show a leading country-flag picker (saves flag + derived country)
+  addIcon?: ComponentType; // PR278: icon for the "+ add" button (defaults to PlusCircleIcon)
+  addLabel?: string; // PR278: label for the "+ add" button (defaults to "add")
 };
 
 const SECTIONS: SectionDef[] = [
@@ -121,6 +124,8 @@ const SECTIONS: SectionDef[] = [
     sub: 'Domestic couriers for the local leg (Purchasing → Forward) AND the consolidator leg (Purchasing → Ship / History). One shared list. Separate from the outbound Couriers list.',
     hasFlag: true,
     colHeader: true,
+    addIcon: TruckIcon,
+    addLabel: 'Add courier',
     cols: [
       { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
       { key: 'label', label: 'Local & consolidator courier name', type: 'text', grow: true },
@@ -134,6 +139,8 @@ const SECTIONS: SectionDef[] = [
     sub: 'International shippers carrying the goods to our warehouse (DHL, FedEx, MTE, Japan Post…) — picked as the Shipment courier on Purchasing → History.',
     hasFlag: true,
     colHeader: true,
+    addIcon: PlaneIcon,
+    addLabel: 'Add courier',
     cols: [
       { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
       { key: 'label', label: 'Shipper courier name', type: 'text', grow: true },
@@ -392,7 +399,9 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
           />
         ))}
         <div className="set-toolbar">
-          <button className="btn-brown btn-ico" onClick={() => add(sec.kind, sec.blank)} disabled={busy}><PlusCircleIcon />add</button>
+          {(() => { const AddIcon = sec.addIcon ?? PlusCircleIcon; return (
+            <button className="btn-brown btn-ico" onClick={() => add(sec.kind, sec.blank)} disabled={busy}><AddIcon />{sec.addLabel ?? 'add'}</button>
+          ); })()}
           <button className="btn-secondary" onClick={() => sortAZ(sec.kind, sec.sortKey)} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       </div>

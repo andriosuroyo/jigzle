@@ -15,7 +15,11 @@ export const MapPinIcon = () => (<svg {...P}><path d="M21 10c0 7-9 13-9 13s-9-6-
 export const BarcodeIcon = () => (<svg {...P}><line x1="4" y1="6" x2="4" y2="18" /><line x1="8" y1="6" x2="8" y2="18" /><line x1="12" y1="6" x2="12" y2="18" /><line x1="16" y1="6" x2="16" y2="18" /><line x1="20" y1="6" x2="20" y2="18" /></svg>);
 // a storefront (Add supplier)
 export const StoreIcon = () => (<svg {...P}><path d="M3 21h18" /><path d="M5 21V9h14v12" /><path d="M4 9l1.4-5h13.2L20 9z" /></svg>);
-// a truck (Add forwarder / export courier)
+// a truck (Add forwarder / export courier / local & consolidator courier)
 export const TruckIcon = () => (<svg {...P}><rect x="1" y="4" width="14" height="12" rx="1" /><path d="M15 8h4l3 3v5h-7z" /><circle cx="6" cy="18.5" r="2" /><circle cx="18.5" cy="18.5" r="2" /></svg>);
+// a warehouse (Add consolidator — the collection/consolidation node)
+export const WarehouseIcon = () => (<svg {...P}><path d="M22 8.35V20a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z" /><path d="M6 18h12" /><path d="M6 14h12" /><path d="M6 10h12" /></svg>);
+// a plane (Add shipper courier — the international carrier)
+export const PlaneIcon = () => (<svg {...P}><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg>);
 // a plus-in-circle for generic "add a row" buttons (Settings sections)
 export const PlusCircleIcon = () => (<svg {...P}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>);

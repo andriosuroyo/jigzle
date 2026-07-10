@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { TruckIcon } from '@/components/AddIcons';
+import { WarehouseIcon } from '@/components/AddIcons';
 import { addForwarder, deleteForwarder, reorderForwarders, updateForwarder, renameConsolidatorPrefix, getConsolidatorOpenShipmentCount } from '@/app/purchasing/actions';
 import { uploadSettingIcon } from '@/app/settings/actions';
 import type { Forwarder } from '@jigzle/db/types';
@@ -219,7 +219,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
         </div>
       ) : (
         <div className="set-toolbar">
-          <button className="btn-brown btn-ico" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '', logo: null })} disabled={busy}><TruckIcon />Add consolidator</button>
+          <button className="btn-brown btn-ico" onClick={() => setAdding({ prefix: '', name: '', flag: '', country: '', logo: null })} disabled={busy}><WarehouseIcon />Add consolidator</button>
           <button className="btn-secondary" onClick={sortAZ} disabled={busy || rows.length < 2}>Sort A–Z</button>
         </div>
       )}
