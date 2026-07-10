@@ -472,7 +472,7 @@ export default function OrderBoard({
         tracking_to_forwarder: form.tracking_to_forwarder.trim() || null,
       });
       await setPOStatus(editPo.po_id, 'With Forwarder');
-      setSuccess(`PO #${editPo.po_id} confirmed → To ship.`);
+      setSuccess(`PO #${editPo.po_id} confirmed → Ship.`);
       setMode(null);
       setEditPo(null);
       await refreshQueue();
@@ -562,7 +562,7 @@ export default function OrderBoard({
         });
         await setPOStatus(id, 'With Forwarder');
       }
-      setSuccess(`${ids.length} item${ids.length === 1 ? '' : 's'} confirmed → To ship.`);
+      setSuccess(`${ids.length} item${ids.length === 1 ? '' : 's'} confirmed → Ship.`);
       closeBatch();
       await refreshQueue();
     } catch (e) {

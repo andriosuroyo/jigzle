@@ -116,7 +116,7 @@ const SECTIONS: SectionDef[] = [
   {
     kind: 'local_courier',
     title: 'Local couriers',
-    sub: 'Domestic (supplier-side) couriers suggested in Purchasing → To forwarder. Separate from the outbound Couriers list.',
+    sub: 'Domestic (supplier-side) couriers suggested in Purchasing → Forward. Separate from the outbound Couriers list.',
     cols: [{ key: 'label', label: 'Label', type: 'text', grow: true }],
     sortKey: 'label',
     blank: { label: '' },

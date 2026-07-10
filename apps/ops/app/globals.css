@@ -218,10 +218,13 @@ input, textarea, select, button { font-family: inherit; }
 /* quickview list: cap at ~6 cards then scroll (the rest of the page stays put) */
 .po-list-scroll { max-height: 25rem; overflow-y: auto; }
 
-/* unit-cost row with a leading currency symbol (To forwarder) */
+/* unit-cost row with a leading currency symbol (Forward) */
 .po-cost-row { display: flex; align-items: center; gap: 8px; }
 .po-cost-row .po-cost-ccy { flex-shrink: 0; font-weight: 700; color: var(--muted); }
 .po-cost-row input { flex: 1; min-width: 0; }
+/* PR267 — "Send back to Ship" action in the History item overlay (separated from the fields above). */
+.sb-field { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
+.sb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 /* Settings → Suppliers: select matches the text inputs; flag column is narrow + centred */
 .set-f select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }

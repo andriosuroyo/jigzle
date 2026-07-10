@@ -7,8 +7,8 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO, searchSkus, setShipmentItemSku } from '@/app/purchasing/actions';
-import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox, SkuHit } from '@/app/purchasing/types';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO, sendPoBackToShip } from '@/app/purchasing/actions';
+import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
 import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
 import { isRealName } from '@/components/skuName';
@@ -28,6 +28,8 @@ const draftToBox = (d: BoxDraft): ShipmentBox => ({ dim_p: numOrNull(d.p), dim_l
 const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 16, height: 16, 'aria-hidden': true };
 const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+// PR267 — "send back" return arrow (arrow-uturn-left) for the Send-back-to-Ship action.
+const BackIcon = () => (<svg {..._ic}><polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" /></svg>);
 
 const fmtDate = (s: string | null): string => (s ? s.slice(0, 10) : '—');
 // one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg · ZTO ZTO123"
@@ -44,6 +46,13 @@ const boxSummary = (b: ShipmentBox): string => {
 const ccyTag = (ccy: string | null | undefined): string => (ccy ? (ccy.trim().toLowerCase() === 'yuan' ? '元' : ` ${ccy}`) : '');
 // PR266 — currency SYMBOL for the cost-input prefix (front, like $10 / ¥100). Yuan → 元; else the word.
 const ccySymbol = (ccy: string | null | undefined): string => (ccy ? (ccy.trim().toLowerCase() === 'yuan' ? '元' : ccy) : '');
+// PR267 — supplier-country → currency symbol, so the cost prefix follows the picked Supplier (CN 元,
+// JP ¥, US $, …). Falls back to the line's stored currency symbol when the country is unknown.
+const CCY_BY_COUNTRY: Record<string, string> = {
+  china: '元', japan: '¥', taiwan: 'NT$', 'hong kong': 'HK$', korea: '₩', 'south korea': '₩',
+  singapore: 'S$', thailand: '฿', malaysia: 'RM', indonesia: 'Rp', 'united states': '$', usa: '$', 'united kingdom': '£', uk: '£',
+};
+const symbolForCountry = (country: string | null | undefined): string => (country ? (CCY_BY_COUNTRY[country.trim().toLowerCase()] ?? '') : '');
 // Active = shipped date; Completed = received date.
 const dateLabel = (s: ShipmentHistoryRow): string =>
   s.completed ? `received ${fmtDate(s.received_date || s.ship_date)}` : `shipped ${fmtDate(s.ship_date)}`;
@@ -114,20 +123,16 @@ export default function PurchasingHistoryBoard({
   const [itNote, setItNote] = useState('');
   const [itSaving, setItSaving] = useState(false);
   const [itErr, setItErr] = useState<string | null>(null);
-  // PR262 — change a not-yet-received line's SKU from the item overlay (Active shipments only).
-  const [siChanging, setSiChanging] = useState(false);
-  const [siQuery, setSiQuery] = useState('');
-  const [siHits, setSiHits] = useState<SkuHit[]>([]);
-  const [siSearching, setSiSearching] = useState(false);
-  const [siBusy, setSiBusy] = useState(false);
-  const siSeq = useRef(0);
+  // PR267 — "Send back to Ship": detach some/all of a not-yet-received line from this shipment.
+  const [sbQty, setSbQty] = useState(1);
+  const [sbBusy, setSbBusy] = useState(false);
 
   // PR153: tell the shell when a detail is open (it hides the pipeline tabs, keeps the breadcrumb)
   useEffect(() => { onDetailOpenChange?.(!!openShip); }, [openShip, onDetailOpenChange]);
 
   const imgCodes = useMemo(
-    () => (openShip ? [...shipItems.map((i) => i.item_code).filter((c): c is string => !!c), ...siHits.map((h) => h.item_code)] : []),
-    [openShip, shipItems, siHits]
+    () => (openShip ? shipItems.map((i) => i.item_code).filter((c): c is string => !!c) : []),
+    [openShip, shipItems]
   );
   const imgMap = useSkuImages(imgCodes);
 
@@ -274,34 +279,26 @@ export default function PurchasingHistoryBoard({
     setItLink(it.product_link ?? '');
     setItNote(it.item_note ?? '');
     setItErr(null);
-    setSiChanging(false); setSiQuery(''); setSiHits([]); setSiSearching(false);
+    setSbQty(Math.max(1, it.qty)); // default: send the whole line back
   }
 
-  // PR262 — the item overlay's SKU search (debounced, 3-char floor, stale-response guard).
-  useEffect(() => {
-    if (!siChanging) return;
-    const q = siQuery.trim();
-    if (q.length < 3) { setSiHits([]); setSiSearching(false); return; }
-    const t = setTimeout(async () => {
-      const _id = ++siSeq.current;
-      setSiSearching(true);
-      let hits: SkuHit[] = [];
-      try { hits = await searchSkus(q); } catch { hits = []; }
-      if (siSeq.current !== _id) return;
-      setSiHits(hits); setSiSearching(false);
-    }, 220);
-    return () => clearTimeout(t);
-  }, [siQuery, siChanging]);
-
-  // PR262 — re-point the open line to the chosen SKU, then reflect it in the loaded list + header.
-  async function changeItemSku(hit: SkuHit) {
+  // PR267 — send `sbQty` of the open line back to Ship (unassigned from this shipment). A partial send
+  // splits the line server-side; reflect the result in the loaded list + header, then close the overlay.
+  async function sendBack() {
     if (!selItem || !openShip) return;
-    setSiBusy(true); setItErr(null);
-    const { error } = await setShipmentItemSku(selItem.po_id, hit.item_code);
-    if (error) { setItErr(error); setSiBusy(false); return; }
-    setShipItems((prev) => prev.map((r) => (r.po_id === selItem.po_id ? { ...r, item_code: hit.item_code, name: hit.name } : r)));
-    setSelItem((prev) => (prev ? { ...prev, item_code: hit.item_code, name: hit.name } : prev));
-    setSiBusy(false); setSiChanging(false); setSiQuery(''); setSiHits([]);
+    const qty = Math.max(1, Math.min(selItem.qty, Math.floor(sbQty) || 1));
+    setSbBusy(true); setItErr(null);
+    const { error } = await sendPoBackToShip(selItem.po_id, qty);
+    if (error) { setItErr(error); setSbBusy(false); return; }
+    // update the loaded lines: drop the line if fully sent back, else reduce its qty.
+    const nextItems = qty >= selItem.qty
+      ? shipItems.filter((r) => r.po_id !== selItem.po_id)
+      : shipItems.map((r) => (r.po_id === selItem.po_id ? { ...r, qty: r.qty - qty } : r));
+    setShipItems(nextItems);
+    // keep the header's item count in sync (the total recomputes from the loaded lines). Full reload authoritative.
+    const distinct = new Set(nextItems.map((i) => i.item_code ?? `raw:${i.po_id}`)).size;
+    setOpenShip((prev) => (prev ? { ...prev, item_count: distinct } : prev));
+    setSbBusy(false); setSelItem(null);
   }
 
   // PR255 — save the per-item detail (descriptive metadata only), reflected in the loaded list.
@@ -350,6 +347,9 @@ export default function PurchasingHistoryBoard({
     // header item-cost, recomputed live from the loaded lines (Σ cost×qty) so an item edit reflects at once.
     const loadedCost = shipItems.some((it) => it.item_cost != null) ? shipItems.reduce((n, it) => n + (it.item_cost ?? 0) * it.qty, 0) : null;
     const itemsCost = costText(shipItems.length ? loadedCost : openShip.total_cost, shipItems.find((it) => it.currency)?.currency ?? openShip.currency);
+    // PR267 — the item overlay's cost prefix follows the picked Supplier's country (else the line's stored currency).
+    const selSup = selItem ? suppliers.find((s) => String(s.supplier_id) === itSupplier) : null;
+    const costSym = selItem ? (symbolForCountry(selSup?.country) || ccySymbol(selItem.currency)) : '';
     return (
       <div className="purch-history">
         <button className="btn-link bv-back" onClick={() => { setEditingShip(false); setSelItem(null); setOpenShip(null); }}>← back</button>
@@ -498,41 +498,6 @@ export default function PurchasingHistoryBoard({
               </div>
               <div className="sc-modal-body">
                 {itErr && <div className="validation err" style={{ marginBottom: 10 }}>{itErr}</div>}
-                {/* PR266 — SKU change (Active shipments only). The current SKU is already in the header,
-                    so this is just the Change control (no repeated code/name); locked once received. */}
-                {!openShip.completed && (
-                  <div className="po-field">
-                    <label>SKU</label>
-                    {!siChanging ? (
-                      <button className="btn-secondary btn-ico" onClick={() => { setSiChanging(true); setSiQuery(''); setSiHits([]); }} disabled={itSaving || siBusy}><PencilIcon />Change SKU</button>
-                    ) : (
-                      <>
-                        <div className="po-inline2">
-                          <SearchInput value={siQuery} onChange={setSiQuery} placeholder="search SKU by code / name" ariaLabel="Search a SKU" />
-                          <button className="btn-link" onClick={() => { setSiChanging(false); setSiQuery(''); setSiHits([]); }} disabled={siBusy}>cancel</button>
-                        </div>
-                        {siSearching && <div className="hint" style={{ marginTop: 6 }}>Searching…</div>}
-                        {!siSearching && siQuery.trim().length >= 3 && siHits.length === 0 && <div className="hint" style={{ marginTop: 6 }}>No matching SKUs.</div>}
-                        {siHits.length > 0 && (
-                          <ul className="result-list" style={{ marginTop: 6 }}>
-                            {siHits.map((h) => (
-                              <li key={h.item_code}>
-                                <button className="result-item ff-card" onClick={() => changeItemSku(h)} disabled={siBusy}>
-                                  <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
-                                  <div className="ff-card-info">
-                                    <div className="ff-card-code">{h.item_code}</div>
-                                    {isRealName(h.name, h.item_code) && <div className="ff-card-name">{h.name}</div>}
-                                    <div className="ff-card-status">{siBusy ? 'working…' : 'tap to use this SKU'}</div>
-                                  </div>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
                 <div className="po-field">
                   <label>Supplier</label>
                   <select value={itSupplier} onChange={(e) => setItSupplier(e.target.value)} disabled={itSaving}>
@@ -544,7 +509,7 @@ export default function PurchasingHistoryBoard({
                   <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
                   {/* PR266 — currency symbol in FRONT of the input (like ¥100 / $10); "each" trails it. */}
                   <div className="po-cost-row">
-                    {selItem.currency && <span className="po-cost-ccy">{ccySymbol(selItem.currency)}</span>}
+                    {costSym && <span className="po-cost-ccy">{costSym}</span>}
                     <input type="number" inputMode="decimal" min={0} step="any" placeholder="0" value={itCost} onChange={(e) => setItCost(e.target.value)} disabled={itSaving} />
                     <span className="po-cost-ccy">each</span>
                   </div>
@@ -569,10 +534,31 @@ export default function PurchasingHistoryBoard({
                   <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
                   <textarea value={itNote} onChange={(e) => setItNote(e.target.value)} disabled={itSaving} rows={2} />
                 </div>
+
+                {/* PR267 — Send back to Ship (Active shipments only): unassign some/all of this line
+                    from the shipment so it returns to the Ship queue to be re-grouped / investigated. */}
+                {!openShip.completed && (
+                  <div className="po-field sb-field">
+                    <label>Send back to Ship</label>
+                    <div className="sb-row">
+                      {selItem.qty > 1 && (
+                        <span className="qty-step">
+                          <button type="button" aria-label="one fewer" onClick={() => setSbQty((q) => Math.max(1, q - 1))} disabled={sbBusy || sbQty <= 1}>−</button>
+                          <input type="number" inputMode="numeric" min={1} max={selItem.qty} value={sbQty} onChange={(e) => setSbQty(Math.max(1, Math.min(selItem.qty, parseInt(e.target.value, 10) || 1)))} />
+                          <button type="button" aria-label="one more" onClick={() => setSbQty((q) => Math.min(selItem.qty, q + 1))} disabled={sbBusy || sbQty >= selItem.qty}>+</button>
+                        </span>
+                      )}
+                      <button className="btn-brown btn-ico" onClick={sendBack} disabled={sbBusy || itSaving}><BackIcon />{sbBusy ? 'Sending…' : 'Send back to Ship'}</button>
+                    </div>
+                    <div className="hint" style={{ marginTop: 6 }}>
+                      Unassigns {selItem.qty > 1 ? `${sbQty} of ×${selItem.qty}` : 'this line'} from {openShip.ship_id} back to Ship — to re-group or investigate a short.
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="sc-modal-foot">
-                <button className="btn-secondary" onClick={() => setSelItem(null)} disabled={itSaving}>Cancel</button>
-                <button className="btn-primary" onClick={saveItem} disabled={itSaving}>{itSaving ? 'Saving…' : 'Save'}</button>
+                <button className="btn-secondary" onClick={() => setSelItem(null)} disabled={itSaving || sbBusy}>Cancel</button>
+                <button className="btn-primary" onClick={saveItem} disabled={itSaving || sbBusy}>{itSaving ? 'Saving…' : 'Save'}</button>
               </div>
             </div>
           </div>
@@ -584,7 +570,7 @@ export default function PurchasingHistoryBoard({
             <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Delete shipment" onClick={(e) => e.stopPropagation()}>
               <div className="sc-modal-body">
                 <div className="confirm-q">Delete shipment {openShip.ship_id}?</div>
-                <div className="hint" style={{ marginBottom: 12 }}>Its {openShip.item_count} {openShip.item_count === 1 ? 'item' : 'items'} go back to To forwarder to be re-grouped. This can’t be undone.</div>
+                <div className="hint" style={{ marginBottom: 12 }}>Its {openShip.item_count} {openShip.item_count === 1 ? 'item' : 'items'} go back to Forward to be re-grouped. This can’t be undone.</div>
                 {delErr && <div className="validation err" style={{ marginBottom: 10 }}>{delErr}</div>}
                 <div className="confirm-actions">
                   <button className="btn-secondary" onClick={() => setConfirmDelShip(false)} disabled={deletingShip}>No</button>

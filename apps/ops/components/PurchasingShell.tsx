@@ -16,7 +16,8 @@ import type { Forwarder, OpenPORow, POOpenStatus, Supplier } from '@jigzle/db/ty
 import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ShipmentHistoryRow, SoldOutRow } from '@/app/purchasing/types';
 
 type PurchasingTab = 'tobuy' | 'forwarder' | 'ship' | 'history';
-const TAB_LABELS: Record<PurchasingTab, string> = { tobuy: 'To buy', forwarder: 'To forwarder', ship: 'To ship', history: 'History' };
+// PR267 — tab labels renamed Buy / Forward / Ship (internal keys unchanged, so URLs/?tab= are stable).
+const TAB_LABELS: Record<PurchasingTab, string> = { tobuy: 'Buy', forwarder: 'Forward', ship: 'Ship', history: 'History' };
 
 const FORWARDER_STATUSES: POOpenStatus[] = ['Processing', 'On the way'];
 
@@ -69,13 +70,13 @@ export default function PurchasingShell({
       <div className="orders-bar">
         <nav className="orders-tabs" role="tablist" aria-label="Purchasing">
           <button role="tab" aria-selected={tab === 'tobuy'} className={`orders-tab ${tab === 'tobuy' ? 'active' : ''}`} onClick={() => switchTab('tobuy')}>
-            To buy<span className="orders-tab-count">{planned.length + preorders.length}</span>
+            Buy<span className="orders-tab-count">{planned.length + preorders.length}</span>
           </button>
           <button role="tab" aria-selected={tab === 'forwarder'} className={`orders-tab ${tab === 'forwarder' ? 'active' : ''}`} onClick={() => switchTab('forwarder')}>
-            To forwarder<span className="orders-tab-count">{forwarderCount}</span>
+            Forward<span className="orders-tab-count">{forwarderCount}</span>
           </button>
           <button role="tab" aria-selected={tab === 'ship'} className={`orders-tab ${tab === 'ship' ? 'active' : ''}`} onClick={() => switchTab('ship')}>
-            To ship<span className="orders-tab-count">{shipCount}</span>
+            Ship<span className="orders-tab-count">{shipCount}</span>
           </button>
           <button role="tab" aria-selected={tab === 'history'} className={`orders-tab ${tab === 'history' ? 'active' : ''}`} onClick={() => switchTab('history')}>
             History
