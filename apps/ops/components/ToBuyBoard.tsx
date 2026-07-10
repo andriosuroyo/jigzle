@@ -411,7 +411,7 @@ export default function ToBuyBoard({
       {error && <div className="validation err">{error}</div>}
 
       {/* three smaller tabs (Sales-Pending style) with live counts */}
-      <div className="fq-filters" role="tablist" aria-label="To buy">
+      <div className="fq-filters" role="tablist" aria-label="Buy">
         {TABS.map((t) => (
           <button
             key={t.key}

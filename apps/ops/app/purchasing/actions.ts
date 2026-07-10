@@ -354,25 +354,15 @@ export async function updateShipmentPO(poId: number, patch: {
   return { error: error ? `Couldn't update item: ${error.message}` : null };
 }
 
-// ── PR262: re-point ONE shipment line to a different SKU from Purchasing → History (Active shipments).
-// This is where SKU corrections live (the Inbound "Edit items" batch tool was removed — Purchasing owns
-// "what was ordered"). Guarded to not-yet-received lines; the target SKU must exist in the catalogue.
-// Resolves a placeholder line too (sets item_code; item_code_raw stays as provenance). Error as data. ──
-export async function setShipmentItemSku(poId: number, itemCode: string): Promise<{ error: string | null }> {
-  const code = itemCode.trim();
-  if (!poId || !code) return { error: 'A line and a target item code are required.' };
+// ── PR267: "Send back to Ship" — detach some/all of a not-yet-received shipment line from its
+// shipment back to the Ship queue (ship_id NULL, status 'With Forwarder'). A partial qty SPLITS the
+// line (new unassigned row for the sent-back qty; original keeps the remainder). Wraps the atomic
+// send_po_back_to_ship RPC (0075). Error returned as data (PR145). ──
+export async function sendPoBackToShip(poId: number, qty: number): Promise<{ error: string | null }> {
+  if (!poId || !Number.isFinite(qty) || qty < 1) return { error: 'A line and a qty ≥ 1 are required.' };
   const supabase = createSupabaseServerClient();
-  const { data: cat } = await supabase.from('catalogue').select('item_code').eq('item_code', code).maybeSingle();
-  if (!cat) return { error: `${code} is not in the catalogue.` };
-  const { data, error } = await supabase
-    .from('purchase_orders')
-    .update({ item_code: code })
-    .eq('po_id', poId)
-    .or('status.is.null,status.neq.Received')
-    .select('po_id');
-  if (error) return { error: `Couldn't change the SKU: ${error.message}` };
-  if (!data || data.length === 0) return { error: 'This line is already received — its SKU is locked.' };
-  return { error: null };
+  const { error } = await supabase.rpc('send_po_back_to_ship', { p_po_id: poId, p_qty: Math.floor(qty) });
+  return { error: error ? error.message : null };
 }
 
 // ── PR254: delete an ACTIVE shipment (Purchasing History detail). Ungroups it — every grouped PO goes
