@@ -46,7 +46,7 @@ function CardStats({ navKey, counts }: { navKey: string; counts: HubCounts | nul
     const o = counts?.outbound;
     return (
       <div className="hub-stats">
-        <Stat tone="green" label="Ready to ship" value={o?.readyToShip ?? 0} pending={pending} />
+        <Stat tone="green" label="Dispatch" value={o?.readyToShip ?? 0} pending={pending} />
       </div>
     );
   }
