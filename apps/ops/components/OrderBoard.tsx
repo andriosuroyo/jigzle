@@ -276,6 +276,12 @@ export default function OrderBoard({
     // shipped from the forwarder and lives under its shipment in History → Active, so it drops out of the
     // To-ship work queue (and its count badge) instead of lingering as an already-shipped row.
     if (bucket === 'ship') rows = rows.filter((p) => !p.ship_id);
+    // PR305 — newest first by the date shown on the card (status_since), po_id as a stable tiebreak.
+    rows = [...rows].sort((a, b) => {
+      const da = a.status_since ?? '', db = b.status_since ?? '';
+      if (da !== db) return da < db ? 1 : -1;
+      return b.po_id - a.po_id;
+    });
     return rows;
   }, [queue, bucket]);
   useEffect(() => { onCountChange?.(shown.length); }, [shown, onCountChange]);

@@ -87,7 +87,7 @@ export default function PurchasingShell({
           the old `{tab === x && <Board/>}` a tab switch unmounted the board and re-mounted it from these
           stale page-load props, so a just-deleted item re-appeared until a full reload. Staying mounted
           preserves each board's own post-delete state across tab switches. */}
-      <div className="orders-panels">
+      <div className="orders-panels purch-panels">
         <div hidden={tab !== 'tobuy'}>
           <ToBuyBoard planned={planned} preorders={preorders} suppliers={suppliers} />
         </div>
