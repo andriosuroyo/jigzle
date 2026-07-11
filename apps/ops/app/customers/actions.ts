@@ -590,6 +590,7 @@ export async function getDataHealth(): Promise<DataHealth> {
     addressGroups: addressGroups.slice(0, 200),
     emptyStrayCount: emptyStrays.length,
     emptyStrays: emptyStrays.slice(0, 200),
+    emptyStrayIds: emptyStrays.map((s) => s.id),
     noAddressCount: noAddress.length,
     noAddress: noAddress.slice(0, 200),
     blankNameCount: blankNames.length,
@@ -650,8 +651,10 @@ export async function deleteEmptyStrays(ids: number[]): Promise<{ deleted: numbe
     for (const f of found) referenced.add(f.customer_id);
   }
   const deletable = ids.filter((id) => !referenced.has(id));
-  if (deletable.length) {
-    const { error } = await supabase.from('customers').delete().in('customer_id', deletable);
+  // PR323 — chunk the delete so "Delete all" can purge an arbitrarily large empty set in one pass
+  // without overflowing the PostgREST `in(...)` URL.
+  for (let i = 0; i < deletable.length; i += 200) {
+    const { error } = await supabase.from('customers').delete().in('customer_id', deletable.slice(i, i + 200));
     if (error) throw new Error(`deleteEmptyStrays: ${error.message}`);
   }
   return { deleted: deletable.length, skipped: ids.length - deletable.length };
