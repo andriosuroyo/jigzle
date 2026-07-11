@@ -1421,8 +1421,8 @@ export default function OrderBoard({
                   <textarea className="batch-field" value={batchNote} onChange={(e) => setBatchNote(e.target.value)} />
                 </div>
 
-                {/* item list (PR256) — plain flush-left rows (no card box): 54px image + two lines,
-                    SKU ×qty / unit cost (no spinner) · name / item link */}
+                {/* PR291 — item list as separate cards: image + two lines. Line 1: SKU + name (left) /
+                    qty (right). Line 2: unit cost (no spinner) + item link, side-by-side full width. */}
                 <div className="fd-section-head batch-items-head">Item list, costs &amp; links</div>
                 <ul className="batch-items">
                   {picked.map((po) => {
@@ -1431,17 +1431,20 @@ export default function OrderBoard({
                       <li key={po.po_id} className="batch-item">
                         <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.smd} />
                         <div className="batch-item-body">
-                          <div className="batch-item-row">
-                            <span className="batch-item-id"><span className="ff-code">{code}</span><span className="po-card-qty">×{po.qty}</span></span>
+                          <div className="batch-item-row batch-item-head">
+                            <span className="batch-item-id">
+                              <span className="ff-code">{code}</span>
+                              {isRealName(po.name, code) && <span className="ff-name batch-item-name">{po.name}</span>}
+                            </span>
+                            <span className="po-card-qty">×{po.qty}</span>
+                          </div>
+                          <div className="batch-item-row batch-item-fields">
                             <input
                               className="batch-field batch-cost"
                               type="number" inputMode="decimal" min={0} step="any" placeholder="unit cost"
                               value={batchPer[po.po_id]?.cost ?? ''}
                               onChange={(e) => setBatchPer((p) => ({ ...p, [po.po_id]: { cost: e.target.value, link: p[po.po_id]?.link ?? '' } }))}
                             />
-                          </div>
-                          <div className="batch-item-row">
-                            <span className="ff-name batch-item-name">{isRealName(po.name, code) ? po.name : ''}</span>
                             <input
                               className="batch-field batch-link"
                               type="text" placeholder="item link"
@@ -1816,37 +1819,6 @@ export default function OrderBoard({
               </>
             ) : (
             <>
-            <div className="batch-group">
-              <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
-              <ul className="po-cards po-cards-compact">
-                {selectedPOs.map((po) => (
-                  <li key={po.po_id}>
-                    <div className="po-card">
-                      <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                      <div className="po-card-main">
-                        <div className="po-card-l1"><span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span></div>
-                        <div className="po-card-l2">
-                          {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
-                          {po.qty > 1 ? (
-                            <span className="grp-qty">
-                              <span className="qty-step">
-                                <button type="button" aria-label="one fewer" onClick={() => setSend(po, sendQty(po) - 1)} disabled={sendQty(po) <= 1}>−</button>
-                                <input type="number" inputMode="numeric" min={1} max={po.qty} value={sendQty(po)} onChange={(e) => setSend(po, Number(e.target.value))} />
-                                <button type="button" aria-label="one more" onClick={() => setSend(po, sendQty(po) + 1)} disabled={sendQty(po) >= po.qty}>+</button>
-                              </span>
-                              <span className="grp-qty-of">/ {po.qty}</span>
-                            </span>
-                          ) : (
-                            <span className="po-card-qty">×1</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
             {/* PR285 — Shipment ID is now the single primary field: type it (autocomplete surfaces the
                 last-used, e.g. SUB 192, so you can bump to SUB 193). The shipment CODE (the leading
                 letters) is derived from what you type — no separate picker. */}
@@ -1881,6 +1853,37 @@ export default function OrderBoard({
                 </select>
                 <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
               </div>
+            </div>
+
+            {/* PR292 — the selected-item list sits LAST (like Confirm step 2). Qty is a right-aligned,
+                vertically-centred control; a single-qty item reads "1 / 1" for consistency with N/M. */}
+            <div className="batch-group">
+              <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
+              <ul className="po-cards po-cards-compact">
+                {selectedPOs.map((po) => (
+                  <li key={po.po_id}>
+                    <div className="po-card grp-card">
+                      <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                      <div className="po-card-main">
+                        <div className="po-card-l1"><span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span></div>
+                        {isRealName(po.name, po.item_code ?? po.item_code_raw) && <div className="po-card-l2"><span className="ff-name">{po.name}</span></div>}
+                      </div>
+                      {po.qty > 1 ? (
+                        <span className="grp-qty">
+                          <span className="qty-step">
+                            <button type="button" aria-label="one fewer" onClick={() => setSend(po, sendQty(po) - 1)} disabled={sendQty(po) <= 1}>−</button>
+                            <input type="number" inputMode="numeric" min={1} max={po.qty} value={sendQty(po)} onChange={(e) => setSend(po, Number(e.target.value))} />
+                            <button type="button" aria-label="one more" onClick={() => setSend(po, sendQty(po) + 1)} disabled={sendQty(po) >= po.qty}>+</button>
+                          </span>
+                          <span className="grp-qty-of">/ {po.qty}</span>
+                        </span>
+                      ) : (
+                        <span className="grp-qty grp-qty-single"><span className="grp-qty-one">1</span><span className="grp-qty-of">/ 1</span></span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
             </>
             )}
