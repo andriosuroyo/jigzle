@@ -526,7 +526,7 @@ export default function PurchasingHistoryBoard({
               <div className="sc-modal-body">
                 {itErr && <div className="validation err" style={{ marginBottom: 10 }}>{itErr}</div>}
                 <div className="po-field">
-                  <label>Supplier</label>
+                  <label>Source</label>
                   <select value={itSupplier} onChange={(e) => setItSupplier(e.target.value)} disabled={itSaving}>
                     <option value="">— none —</option>
                     {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>)}

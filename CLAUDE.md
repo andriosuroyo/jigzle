@@ -24,9 +24,20 @@ The two middle nodes are the LOCKED names (chosen 2026-07; don't reintroduce "Fo
 | Consolidator → Shipper | **consolidator tracking** | shipment-level `shipments.consolidator_tracking` |
 | Shipper → Jigzle | **shipment tracking** | shipment-level `shipments.tracking` (courier = `shipments.courier`) |
 
-The ship_id is grouped at the Consolidator level (`SUB 192`); `forwarders.prefix` is that node's prefix.
-NB: the legacy `forwarders` table / `tracking_to_forwarder` column keep their old names in the DB — the
-domain names above are the source of truth for UI copy.
+**Shipment codes vs the "Consolidator" step (PR281 — important, don't re-confuse).** The ship_id
+prefix (`forwarders.prefix`: SUB, PRI, IMA, MTE, LGB, CBL …) is NOT the same as "a consolidator". It's a
+**routing lane / shipment code** — a named channel that tells the operator *how a batch is handled*. A code
+can happen to be a supplier (PRI/Princess, IMA/Imaginatorium, LGB/LetsGoBuy), a consolidator (SUB/Superbuy),
+or a forwarder (MTE) — so the list is deliberately its own axis, **separate from Suppliers** (who you bought
+from); the same real-world name legitimately appears on both. In the UI this list is surfaced as
+**"Shipment codes"** (Settings → Purchasing) and the Create-shipment picker is labelled **"Shipment code"** —
+do NOT call it "Consolidator" or "Forwarder" as an entity/list. The words **Consolidator** and **Shipper**
+survive ONLY as the names of the physical *legs / tracking numbers* above (the "consolidator tracking" leg is
+user-coined and stays). The domestic courier list is just **"Local couriers"** (drop "& consolidator").
+
+DB names are unchanged (legacy): the table is still `forwarders`, its column `forwarder_prefix`, and the
+per-PO local number `tracking_to_forwarder`; code identifiers keep `consolidator`/`forwarder` too. Only the
+UI copy changed. `forwarders.prefix` is the shipment code; a ship_id like `SUB 192` is one instance of it.
 
 ## Development workflow — pool changes, ship on command
 

@@ -17,7 +17,7 @@ import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ShipmentHistoryRow, 
 
 type PurchasingTab = 'tobuy' | 'forwarder' | 'ship' | 'history';
 // PR267 — tab labels renamed Buy / Forward / Ship (internal keys unchanged, so URLs/?tab= are stable).
-const TAB_LABELS: Record<PurchasingTab, string> = { tobuy: 'Buy', forwarder: 'Forward', ship: 'Ship', history: 'History' };
+const TAB_LABELS: Record<PurchasingTab, string> = { tobuy: 'Buy', forwarder: 'Confirm', ship: 'Ship', history: 'History' };
 
 const FORWARDER_STATUSES: POOpenStatus[] = ['Processing', 'On the way'];
 
@@ -73,7 +73,7 @@ export default function PurchasingShell({
             Buy<span className="orders-tab-count">{planned.length + preorders.length}</span>
           </button>
           <button role="tab" aria-selected={tab === 'forwarder'} className={`orders-tab ${tab === 'forwarder' ? 'active' : ''}`} onClick={() => switchTab('forwarder')}>
-            Forward<span className="orders-tab-count">{forwarderCount}</span>
+            Confirm<span className="orders-tab-count">{forwarderCount}</span>
           </button>
           <button role="tab" aria-selected={tab === 'ship'} className={`orders-tab ${tab === 'ship' ? 'active' : ''}`} onClick={() => switchTab('ship')}>
             Ship<span className="orders-tab-count">{shipCount}</span>
@@ -91,7 +91,7 @@ export default function PurchasingShell({
           preserves each board's own post-delete state across tab switches. */}
       <div className="orders-panels">
         <div hidden={tab !== 'tobuy'}>
-          <ToBuyBoard planned={planned} preorders={preorders} soldOut={soldOut} />
+          <ToBuyBoard planned={planned} preorders={preorders} soldOut={soldOut} suppliers={suppliers} />
         </div>
         <div hidden={tab !== 'forwarder'}>
           <OrderBoard

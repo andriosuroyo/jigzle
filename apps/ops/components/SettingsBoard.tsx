@@ -120,15 +120,15 @@ const SECTIONS: SectionDef[] = [
   },
   {
     kind: 'local_courier',
-    title: 'Local & consolidator couriers',
-    sub: 'Domestic couriers for the local leg (Purchasing → Forward) AND the consolidator leg (Purchasing → Ship / History). One shared list. Separate from the outbound Couriers list.',
+    title: 'Local couriers',
+    sub: 'Domestic couriers for the local legs of the buying chain (supplier → hub, and onward) — suggested in Purchasing → Forward / Ship / History. Separate from the outbound Couriers list.',
     hasFlag: true,
     colHeader: true,
     addIcon: TruckIcon,
     addLabel: 'Add courier',
     cols: [
       { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
-      { key: 'label', label: 'Local & consolidator courier name', type: 'text', grow: true },
+      { key: 'label', label: 'Local courier name', type: 'text', grow: true },
     ],
     sortKey: 'label',
     blank: { label: '' },
@@ -186,7 +186,7 @@ const CATEGORIES: Category[] = [
   { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
   { key: 'shipping', title: 'Shipping', sub: 'Couriers, box presets and export couriers used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }, { custom: 'export_courier' }] },
   { key: 'inbound', title: 'Inbound', sub: 'Labels for the receiving flow and warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'inbound_labels' }, { kind: 'staff' }] },
-  { key: 'purchasing', title: 'Purchasing', sub: 'Suppliers, consolidators, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
+  { key: 'purchasing', title: 'Purchasing', sub: 'Sources, shipment codes, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
   { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists (Product / Sub / Piece type) for the Catalog item editor.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }] },
 ];
@@ -263,8 +263,8 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
   }
   function tabLabel(t: CatTab): string {
     if ('kind' in t) return SECTION_BY_KIND[t.kind].title;
-    if (t.custom === 'forwarders') return 'Consolidators';
-    if (t.custom === 'suppliers') return 'Suppliers';
+    if (t.custom === 'forwarders') return 'Shipment codes';
+    if (t.custom === 'suppliers') return 'Sources';
     if (t.custom === 'declaration_user') return 'Declaration users';
     return 'Export couriers';
   }

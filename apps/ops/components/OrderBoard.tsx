@@ -5,12 +5,14 @@ import AppHeader from '@/components/AppHeader';
 import { customerLabel, fmtNiceDate } from '@jigzle/lib';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
+  addForwarder,
   addSupplier,
   createPO,
   deletePO,
-  getLastShipId,
   getOpenPOs,
   getOpenShipments,
+  getRecentShipIds,
+  getShipmentItems,
   groupIntoShipment,
   searchCustomers,
   searchSkus,
@@ -19,7 +21,7 @@ import {
   setShipmentNote,
   updatePO,
 } from '@/app/purchasing/actions';
-import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
+import type { CustomerHit, OpenShipmentRow, ShipmentItemRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { StoreIcon, TruckIcon, PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
@@ -194,6 +196,8 @@ export default function OrderBoard({
   const [editPo, setEditPo] = useState<OpenPORow | null>(null);
   const [shipNote, setShipNote] = useState(''); // the edited PO's Ship-ID note (To-ship), seeded on open
   const [attachShipId, setAttachShipId] = useState(''); // PR152: To-ship attach-to-open-shipment pick
+  // PR286 — picking a shipment opens a preview/confirm overlay (its details + items) before attaching.
+  const [attachPreview, setAttachPreview] = useState<{ ship: OpenShipmentRow; items: ShipmentItemRow[]; loading: boolean } | null>(null);
   const [shipEditing, setShipEditing] = useState(false); // PR256: To-ship detail edit mode (fields unlocked)
   const [copiedKey, setCopiedKey] = useState<string | null>(null); // PR256: which easy-copy chip just fired
   const [form, setForm] = useState<PoForm>(emptyForm());
@@ -241,17 +245,12 @@ export default function OrderBoard({
   const [grpConsolCourier, setGrpConsolCourier] = useState('');   // PR274: consolidator courier (optional)
   const [grpConsolTracking, setGrpConsolTracking] = useState(''); // PR272: consolidator tracking (optional)
   const [grpShipId, setGrpShipId] = useState('');
+  const [grpStep, setGrpStep] = useState<'pick' | 'details'>('pick'); // PR287: two-step Create shipment
+  const [shipIdOpts, setShipIdOpts] = useState<string[]>([]); // PR285: recent ship_ids for autocomplete
   const [grpOrigin, setGrpOrigin] = useState(''); // kept internally (from an existing shipment) — no UI field
   const [grpDate, setGrpDate] = useState(todayStr());
   const [grpQty, setGrpQty] = useState<Record<number, number>>({}); // per-PO ship qty override (partial split)
 
-  // forwarders for the group picker, grouped by flag/country first, then acronym (prefix) A–Z
-  const forwardersSorted = useMemo(
-    () => [...forwarders].sort((a, b) =>
-      (a.country || '￿').localeCompare(b.country || '￿') || a.prefix.localeCompare(b.prefix)
-    ),
-    [forwarders]
-  );
 
   // PR254 — open shipments offered as tap-to-pick chips in the group overlay's Ship ID field. Once a
   // forwarder is chosen, scope to that forwarder's open shipments (else show all) so "add to an existing
@@ -301,7 +300,7 @@ export default function OrderBoard({
   const [shipCountry, setShipCountry] = useState<string>(ALL_COUNTRIES);
   // the country tabs present in the ship bucket, with counts (+ an "Other" bucket for unattributed rows)
   const shipCountryTabs = useMemo(() => {
-    if (bucket !== 'ship') return [];
+    if (bucket !== 'ship' && bucket !== 'forwarder') return []; // PR284: Confirm groups by Source country too
     const counts = new Map<string, number>();
     let other = 0;
     for (const po of shown) {
@@ -319,11 +318,12 @@ export default function OrderBoard({
   // (name / SKU code / supplier / ship id); other buckets pass through.
   const shownFiltered = useMemo(() => {
     let rows = shown;
-    if (bucket === 'ship' && shipCountry !== ALL_COUNTRIES) {
+    const grouped = bucket === 'ship' || bucket === 'forwarder'; // PR284
+    if (grouped && shipCountry !== ALL_COUNTRIES) {
       rows = shipCountry === OTHER_COUNTRY ? rows.filter((p) => !countryOf(p)) : rows.filter((p) => countryOf(p) === shipCountry);
     }
     const q = search.trim().toLowerCase();
-    if (bucket === 'ship' && q) {
+    if (grouped && q) {
       rows = rows.filter((p) =>
         (p.name || '').toLowerCase().includes(q) ||
         (p.item_code || '').toLowerCase().includes(q) ||
@@ -448,7 +448,7 @@ export default function OrderBoard({
     resetMessages();
     // PR256 — a supplier is the one thing To-forwarder must record before an item can move on.
     if (!form.supplier_id) {
-      setError('Pick a supplier before Ready to Ship.');
+      setError('Pick a source before Ready to Ship.');
       return;
     }
     setBusy(true);
@@ -578,8 +578,10 @@ export default function OrderBoard({
 
   // open the group overlay for the current selection (seeds fresh forwarder / ship id / date / qty)
   function openGroup() {
-    if (selectedPoIds.size === 0) return;
+    // PR287 — two-step: open on the item picker (list stays checkbox-free), then the shipment details.
     resetMessages();
+    setGrpStep('pick');
+    setSelectedPoIds(new Set());
     setGrpForwarder('');
     setGrpConsolCourier('');
     setGrpConsolTracking('');
@@ -588,21 +590,8 @@ export default function OrderBoard({
     setGrpDate(todayStr());
     setGrpQty({});
     setMode('group');
-  }
-
-  // pick a forwarder in the group panel → load its LAST ship id into the Ship id field (editable free
-  // text: keep it to add to that shipment, or bump the number for a new one). Forwarder's country seeds
-  // the (hidden) origin.
-  async function pickForwarder(prefix: string) {
-    setGrpForwarder(prefix);
-    const fwd = forwarders.find((f) => f.prefix === prefix);
-    if (fwd?.country) setGrpOrigin(fwd.country);
-    if (!prefix) { setGrpShipId(''); return; }
-    try {
-      setGrpShipId(await getLastShipId(prefix));
-    } catch {
-      /* leave the field for manual entry on failure */
-    }
+    // PR285 — load recent ship_ids (open + History) so the Shipment ID field can autocomplete.
+    getRecentShipIds().then(setShipIdOpts).catch(() => {});
   }
 
   function clearSelection() {
@@ -684,7 +673,7 @@ export default function OrderBoard({
     if (!supForm) return;
     const name = supForm.name.trim();
     if (!name) {
-      setError('Supplier name is required.');
+      setError('Source name is required.');
       return;
     }
     setBusy(true);
@@ -800,6 +789,19 @@ export default function OrderBoard({
     }
   }
 
+  // ── PR286: picking a shipment in the dropdown opens a preview/confirm overlay (its details + items)
+  // before attaching — no separate "Attach" button. ──
+  function pickShipmentToAttach(shipId: string) {
+    setAttachShipId(shipId);
+    if (!shipId) { setAttachPreview(null); return; }
+    const ship = shipments.find((s) => s.ship_id === shipId);
+    if (!ship) return;
+    setAttachPreview({ ship, items: [], loading: true });
+    getShipmentItems(shipId)
+      .then((items) => setAttachPreview((p) => (p && p.ship.ship_id === shipId ? { ...p, items, loading: false } : p)))
+      .catch(() => setAttachPreview((p) => (p ? { ...p, loading: false } : p)));
+  }
+
   // ── PR152: attach a With-Forwarder PO to an already-open shipment (To-ship's one editable field) ──
   async function attachShip() {
     if (!editPo || !attachShipId) return;
@@ -812,6 +814,7 @@ export default function OrderBoard({
       setEditPo((prev) => (prev ? { ...prev, ship_id: attachShipId } : prev));
       setShipNote(shipmentById.get(attachShipId)?.note ?? '');
       setAttachShipId('');
+      setAttachPreview(null);
       await refreshQueue();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to attach.');
@@ -838,21 +841,25 @@ export default function OrderBoard({
       setError('Select at least one PO.');
       return;
     }
-    if (!grpForwarder.trim()) {
-      setError('Pick a consolidator.');
-      return;
-    }
-    if (!grpShipId.trim()) {
-      setError('A ship id is required (existing or new, e.g. "SUB 192").');
+    const shipId = grpShipId.trim();
+    // PR285 — the shipment CODE is the leading letters of the Shipment ID ("SUB 193" → "SUB").
+    const prefix = (shipId.match(/^[A-Za-z]+/)?.[0] ?? '').toUpperCase();
+    if (!prefix) {
+      setError('Enter a Shipment ID that starts with a code, e.g. "SUB 193".');
       return;
     }
     setBusy(true);
     try {
+      // PR285 — ensure the code exists (FK on shipments.forwarder_prefix). addForwarder is idempotent;
+      // a brand-new code lands in Settings → Shipment codes with no flag until one is added there.
+      const known = forwarders.find((f) => f.prefix.toUpperCase() === prefix);
+      if (!known) { try { await addForwarder({ prefix }); } catch { /* non-fatal: may already exist */ } }
+      const origin = (grpOrigin.trim() || known?.country || '').trim() || null;
       const { affected } = await groupIntoShipment({
-        ship_id: grpShipId.trim(),
+        ship_id: shipId,
         items: selectedPOs.map((po) => ({ po_id: po.po_id, qty: sendQty(po) })),
-        forwarder_prefix: grpForwarder.trim(),
-        origin_country: grpOrigin.trim() || null,
+        forwarder_prefix: prefix,
+        origin_country: origin,
         ship_date: grpDate || null,
       });
       // PR272/PR274 — best-effort: stamp the consolidator courier + tracking on the shipment (degrades
@@ -880,67 +887,73 @@ export default function OrderBoard({
   // PR151 — To forwarder is a BODYVIEW (the Purchasing-History pattern): the body shows EITHER the
   // full-width compact card list OR the tapped PO's detail (image header + auto-save form) with a
   // ← back button. The other buckets keep the two-pane layout below.
+  const closeForwardDetail = () => { setMode(null); setEditPo(null); setConfirmDel(false); };
   const forwarderBody = (
     <div className="bodyview">
       {error && <div className="validation err">{error}</div>}
       {success && <div className="validation ok">{success}</div>}
 
-      {!(mode === 'edit' && editPo) ? (
-        <>
-          {/* PR263 — Batch confirm is an entry button at the top of the list (like To-buy's "add item"). */}
-          <button className="btn-brown btn-ico po-add-full po-add-toplist" onClick={openBatch}><TruckIcon />Batch confirm</button>
-          {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
-          <ul className="po-cards po-cards-compact">
-            {shownFiltered.map((po) => {
-              const code = po.item_code ?? po.item_code_raw ?? '—';
-              return (
-              <li key={po.po_id}>
-                {/* PR254 — the To-buy card standard: SKU (+ name) vertically centred on the left, qty
-                    ABOVE the date on the right. Keeps a nameless SKU centred (no drop under the code). */}
-                <button className="po-card po-card-btn po-card-mini" onClick={() => openEdit(po)}>
-                  <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                  <div className="po-card-main">
-                    <span className="ff-code">{code}</span>
-                    {isRealName(po.name, code) && <span className="ff-name po-card-name">{po.name}</span>}
-                  </div>
-                  <div className="po-card-side">
-                    <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
-                    <div className="po-card-meta">
-                      <span className="po-card-date">{fmtNiceDate(po.status_since)}</span>
-                    </div>
-                  </div>
-                  <span className="po-chev" aria-hidden>›</span>
-                </button>
-              </li>
-              );
-            })}
-          </ul>
-        </>
-      ) : (
-        <>
-          <button className="btn-link bv-back" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }}>← back</button>
-          <div className="bv-detail">
-            {/* body-header: md image left; SKU + date / name + ×qty / PO # (+ customer) to its right */}
-            <div className="po-bvhead">
-              <SkuImage status={imgMap[editPo.item_code ?? '']?.status} displayUrl={imgMap[editPo.item_code ?? '']?.displayUrl} name={editPo.name} size={SKU_IMG.smd} />
-              <div className="po-bvhead-main">
-                <div className="po-card-l1">
-                  <span className="ff-code">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
-                  <span className="po-card-date">{fmtNiceDate(editPo.input_date)}</span>
-                </div>
-                <div className="po-card-l1 po-card-mid">
-                  {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <span className="ff-name">{editPo.name}</span>}
-                  <span className="po-card-qty">×{editPo.qty}</span>
-                </div>
-                <div className="po-card-l2 hint">
-                  PO #{editPo.po_id}
-                  {editPo.customer_id != null ? ` · ${editPo.customer_name || `#${editPo.customer_id}`}` : ''}
+      {/* PR284 — country sub-tabs (by Source origin), like Ship, so same-origin items group together. */}
+      {shipCountryTabs.some((t) => t.key !== ALL_COUNTRIES && t.key !== OTHER_COUNTRY) && (
+        <div className="fq-filters" role="tablist" aria-label="Country">
+          {shipCountryTabs.map((t) => (
+            <button
+              key={t.key}
+              role="tab"
+              aria-selected={shipCountry === t.key}
+              className={`fq-filter ${shipCountry === t.key ? 'active' : ''}`}
+              onClick={() => setShipCountry(t.key)}
+            >
+              {t.label}<span className="fq-filter-count">{t.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {/* PR284 — "Confirm item(s)" (ex-"Batch confirm"): the two-step picker; the list stays checkbox-free. */}
+      <button className="btn-brown btn-ico po-add-full po-add-toplist" onClick={openBatch}><TruckIcon />Confirm item(s)</button>
+      {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
+      <ul className="po-cards po-cards-compact">
+        {shownFiltered.map((po) => {
+          const code = po.item_code ?? po.item_code_raw ?? '—';
+          return (
+          <li key={po.po_id}>
+            {/* PR254 — the To-buy card standard: SKU (+ name) vertically centred on the left, qty
+                ABOVE the date on the right. Keeps a nameless SKU centred (no drop under the code). */}
+            <button className="po-card po-card-btn po-card-mini" onClick={() => openEdit(po)}>
+              <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+              <div className="po-card-main">
+                <span className="ff-code">{code}</span>
+                {isRealName(po.name, code) && <span className="ff-name po-card-name">{po.name}</span>}
+              </div>
+              <div className="po-card-side">
+                <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
+                <div className="po-card-meta">
+                  <span className="po-card-date">{fmtNiceDate(po.status_since)}</span>
                 </div>
               </div>
+              <span className="po-chev" aria-hidden>›</span>
+            </button>
+          </li>
+          );
+        })}
+      </ul>
+
+      {/* PR284 — item detail as an OVERLAY (was a bodyview); fields edit directly (no Edit button). */}
+      {mode === 'edit' && editPo && (
+        <div className="sc-modal-backdrop" onClick={closeForwardDetail}>
+          <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Confirm item" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <div>
+                <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
+                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name} · ×{editPo.qty}</div>}
+              </div>
+              <button className="sc-modal-x" onClick={closeForwardDetail} aria-label="Close">×</button>
             </div>
-            {renderForwarderForm()}
+            <div className="sc-modal-body">
+              {renderForwarderForm()}
+            </div>
           </div>
-        </>
+        </div>
       )}
       {batchOpen && renderBatchModal()}
     </div>
@@ -955,8 +968,7 @@ export default function OrderBoard({
       {error && <div className="validation err">{error}</div>}
       {success && <div className="validation ok">{success}</div>}
 
-      {!shipDetailOpen ? (
-        <>
+      <>
           {/* country sub-tabs (by supplier origin) so same-origin items group together */}
           {shipCountryTabs.some((t) => t.key !== ALL_COUNTRIES && t.key !== OTHER_COUNTRY) && (
             <div className="fq-filters" role="tablist" aria-label="Country">
@@ -973,75 +985,52 @@ export default function OrderBoard({
               ))}
             </div>
           )}
-          {/* PR263 — Create shipment is an entry button at the top of the list (mirrors Batch confirm);
-              disabled until rows are ticked. */}
-          <button
-            className="btn-brown btn-ico po-add-full po-add-toplist"
-            onClick={openGroup}
-            disabled={selectedCount === 0}
-            title={selectedCount === 0 ? 'Tick items in the list first' : `Create a shipment from ${selectedCount} selected`}
-          >
-            <PackageIcon />Create shipment{selectedCount > 0 ? ` · ${selectedCount}` : ''}
-          </button>
+          {/* PR287 — Create shipment is a two-step picker (list stays checkbox-free, like Confirm). */}
+          <button className="btn-brown btn-ico po-add-full po-add-toplist" onClick={openGroup}><PackageIcon />Create shipment</button>
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
             {shownFiltered.map((po) => {
               const code = po.item_code ?? po.item_code_raw ?? '—';
               return (
               <li key={po.po_id}>
-                <div className="po-row-wrap">
-                  <input
-                    type="checkbox"
-                    className="po-check"
-                    checked={selectedPoIds.has(po.po_id)}
-                    onChange={() => toggleSelect(po.po_id)}
-                    aria-label={`select PO ${po.po_id}`}
-                  />
-                  {/* PR254 — same To-buy card standard as To forwarder: qty above date, SKU centred. */}
-                  <button className="po-card po-card-btn po-card-mini" style={{ flex: 1, minWidth: 0 }} onClick={() => openEdit(po)}>
-                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                    <div className="po-card-main">
-                      <span className="ff-code">{code}</span>
-                      {isRealName(po.name, code) && <span className="ff-name po-card-name">{po.name}</span>}
-                      {shortFromShip(po) && <span className="badge short">Short · from {shortFromShip(po)}</span>}
+                {/* PR254 — same To-buy card standard as To forwarder: qty above date, SKU centred. */}
+                <button className="po-card po-card-btn po-card-mini" onClick={() => openEdit(po)}>
+                  <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                  <div className="po-card-main">
+                    <span className="ff-code">{code}</span>
+                    {isRealName(po.name, code) && <span className="ff-name po-card-name">{po.name}</span>}
+                    {shortFromShip(po) && <span className="badge short">Short · from {shortFromShip(po)}</span>}
+                  </div>
+                  <div className="po-card-side">
+                    <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
+                    <div className="po-card-meta">
+                      <span className="po-card-date">{fmtNiceDate(po.status_since)}</span>
                     </div>
-                    <div className="po-card-side">
-                      <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
-                      <div className="po-card-meta">
-                        <span className="po-card-date">{fmtNiceDate(po.status_since)}</span>
-                      </div>
-                    </div>
-                    <span className="po-chev" aria-hidden>›</span>
-                  </button>
-                </div>
+                  </div>
+                  <span className="po-chev" aria-hidden>›</span>
+                </button>
               </li>
               );
             })}
           </ul>
 
         </>
-      ) : (
-        <>
-          <button className="btn-link bv-back" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }}>← back</button>
-          <div className="bv-detail">
-            {/* same body-header as To forwarder */}
-            <div className="po-bvhead">
-              <SkuImage status={imgMap[editPo!.item_code ?? '']?.status} displayUrl={imgMap[editPo!.item_code ?? '']?.displayUrl} name={editPo!.name} size={SKU_IMG.smd} />
-              <div className="po-bvhead-main">
-                <div className="po-card-l1">
-                  <span className="ff-code">{editPo!.item_code ?? editPo!.item_code_raw ?? '—'}</span>
-                  <span className="po-card-date">{fmtNiceDate(editPo!.status_since)}</span>
-                </div>
-                <div className="po-card-l1 po-card-mid">
-                  {isRealName(editPo!.name, editPo!.item_code ?? editPo!.item_code_raw) && <span className="ff-name">{editPo!.name}</span>}
-                  <span className="po-card-qty">×{editPo!.qty}</span>
-                </div>
-                <div className="po-card-l2 hint">PO #{editPo!.po_id}</div>
+      {/* PR286 — Ship item detail as an OVERLAY (was a bodyview); read-only until "Edit item". */}
+      {shipDetailOpen && editPo && (
+        <div className="sc-modal-backdrop" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }}>
+          <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Ship item" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <div>
+                <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
+                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name} · ×{editPo.qty}</div>}
               </div>
+              <button className="sc-modal-x" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }} aria-label="Close">×</button>
             </div>
-            {renderShipDetail()}
+            <div className="sc-modal-body">
+              {renderShipDetail()}
+            </div>
           </div>
-        </>
+        </div>
       )}
       {mode === 'group' && renderGroupModal()}
     </div>
@@ -1164,7 +1153,7 @@ export default function OrderBoard({
         {!shipEditing ? (
           /* what was set in To forwarder — read-only rows; unit cost + item link are easy-copy */
           <div className="po-roview">
-            <div className="po-rorow"><span className="po-rok">Supplier</span><span className="po-rov">{supplierName || '—'}</span></div>
+            <div className="po-rorow"><span className="po-rok">Source</span><span className="po-rov">{supplierName || '—'}</span></div>
             <div className="po-rorow">
               <span className="po-rok">Item link</span>
               <span className="po-rov po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
@@ -1191,7 +1180,7 @@ export default function OrderBoard({
           <>
             {/* Edit mode — the To-forwarder field set, auto-saving on blur/change */}
             <div className="po-field">
-              <label>Supplier</label>
+              <label>Source</label>
               <select
                 value={form.supplier_id}
                 onChange={(e) => {
@@ -1293,23 +1282,60 @@ export default function OrderBoard({
               />
             </>
           ) : (
-            <div className="po-inline2">
-              <select value={attachShipId} onChange={(e) => setAttachShipId(e.target.value)}>
-                <option value="">— pick an open shipment —</option>
-                {shipments.map((s) => (
-                  <option key={s.ship_id} value={s.ship_id}>{s.ship_id}</option>
-                ))}
-              </select>
-              <button className="btn-secondary" onClick={attachShip} disabled={busy || !attachShipId}>Attach</button>
-            </div>
+            /* PR286 — pick a shipment → preview/confirm overlay attaches it (no Attach button). */
+            <select value={attachShipId} onChange={(e) => pickShipmentToAttach(e.target.value)} disabled={busy}>
+              <option value="">— pick an open shipment —</option>
+              {shipments.map((s) => (
+                <option key={s.ship_id} value={s.ship_id}>{s.ship_id}</option>
+              ))}
+            </select>
           )}
         </div>
+
+        {/* PR286 — attach preview: the picked shipment's details + items, then confirm to attach. */}
+        {attachPreview && (
+          <div className="sc-modal-backdrop" onClick={() => { if (!busy) { setAttachPreview(null); setAttachShipId(''); } }}>
+            <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Attach to shipment" onClick={(e) => e.stopPropagation()}>
+              <div className="sc-modal-head sc-modal-head-row">
+                <span className="sc-modal-title">Attach to {attachPreview.ship.ship_id}?</span>
+                <button className="sc-modal-x" onClick={() => { setAttachPreview(null); setAttachShipId(''); }} disabled={busy} aria-label="Close">×</button>
+              </div>
+              <div className="sc-modal-body">
+                <div className="hint" style={{ marginBottom: 8 }}>
+                  {[attachPreview.ship.origin_country, attachPreview.ship.ship_date ? fmtNiceDate(attachPreview.ship.ship_date) : null].filter(Boolean).join(' · ') || 'Open shipment'}
+                  {attachPreview.ship.note ? ` · ${attachPreview.ship.note}` : ''}
+                </div>
+                <div className="fd-section-head">Already in this shipment</div>
+                {attachPreview.loading ? (
+                  <div className="hint">Loading items…</div>
+                ) : attachPreview.items.length === 0 ? (
+                  <div className="hint">No items yet — this PO will be the first.</div>
+                ) : (
+                  <ul className="po-cards po-cards-compact">
+                    {attachPreview.items.map((it) => (
+                      <li key={it.po_id}>
+                        <div className="po-card po-card-mini">
+                          <div className="po-card-main"><span className="ff-code">{it.item_code || '—'}</span>{isRealName(it.name, it.item_code) && <span className="ff-name po-card-name">{it.name}</span>}</div>
+                          <span className="po-card-qty">×{it.qty}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="sc-modal-foot">
+                <button className="btn-secondary" onClick={() => { setAttachPreview(null); setAttachShipId(''); }} disabled={busy}>Cancel</button>
+                <button className="btn-primary" onClick={attachShip} disabled={busy}>{busy ? 'Attaching…' : `Attach to ${attachPreview.ship.ship_id}`}</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* PR256 — the Sales / To-forwarder action-bar standard: secondary (Edit) then destructive
             last; Delete opens a modal confirm instead of the old bare trash + inline ask. */}
         <div className="td-actions">
           <button className="btn-secondary btn-ico" onClick={() => setShipEditing((v) => !v)} disabled={busy}>
-            <PencilIcon />{shipEditing ? 'Done' : 'Edit'}
+            <PencilIcon />{shipEditing ? 'Done' : 'Edit item'}
           </button>
           <button className="btn-danger btn-ico" onClick={() => setConfirmDel(true)} disabled={busy}><TrashIcon />Delete PO</button>
         </div>
@@ -1336,9 +1362,9 @@ export default function OrderBoard({
     const picked = shownFiltered.filter((po) => batchIds.has(po.po_id));
     return (
       <div className="sc-modal-backdrop" onClick={closeBatch}>
-        <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Batch to forwarder" onClick={(e) => e.stopPropagation()}>
+        <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Confirm items" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <div className="sc-modal-title">{batchStep === 'pick' ? 'Batch confirm · step 1 of 2' : 'Batch confirm · step 2 of 2'}</div>
+            <div className="sc-modal-title">{batchStep === 'pick' ? 'Confirm item(s) · step 1 of 2' : 'Confirm item(s) · step 2 of 2'}</div>
             <button className="sc-modal-x" onClick={closeBatch} aria-label="Close">×</button>
           </div>
 
@@ -1380,7 +1406,7 @@ export default function OrderBoard({
               <div className="sc-modal-body">
                 {/* group fields — each its own subheader; applied to every picked item */}
                 <div className="batch-group">
-                  <div className="fd-section-head">Supplier</div>
+                  <div className="fd-section-head">Source</div>
                   <select className="batch-field" value={batchSupplier} onChange={(e) => setBatchSupplier(e.target.value ? Number(e.target.value) : '')}>
                     <option value="">— pick a supplier —</option>
                     {suppliers.map((s) => (
@@ -1458,22 +1484,27 @@ export default function OrderBoard({
     const ccy = currencyForCountry(selSup?.country);
     return (
       <div className="po-form">
-        {/* 1 · Supplier — managed in Settings → Suppliers (no inline add here). Flag + name, A–Z. */}
+        {/* 1 · Source — LOCKED (PR284): it's chosen in Buy and can't change here. A legacy PO with no
+            Source yet falls back to an editable picker so it isn't stranded. */}
         <div className="po-field">
-          <label>Supplier</label>
-          <select
-            value={form.supplier_id}
-            onChange={(e) => {
-              const supplier_id = e.target.value ? Number(e.target.value) : '';
-              setForm((f) => ({ ...f, supplier_id }));
-              autoSaveForwarder({ supplier_id: supplier_id ? Number(supplier_id) : undefined });
-            }}
-          >
-            <option value="">— pick a supplier —</option>
-            {suppliers.map((s) => (
-              <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
-            ))}
-          </select>
+          <label>Source</label>
+          {form.supplier_id ? (
+            <div className="po-ro-locked">{selSup ? `${selSup.flag ? selSup.flag + ' ' : ''}${selSup.name}` : '—'}</div>
+          ) : (
+            <select
+              value={form.supplier_id}
+              onChange={(e) => {
+                const supplier_id = e.target.value ? Number(e.target.value) : '';
+                setForm((f) => ({ ...f, supplier_id }));
+                autoSaveForwarder({ supplier_id: supplier_id ? Number(supplier_id) : undefined });
+              }}
+            >
+              <option value="">— pick a source —</option>
+              {suppliers.map((s) => (
+                <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* 2 · Item link */}
@@ -1581,7 +1612,7 @@ export default function OrderBoard({
       <div className="po-form">
         {/* Supplier */}
         <div className="po-field">
-          <label>Supplier</label>
+          <label>Source</label>
           <div className="po-inline">
             <div className="po-field" style={{ marginBottom: 0 }}>
               <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value ? Number(e.target.value) : '' }))}>
@@ -1766,12 +1797,35 @@ export default function OrderBoard({
       <div className="sc-modal-backdrop" onClick={close}>
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Create shipment" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <div className="sc-modal-title">Create shipment · {totalItems} item{totalItems === 1 ? '' : 's'}</div>
+            <div className="sc-modal-title">{grpStep === 'pick' ? 'Create shipment · step 1 of 2' : 'Create shipment · step 2 of 2'}</div>
             <button className="sc-modal-x" onClick={close} aria-label="Close">×</button>
           </div>
           <div className="sc-modal-body">
             {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
 
+            {grpStep === 'pick' ? (
+              <>
+                <div className="hint" style={{ marginBottom: 8 }}>Tick the items to group into this shipment.</div>
+                {shownFiltered.length === 0 && <div className="hint">Nothing to ship yet.</div>}
+                <ul className="po-cards po-cards-compact batch-picklist">
+                  {shownFiltered.map((po) => (
+                    <li key={po.po_id}>
+                      <label className="po-row-wrap batch-pickrow">
+                        <input type="checkbox" className="po-check" checked={selectedPoIds.has(po.po_id)} onChange={() => toggleSelect(po.po_id)} aria-label={`select PO ${po.po_id}`} />
+                        <span className="po-card batch-pickcard" style={{ flex: 1, minWidth: 0 }}>
+                          <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                          <div className="po-card-main">
+                            <div className="po-card-l1"><span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span><span className="po-card-poid">{fmtNiceDate(po.status_since)}</span></div>
+                            <div className="po-card-l2">{isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}<span className="po-card-qty">×{po.qty}</span></div>
+                          </div>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+            <>
             <div className="batch-group">
               <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
               <ul className="po-cards po-cards-compact">
@@ -1803,29 +1857,13 @@ export default function OrderBoard({
               </ul>
             </div>
 
+            {/* PR285 — Shipment ID is now the single primary field: type it (autocomplete surfaces the
+                last-used, e.g. SUB 192, so you can bump to SUB 193). The shipment CODE (the leading
+                letters) is derived from what you type — no separate picker. */}
             <div className="batch-group">
-              {/* PR272 — Consolidator (ex-"Forwarder"): the ship_id-prefix node, e.g. Superbuy. */}
-              <div className="fd-section-head">Consolidator</div>
-              <select className="field" value={grpForwarder} onChange={(e) => pickForwarder(e.target.value)}>
-                <option value="">— consolidator —</option>
-                {forwardersSorted.map((f) => (
-                  <option key={f.prefix} value={f.prefix}>{f.flag ? `${f.flag} ` : ''}{f.prefix}</option>
-                ))}
-              </select>
-            </div>
-            <div className="batch-group">
-              {/* PR274 — Consolidator → Shipper leg: courier (shared local list) + tracking. */}
-              <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
-              <div className="po-inline2">
-                <input className="field" type="text" list="grp-consol-couriers" placeholder="courier" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)} />
-                <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
-              </div>
-              <datalist id="grp-consol-couriers">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
-            </div>
-            <div className="batch-group">
-              <div className="fd-section-head">Ship ID</div>
-              <input className="field" type="text" placeholder='type a new ID, e.g. "SUB 192"' value={grpShipId} onChange={(e) => setGrpShipId(e.target.value)} />
-              {/* PR254 — tap an open shipment to add these items to it (reliable pick vs. a datalist). */}
+              <div className="fd-section-head">Shipment ID</div>
+              <input className="field" type="text" list="grp-shipids" placeholder='e.g. "SUB 193"' value={grpShipId} onChange={(e) => setGrpShipId(e.target.value)} />
+              <datalist id="grp-shipids">{shipIdOpts.map((s) => <option key={s} value={s} />)}</datalist>
               {openShipmentChoices.length > 0 && (
                 <div className="grp-shipid-picks">
                   <span className="grp-shipid-lead">or add to an open shipment:</span>
@@ -1842,10 +1880,33 @@ export default function OrderBoard({
                 </div>
               )}
             </div>
+            <div className="batch-group">
+              {/* PR274/PR285 — Consolidator → Shipper leg: courier (dropdown, shared local list) + tracking. */}
+              <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+              <div className="po-inline2">
+                <select className="field" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)}>
+                  <option value="">— courier —</option>
+                  {(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m}>{m}</option>)}
+                  {grpConsolCourier && !(localCouriers.length ? localCouriers : METHODS).includes(grpConsolCourier) && <option value={grpConsolCourier}>{grpConsolCourier}</option>}
+                </select>
+                <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
+              </div>
+            </div>
+            </>
+            )}
           </div>
           <div className="sc-modal-foot">
-            <button className="btn-secondary" onClick={close} disabled={busy}>Cancel</button>
-            <button className="btn-primary btn-ico" onClick={submitGroup} disabled={busy || selectedCount === 0}><PackageIcon />{busy ? 'Grouping…' : 'Group shipment'}</button>
+            {grpStep === 'pick' ? (
+              <>
+                <button className="btn-secondary" onClick={close} disabled={busy}>Cancel</button>
+                <button className="btn-primary" onClick={() => setGrpStep('details')} disabled={selectedCount === 0}>Next · {selectedCount} selected</button>
+              </>
+            ) : (
+              <>
+                <button className="btn-secondary" onClick={() => setGrpStep('pick')} disabled={busy}>Back</button>
+                <button className="btn-primary btn-ico" onClick={submitGroup} disabled={busy || selectedCount === 0}><PackageIcon />{busy ? 'Grouping…' : 'Group shipment'}</button>
+              </>
+            )}
           </div>
         </div>
       </div>
