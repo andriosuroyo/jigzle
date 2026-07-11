@@ -13,7 +13,6 @@ import OutboundBoard from '@/components/OutboundBoard';
 import OutboundHistoryBoard from '@/components/OutboundHistoryBoard';
 import { getMonthlyShipmentsXlsx, getShipmentMonthRange } from '@/app/outbound/actions';
 import type { ShipQueueRow } from '@jigzle/db/types';
-import type { ShipmentHistoryRow } from '@/app/outbound/types';
 import type { BoxPreset, StaffMember } from '@/app/settings/types';
 
 // PR320 — report (document) icon for the Monthly report button.
@@ -34,14 +33,12 @@ export default function OutboundShell({
   userEmail,
   initialQueue,
   boxPresets,
-  shippedHistory,
   staffOptions,
   initialOrderId,
 }: {
   userEmail: string;
   initialQueue: ShipQueueRow[];
   boxPresets: BoxPreset[];
-  shippedHistory: ShipmentHistoryRow[];
   staffOptions: StaffMember[];
   initialOrderId: string | null;
 }) {
@@ -181,7 +178,7 @@ export default function OutboundShell({
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <OutboundHistoryBoard active={tab === 'history'} initialOrders={shippedHistory} boxPresets={boxPresets} onDetailOpenChange={onHistoryDetail} onCancelled={onShipmentCancelled} />
+          <OutboundHistoryBoard active={tab === 'history'} boxPresets={boxPresets} onDetailOpenChange={onHistoryDetail} onCancelled={onShipmentCancelled} />
         </div>
       </div>
 

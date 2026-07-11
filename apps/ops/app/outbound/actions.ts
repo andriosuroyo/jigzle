@@ -84,7 +84,7 @@ function sanitize(q: string): string {
 // fields for CSV/legacy rows). Newest first, capped at HISTORY_LIMIT shipments. Search matches customer /
 // courier / note / SKU (item_code). Read-only; each row carries its full detail (no sales_id to re-fetch
 // CSV rows by). ──
-export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow[]> {
+export async function getOutboundHistory(query = '', month?: string): Promise<ShipmentHistoryRow[]> {
   const supabase = createSupabaseServerClient();
   const raw = sanitize(query);
 
@@ -99,8 +99,17 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
       .from('outbound_shipments')
       .select(cols)
       .not('ship_date', 'is', null)
-      .order('ship_date', { ascending: false })
-      .limit(raw ? 900 : 600);
+      .order('ship_date', { ascending: false });
+    // PR320 — a specific month (YYYY-MM) is fetched in full (its own bounded range), so History can lazy-
+    // load one month at a time; otherwise keep the recent-window limit for search / the ungrouped case.
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const y = Number(month.slice(0, 4));
+      const m = Number(month.slice(5, 7));
+      const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+      q = q.gte('ship_date', `${month}-01`).lt('ship_date', next).limit(3000);
+    } else {
+      q = q.limit(raw ? 900 : 600);
+    }
     if (raw) {
       q = q.or(
         `recipient_name.ilike.%${raw}%,customer_ref.ilike.%${raw}%,courier.ilike.%${raw}%,note.ilike.%${raw}%,item_code.ilike.%${raw}%,item_code_raw.ilike.%${raw}%`
@@ -186,7 +195,7 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
       : `C:${it.customer_ref ?? ''}|${it.ship_date ?? ''}|${it.address ?? ''}|${it.courier ?? ''}|${it.weight_gram ?? ''}`;
     let g = groups.get(key);
     if (!g) {
-      if (groups.size >= HISTORY_LIMIT) continue; // capped; ignore older shipments beyond the window
+      if (!month && groups.size >= HISTORY_LIMIT) continue; // window cap for the recent view; a month fetch shows all its shipments
       g = {
         key, ship_date: it.ship_date, customer: it.recipient_name || it.customer_ref,
         address: it.address, courier: it.courier, weight_gram: it.weight_gram, send_id: it.send_id,
@@ -236,6 +245,41 @@ export async function getOutboundHistory(query = ''): Promise<ShipmentHistoryRow
       boxes,
     };
   });
+}
+
+// ── PR320 — the History MONTH INDEX: distinct shipments per calendar month (YYYY-MM), newest first.
+// Pages through the canonical log's grouping columns ONLY (no catalogue/box/customer joins), so it stays
+// cheap enough to run on History tab-open; each month's rows then load lazily via getOutboundHistory(_, ym).
+// Read-only loader — returns [] on error so History still renders (mirrors getOutboundHistory). ──
+export async function getOutboundHistoryMonths(): Promise<{ ym: string; count: number }[]> {
+  const supabase = createSupabaseServerClient();
+  const PAGE = 1000;
+  const seenByYm = new Map<string, Set<string>>();
+  for (let offset = 0; offset < 200_000; offset += PAGE) {
+    const { data, error } = await supabase
+      .from('outbound_shipments')
+      .select('ship_date,send_id,customer_ref,address,courier,weight_gram')
+      .not('ship_date', 'is', null)
+      .order('ship_date', { ascending: false })
+      .range(offset, offset + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    for (const it of data as { ship_date: string | null; send_id: string | null; customer_ref: string | null; address: string | null; courier: string | null; weight_gram: number | null }[]) {
+      const ym = (it.ship_date ?? '').slice(0, 7);
+      if (ym.length !== 7) continue;
+      // same shipment key as getOutboundHistory (send_id for app ships; a composite for CSV/legacy rows),
+      // so items split across pages dedupe into one shipment.
+      const key = it.send_id
+        ? `S:${it.send_id}`
+        : `C:${it.customer_ref ?? ''}|${it.ship_date ?? ''}|${it.address ?? ''}|${it.courier ?? ''}|${it.weight_gram ?? ''}`;
+      let set = seenByYm.get(ym);
+      if (!set) { set = new Set(); seenByYm.set(ym, set); }
+      set.add(key);
+    }
+    if (data.length < PAGE) break;
+  }
+  return [...seenByYm.entries()]
+    .map(([ym, set]) => ({ ym, count: set.size }))
+    .sort((a, b) => (a.ym < b.ym ? 1 : -1)); // newest month first
 }
 
 // ── the ship detail pane ── (ShipDetail lives in ./types)
