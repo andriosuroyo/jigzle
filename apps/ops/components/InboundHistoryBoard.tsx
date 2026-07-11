@@ -11,8 +11,14 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import ConfirmModal from '@/components/ConfirmModal';
 import { useOverlayClose } from '@/components/useOverlayClose';
 import { fmtNiceDate } from '@jigzle/lib';
+
+// PR314 — detail action-bar glyphs (edit pencil + delete trash), matching the app's 16px icon set.
+const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 16, height: 16, 'aria-hidden': true };
+const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
+const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 
@@ -55,7 +61,6 @@ export default function InboundHistoryBoard({
   // edit-ship-id overlay
   const [editing, setEditing] = useState(false);
   const [editShipId, setEditShipId] = useState('');
-  const [editClose, setEditClose] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
   const [editErr, setEditErr] = useState<string | null>(null);
   const reqRef = useRef(0);
@@ -134,7 +139,6 @@ export default function InboundHistoryBoard({
   function openEdit() {
     if (!sel) return;
     setEditShipId(sel.ship_id);
-    setEditClose(false);
     setEditErr(null);
     setEditing(true);
   }
@@ -145,7 +149,8 @@ export default function InboundHistoryBoard({
     if (next === sel.ship_id) { setEditing(false); return; }
     setEditBusy(true); setEditErr(null);
     try {
-      await moveShipId(sel.ship_id, next, editClose);
+      // PR314 — SOP: moving a received entry closes the target shipment (all goods accounted for).
+      await moveShipId(sel.ship_id, next, true);
       setEditing(false);
       const r = await getReceiveHistory(query.trim());
       setRows(r);
@@ -162,7 +167,7 @@ export default function InboundHistoryBoard({
   const editIdClose = useOverlayClose({
     open: editing && !!sel,
     onClose: () => { if (!editBusy) setEditing(false); },
-    dirty: editShipId.trim() !== (sel?.ship_id ?? '') || editClose,
+    dirty: editShipId.trim() !== (sel?.ship_id ?? ''),
   });
 
   useEffect(() => { onCountChange?.(rows.length); }, [rows, onCountChange]);
@@ -236,8 +241,6 @@ export default function InboundHistoryBoard({
             <div className="fd-head">
               <div className="fd-title-row">
                 <div className="fd-title">{sel.ship_id}</div>
-                {/* PR162: the synthetic "Up to 2023" opening-balance entry is read-only (no ship_id to edit) */}
-                {!sel.is_opening_balance && <button className="btn-link" onClick={openEdit} disabled={editing}>Edit ship id</button>}
               </div>
               <div className="fd-sub">
                 {sel.is_opening_balance
@@ -272,22 +275,28 @@ export default function InboundHistoryBoard({
               </ul>
             </section>
 
-            {/* Delete this received entry (text-button; removes the inbound rows, stock self-corrects).
-                Hidden for the read-only opening-balance entry (no ship_id to delete by). */}
+            {/* PR314 — one bottom action row: Edit shipment ID (secondary) then Delete entry (destructive).
+                Hidden for the read-only opening-balance entry (no ship_id to edit/delete by). */}
             {!sel.is_opening_balance && (
-            <div className="ob-return">
-              {!confirmDelete ? (
-                <button className="btn-link danger" onClick={() => setConfirmDelete(true)} disabled={deleting}>Delete entry</button>
-              ) : (
-                <span className="rcv-reverse-ask">
-                  Delete {sel.ship_id}? Its received stock will be removed.
-                  <button className="btn-secondary" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
-                  <button className="btn-primary danger" onClick={doDelete} disabled={deleting}>{deleting ? 'Deleting…' : 'Yes, delete'}</button>
-                </span>
-              )}
-            </div>
+              <div className="td-actions">
+                <button className="btn-secondary btn-ico" onClick={openEdit} disabled={editing}><PencilIcon />Edit shipment ID</button>
+                <button className="btn-danger btn-ico" onClick={() => setConfirmDelete(true)} disabled={deleting}><TrashIcon />Delete entry</button>
+              </div>
             )}
           </div>
+          {confirmDelete && sel && (
+            <ConfirmModal
+              title={`Delete ${sel.ship_id}?`}
+              busy={deleting}
+              confirmLabel={deleting ? 'Deleting…' : 'Delete entry'}
+              cancelLabel="Cancel"
+              danger
+              onConfirm={doDelete}
+              onCancel={() => setConfirmDelete(false)}
+            >
+              <div>This removes the received rows for this entry; the affected stock self-corrects.</div>
+            </ConfirmModal>
+          )}
         </>
       )}
 
@@ -296,12 +305,11 @@ export default function InboundHistoryBoard({
         <div className="sc-modal-backdrop" onClick={editIdClose.requestClose}>
           <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Edit ship id" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head">
-              <div className="sc-modal-title">Edit ship id</div>
-              <div className="sc-modal-sub">Move “{sel.ship_id}” to the correct ship id. Its POs re-allocate; the old shipment re-opens.</div>
+              <div className="sc-modal-title">Edit shipment ID</div>
             </div>
             <div className="sc-modal-body">
               <label className="rcv-map-barcode">
-                <span className="fd-label">New ship id</span>
+                <span className="fd-label">New shipment ID</span>
                 <input
                   type="text"
                   autoFocus
@@ -310,10 +318,6 @@ export default function InboundHistoryBoard({
                   onChange={(e) => setEditShipId(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } }}
                 />
-              </label>
-              <label className="rcv-ctl" style={{ marginTop: 10 }}>
-                <input type="checkbox" checked={editClose} onChange={(e) => setEditClose(e.target.checked)} />
-                <span>Close the shipment after moving (all goods received)</span>
               </label>
               {editErr && <div className="validation err" style={{ marginTop: 10 }}>{editErr}</div>}
             </div>

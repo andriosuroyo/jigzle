@@ -719,7 +719,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .rcv-close { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); padding: 6px 0; }
 
 /* ── PR17: scan-to-find-shipment (§5), result banner + Reverse, confirm window extras ── */
-.rcv-find { padding: 8px 8px 2px; }
+/* PR310 — full-width: no horizontal padding so the search bar's edges line up with the tabs above and
+   the arrival cards below (which are flush in the bodyview). */
+.rcv-find { padding: 8px 0 2px; }
 .rcv-suggest { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .rcv-suggest-opt { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: white; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 12px; cursor: pointer; }
 .rcv-suggest-opt:active { background: var(--paper); }
@@ -1745,6 +1747,17 @@ img.sku-img { background: #e8e8e8; }
 input.batch-field, select.batch-field {
   height: 34px; padding-top: 4px; padding-bottom: 4px;
 }
+/* PR308 — STANDARD placeholder ("filler") look, app-wide: italic + a lighter/thinner weight so hints
+   read as clearly secondary to typed values. Size is left at the input's own font-size (16px on the
+   standard field) — that's what governs iOS focus-zoom, not the placeholder, so hints stay zoom-safe. */
+::placeholder { font-style: italic; font-weight: 300; opacity: 1; color: var(--muted); }
+/* PR309 — 16px is THE standard control font size. On mobile, Safari zooms in on focus for any text
+   control whose font is < 16px, so force every input/select/textarea to 16px at the mobile breakpoint
+   (the denser 13–14px desktop sizes never zoom, so they're left as-is). This makes the 16px standard
+   apply where it actually matters — no focus-zoom on any field, anywhere on mobile. */
+@media (max-width: 760px) {
+  input, select, textarea { font-size: 16px !important; }
+}
 /* PR250 — a catalogue SKU's code can't be recoded here: locked look (greyed fill, muted text, not-allowed). */
 .le-field input.le-locked { background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1; }
 /* PR254 — the Qty stepper in the Edit PO row keeps its natural width; without this the full-width
@@ -1862,6 +1875,12 @@ input.batch-field, select.batch-field {
 .bodyview { max-width: 1100px; margin: 0 auto; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
 .bodyview > .validation { margin-bottom: 10px; }
 .bodyview .fq-list { height: auto; max-height: none; overflow: visible; padding: 6px 0; }
+/* PR310/PR314 — Inbound Active + History cards: white fill (like Purchasing). The row layout + chevron
+   is ONLY for the Active arrivals list (which wraps its two lines in .fq-row-main); the History list
+   keeps its stacked column layout. */
+.bodyview .fq-list .fq-row { background: white; }
+.fq-list-arrivals .fq-row { flex-direction: row; align-items: center; gap: 10px; }
+.fq-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .bv-back { display: inline-block; margin-bottom: 10px; font-size: 13px; }
 .bv-detail { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 /* New-order bodyview: back row above the form (tabs hidden, breadcrumb stays). */

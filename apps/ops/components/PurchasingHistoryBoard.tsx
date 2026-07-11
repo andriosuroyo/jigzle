@@ -407,10 +407,14 @@ export default function PurchasingHistoryBoard({
                       shipper leg. Courier uses the shared LOCAL + CONSOLIDATOR list (localCouriers). */}
                   <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
                   <div className="po-inline2">
-                    <input type="text" list="hist-consol-couriers" placeholder="courier" value={consolCourierDraft} onChange={(e) => setConsolCourierDraft(e.target.value)} onBlur={(e) => void saveConsolidator(e.target.value, consolTrackDraft)} />
-                    <input type="text" placeholder="consolidator tracking" value={consolTrackDraft} onChange={(e) => setConsolTrackDraft(e.target.value)} onBlur={(e) => void saveConsolidator(consolCourierDraft, e.target.value)} />
+                    {/* PR308 — consolidator courier is a dropdown (shared LOCAL + CONSOLIDATOR list), like the shipment courier. */}
+                    <select value={consolCourierDraft} onChange={(e) => { setConsolCourierDraft(e.target.value); void saveConsolidator(e.target.value, consolTrackDraft); }}>
+                      <option value="">— Pick courier —</option>
+                      {localCouriers.map((m) => <option key={m} value={m}>{m}</option>)}
+                      {consolCourierDraft && !localCouriers.includes(consolCourierDraft) && <option value={consolCourierDraft}>{consolCourierDraft}</option>}
+                    </select>
+                    <input type="text" placeholder="Tracking number" value={consolTrackDraft} onChange={(e) => setConsolTrackDraft(e.target.value)} onBlur={(e) => void saveConsolidator(consolCourierDraft, e.target.value)} />
                   </div>
-                  <datalist id="hist-consol-couriers">{localCouriers.map((m) => <option key={m} value={m} />)}</datalist>
                 </div>
                 <div className="po-field">
                   {/* PR261 — subheaders styled like the detail view (uppercase .fd-section-head) */}
@@ -418,11 +422,11 @@ export default function PurchasingHistoryBoard({
                   {courierErr && <div className="validation err" style={{ marginBottom: 8 }}>{courierErr}</div>}
                   <div className="po-inline2">
                     <select value={courierDraft} onChange={(e) => { setCourierDraft(e.target.value); void saveCourier(e.target.value, trackingDraft); }}>
-                      <option value="">— courier —</option>
+                      <option value="">— Pick courier —</option>
                       {shipmentCouriers.map((c) => <option key={c} value={c}>{c}</option>)}
                       {courierDraft && !shipmentCouriers.includes(courierDraft) && <option value={courierDraft}>{courierDraft}</option>}
                     </select>
-                    <input type="text" placeholder="tracking number" value={trackingDraft} onChange={(e) => setTrackingDraft(e.target.value)} onBlur={(e) => void saveCourier(courierDraft, e.target.value)} />
+                    <input type="text" placeholder="Tracking number" value={trackingDraft} onChange={(e) => setTrackingDraft(e.target.value)} onBlur={(e) => void saveCourier(courierDraft, e.target.value)} />
                   </div>
                 </div>
                 <div className="po-field">
@@ -451,7 +455,7 @@ export default function PurchasingHistoryBoard({
                 </div>
               </div>
               <div className="sc-modal-foot">
-                <button className="btn-primary" onClick={saveAndCloseEdit} disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Done'}</button>
+                <button className="btn-primary" onClick={saveAndCloseEdit} disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button>
               </div>
             </div>
           </div>

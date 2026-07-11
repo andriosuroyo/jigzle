@@ -500,8 +500,8 @@ export default function InboundBoard({
         setScanMsg(`⚠ barcode ${code} → ${res.skus.length} SKUs — pick one`);
       } else {
         // PR288 — unknown → open Manual add prefilled with the scan; the form pre-fills the right field.
+        // PR311 — no inline "unknown …" note: the Manual-add overlay opening is the feedback.
         openManualAdd(code);
-        setScanMsg(`unknown ${code} — add via Manual add`);
       }
     } catch (e) {
       setScanMsg(e instanceof Error ? e.message : 'scan failed');
@@ -833,28 +833,31 @@ export default function InboundBoard({
             )}
 
             {sortedQueue.length === 0 && <div className="hint fq-empty">No open shipments.</div>}
-            <ul className="fq-list">
+            <ul className="fq-list fq-list-arrivals">
               {sortedQueue.map((q) => (
                 <li key={q.ship_id}>
                   <button className="fq-row" onClick={() => openShipment(q.ship_id)}>
-                    {/* top: ship id (left) · shipped date (right — mirrors Purchasing History Active) */}
-                    <div className="fq-row-top">
-                      <span className="fq-id">{q.ship_id}</span>
-                      {/* PR259 — badge a shipment that has an unsaved in-progress count waiting to resume */}
-                      {draftIndex.ships.has(q.ship_id) && <span className="badge draft">in-progress</span>}
-                      <span className="fq-id-sub" style={{ marginLeft: 'auto' }}>shipped {fmtNiceDate(q.ship_date) || '—'}</span>
+                    <div className="fq-row-main">
+                      {/* top: ship id (left) · shipped date (right — mirrors Purchasing History Active) */}
+                      <div className="fq-row-top">
+                        <span className="fq-id">{q.ship_id}</span>
+                        {/* PR259 — badge a shipment that has an unsaved in-progress count waiting to resume */}
+                        {draftIndex.ships.has(q.ship_id) && <span className="badge draft">in-progress</span>}
+                        <span className="fq-id-sub" style={{ marginLeft: 'auto' }}>shipped {fmtNiceDate(q.ship_date) || '—'}</span>
+                      </div>
+                      {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
+                      <div className="fq-row-bot">
+                        {q.expected_count > 0 ? (
+                          <span className="ff-items-skus">
+                            {q.expected_count} {q.expected_count === 1 ? 'item' : 'items'}
+                            {q.sku_codes.length ? ` · ${q.sku_codes.join(', ')}` : ''}
+                          </span>
+                        ) : (
+                          <span className="badge ready" style={{ marginLeft: 0 }}>no list</span>
+                        )}
+                      </div>
                     </div>
-                    {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
-                    <div className="fq-row-bot">
-                      {q.expected_count > 0 ? (
-                        <span className="ff-items-skus">
-                          {q.expected_count} {q.expected_count === 1 ? 'item' : 'items'}
-                          {q.sku_codes.length ? ` · ${q.sku_codes.join(', ')}` : ''}
-                        </span>
-                      ) : (
-                        <span className="badge ready" style={{ marginLeft: 0 }}>no list</span>
-                      )}
-                    </div>
+                    <span className="po-chev" aria-hidden>›</span>
                   </button>
                 </li>
               ))}
@@ -951,7 +954,7 @@ export default function InboundBoard({
                 {/* PR288 — an unknown scan now opens the Manual-add overlay (prefilled); no inline stub here. */}
 
                 {detail.expected.length === 0 && extras.length === 0 && (
-                  <div className="hint">No item list — scan or use Manual add to record what arrived.</div>
+                  <div className="hint">No items yet — scan or use Manual add to record an item.</div>
                 )}
                 <ul className="ff-lines">
                   {expectedResolved.map((e) => renderItemLine(e.item_code!, e.name, e.expected_qty))}
@@ -1081,22 +1084,25 @@ export default function InboundBoard({
                   )}
                   {!searching && skuSearched && skuHits.length === 0 && stub && (
                     <div className="rcv-stub" style={{ marginTop: 8 }}>
-                      <div className="subform-label">No match — add new SKU (flagged needs review)</div>
+                      <div className="subform-label">No match — add new SKU</div>
                       <input type="text" placeholder="SKU code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => { setStubTouched(true); setStub({ ...stub, item_code: e.target.value }); }} />
                       <input type="text" placeholder="original name" value={stub.original} onChange={(e) => { setStubTouched(true); setStub({ ...stub, original: e.target.value }); }} onBlur={(e) => autoTranslate(e.target.value)} />
                       <input type="text" placeholder="translated name (English)" value={stub.name} onChange={(e) => { setStubTouched(true); setStub({ ...stub, name: e.target.value }); }} />
                       {translating && <div className="hint"><em>Translating…</em></div>}
                       <input type="text" placeholder="barcode (optional)" value={stub.barcode} onChange={(e) => { setStubTouched(true); setStub({ ...stub, barcode: e.target.value }); }} />
-                      <div className="subform-actions">
-                        <button className="btn-primary" onClick={createStub} disabled={!stub.item_code.trim()} title={!stub.item_code.trim() ? 'Enter a SKU code' : undefined}>create + add</button>
-                      </div>
+                      {/* PR312 — the create button moved to the footer (Cancel · Add item), aligned right. */}
                     </div>
                   )}
                 </>
               )}
             </div>
+            {/* PR312 — modal-footer standard: Cancel left, primary (Add item) right. The create button
+                shows only while the no-match new-SKU form is up (manual-add mode). */}
             <div className="sc-modal-foot">
-              <button className="btn-secondary" onClick={manualClose.requestClose}>Close</button>
+              <button className="btn-secondary" onClick={manualClose.requestClose}>Cancel</button>
+              {!mappingRaw && !searching && skuSearched && skuHits.length === 0 && stub && (
+                <button className="btn-primary" onClick={createStub} disabled={!stub.item_code.trim()} title={!stub.item_code.trim() ? 'Enter a SKU code' : undefined}>Add item</button>
+              )}
             </div>
           </div>
           {manualClose.confirm}
