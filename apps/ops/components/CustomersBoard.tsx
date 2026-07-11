@@ -91,6 +91,14 @@ const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
 });
 const isIndonesia = (c: string) => c.trim().toLowerCase() === 'indonesia';
 
+// PR327 — the composed address string EXACTLY as addrFields() builds `raw_address` on save (and as
+// Outbound + every other consumer prints it verbatim): street, kelurahan, kecamatan, kota, provinsi,
+// negara, kode_pos joined by ", ". Kept in lockstep with the server composer.
+function previewRawAddress(d: AddrDraft): string {
+  return [d.street, d.kelurahan, d.kecamatan, d.kota, d.provinsi, d.negara, d.kode_pos]
+    .map((v) => v.trim()).filter(Boolean).join(', ');
+}
+
 // PR324 — inline pencil / trash icons for the detail action bar (Edit customer / Delete customer),
 // matching the shared `svg`/`btn-ico` convention used across the other boards.
 const _ic = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
@@ -1083,14 +1091,26 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 </div>
                 <div className="po-field">
                   <label>Delivery note <em className="po-sub">(courier instructions / sender — printed below the courier line as “Note: …”)</em></label>
-                  <textarea value={addrDraft.delivery_note} onChange={(e) => setAddrDraft({ ...addrDraft, delivery_note: e.target.value })} />
+                  <input type="text" value={addrDraft.delivery_note} onChange={(e) => setAddrDraft({ ...addrDraft, delivery_note: e.target.value })} />
                 </div>
 
-                {/* PR326 — the original address STUB moved below Delivery note; collapsible (starts shown) */}
+                {/* PR327 — live PREVIEW of the strung-together address, exactly as it saves + prints on
+                    Outbound and everywhere else that uses the address (name + composed line + phone + note). */}
+                <div className="cust-addr-stub cust-addr-preview">
+                  <div className="cust-addr-stub-label">Preview address</div>
+                  <div className="cust-addr-stub-text">{[
+                    addrDraft.recipient_name.trim(),
+                    previewRawAddress(addrDraft) || '—',
+                    addrDraft.contact_phone.trim(),
+                    addrDraft.delivery_note.trim() ? `Note: ${addrDraft.delivery_note.trim()}` : '',
+                  ].filter(Boolean).join('\n')}</div>
+                </div>
+
+                {/* PR326/PR327 — the original imported address STUB; collapsible (starts shown) */}
                 {addrEdit.address && (addrEdit.address.source_blob || addrEdit.address.raw_address) && (
                   <div className="cust-addr-stub">
                     <div className="cust-addr-stub-head">
-                      <span className="cust-addr-stub-label">Original — as first entered</span>
+                      <span className="cust-addr-stub-label">Original address — from old database</span>
                       <button type="button" className="btn-link cust-addr-stub-toggle" onClick={() => setStubOpen((v) => !v)}>{stubOpen ? 'Hide' : 'Show'}</button>
                     </div>
                     {stubOpen && <div className="cust-addr-stub-text">{addrEdit.address.source_blob || addrEdit.address.raw_address}</div>}
