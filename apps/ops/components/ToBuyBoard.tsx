@@ -653,7 +653,6 @@ export default function ToBuyBoard({
                         <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
                       ))}
                     </select>
-                    {!buySource && <div className="hint" style={{ marginTop: 4 }}>Pick a source to finish buying.</div>}
                   </div>
                 </div>
                 {/* Actions — the standard scrollable row: out of stock · done buying · delete PO (last). */}
