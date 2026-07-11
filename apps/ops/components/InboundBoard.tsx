@@ -30,7 +30,6 @@ import type {
 import type { InboundLabel, StaffMember } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { isRealName } from '@/components/skuName';
-import IconSelect from '@/components/IconSelect';
 import BarcodePicker from '@/components/BarcodePicker';
 import ReceiveConfirm from '@/components/ReceiveConfirm';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -47,10 +46,11 @@ const CopyIcon = () => (<svg {...csvg}><rect x="9" y="9" width="13" height="13" 
 const CheckIcon = () => (<svg {...csvg}><polyline points="20 6 9 17 4 12" /></svg>);
 // PR243 — 16px action glyphs: the per-line edit pencil + the remove-line trash (mirrors Sales → Pending).
 const asvg = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
-const PencilIcon = () => (<svg {...asvg}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 const TrashIcon = () => (<svg {...asvg}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
 // PR262 — the "Mark received / Save inbound" commit-button glyph (an inbox — goods into stock).
 const InboxIcon = () => (<svg {...asvg}><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>);
+// PR289 — exclude (damaged / not-sellable): a no-entry circle with a slash.
+const ExcludeIcon = () => (<svg {...asvg}><circle cx="12" cy="12" r="9" /><line x1="5.6" y1="5.6" x2="18.4" y2="18.4" /></svg>);
 
 // PR257 — a name that's blank or just repeats the item_code is NOT shown (the old "Unmatched item"
 // filler is gone): the code stands alone. A placeholder line is resolved via the per-line "map SKU"
@@ -101,7 +101,8 @@ function sellableOf(l: ReceiveLine): number {
 
 export default function InboundBoard({
   initialQueue,
-  inboundLabels,
+  // inboundLabels is still threaded from Settings but the per-line label picker was dropped (PR289);
+  // it's kept in the props shape so the shell/loader plumbing stays valid.
   staffOptions = [],
   userEmail,
   embedded = false,
@@ -767,7 +768,7 @@ export default function InboundBoard({
     }
   }
 
-  const headerTitle = mode === 'adhoc' ? 'Unmarked shipment' : detail?.ship_id ?? '';
+  const headerTitle = mode === 'adhoc' ? 'Add unmarked items' : detail?.ship_id ?? '';
 
   // PR154 — bodyview: the body shows EITHER the scan-to-find + arrivals list (full width) OR the
   // receive detail with a ← back button; the shell hides the tab bar while the detail is open.
@@ -886,9 +887,7 @@ export default function InboundBoard({
                     )}
                     {!detail.is_shipment && <span className="warn-text">not in the shipment ledger</span>}
                   </div>
-                ) : (
-                  <div className="fd-sub">goods with no shipment ID</div>
-                )}
+                ) : null}
               </div>
 
               {error && <div className="validation err">{error}</div>}
@@ -904,7 +903,7 @@ export default function InboundBoard({
               {/* Ad-hoc id (editable; operator can override with free text) */}
               {mode === 'adhoc' && (
                 <section className="fd-section">
-                  <div className="fd-section-head">Unmarked ship id</div>
+                  <div className="fd-section-head">Unmarked shipment id</div>
                   <input
                     type="text"
                     className="rcv-shipid"
@@ -1162,40 +1161,38 @@ export default function InboundBoard({
           <div className="pend-line-main">
             <span className="ff-code">{item_code}</span>
             {isRealName(name, item_code) && <span className="ff-name">{name}</span>}
-            {/* touched-line summary: only surface exclude/label/dim when set, so the row stays clean */}
-            {line && (excl > 0 || line.label || line.dimension_weight) && (
-              <span className="rcv-line-tags">
-                {excl > 0 && <span className="rcv-tag danger">−{excl} excluded</span>}
-                {line.label && <span className="rcv-tag">{line.label}</span>}
-                {line.dimension_weight && <span className="rcv-tag">{line.dimension_weight}</span>}
-              </span>
-            )}
           </div>
           <div className="rcv-count">
-            <input
-              type="number"
-              inputMode="numeric"
-              step={1}
-              className={`rcv-qty-in ${countCls}`}
-              value={got}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                setQty(item_code, name, Number.isFinite(n) ? n : 0);
-              }}
-              aria-label={`received qty for ${item_code}`}
-            />
-            <span className="rcv-denom">/ {exp > 0 ? exp : '—'}</span>
+            {/* PR289 — easy-adjust qty stepper (− input +). The predicted denom shows only when there's
+                an expected qty; unmarked/manual lines are just a qty. */}
+            <span className="qty-step">
+              <button type="button" aria-label="one fewer" onClick={() => setQty(item_code, name, Math.max(0, got - 1))} disabled={got <= 0}>−</button>
+              <input
+                type="number"
+                inputMode="numeric"
+                step={1}
+                className={`rcv-qty-in ${countCls}`}
+                value={got}
+                onChange={(e) => { const n = parseInt(e.target.value, 10); setQty(item_code, name, Number.isFinite(n) ? n : 0); }}
+                aria-label={`received qty for ${item_code}`}
+              />
+              <button type="button" aria-label="one more" onClick={() => setQty(item_code, name, got + 1)}>+</button>
+            </span>
+            {exp > 0 && <span className="rcv-denom">/ {exp}</span>}
+            {/* PR289 — excluded shows as a large −N beside the qty (same size as the count) */}
+            {excl > 0 && <span className="rcv-excl-big">−{excl}</span>}
           </div>
           {line && (
-            <button className="btn-edit" onClick={() => setLineEditCode(item_code)} aria-label="Edit line" title="Edit line"><PencilIcon /></button>
+            <button className="btn-edit rcv-excl-btn" onClick={() => setLineEditCode(item_code)} aria-label="Exclude units" title="Exclude damaged / not-sellable units"><ExcludeIcon /></button>
           )}
         </div>
       </li>
     );
   }
 
-  // PR243 — per-line editor overlay (opened by the row pencil): exclude (+ qty/reason), inbound label,
-  // dim/weight, and remove-line. Edits apply live to the received line; "Done" just closes it.
+  // PR289 — per-line EXCLUDE overlay (opened by the row's exclude button): just excluded qty + reason.
+  // (Label = Hold/Tokopedia and Dim/weight were relics of the old flow — dropped.) A damaged unit still
+  // arrived, so it's scanned into the count; excluding it keeps it out of sellable stock.
   function renderLineEditor() {
     if (!lineEditCode) return null;
     const line = received.get(lineEditCode);
@@ -1204,71 +1201,35 @@ export default function InboundBoard({
     const close = () => setLineEditCode(null);
     return (
       <div className="sc-modal-backdrop" onClick={close}>
-        <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Edit line" onClick={(e) => e.stopPropagation()}>
+        <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Exclude units" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <span className="sc-modal-title">Edit line · {line.item_code}</span>
+            <span className="sc-modal-title">Exclude · {line.item_code}</span>
             <button className="sc-modal-x" onClick={close} aria-label="Close">×</button>
           </div>
           <div className="sc-modal-body rcv-le-body">
-            <label className="rcv-le-check">
+            <div className="hint">A damaged / not-sellable unit still arrived — scan it into the count, then record how many to keep out of sellable stock.</div>
+            <div className="rcv-le-field rcv-le-field-sm">
+              <span className="fd-label">Excluded qty</span>
               <input
-                type="checkbox"
-                checked={line.excluded}
-                onChange={(e) =>
-                  setField(line.item_code, e.target.checked
-                    ? { excluded: true, excluded_qty: line.excluded_qty ?? Math.max(line.qty, 0) }
-                    : { excluded: false, excluded_qty: null, exclude_reason: null })
-                }
-              />
-              <span>Exclude damaged / not-sellable units</span>
-            </label>
-            {line.excluded && (
-              <div className="rcv-le-excl">
-                <div className="rcv-le-field rcv-le-field-sm">
-                  <span className="fd-label">Excluded qty</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
-                    className="rcv-qty"
-                    value={excl}
-                    onChange={(e) => {
-                      const n = parseInt(e.target.value, 10);
-                      setField(line.item_code, { excluded_qty: Number.isFinite(n) ? Math.max(n, 0) : 0 });
-                    }}
-                  />
-                </div>
-                <div className="rcv-le-field">
-                  <span className="fd-label">Reason</span>
-                  <input
-                    type="text"
-                    placeholder="e.g. damaged box"
-                    value={line.exclude_reason ?? ''}
-                    onChange={(e) => setField(line.item_code, { exclude_reason: e.target.value })}
-                  />
-                </div>
-              </div>
-            )}
-            <div className="rcv-le-field">
-              <span className="fd-label">Label</span>
-              <IconSelect
-                ariaLabel="Inbound label"
-                value={line.label ?? ''}
-                options={[
-                  { value: '', label: '—' },
-                  ...inboundLabels.map((l) => ({ value: l.label, label: l.label, icon: l.icon })),
-                ]}
-                onChange={(v) => setField(line.item_code, { label: v || null })}
+                type="number"
+                inputMode="numeric"
+                step={1}
+                className="rcv-qty"
+                value={excl}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  const v = Number.isFinite(n) ? Math.abs(n) : 0;
+                  setField(line.item_code, { excluded: v > 0, excluded_qty: v });
+                }}
               />
             </div>
             <div className="rcv-le-field">
-              <span className="fd-label">Dim / weight <em>(optional)</em></span>
+              <span className="fd-label">Reason</span>
               <input
                 type="text"
-                placeholder="e.g. 30×20×10, 1.2kg"
-                value={line.dimension_weight ?? ''}
-                onChange={(e) => setField(line.item_code, { dimension_weight: e.target.value })}
+                placeholder="e.g. damaged box"
+                value={line.exclude_reason ?? ''}
+                onChange={(e) => setField(line.item_code, { exclude_reason: e.target.value })}
               />
             </div>
           </div>
