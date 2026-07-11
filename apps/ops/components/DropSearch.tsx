@@ -10,7 +10,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-export type DropOption = { value: string; label: string; icon?: React.ReactNode };
+// `buttonLabel` (when set, incl. '') is shown on the closed button instead of `label` — for compact
+// pickers whose button is terser than their list rows (e.g. the phone code shows "+62", flag shows just
+// the flag). `search` overrides what filtering matches against (else `label`).
+export type DropOption = { value: string; label: string; icon?: React.ReactNode; buttonLabel?: string; search?: string };
 
 export default function DropSearch({
   value,
@@ -47,7 +50,7 @@ export default function DropSearch({
   const selected = useMemo(() => (value ? allOpts.find((o) => o.value === value) ?? null : null), [allOpts, value]);
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? allOpts.filter((o) => o.label.toLowerCase().includes(s)) : allOpts;
+    return s ? allOpts.filter((o) => (o.search ?? o.label).toLowerCase().includes(s)) : allOpts;
   }, [q, allOpts]);
   const qTrim = q.trim();
   const canCreate = allowCreate && qTrim.length > 0 && !allOpts.some((o) => o.label.toLowerCase() === qTrim.toLowerCase());
@@ -110,7 +113,7 @@ export default function DropSearch({
         onKeyDown={onKey}
       >
         <span className="ds-val">
-          {selected ? (<>{selected.icon != null && <span className="ds-ico">{selected.icon}</span>}<span className="ds-label">{selected.label}</span></>)
+          {selected ? (<>{selected.icon != null && <span className="ds-ico">{selected.icon}</span>}<span className="ds-label">{selected.buttonLabel ?? selected.label}</span></>)
             : <span className="ds-ph">{placeholder}</span>}
         </span>
         <span className="ds-caret" aria-hidden>▾</span>
