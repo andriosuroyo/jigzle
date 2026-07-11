@@ -440,7 +440,7 @@ export default function PurchasingHistoryBoard({
                 <div className="po-field">
                   {/* PR274 — consolidator courier + tracking (Consolidator → Shipper leg), before the
                       shipper leg. Courier uses the shared LOCAL + CONSOLIDATOR list (localCouriers). */}
-                  <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  <div className="fd-section-head">Consolidator courier &amp; tracking</div>
                   <div className="po-inline2">
                     {/* PR308 — consolidator courier is a dropdown (shared LOCAL + CONSOLIDATOR list), like the shipment courier. */}
                     <select value={consolCourierDraft} onChange={(e) => { setConsolCourierDraft(e.target.value); void saveConsolidator(e.target.value, consolTrackDraft); }}>
@@ -453,7 +453,7 @@ export default function PurchasingHistoryBoard({
                 </div>
                 <div className="po-field">
                   {/* PR261 — subheaders styled like the detail view (uppercase .fd-section-head) */}
-                  <div className="fd-section-head">Shipment courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  <div className="fd-section-head">Shipment courier &amp; tracking</div>
                   {courierErr && <div className="validation err" style={{ marginBottom: 8 }}>{courierErr}</div>}
                   <div className="po-inline2">
                     <select value={courierDraft} onChange={(e) => { setCourierDraft(e.target.value); void saveCourier(e.target.value, trackingDraft); }}>
@@ -467,7 +467,7 @@ export default function PurchasingHistoryBoard({
                 <div className="po-field">
                   {/* PR273 — box is dimensions only: local courier/tracking removed (the leg's tracking
                       lives in the Consolidator/Shipment sections), and no delete (one box per shipment). */}
-                  <div className="fd-section-head">Box dimensions <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  <div className="fd-section-head">Box dimensions</div>
                   {boxErr && <div className="validation err">{boxErr}</div>}
                   {(() => {
                     const b = boxDraft[0] ?? emptyBoxDraft();
@@ -485,7 +485,7 @@ export default function PurchasingHistoryBoard({
                   })()}
                 </div>
                 <div className="po-field">
-                  <div className="fd-section-head">Shipment notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+                  <div className="fd-section-head">Shipment notes</div>
                   <textarea value={noteDraft} onChange={(e) => { setEditDirty(true); setNoteDraft(e.target.value); }} placeholder="Notes for this shipment ID" rows={3} disabled={savingNote} />
                 </div>
               </div>
@@ -573,7 +573,7 @@ export default function PurchasingHistoryBoard({
                 <div className="confirm-q">Mark {openShip.ship_id} as received?</div>
                 <div className="hint" style={{ marginBottom: 12 }}>Moves it to Completed. Use only when the goods were already received in Inbound — this records the date below and does not add stock.</div>
                 <div className="po-field">
-                  <label>Received date</label>
+                  <label>Received date<span className="req" aria-hidden="true">*</span></label>
                   <input type="date" value={markRcvDate} onChange={(e) => setMarkRcvDate(e.target.value)} disabled={markingRcv} />
                 </div>
                 {markErr && <div className="validation err" style={{ margin: '4px 0 10px' }}>{markErr}</div>}

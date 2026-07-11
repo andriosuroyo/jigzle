@@ -223,7 +223,7 @@ export function QuickAddForm({
         </select>
       </label>
       <label className="sc-qa-field">
-        <span>Barcode (optional)</span>
+        <span>Barcode</span>
         <input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="scan / type, or leave blank" />
       </label>
 

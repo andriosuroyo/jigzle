@@ -503,6 +503,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .fd-courier > div { flex: 1; }
 .fd-label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
 .fd-label em { font-style: normal; opacity: 0.7; }
+/* PR318 — required-field marker: a red asterisk after the label text (mandatory = blocks the form's
+   primary submit). Optional fields carry no marker (we dropped the old "(optional)" text). */
+.req { color: var(--red); font-weight: 700; margin-left: 2px; }
 .fd-courier select, .fd-courier input { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
 
 /* ── Outbound: scan + boxes ── */

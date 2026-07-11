@@ -263,7 +263,7 @@ function NewCountModal({
           )}
 
           <label className="sc-field">
-            <span>Note (optional)</span>
+            <span>Note</span>
             <input type="text" value={note} placeholder="e.g. monthly count" onChange={(e) => setNote(e.target.value)} />
           </label>
 

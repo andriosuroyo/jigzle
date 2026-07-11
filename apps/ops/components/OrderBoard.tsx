@@ -1265,7 +1265,7 @@ export default function OrderBoard({
             {/* Unit cost (narrow, left, no number-spinner) + Item link (grow, right) share one line. */}
             <div className="po-field-row">
               <div className="po-field po-field-cost">
-                <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                <label>Unit cost</label>
                 <div className="po-cost-row">
                   {editCcy && <span className="po-cost-ccy">{editCcy.symbol}</span>}
                   <input
@@ -1278,7 +1278,7 @@ export default function OrderBoard({
                 </div>
               </div>
               <div className="po-field grow">
-                <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                <label>Item link</label>
                 <input
                   type="text"
                   placeholder="https://…"
@@ -1288,7 +1288,7 @@ export default function OrderBoard({
               </div>
             </div>
             <div className="po-field">
-              <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <label>Local courier &amp; tracking</label>
               <div className="po-inline2 po-inline-courier">
                 <input
                   type="text"
@@ -1307,7 +1307,7 @@ export default function OrderBoard({
               <datalist id="ship-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
             </div>
             <div className="po-field">
-              <label>Marketplace ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <label>Marketplace ID</label>
               <input
                 type="text"
                 placeholder="marketplace order id"
@@ -1316,7 +1316,7 @@ export default function OrderBoard({
               />
             </div>
             <div className="po-field">
-              <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <label>Notes</label>
               <textarea
                 value={form.item_note}
                 onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
@@ -1542,7 +1542,7 @@ export default function OrderBoard({
             plain text (inputMode decimal) so there's no number-spinner; its symbol follows the source. */}
         <div className="po-field-row">
           <div className="po-field po-field-cost">
-            <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+            <label>Unit cost</label>
             <div className="po-cost-row">
               {ccy && <span className="po-cost-ccy">{ccy.symbol}</span>}
               <input
@@ -1556,7 +1556,7 @@ export default function OrderBoard({
             </div>
           </div>
           <div className="po-field grow">
-            <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+            <label>Item link</label>
             <input
               type="text"
               placeholder="https://…"
@@ -1571,7 +1571,7 @@ export default function OrderBoard({
             distinct from the mandatory outbound Shipping courier. Suggestions come from Settings →
             Purchasing → Local couriers (0055; falls back to the legacy hard-wired list). */}
         <div className="po-field">
-          <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>Local courier &amp; tracking</label>
           <div className="po-inline2 po-inline-courier">
             <input
               type="text"
@@ -1594,7 +1594,7 @@ export default function OrderBoard({
 
         {/* 5 · Marketplace ID (PR151: always shown, no longer China-only) */}
         <div className="po-field">
-          <label>Marketplace ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>Marketplace ID</label>
           <input
             type="text"
             placeholder="marketplace order id"
@@ -1606,7 +1606,7 @@ export default function OrderBoard({
 
         {/* 6 · Notes (optional) */}
         <div className="po-field">
-          <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>Notes</label>
           <textarea
             value={form.item_note}
             onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
@@ -1733,7 +1733,7 @@ export default function OrderBoard({
 
         {/* for customer (optional) */}
         <div className="po-field">
-          <label>For customer <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>For customer</label>
           {form.customer_id != null ? (
             <div className="po-current">
               <span className="ff-name">{form.customer_label}</span>
@@ -1860,7 +1860,7 @@ export default function OrderBoard({
                 last-used, e.g. SUB 192, so you can bump to SUB 193). The shipment CODE (the leading
                 letters) is derived from what you type — no separate picker. */}
             <div className="batch-group">
-              <div className="fd-section-head">Shipment ID</div>
+              <div className="fd-section-head">Shipment ID<span className="req" aria-hidden="true">*</span></div>
               <input className="field" type="text" list="grp-shipids" placeholder='e.g. "SUB 193"' value={grpShipId} onChange={(e) => setGrpShipId(e.target.value)} />
               <datalist id="grp-shipids">{shipIdOpts.map((s) => <option key={s} value={s} />)}</datalist>
               {openShipmentChoices.length > 0 && (
@@ -1881,7 +1881,7 @@ export default function OrderBoard({
             </div>
             <div className="batch-group">
               {/* PR274/PR285 — Consolidator → Shipper leg: courier (dropdown, shared local list) + tracking. */}
-              <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+              <div className="fd-section-head">Consolidator courier &amp; tracking</div>
               <div className="po-inline2 po-inline-courier">
                 <select className="field" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)}>
                   <option value="">— courier —</option>
