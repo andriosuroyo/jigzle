@@ -467,8 +467,12 @@ export default function PurchasingHistoryBoard({
             <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Item detail" onClick={(e) => e.stopPropagation()}>
               <div className="sc-modal-head sc-modal-head-row">
                 <div>
-                  <span className="sc-modal-title">{selItem.item_code || '—'}</span>
-                  {isRealName(selItem.name, selItem.item_code) && <div className="sc-modal-sub">{selItem.name} · ×{selItem.qty}</div>}
+                  {/* PR315 — qty sits beside the SKU in the header (was trailing the subheader name). */}
+                  <div className="sc-modal-title-line">
+                    <span className="sc-modal-title">{selItem.item_code || '—'}</span>
+                    <span className="po-card-qty">×{selItem.qty}</span>
+                  </div>
+                  {isRealName(selItem.name, selItem.item_code) && <div className="sc-modal-sub">{selItem.name}</div>}
                 </div>
                 <button className="sc-modal-x" onClick={() => setSelItem(null)} aria-label="Close">×</button>
               </div>

@@ -1259,6 +1259,8 @@ img.sku-img { background: #e8e8e8; }
 .sc-modal-x { background: var(--paper); border: none; color: var(--brown-dark); width: 32px; height: 32px; border-radius: 8px; font-size: 20px; line-height: 1; cursor: pointer; flex-shrink: 0; }
 .sc-modal-x:active { background: var(--line); }
 .sc-modal-title { font-size: 16px; font-weight: 700; color: var(--brown-dark); }
+/* PR315 — SKU title with the qty sitting beside it on the same line. */
+.sc-modal-title-line { display: flex; align-items: baseline; gap: 8px; }
 .sc-modal-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .sc-modal-body { padding: 14px 18px; overflow: auto; }
 .sc-modal-foot { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; }
