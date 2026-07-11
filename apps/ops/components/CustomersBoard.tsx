@@ -74,6 +74,22 @@ const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
 });
 const isIndonesia = (c: string) => c.trim().toLowerCase() === 'indonesia';
 
+// PR324 — inline pencil / trash icons for the detail action bar (Edit customer / Delete customer),
+// matching the shared `svg`/`btn-ico` convention used across the other boards.
+const _ic = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
+const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+
+// a channel platform's icon (from Settings → Customer → Channel): an uploaded image (URL/`/`-path) or emoji/text.
+const isChannelIconUrl = (icon: string | null | undefined): boolean => !!icon && /^(https?:\/\/|\/)/.test(icon);
+function ChannelIcon({ icon }: { icon?: string | null }) {
+  if (!icon) return null;
+  return isChannelIconUrl(icon)
+    // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
+    ? <img className="cust-col-ico-img" src={icon} alt="" />
+    : <span aria-hidden>{icon}</span>;
+}
+
 export default function CustomersBoard({ initialCustomers, initialTiers, channelOptions, userEmail }: { initialCustomers: CustomerListRow[]; initialTiers: Record<number, Tier>; channelOptions: ChannelOption[]; userEmail: string }) {
   // platform options for the Channels picker (icon + label), from Settings → Customer → Channel
   const channelSelectOptions: IconOption<string>[] = channelOptions.map((c) => ({ value: c.label, label: c.label, icon: c.icon }));
@@ -108,8 +124,10 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const [coding, setCoding] = useState(false);
   const [codeProgress, setCodeProgress] = useState(0);
 
-  // "Delete customer ID" two-step confirm (detail danger zone)
+  // "Delete customer" two-step confirm (detail danger zone)
   const [confirmDel, setConfirmDel] = useState(false);
+  // PR324 — the bodyview is read-only by default; "Edit customer" flips it into the editable form.
+  const [editing, setEditing] = useState(false);
 
   const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
   const note = (tone: 'ok' | 'err' | 'warn', text: string) => setNotice({ tone, text });
@@ -253,6 +271,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     setDetailLoading(true);
     setNotice(null);
     setConfirmDel(false);
+    setEditing(false);
     try {
       const d = await getCustomerDetail(id);
       setDetail(d);
@@ -277,6 +296,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     setSelectedId(null);
     setDetail(null);
     setNotice(null);
+    setEditing(false);
     // a name / address just edited can change the Fix scans — refresh them on the way back
     if (tab === 'fix' && health) loadFix();
   }
@@ -407,6 +427,10 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
 
   const since = daysSince(detail?.last_purchase ?? null);
   const showBody = selectedId != null;
+  // PR324 — read-only column lists: only the phones / channels that carry a value (0 → an empty-state hint).
+  const phoneList = detail ? [detail.phone_raw ?? detail.phone, detail.phone2_raw, detail.phone3_raw].map((p) => (p ?? '').trim()).filter(Boolean) : [];
+  const channelList = detail ? (detail.channels ?? []).filter((c) => (c.platform || '').trim()) : [];
+  const channelIconOf = (platform: string): string | null => channelOptions.find((c) => c.label === platform)?.icon ?? null;
   const fixCount = health
     ? (dupGroups?.length ?? 0) + health.sharedPhoneGroupCount + health.sharedAddressGroupCount
       + health.noAddressCount + health.blankNameCount + health.oddPhoneCount + health.emptyStrayCount + health.repeatRegionCount
@@ -454,140 +478,182 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 </div>
               </div>
 
-              {/* three read-only stat cards */}
-              <div className="cust-stats">
-                <div className="cust-stat">
-                  <div className="cust-stat-label">Total spend</div>
-                  <div className="cust-stat-value cust-stat-figure">{fmtRpCompact(detail.lifetime_spend)}</div>
-                  <div className="cust-stat-sub">{detail.order_count} order{detail.order_count === 1 ? '' : 's'}</div>
-                </div>
-                <div className="cust-stat">
-                  <div className="cust-stat-label">Member level</div>
-                  <div className="cust-stat-value">
-                    {detail.tier ? <span className={`tier tier-${detail.tier.toLowerCase()}`}>{detail.tier}</span> : <span className="tier tier-none">No tier</span>}
-                  </div>
-                  <div className="cust-stat-sub">{detail.to_next_tier ? `${fmtRpCompact(detail.to_next_tier.remaining)} → ${detail.to_next_tier.tier}` : 'Top tier'}</div>
-                </div>
-                <div className="cust-stat">
-                  <div className="cust-stat-label">Last purchase</div>
-                  <div className="cust-stat-value cust-stat-figure">{fmtDay(detail.last_purchase)}</div>
-                  <div className="cust-stat-sub">{since == null ? '—' : since === 0 ? 'today' : `${since} day${since === 1 ? '' : 's'} ago`}</div>
-                </div>
-              </div>
-
-              {/* personal details — editable name + whatsapp */}
-              <section className="fd-section">
-                <div className="fd-section-head">Personal details</div>
-                <div className="po-form">
-                  <div className="po-field">
-                    <label>Name</label>
-                    <input
-                      type="text"
-                      value={nameDraft}
-                      placeholder="customer name"
-                      onChange={(e) => setNameDraft(e.target.value)}
-                      onBlur={() => { if (nameDraft.trim() !== (detail.name ?? '')) savePersonal({ name: nameDraft.trim() || null }); }}
-                      disabled={busy}
-                    />
-                  </div>
-                  <div className="po-field">
-                    <label>WhatsApp / phone number</label>
-                    <input
-                      type="text"
-                      inputMode="tel"
-                      value={phoneDraft}
-                      placeholder="Number #1"
-                      onChange={(e) => setPhoneDraft(e.target.value)}
-                      onBlur={() => { if (phoneDraft.trim() !== (detail.phone_raw ?? detail.phone ?? '')) savePersonal({ phone: phoneDraft.trim() || null }); }}
-                      disabled={busy}
-                    />
-                    <input
-                      type="text"
-                      inputMode="tel"
-                      value={phone2Draft}
-                      placeholder="Number #2"
-                      style={{ marginTop: 6 }}
-                      onChange={(e) => setPhone2Draft(e.target.value)}
-                      onBlur={() => { if (phone2Draft.trim() !== (detail.phone2_raw ?? '')) savePersonal({ phone2: phone2Draft.trim() || null }); }}
-                      disabled={busy}
-                    />
-                    <input
-                      type="text"
-                      inputMode="tel"
-                      value={phone3Draft}
-                      placeholder="Number #3"
-                      style={{ marginTop: 6 }}
-                      onChange={(e) => setPhone3Draft(e.target.value)}
-                      onBlur={() => { if (phone3Draft.trim() !== (detail.phone3_raw ?? '')) savePersonal({ phone3: phone3Draft.trim() || null }); }}
-                      disabled={busy}
-                    />
-                  </div>
-                  <div className="po-field">
-                    <label>Channels</label>
-                    {channelDrafts.map((row, i) => (
-                      <div className="cust-channel" key={i} style={i > 0 ? { marginTop: 6 } : undefined}>
-                        <IconSelect
-                          className="cust-channel-platform"
-                          value={row.platform || null}
-                          options={channelSelectOptions}
-                          placeholder="— pick —"
-                          ariaLabel="Channel platform"
+              {editing ? (
+                /* ── PR324 edit mode: the editable customer fields (name / three phones / three channels).
+                   Each control auto-saves on change/blur; "Done" returns to the read-only bodyview. ── */
+                <>
+                  <section className="fd-section">
+                    <div className="fd-section-head">Personal details</div>
+                    <div className="po-form">
+                      <div className="po-field">
+                        <label>Name</label>
+                        <input
+                          type="text"
+                          value={nameDraft}
+                          placeholder="customer name"
+                          onChange={(e) => setNameDraft(e.target.value)}
+                          onBlur={() => { if (nameDraft.trim() !== (detail.name ?? '')) savePersonal({ name: nameDraft.trim() || null }); }}
                           disabled={busy}
-                          onChange={(v) => {
-                            const next = channelDrafts.map((r, idx) => (idx === i ? { ...r, platform: v } : r));
-                            setChannelDrafts(next);
-                            saveChannels(next);
-                          }}
+                        />
+                      </div>
+                      <div className="po-field">
+                        <label>WhatsApp / phone number</label>
+                        <input
+                          type="text"
+                          inputMode="tel"
+                          value={phoneDraft}
+                          placeholder="Number #1"
+                          onChange={(e) => setPhoneDraft(e.target.value)}
+                          onBlur={() => { if (phoneDraft.trim() !== (detail.phone_raw ?? detail.phone ?? '')) savePersonal({ phone: phoneDraft.trim() || null }); }}
+                          disabled={busy}
                         />
                         <input
-                          className="cust-channel-handle"
                           type="text"
-                          value={row.handle}
-                          placeholder="username / number"
-                          onChange={(e) => setChannelRow(i, { handle: e.target.value })}
-                          onBlur={() => saveChannels(channelDrafts)}
+                          inputMode="tel"
+                          value={phone2Draft}
+                          placeholder="Number #2"
+                          style={{ marginTop: 6 }}
+                          onChange={(e) => setPhone2Draft(e.target.value)}
+                          onBlur={() => { if (phone2Draft.trim() !== (detail.phone2_raw ?? '')) savePersonal({ phone2: phone2Draft.trim() || null }); }}
+                          disabled={busy}
+                        />
+                        <input
+                          type="text"
+                          inputMode="tel"
+                          value={phone3Draft}
+                          placeholder="Number #3"
+                          style={{ marginTop: 6 }}
+                          onChange={(e) => setPhone3Draft(e.target.value)}
+                          onBlur={() => { if (phone3Draft.trim() !== (detail.phone3_raw ?? '')) savePersonal({ phone3: phone3Draft.trim() || null }); }}
                           disabled={busy}
                         />
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              {/* addresses — add / edit / delete via overlay */}
-              <section className="fd-section">
-                <div className="po-tobuy-head">
-                  <div className="fd-section-head" style={{ marginBottom: 0 }}>Addresses</div>
-                  <button className="btn-brown btn-ico" onClick={() => openAddr(null)} disabled={busy}><MapPinIcon />add address</button>
-                </div>
-                {detail.addresses.length === 0 && <div className="hint">No addresses on file.</div>}
-                <ul className="cust-addrs">
-                  {detail.addresses.map((a) => (
-                    <li key={a.address_id} className="cust-addr">
-                      <div className="cust-addr-main">
-                        <div className="cust-addr-name">{a.recipient_name || addressLine(a)}</div>
-                        <div className="cust-addr-line hint">{a.raw_address || [a.street, a.kota].filter(Boolean).join(', ') || '—'}</div>
+                      <div className="po-field">
+                        <label>Channels</label>
+                        {channelDrafts.map((row, i) => (
+                          <div className="cust-channel" key={i} style={i > 0 ? { marginTop: 6 } : undefined}>
+                            <IconSelect
+                              className="cust-channel-platform"
+                              value={row.platform || null}
+                              options={channelSelectOptions}
+                              placeholder="— pick —"
+                              ariaLabel="Channel platform"
+                              disabled={busy}
+                              onChange={(v) => {
+                                const next = channelDrafts.map((r, idx) => (idx === i ? { ...r, platform: v } : r));
+                                setChannelDrafts(next);
+                                saveChannels(next);
+                              }}
+                            />
+                            <input
+                              className="cust-channel-handle"
+                              type="text"
+                              value={row.handle}
+                              placeholder="username / number"
+                              onChange={(e) => setChannelRow(i, { handle: e.target.value })}
+                              onBlur={() => saveChannels(channelDrafts)}
+                              disabled={busy}
+                            />
+                          </div>
+                        ))}
                       </div>
-                      <button className="cust-addr-edit" onClick={() => openAddr(a)} disabled={busy} aria-label="Edit address">✎</button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              {/* danger zone — delete this customer record outright (blocked server-side if it has sales) */}
-              <section className="fd-section cust-danger">
-                {confirmDel ? (
-                  <div className="cust-danger-confirm">
-                    <span className="hint">Permanently delete {customerLabel(detail.name, detail.phone)}? This can’t be undone.</span>
-                    <div className="cust-danger-actions">
-                      <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
-                      <button className="btn-link danger" onClick={handleDeleteCustomer} disabled={busy}>{busy ? 'Deleting…' : 'Delete'}</button>
+                    </div>
+                  </section>
+                  <div className="cust-actions">
+                    <button className="btn-primary" onClick={() => { setNotice(null); setEditing(false); }} disabled={busy}>Done</button>
+                  </div>
+                </>
+              ) : (
+                /* ── PR324 read-only bodyview ── */
+                <>
+                  {/* three read-only stat cards */}
+                  <div className="cust-stats">
+                    <div className="cust-stat">
+                      <div className="cust-stat-label">Total spend</div>
+                      <div className="cust-stat-value cust-stat-figure">{fmtRpCompact(detail.lifetime_spend)}</div>
+                      <div className="cust-stat-sub">{detail.order_count} order{detail.order_count === 1 ? '' : 's'}</div>
+                    </div>
+                    <div className="cust-stat">
+                      <div className="cust-stat-label">Member level</div>
+                      <div className="cust-stat-value">
+                        {detail.tier ? <span className={`tier tier-${detail.tier.toLowerCase()}`}>{detail.tier}</span> : <span className="tier tier-none">No tier</span>}
+                      </div>
+                      <div className="cust-stat-sub">{detail.to_next_tier ? `${fmtRpCompact(detail.to_next_tier.remaining)} → ${detail.to_next_tier.tier}` : 'Top tier'}</div>
+                    </div>
+                    <div className="cust-stat">
+                      <div className="cust-stat-label">Last purchase</div>
+                      <div className="cust-stat-value cust-stat-figure">{fmtDay(detail.last_purchase)}</div>
+                      <div className="cust-stat-sub">{since == null ? '—' : since === 0 ? 'today' : `${since} day${since === 1 ? '' : 's'} ago`}</div>
                     </div>
                   </div>
-                ) : (
-                  <button className="btn-link danger" onClick={() => { setNotice(null); setConfirmDel(true); }} disabled={busy}>Delete customer ID</button>
-                )}
-              </section>
+
+                  {/* registered phone numbers — up to three columns, only the filled ones */}
+                  <section className="fd-section">
+                    <div className="fd-section-head">Registered phone number</div>
+                    {phoneList.length === 0 ? (
+                      <div className="hint">No number on file.</div>
+                    ) : (
+                      <div className="cust-cols">
+                        {phoneList.map((p, i) => (
+                          <div className="cust-col" key={i}>
+                            <div className="cust-col-label">Number {i + 1}</div>
+                            <div className="cust-col-value">{p}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* channels — up to three columns, only the filled ones; white cards */}
+                  <section className="fd-section">
+                    <div className="fd-section-head">Channels</div>
+                    {channelList.length === 0 ? (
+                      <div className="hint">No channels on file.</div>
+                    ) : (
+                      <div className="cust-cols">
+                        {channelList.map((c, i) => (
+                          <div className="cust-col cust-col-white" key={i}>
+                            <div className="cust-col-label"><ChannelIcon icon={channelIconOf(c.platform)} />{c.platform}</div>
+                            <div className="cust-col-value">{c.handle || '—'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* addresses — full width; white cards; "Edit address" per saved address */}
+                  <section className="fd-section">
+                    <div className="fd-section-head">Addresses</div>
+                    {detail.addresses.length === 0 && <div className="hint">No addresses on file.</div>}
+                    <ul className="cust-addrs">
+                      {detail.addresses.map((a) => (
+                        <li key={a.address_id} className="cust-addr">
+                          <div className="cust-addr-main">
+                            <div className="cust-addr-name">{a.recipient_name || addressLine(a)}</div>
+                            <div className="cust-addr-line hint">{a.raw_address || [a.street, a.kota].filter(Boolean).join(', ') || '—'}</div>
+                          </div>
+                          <button className="btn-secondary btn-ico cust-addr-edit-btn" onClick={() => openAddr(a)} disabled={busy}><PencilIcon />Edit address</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  {/* action bar (PR239 standard: secondary → brown → destructive, grouped left) */}
+                  {confirmDel ? (
+                    <div className="cust-actions cust-confirm">
+                      <span className="hint">Permanently delete {customerLabel(detail.name, detail.phone)}? This can’t be undone.</span>
+                      <button className="btn-secondary" onClick={() => setConfirmDel(false)} disabled={busy}>Cancel</button>
+                      <button className="btn-primary danger" onClick={handleDeleteCustomer} disabled={busy}>{busy ? 'Deleting…' : 'Delete'}</button>
+                    </div>
+                  ) : (
+                    <div className="cust-actions">
+                      <button className="btn-secondary btn-ico" onClick={() => { setNotice(null); setEditing(true); }} disabled={busy}><PencilIcon />Edit customer</button>
+                      <button className="btn-brown btn-ico" onClick={() => openAddr(null)} disabled={busy}><MapPinIcon />Add address</button>
+                      <button className="btn-danger btn-ico" onClick={() => { setNotice(null); setConfirmDel(true); }} disabled={busy}><TrashIcon />Delete customer</button>
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>
@@ -875,6 +941,14 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               <button className="sc-modal-x" onClick={addrClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
+              {/* PR324 — when editing, show the original address STUB (as first entered / imported) so the
+                  structured fields can be cross-checked against the source instead of drifting from it. */}
+              {addrEdit.address && (addrEdit.address.source_blob || addrEdit.address.raw_address) && (
+                <div className="cust-addr-stub">
+                  <div className="cust-addr-stub-label">Original — as first entered</div>
+                  <div className="cust-addr-stub-text">{addrEdit.address.source_blob || addrEdit.address.raw_address}</div>
+                </div>
+              )}
               <div className="po-form">
                 <div className="po-inline">
                   <div className="po-field">

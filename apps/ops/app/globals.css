@@ -1433,20 +1433,32 @@ img.sku-img { background: #e8e8e8; }
 .cust-stat-value.cust-stat-figure { font-size: 12.5px; white-space: nowrap; }
 .cust-stat-value .tier { font-size: 12px; }
 .cust-stat-sub { font-size: 11px; color: var(--muted); }
-/* address list rows */
+/* PR324 — read-only column lists for the registered phones + channels (mirror the stat-card row: one
+   card per value, only as many as there are values). Channels use white cards; phones stay cream. */
+.cust-cols { display: flex; gap: 8px; margin-top: 8px; }
+.cust-col { flex: 1 1 0; min-width: 0; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.cust-col.cust-col-white { background: white; }
+.cust-col-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.cust-col-ico-img { width: 15px; height: 15px; object-fit: contain; border-radius: 3px; }
+.cust-col-value { margin-top: 5px; font-weight: 600; color: var(--ink); word-break: break-word; }
+/* address list rows (PR324 — white cards) */
 .cust-addrs { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.cust-addr { display: flex; align-items: center; gap: 10px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.cust-addr { display: flex; align-items: center; gap: 10px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
 .cust-addr-main { flex: 1; min-width: 0; }
 .cust-addr-name { font-weight: 600; color: var(--ink); }
 .cust-addr-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cust-addr-edit { flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--brown-dark); font-size: 14px; line-height: 1; cursor: pointer; }
-.cust-addr-edit:active { background: var(--paper); }
-.cust-addr-edit:disabled { opacity: 0.5; cursor: not-allowed; }
+.cust-addr-edit-btn { flex-shrink: 0; }
+/* PR324 — the original address STUB shown at the top of the Edit-address overlay (crosscheck source) */
+.cust-addr-stub { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; }
+.cust-addr-stub-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin-bottom: 3px; }
+.cust-addr-stub-text { font-size: 12.5px; color: var(--ink); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 /* "Find duplicates" link at the bottom of the customer list pane */
 .cust-dup-link { display: block; margin: 10px 8px 4px; text-align: center; }
-/* detail danger zone — "Delete customer ID" */
-.cust-danger { border-top: 1px solid var(--line); padding-top: 12px; }
-.cust-danger-confirm { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+/* PR324 — detail action bar (Edit customer / Add address / Delete customer): the PR239 standard row —
+   left-aligned, horizontally scrollable, buttons never shrink. Same shell carries the delete confirm. */
+.cust-actions { display: flex; gap: 8px; overflow-x: auto; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cust-actions > button { flex-shrink: 0; }
+.cust-confirm { align-items: center; flex-wrap: wrap; }
 .cust-danger-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 /* ── Data health page ── */
 .dh-intro { margin: 12px 0 4px; line-height: 1.5; }
