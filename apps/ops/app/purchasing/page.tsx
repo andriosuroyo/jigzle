@@ -6,7 +6,6 @@ import {
   getOpenShipments,
   getPlannedItems,
   getPreorders,
-  getSoldOutItems,
   getSuppliers,
 } from '@/app/purchasing/actions';
 import { getLocalCouriers, getShipmentCouriers } from '@/app/settings/actions';
@@ -27,7 +26,6 @@ export default async function OrderPage() {
     shipments,
     planned,
     preorders,
-    soldOut,
     localCouriers,
     shipmentCouriers,
   ] = await Promise.all([
@@ -38,7 +36,6 @@ export default async function OrderPage() {
     getOpenShipments(),
     getPlannedItems(),
     getPreorders(),
-    getSoldOutItems(),
     getLocalCouriers(),
     getShipmentCouriers(),
   ]);
@@ -51,7 +48,6 @@ export default async function OrderPage() {
       shipments={shipments}
       planned={planned}
       preorders={preorders}
-      soldOut={soldOut}
       shipmentHistory={[]}
       localCouriers={localCouriers.map((c) => c.label)}
       shipmentCouriers={shipmentCouriers.map((c) => c.label)}

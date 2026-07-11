@@ -118,6 +118,10 @@ export interface PreorderRow {
   urgency: Urgency | null; // from the order (orders.urgency)
   line_note: string | null; // the order line's note (order_lines.line_note) — editable via Edit PO (PR254)
   product_link: string | null; // the order line's item_link, if any (used by the Buy overlay)
+  // PR304 — out-of-stock is now an inline flag (no separate list). A From-Sales line is flagged by a
+  // 'Sold out' PO created for it; oos_po_id is that PO (so unchecking can delete it).
+  out_of_stock: boolean;
+  oos_po_id: number | null;
 }
 
 // ── To buy → Planned (manual buy-list; PO status 'Planned'). Created with no supplier yet. ──
@@ -146,6 +150,8 @@ export interface PlannedItemRow {
   available: number;     // live stock_check.available (warehouse)
   on_the_way: number;    // Σ 'On the way' PO qty (shipped, en route)
   with_forwarder: number; // Σ 'With Forwarder' PO qty (in forwarder)
+  // PR304 — inline out-of-stock flag (PO status 'Sold out'); the item stays in the Manual list.
+  out_of_stock: boolean;
 }
 
 // ── To buy → Out of Stock (PO status 'Sold out' + auto date + optional reason). The card mirrors its
