@@ -560,6 +560,7 @@ export default function PurchasingHistoryBoard({
                     )}
                   </div>
                 </div>
+                <span className="po-chev" aria-hidden>›</span>
               </button>
             </li>
           );
