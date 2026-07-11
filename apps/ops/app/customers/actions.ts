@@ -4,6 +4,8 @@
 // supabase client (anon key + the signed-in user's session), so RLS (is_allowed_user()) gates reads
 // and writes. Reads draw from customers / orders / payments / customer_addresses (no new tables).
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import { normalizePhone, phoneCode, tierFor, toNextTier, type Tier } from '@jigzle/lib';
 import type { Customer, CustomerAddress, CustomerChannel } from '@jigzle/db/types';
@@ -21,6 +23,36 @@ import type {
   FlaggedCustomer,
   MergeResult,
 } from './types';
+
+// ── PR321: postcode ↔ province crosscheck data ──
+// Normalize a province for comparison. The DKI Jakarta / Jawa Barat / Banten trio (Greater Jakarta) is
+// collapsed to ONE bucket, per the operator's convention of labelling Jakarta addresses "Jawa Barat" —
+// so those don't false-flag against a dataset that files them under "Daerah Khusus Ibukota Jakarta".
+function normProv(s: string | null | undefined): string {
+  const v = (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!v) return '';
+  if (/jakarta|jawa barat|banten/.test(v)) return '@jabodetabek';
+  return v.replace(/^(provinsi|prov\.?|daerah istimewa|d\.?i\.?)\s+/, '');
+}
+// postcode → set of (normalized) provinces, read ONCE from the bundled Indonesia dataset (public/). Cached
+// at module scope; any read/parse error leaves an empty index → no postcode flags (graceful degrade).
+let postalProvIdx: Map<string, Set<string>> | null = null;
+function postalIndex(): Map<string, Set<string>> {
+  if (postalProvIdx) return postalProvIdx;
+  const idx = new Map<string, Set<string>>();
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'data', 'id-postal.json'), 'utf8')) as { provinces: string[]; rows: [string, string, string, number, string][] };
+    for (const r of raw.rows) {
+      const pc = (r[4] ?? '').replace(/\D/g, '');
+      if (!pc) continue;
+      const prov = normProv(raw.provinces[r[3]] ?? '');
+      if (!prov) continue;
+      (idx.get(pc) ?? idx.set(pc, new Set()).get(pc)!).add(prov);
+    }
+  } catch { /* dataset unreadable → empty index → postcode flags simply don't fire */ }
+  postalProvIdx = idx;
+  return idx;
+}
 
 // ── the A–Z directory: every customer, lightweight (id / name / phone), name-sorted ──
 // PostgREST caps a single response at ~1000 rows regardless of .limit(), so we PAGE through with
@@ -524,6 +556,28 @@ export async function getDataHealth(): Promise<DataHealth> {
     .filter((r) => repeatRegionIds.has(r.customer_id))
     .map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
 
+  // ── PR321: postcode crosschecks (Indonesia addresses only). Step 1 — the stated PROVINCE contradicts
+  // the dataset's province(s) for that postcode (Greater-Jakarta merged, so DKI↔Jawa Barat doesn't flag).
+  // Step 2 — a filled address that is MISSING a postcode (flag for manual dissection; never auto-assumed).
+  const pidx = postalIndex();
+  const postcodeMismatchIds = new Set<number>();
+  const missingPostcodeIds = new Set<number>();
+  for (const a of addrRows) {
+    const indonesia = !(a.negara ?? '').trim() || /indonesia/i.test(a.negara ?? '');
+    if (!indonesia) continue;
+    const hasRegion = !!((a.provinsi ?? '').trim() || (a.kota ?? '').trim() || (a.kecamatan ?? '').trim() || (a.kelurahan ?? '').trim());
+    const pc = (a.kode_pos ?? '').replace(/\D/g, '');
+    if (!pc) {
+      if (hasRegion) missingPostcodeIds.add(a.customer_id);
+      continue;
+    }
+    const provs = pidx.get(pc);
+    const ap = normProv(a.provinsi);
+    if (provs && provs.size && ap && !provs.has(ap)) postcodeMismatchIds.add(a.customer_id);
+  }
+  const postcodeMismatch: FlaggedCustomer[] = rows.filter((r) => postcodeMismatchIds.has(r.customer_id)).map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
+  const missingPostcode: FlaggedCustomer[] = rows.filter((r) => missingPostcodeIds.has(r.customer_id)).map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
+
   return {
     totalCustomers: rows.length,
     noName,
@@ -543,6 +597,10 @@ export async function getDataHealth(): Promise<DataHealth> {
     oddPhones: oddPhones.slice(0, 200),
     repeatRegionCount: repeatRegion.length,
     repeatRegion: repeatRegion.slice(0, 200),
+    postcodeMismatchCount: postcodeMismatch.length,
+    postcodeMismatch: postcodeMismatch.slice(0, 200),
+    missingPostcodeCount: missingPostcode.length,
+    missingPostcode: missingPostcode.slice(0, 200),
   };
 }
 

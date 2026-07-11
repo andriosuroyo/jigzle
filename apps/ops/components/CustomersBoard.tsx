@@ -410,6 +410,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const fixCount = health
     ? (dupGroups?.length ?? 0) + health.sharedPhoneGroupCount + health.sharedAddressGroupCount
       + health.noAddressCount + health.blankNameCount + health.oddPhoneCount + health.emptyStrayCount + health.repeatRegionCount
+      + health.postcodeMismatchCount + health.missingPostcodeCount
     : 0;
 
   // a compact clickable directory row (used by the Fix single-customer scans)
@@ -821,6 +822,34 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     <ul className="fq-list">{health.repeatRegion.map((c) => flaggedRow(c))}</ul>
                     {health.repeatRegionCount > health.repeatRegion.length && (
                       <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.repeatRegion.length} of {health.repeatRegionCount}.</div>
+                    )}
+                  </>
+                )}
+
+                {/* PR321 — postcode ↔ province mismatch (crosscheck against the bundled dataset) */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Postcode ≠ province {health.postcodeMismatchCount ? `(${health.postcodeMismatchCount})` : ''}</div>
+                {health.postcodeMismatchCount === 0 ? (
+                  <div className="validation ok">No address has a postcode whose province contradicts the dataset.</div>
+                ) : (
+                  <>
+                    <div className="hint" style={{ marginBottom: 6 }}>The stated province doesn’t match the province the dataset lists for that postcode (Jakarta ⇄ Jawa Barat are treated as one). Either the postcode or the province is wrong — open each to check.</div>
+                    <ul className="fq-list">{health.postcodeMismatch.map((c) => flaggedRow(c))}</ul>
+                    {health.postcodeMismatchCount > health.postcodeMismatch.length && (
+                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.postcodeMismatch.length} of {health.postcodeMismatchCount}.</div>
+                    )}
+                  </>
+                )}
+
+                {/* PR321 — Indonesia address with no postcode (flag; we deliberately don't assume one) */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Missing postcode {health.missingPostcodeCount ? `(${health.missingPostcodeCount})` : ''}</div>
+                {health.missingPostcodeCount === 0 ? (
+                  <div className="validation ok">Every filled Indonesia address has a postcode.</div>
+                ) : (
+                  <>
+                    <div className="hint" style={{ marginBottom: 6 }}>A filled address with no postcode. Dissect it manually and add the correct postcode — we don’t assume one (a guessed postcode can misroute the parcel).</div>
+                    <ul className="fq-list">{health.missingPostcode.map((c) => flaggedRow(c))}</ul>
+                    {health.missingPostcodeCount > health.missingPostcode.length && (
+                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.missingPostcode.length} of {health.missingPostcodeCount}.</div>
                     )}
                   </>
                 )}
