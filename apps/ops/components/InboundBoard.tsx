@@ -837,24 +837,27 @@ export default function InboundBoard({
               {sortedQueue.map((q) => (
                 <li key={q.ship_id}>
                   <button className="fq-row" onClick={() => openShipment(q.ship_id)}>
-                    {/* top: ship id (left) · shipped date (right — mirrors Purchasing History Active) */}
-                    <div className="fq-row-top">
-                      <span className="fq-id">{q.ship_id}</span>
-                      {/* PR259 — badge a shipment that has an unsaved in-progress count waiting to resume */}
-                      {draftIndex.ships.has(q.ship_id) && <span className="badge draft">in-progress</span>}
-                      <span className="fq-id-sub" style={{ marginLeft: 'auto' }}>shipped {fmtNiceDate(q.ship_date) || '—'}</span>
+                    <div className="fq-row-main">
+                      {/* top: ship id (left) · shipped date (right — mirrors Purchasing History Active) */}
+                      <div className="fq-row-top">
+                        <span className="fq-id">{q.ship_id}</span>
+                        {/* PR259 — badge a shipment that has an unsaved in-progress count waiting to resume */}
+                        {draftIndex.ships.has(q.ship_id) && <span className="badge draft">in-progress</span>}
+                        <span className="fq-id-sub" style={{ marginLeft: 'auto' }}>shipped {fmtNiceDate(q.ship_date) || '—'}</span>
+                      </div>
+                      {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
+                      <div className="fq-row-bot">
+                        {q.expected_count > 0 ? (
+                          <span className="ff-items-skus">
+                            {q.expected_count} {q.expected_count === 1 ? 'item' : 'items'}
+                            {q.sku_codes.length ? ` · ${q.sku_codes.join(', ')}` : ''}
+                          </span>
+                        ) : (
+                          <span className="badge ready" style={{ marginLeft: 0 }}>no list</span>
+                        )}
+                      </div>
                     </div>
-                    {/* second line, left-aligned: item count + the full SKU list (A-Z), else "no list" */}
-                    <div className="fq-row-bot">
-                      {q.expected_count > 0 ? (
-                        <span className="ff-items-skus">
-                          {q.expected_count} {q.expected_count === 1 ? 'item' : 'items'}
-                          {q.sku_codes.length ? ` · ${q.sku_codes.join(', ')}` : ''}
-                        </span>
-                      ) : (
-                        <span className="badge ready" style={{ marginLeft: 0 }}>no list</span>
-                      )}
-                    </div>
+                    <span className="po-chev" aria-hidden>›</span>
                   </button>
                 </li>
               ))}

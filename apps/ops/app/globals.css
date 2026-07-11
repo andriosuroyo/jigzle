@@ -719,7 +719,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .rcv-close { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); padding: 6px 0; }
 
 /* ── PR17: scan-to-find-shipment (§5), result banner + Reverse, confirm window extras ── */
-.rcv-find { padding: 8px 8px 2px; }
+/* PR310 — full-width: no horizontal padding so the search bar's edges line up with the tabs above and
+   the arrival cards below (which are flush in the bodyview). */
+.rcv-find { padding: 8px 0 2px; }
 .rcv-suggest { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .rcv-suggest-opt { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: white; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 12px; cursor: pointer; }
 .rcv-suggest-opt:active { background: var(--paper); }
@@ -1873,6 +1875,9 @@ input.batch-field, select.batch-field {
 .bodyview { max-width: 1100px; margin: 0 auto; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
 .bodyview > .validation { margin-bottom: 10px; }
 .bodyview .fq-list { height: auto; max-height: none; overflow: visible; padding: 6px 0; }
+/* PR310 — Inbound Active arrival cards: white fill (like Purchasing) + a right-aligned "›" chevron. */
+.bodyview .fq-list .fq-row { background: white; flex-direction: row; align-items: center; gap: 10px; }
+.fq-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .bv-back { display: inline-block; margin-bottom: 10px; font-size: 13px; }
 .bv-detail { background: white; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 /* New-order bodyview: back row above the form (tabs hidden, breadcrumb stays). */
