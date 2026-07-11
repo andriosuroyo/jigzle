@@ -16,7 +16,12 @@ import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import DropSearch from '@/components/DropSearch';
 import { fmtNiceDate } from '@jigzle/lib';
+
+// PR322 — courier dropsearch options: the shared list + the current value if it's not in it (kept so an
+// existing courier still shows even after it's removed from Settings), each as a {value,label} pair.
+const courierDsOpts = (list: string[], cur: string) => [...list, ...(cur && !list.includes(cur) ? [cur] : [])].map((c) => ({ value: c, label: c }));
 
 // PR206/PR261: box editor draft rows (string inputs) ⇄ ShipmentBox (numbers/null). real_weight is kg
 // (the CN Packing List reads kg). PR261 adds a per-box local courier alongside the tracking number.
@@ -443,11 +448,14 @@ export default function PurchasingHistoryBoard({
                   <div className="fd-section-head">Consolidator courier &amp; tracking</div>
                   <div className="po-inline2 po-inline-courier">
                     {/* PR308 — consolidator courier is a dropdown (shared LOCAL + CONSOLIDATOR list), like the shipment courier. */}
-                    <select value={consolCourierDraft} onChange={(e) => { setConsolCourierDraft(e.target.value); void saveConsolidator(e.target.value, consolTrackDraft); }}>
-                      <option value="">— Pick courier —</option>
-                      {localCouriers.map((m) => <option key={m} value={m}>{m}</option>)}
-                      {consolCourierDraft && !localCouriers.includes(consolCourierDraft) && <option value={consolCourierDraft}>{consolCourierDraft}</option>}
-                    </select>
+                    <DropSearch
+                      value={consolCourierDraft || null}
+                      onChange={(v) => { setConsolCourierDraft(v); void saveConsolidator(v, consolTrackDraft); }}
+                      options={courierDsOpts(localCouriers, consolCourierDraft)}
+                      placeholder="— Pick courier —"
+                      clearable
+                      ariaLabel="Consolidator courier"
+                    />
                     <input type="text" placeholder="Tracking number" value={consolTrackDraft} onChange={(e) => setConsolTrackDraft(e.target.value)} onBlur={(e) => void saveConsolidator(consolCourierDraft, e.target.value)} />
                   </div>
                 </div>
@@ -456,11 +464,14 @@ export default function PurchasingHistoryBoard({
                   <div className="fd-section-head">Shipment courier &amp; tracking</div>
                   {courierErr && <div className="validation err" style={{ marginBottom: 8 }}>{courierErr}</div>}
                   <div className="po-inline2 po-inline-courier">
-                    <select value={courierDraft} onChange={(e) => { setCourierDraft(e.target.value); void saveCourier(e.target.value, trackingDraft); }}>
-                      <option value="">— Pick courier —</option>
-                      {shipmentCouriers.map((c) => <option key={c} value={c}>{c}</option>)}
-                      {courierDraft && !shipmentCouriers.includes(courierDraft) && <option value={courierDraft}>{courierDraft}</option>}
-                    </select>
+                    <DropSearch
+                      value={courierDraft || null}
+                      onChange={(v) => { setCourierDraft(v); void saveCourier(v, trackingDraft); }}
+                      options={courierDsOpts(shipmentCouriers, courierDraft)}
+                      placeholder="— Pick courier —"
+                      clearable
+                      ariaLabel="Shipment courier"
+                    />
                     <input type="text" placeholder="Tracking number" value={trackingDraft} onChange={(e) => setTrackingDraft(e.target.value)} onBlur={(e) => void saveCourier(courierDraft, e.target.value)} />
                   </div>
                 </div>

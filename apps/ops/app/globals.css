@@ -1369,6 +1369,42 @@ img.sku-img { background: #e8e8e8; }
 .fwd-prefix-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* FlagSelect — compact flag button + searchable country dropdown */
+/* PR322 — dropsearch: a searchable dropdown (button + popup with an auto-focused search + filtered list).
+   The button mirrors the standard .field look (34px, hairline border) so it drops in for a native select. */
+.ds { position: relative; width: 100%; }
+.ds-btn { width: 100%; height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 16px; color: var(--ink); cursor: pointer; text-align: left; }
+.ds-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ds-val { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.ds-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-ph { color: var(--muted-light); }
+.ds-ico { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; }
+.ds-caret { flex-shrink: 0; color: var(--muted); font-size: 11px; }
+.ds.open .ds-caret { transform: rotate(180deg); }
+.ds-pop { position: absolute; z-index: 60; top: calc(100% + 4px); left: 0; width: 100%; min-width: 200px; background: white; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); padding: 6px; }
+.ds-search { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; background: var(--cream); margin-bottom: 6px; }
+.ds-list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.ds-opt { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 9px; border: none; border-radius: 6px; background: none; font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; }
+.ds-opt.hi { background: var(--paper); }
+.ds-opt.active { font-weight: 600; }
+.ds-opt.ds-none, .ds-opt.ds-create { color: var(--muted); font-style: italic; }
+.ds-empty { padding: 8px 9px; font-size: 13px; color: var(--muted); }
+/* PR322 — an uploaded/brand image icon inside a dropsearch option (couriers, payment, box presets). */
+.ds-ico-img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; display: block; }
+/* PR322 — size variants migrated from IconSelect (now a DropSearch wrapper). Channel-width variants
+   (.cust-channel-platform / .nc-channel-platform) target the passed className, so they carry over as-is. */
+.ds.box-preset { width: 96px; flex-shrink: 0; }
+.ds.box-preset .ds-btn { padding: 6px 8px; font-size: 13px; }
+.ds.box-preset .ds-ico-img { width: 18px; height: 18px; }
+.rcv-ctl .ds { width: auto; min-width: 84px; }
+.rcv-ctl .ds-btn { padding: 6px 8px; font-size: 13px; }
+.rcv-ctl .ds-ico-img { width: 18px; height: 18px; }
+.rcv-le-field .ds { width: 100%; }
+/* PR322 — compact flag-only picker (Settings suppliers/forwarders): fills its 46px cell, flag + caret,
+   no label text (buttonLabel is blank). Tight padding so the flag + caret fit the narrow cell. */
+.ds.ds-flag .ds-btn { padding: 3px 4px; gap: 2px; }
+.ds.ds-flag .ds-label:empty { display: none; }
+/* PR322 — phone country-code picker keeps its snug fixed-width fit inside the number row. */
+.nc-row .phone-cc .ds-btn { padding: 9px 8px; gap: 4px; }
 .flag-select { position: relative; }
 .flag-select-btn { width: 100%; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; padding: 0; }
 .flag-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
