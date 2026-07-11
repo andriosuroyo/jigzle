@@ -406,6 +406,24 @@ export async function sendPoBackToShip(poId: number, qty: number): Promise<{ err
   return { error: error ? error.message : null };
 }
 
+// ── PR316: manually mark an ACTIVE shipment as received (→ Completed). For the out-of-band case where
+// the goods were already received in Inbound but this shipment header was never closed (e.g. a back-dated
+// box entered into Purchasing after the fact, so record_receipt never ran against this ship_id). This is
+// HEADER-ONLY: it flips shipments.status → 'completed' and stamps received_date; it does NOT run receiving
+// or touch inventory / PO lines (the stock is already in). Guarded to an 'open' shipment; a completed one
+// already is. Error returned as data (PR145). ──
+export async function markShipmentReceived(shipId: string, receivedDate: string): Promise<{ error: string | null }> {
+  const sid = shipId?.trim();
+  if (!sid) return { error: 'A ship id is required.' };
+  if (!receivedDate || !/^\d{4}-\d{2}-\d{2}$/.test(receivedDate)) return { error: 'A received date is required.' };
+  const supabase = createSupabaseServerClient();
+  const { data: sh } = await supabase.from('shipments').select('status').eq('ship_id', sid).maybeSingle();
+  if (!sh) return { error: 'Shipment not found.' };
+  if ((sh as { status: string | null }).status === 'completed') return { error: 'This shipment is already completed.' };
+  const { error } = await supabase.from('shipments').update({ status: 'completed', received_date: receivedDate }).eq('ship_id', sid);
+  return { error: error ? `Couldn't mark received: ${error.message}` : null };
+}
+
 // ── PR254: delete an ACTIVE shipment (Purchasing History detail). Ungroups it — every grouped PO goes
 // back to To forwarder (status → Processing, ship link cleared) so nothing is lost — then drops the
 // shipment ledger + box rows. Refuses a completed/received shipment (its goods are already in inventory).

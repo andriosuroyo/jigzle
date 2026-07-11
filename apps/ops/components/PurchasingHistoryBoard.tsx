@@ -7,7 +7,7 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, setConsolidator, getShipmentBoxes, setShipmentBoxes, deleteShipment } from '@/app/purchasing/actions';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, setConsolidator, getShipmentBoxes, setShipmentBoxes, deleteShipment, markShipmentReceived } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
 import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
@@ -30,6 +30,9 @@ const draftToBox = (d: BoxDraft): ShipmentBox => ({ dim_p: numOrNull(d.p), dim_l
 const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 16, height: 16, 'aria-hidden': true };
 const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+const CheckIcon = () => (<svg {..._ic}><polyline points="20 6 9 17 4 12" /></svg>);
+// today's date as an ISO yyyy-mm-dd value, for the "Mark as received" date field default.
+const todayISO = (): string => new Date().toISOString().slice(0, 10);
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 // one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg" (PR273 — box is dims only)
@@ -98,6 +101,12 @@ export default function PurchasingHistoryBoard({
   const [confirmDelShip, setConfirmDelShip] = useState(false);
   const [deletingShip, setDeletingShip] = useState(false);
   const [delErr, setDelErr] = useState<string | null>(null);
+  // PR316 — "Mark as received" confirm (active shipments only): a header-only close for goods already
+  // received out of band in Inbound. Captures an editable received date (default today).
+  const [confirmMarkRcv, setConfirmMarkRcv] = useState(false);
+  const [markRcvDate, setMarkRcvDate] = useState('');
+  const [markingRcv, setMarkingRcv] = useState(false);
+  const [markErr, setMarkErr] = useState<string | null>(null);
   // shipment-note editor (detail view)
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -254,6 +263,26 @@ export default function PurchasingHistoryBoard({
     setDeletingShip(false); setConfirmDelShip(false); setOpenShip(null);
   }
 
+  // PR316 — open the "Mark as received" confirm, seeding the date to today (editable).
+  function openMarkReceived() {
+    setMarkErr(null);
+    setMarkRcvDate(todayISO());
+    setConfirmMarkRcv(true);
+  }
+
+  // PR316 — header-only close: flips this shipment to Completed with the chosen received date. The goods
+  // were already received in Inbound, so this does NOT re-run receiving / add stock (see the action).
+  async function doMarkReceived() {
+    if (!openShip) return;
+    setMarkingRcv(true); setMarkErr(null);
+    const { error } = await markShipmentReceived(openShip.ship_id, markRcvDate);
+    if (error) { setMarkErr(error); setMarkingRcv(false); return; }
+    const id = openShip.ship_id;
+    setShips((prev) => prev.map((s) => (s.ship_id === id ? { ...s, completed: true, received_date: markRcvDate } : s)));
+    setOpenShip((prev) => (prev ? { ...prev, completed: true, received_date: markRcvDate } : prev));
+    setMarkingRcv(false); setConfirmMarkRcv(false);
+  }
+
   // PR153: persist courier + tracking together (select saves on change, tracking on blur).
   async function saveCourier(courier: string, tracking: string) {
     if (!openShip) return;
@@ -296,6 +325,7 @@ export default function PurchasingHistoryBoard({
   const editShipClose = useOverlayClose({ open: editingShip, onClose: () => setEditingShip(false), dirty: editDirty });
   useEscToClose(!!selItem, () => setSelItem(null));
   useEscToClose(confirmDelShip, () => { if (!deletingShip) setConfirmDelShip(false); });
+  useEscToClose(confirmMarkRcv, () => { if (!markingRcv) setConfirmMarkRcv(false); });
 
   if (openShip) {
     const courierLine = [openShip.courier, openShip.tracking].filter(Boolean).join(' ');
@@ -385,6 +415,11 @@ export default function PurchasingHistoryBoard({
           {/* Actions */}
           {delErr && <div className="validation err" style={{ marginTop: 12 }}>{delErr}</div>}
           <div className="fd-actions">
+            {/* PR316 — an active shipment can be marked received manually (goods already received in Inbound
+                out of band, so the header never closed). Header-only; hidden once completed. */}
+            {!openShip.completed && (
+              <button className="btn-brown btn-ico" onClick={openMarkReceived}><CheckIcon />Mark as received</button>
+            )}
             <button className="btn-brown btn-ico" onClick={enterEdit}><PencilIcon />Edit shipment</button>
             {!openShip.completed && (
               <button className="btn-danger btn-ico" onClick={() => { setDelErr(null); setConfirmDelShip(true); }}><TrashIcon />Delete shipment</button>
@@ -523,6 +558,28 @@ export default function PurchasingHistoryBoard({
                 <div className="confirm-actions">
                   <button className="btn-secondary" onClick={() => setConfirmDelShip(false)} disabled={deletingShip}>No</button>
                   <button className="btn-primary danger" onClick={doDeleteShipment} disabled={deletingShip}>{deletingShip ? 'Deleting…' : 'Yes, delete'}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PR316 — mark-as-received confirm: header-only close with an editable received date (default today).
+            For the out-of-band case (goods already received in Inbound); does NOT add stock. */}
+        {confirmMarkRcv && (
+          <div className="sc-modal-backdrop" onClick={() => { if (!markingRcv) setConfirmMarkRcv(false); }}>
+            <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Mark shipment received" onClick={(e) => e.stopPropagation()}>
+              <div className="sc-modal-body">
+                <div className="confirm-q">Mark {openShip.ship_id} as received?</div>
+                <div className="hint" style={{ marginBottom: 12 }}>Moves it to Completed. Use only when the goods were already received in Inbound — this records the date below and does not add stock.</div>
+                <div className="po-field">
+                  <label>Received date</label>
+                  <input type="date" value={markRcvDate} onChange={(e) => setMarkRcvDate(e.target.value)} disabled={markingRcv} />
+                </div>
+                {markErr && <div className="validation err" style={{ margin: '4px 0 10px' }}>{markErr}</div>}
+                <div className="confirm-actions">
+                  <button className="btn-secondary" onClick={() => setConfirmMarkRcv(false)} disabled={markingRcv}>Cancel</button>
+                  <button className="btn-primary" onClick={doMarkReceived} disabled={markingRcv || !markRcvDate}>{markingRcv ? 'Saving…' : 'Mark as received'}</button>
                 </div>
               </div>
             </div>
