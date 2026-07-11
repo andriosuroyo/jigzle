@@ -500,8 +500,8 @@ export default function InboundBoard({
         setScanMsg(`⚠ barcode ${code} → ${res.skus.length} SKUs — pick one`);
       } else {
         // PR288 — unknown → open Manual add prefilled with the scan; the form pre-fills the right field.
+        // PR311 — no inline "unknown …" note: the Manual-add overlay opening is the feedback.
         openManualAdd(code);
-        setScanMsg(`unknown ${code} — add via Manual add`);
       }
     } catch (e) {
       setScanMsg(e instanceof Error ? e.message : 'scan failed');
