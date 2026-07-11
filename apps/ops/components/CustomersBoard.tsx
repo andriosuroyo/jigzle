@@ -104,6 +104,8 @@ function previewRawAddress(d: AddrDraft): string {
 const _ic = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
 const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
+// PR328 — copy affordance for the address card (two overlapping sheets)
+const CopyIcon = () => (<svg {..._ic}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
 
 // a channel platform's icon (from Settings → Customer → Channel): an uploaded image (URL/`/`-path) or emoji/text.
 const isChannelIconUrl = (icon: string | null | undefined): boolean => !!icon && /^(https?:\/\/|\/)/.test(icon);
@@ -475,6 +477,18 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     }
   }
 
+  // PR328 — one-tap copy of the shipping block (name / composed address / phone) to the clipboard.
+  async function copyAddr(a: CustomerAddress) {
+    const text = [a.recipient_name, a.raw_address || [a.street, a.kota].filter(Boolean).join(', '), a.contact_phone]
+      .map((s) => (s ?? '').trim()).filter(Boolean).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      note('ok', 'Address copied.');
+    } catch {
+      note('err', 'Could not copy — copy it manually.');
+    }
+  }
+
   const since = daysSince(detail?.last_purchase ?? null);
   const showBody = selectedId != null;
   // PR324 — read-only column lists: only the phones / channels that carry a value (0 → an empty-state hint).
@@ -519,7 +533,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
           {detailLoading && <div className="fd-empty">Loading…</div>}
 
           {detail && (
-            <>
+            <div className="bv-detail">
               <div className="fd-head">
                 <div className="fd-title">{customerLabel(detail.name, detail.phone)}</div>
                 <div className="fd-sub">
@@ -654,7 +668,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     )}
                   </section>
 
-                  {/* channels — up to three columns, only the filled ones; white cards */}
+                  {/* channels — up to three columns, only the filled ones (cream cards on the white body) */}
                   <section className="fd-section">
                     <div className="fd-section-head">Channels</div>
                     {channelList.length === 0 ? (
@@ -662,7 +676,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     ) : (
                       <div className="cust-cols">
                         {channelList.map((c, i) => (
-                          <div className="cust-col cust-col-white" key={i}>
+                          <div className="cust-col" key={i}>
                             <div className="cust-col-label"><ChannelIcon icon={channelIconOf(c.platform)} />{c.platform}</div>
                             <div className="cust-col-value">{c.handle || '—'}</div>
                           </div>
@@ -671,7 +685,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     )}
                   </section>
 
-                  {/* addresses — full width; white cards; "Edit address" per saved address */}
+                  {/* addresses — full width cream cards; three lines (name / address … / phone) with a
+                      copy + edit icon pair on the right (PR328) */}
                   <section className="fd-section">
                     <div className="fd-section-head">Addresses</div>
                     {detail.addresses.length === 0 && <div className="hint">No addresses on file.</div>}
@@ -681,8 +696,12 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                           <div className="cust-addr-main">
                             <div className="cust-addr-name">{a.recipient_name || addressLine(a)}</div>
                             <div className="cust-addr-line hint">{a.raw_address || [a.street, a.kota].filter(Boolean).join(', ') || '—'}</div>
+                            <div className="cust-addr-phone hint">{a.contact_phone || detail.phone_raw || detail.phone || '—'}</div>
                           </div>
-                          <button className="btn-secondary btn-ico cust-addr-edit-btn" onClick={() => openAddr(a)} disabled={busy}><PencilIcon />Edit address</button>
+                          <div className="cust-addr-actions">
+                            <button className="cust-addr-ico" onClick={() => copyAddr(a)} disabled={busy} aria-label="Copy address" title="Copy address"><CopyIcon /></button>
+                            <button className="cust-addr-ico" onClick={() => openAddr(a)} disabled={busy} aria-label="Edit address" title="Edit address"><PencilIcon /></button>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -704,7 +723,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   )}
                 </>
               )}
-            </>
+            </div>
           )}
         </div>
       )}
