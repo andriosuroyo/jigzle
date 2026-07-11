@@ -602,13 +602,14 @@ export default function ToBuyBoard({
                     </div>
                   </div>
                   <div className="le-field le-note">
-                    <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                    <input type="text" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="e.g. confirm colour" disabled={eBusy} autoComplete="off" />
+                    <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                    <input type="text" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="e.g. buy one set" disabled={eBusy} autoComplete="off" />
                   </div>
                 </div>
-                <div className="sc-modal-foot le-foot">
-                  <button className="btn-primary" onClick={saveEdit} disabled={eBusy || !eSku.trim()}>{eBusy ? 'Saving…' : 'Save'}</button>
+                {/* PR300 — modal-footer standard: Cancel on the LEFT, primary (Save changes) on the RIGHT. */}
+                <div className="sc-modal-foot">
                   <button className="btn-secondary" onClick={cancelEdit} disabled={eBusy}>Cancel</button>
+                  <button className="btn-primary" onClick={saveEdit} disabled={eBusy || !eSku.trim()}>{eBusy ? 'Saving…' : 'Save changes'}</button>
                 </div>
               </>
             ) : (
