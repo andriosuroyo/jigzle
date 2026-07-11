@@ -64,6 +64,15 @@ function todayStr(): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
+// PR288 — a value that STARTS with 3+ letters then a "-" reads as a SKU code (APP-300-358); anything
+// else (mostly digit barcodes) reads as a barcode. Drives which field a new-SKU form pre-fills.
+const looksLikeSku = (s: string): boolean => /^[A-Za-z]{3,}-/.test(s.trim());
+type NewSkuStub = { barcode: string; item_code: string; original: string; name: string };
+const prefillStub = (v: string): NewSkuStub =>
+  looksLikeSku(v)
+    ? { barcode: '', item_code: v.trim(), original: '', name: '' }
+    : { barcode: v.trim(), item_code: '', original: '', name: '' };
+
 // the synthetic detail for an ad-hoc receive (no shipments-ledger row, no expected list)
 const ADHOC_SENTINEL = '__adhoc__';
 
@@ -147,6 +156,7 @@ export default function InboundBoard({
   // PR257 — the new-SKU stub form: SKU code · original (native) name · translated (English) name ·
   // barcode. `name` is the translated side; brand still auto-derives server-side from the code prefix.
   const [stub, setStub] = useState<{ barcode: string; item_code: string; original: string; name: string } | null>(null);
+  const [stubTouched, setStubTouched] = useState(false); // PR288: user edited the new-SKU form → stop tracking the query
   const [translating, setTranslating] = useState(false); // the original→English auto-fill in flight
 
   const [skuQuery, setSkuQuery] = useState('');
@@ -477,8 +487,9 @@ export default function InboundBoard({
         setPicker(res.skus);
         setScanMsg(`⚠ barcode ${code} → ${res.skus.length} SKUs — pick one`);
       } else {
-        setStub({ barcode: code, item_code: '', original: '', name: '' });
-        setScanMsg(`unknown barcode ${code} — add a new SKU`);
+        // PR288 — unknown → open Manual add prefilled with the scan; the form pre-fills the right field.
+        openManualAdd(code);
+        setScanMsg(`unknown ${code} — add via Manual add`);
       }
     } catch (e) {
       setScanMsg(e instanceof Error ? e.message : 'scan failed');
@@ -562,7 +573,9 @@ export default function InboundBoard({
   // open the Manual-add modal, optionally pre-filling the search. When rawToMap is set (opened from an
   // unresolved line) the modal is in "map" mode — a pick/new-SKU relinks the placeholder PO.
   function openManualAdd(prefill?: string, rawToMap?: string) {
-    setStub(null);
+    // PR288 — manual add seeds the new-SKU form live from the query (map mode keeps its button flow).
+    setStub(rawToMap ? null : prefillStub(prefill ?? ''));
+    setStubTouched(false);
     setSkuSearched(false);
     setSkuHits([]);
     setSkuQuery(prefill ?? '');
@@ -607,8 +620,16 @@ export default function InboundBoard({
     setSkuQuery('');
     setSkuHits([]);
     setSkuSearched(false);
+    setStubTouched(false); // PR288 — reset the new-SKU form's tracking
     skuInputRef.current?.focus();
   }
+
+  // PR288 — while the user hasn't edited the new-SKU form, keep its SKU/barcode field tracking the
+  // search query (so a scan or typed value flows straight into the right field). Manual add only.
+  useEffect(() => {
+    if (!manualAdd || mappingRaw || stubTouched) return;
+    setStub(prefillStub(skuQuery));
+  }, [skuQuery, manualAdd, mappingRaw, stubTouched]);
 
   // ── expected vs received, merged ──
   const expectedByCode = useMemo(() => {
@@ -917,21 +938,7 @@ export default function InboundBoard({
                   <BarcodePicker skus={picker} imgMap={imgMap} onPick={(s) => pick(s)} onCancel={() => setPicker(null)} />
                 )}
 
-                {/* D2 unknown barcode → minimal stub (inline; the Manual-add modal owns its own stub form) */}
-                {stub && !manualAdd && (
-                  <div className="rcv-stub">
-                    <div className="subform-label">Add new SKU (flagged needs review)</div>
-                    <div className="hint">barcode {stub.barcode}</div>
-                    <input type="text" placeholder="SKU code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
-                    <input type="text" placeholder="original name" value={stub.original} onChange={(e) => setStub({ ...stub, original: e.target.value })} onBlur={(e) => autoTranslate(e.target.value)} />
-                    <input type="text" placeholder="translated name (English)" value={stub.name} onChange={(e) => setStub({ ...stub, name: e.target.value })} />
-                    {translating && <div className="hint"><em>Translating…</em></div>}
-                    <div className="subform-actions">
-                      <button className="btn-link" onClick={() => setStub(null)}>cancel</button>
-                      <button className="btn-primary" onClick={createStub}>create + add</button>
-                    </div>
-                  </div>
-                )}
+                {/* PR288 — an unknown scan now opens the Manual-add overlay (prefilled); no inline stub here. */}
 
                 {detail.expected.length === 0 && extras.length === 0 && (
                   <div className="hint">No item list — scan or use Manual add to record what arrived.</div>
@@ -1001,79 +1008,81 @@ export default function InboundBoard({
                   </label>
                 </>
               )}
-              {!stub ? (
+              {mappingRaw ? (
+                // ── MAP MODE (unchanged): search → pick, or create+map a new SKU from the placeholder ──
+                !stub ? (
+                  <>
+                    <div className="scan-row">
+                      <SearchInput ref={skuInputRef} autoFocus placeholder="Search by SKU, original name or barcode" value={skuQuery} onChange={(v) => { setSkuQuery(v); setSkuSearched(false); }} onClear={clearSearch} />
+                    </div>
+                    {searching && <div className="hint">Searching…</div>}
+                    {!searching && skuSearched && skuHits.length === 0 && (
+                      <div className="rcv-noresult">
+                        <div className="hint"><em>No results.</em></div>
+                        <button className="btn-brown btn-ico" onClick={() => setStub({ barcode: '', item_code: mappingRaw, original: '', name: '' })}><PackageIcon />Create a new SKU + map</button>
+                      </div>
+                    )}
+                    {skuHits.length > 0 && (
+                      <ul className="result-list" style={{ marginTop: 6 }}>
+                        {skuHits.map((h) => (
+                          <li key={h.item_code}>
+                            <button className="result-item ff-card" onClick={() => doMap(h.item_code, h.name)}>
+                              <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
+                              <div className="ff-card-info"><div className="ff-card-code">{h.item_code}</div>{isRealName(h.name, h.item_code) && <div className="ff-card-name">{h.name}</div>}<div className="ff-card-status">tap to map</div></div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                ) : (
+                  <div className="rcv-stub">
+                    <div className="subform-label">Create &amp; map a new SKU (flagged needs review)</div>
+                    <label className="rcv-map-field">
+                      <span className="fd-label">SKU code</span>
+                      <input type="text" placeholder="brand-prefix convention, e.g. APP-300-358" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
+                    </label>
+                    <div className="subform-actions">
+                      <button className="btn-link" onClick={() => setStub(null)}>← back to search</button>
+                      <button className="btn-primary" onClick={createStub}>Create + map</button>
+                    </div>
+                  </div>
+                )
+              ) : (
+                // ── MANUAL ADD (PR288): search stays visible (so a scan/typed value keeps flowing in);
+                // when nothing matches, the four-field new-SKU form appears inline, pre-filled per the
+                // SKU-vs-barcode heuristic (ABC-123 → SKU code; 1234567890 → barcode). ──
                 <>
                   <div className="scan-row">
-                    <SearchInput
-                      ref={skuInputRef}
-                      autoFocus
-                      placeholder="SKU, name, or piece count…"
-                      value={skuQuery}
-                      onChange={(v) => { setSkuQuery(v); setSkuSearched(false); }}
-                      onClear={clearSearch}
-                    />
+                    <SearchInput ref={skuInputRef} autoFocus placeholder="Search by SKU, original name or barcode" value={skuQuery} onChange={(v) => { setSkuQuery(v); setSkuSearched(false); }} onClear={clearSearch} />
                   </div>
                   {searching && <div className="hint">Searching…</div>}
-                  {!searching && skuSearched && skuHits.length === 0 && (
-                    <div className="rcv-noresult">
-                      <div className="hint"><em>No results.</em></div>
-                      <button
-                        className="btn-brown btn-ico"
-                        onClick={() => setStub({ barcode: '', item_code: mappingRaw ? mappingRaw : skuQuery.trim(), original: '', name: '' })}
-                      >
-                        <PackageIcon />
-                        {mappingRaw ? 'Create a new SKU + map' : `Add${skuQuery.trim() ? ` “${skuQuery.trim()}”` : ''} as a new SKU`}
-                      </button>
-                    </div>
-                  )}
                   {skuHits.length > 0 && (
                     <ul className="result-list" style={{ marginTop: 6 }}>
                       {skuHits.map((h) => (
                         <li key={h.item_code}>
-                          {/* §4a Pattern A: image left, code / name / avail stacked beside (ff-card family) */}
-                          <button className="result-item ff-card" onClick={() => { if (mappingRaw) { doMap(h.item_code, h.name); } else { addUnit(h.item_code, h.name); setScanMsg(`✓ ${h.item_code} +1`); clearSearch(); } }}>
+                          <button className="result-item ff-card" onClick={() => { addUnit(h.item_code, h.name); setScanMsg(`✓ ${h.item_code} +1`); clearSearch(); }}>
                             <SkuImage status={imgMap[h.item_code]?.status} displayUrl={imgMap[h.item_code]?.displayUrl} name={h.name} size={SKU_IMG.sm} />
-                            <div className="ff-card-info">
-                              <div className="ff-card-code">{h.item_code}</div>
-                              {isRealName(h.name, h.item_code) && <div className="ff-card-name">{h.name}</div>}
-                              <div className="ff-card-status">{mappingRaw ? 'tap to map' : `avail ${h.available}`}</div>
-                            </div>
+                            <div className="ff-card-info"><div className="ff-card-code">{h.item_code}</div>{isRealName(h.name, h.item_code) && <div className="ff-card-name">{h.name}</div>}<div className="ff-card-status">avail {h.available}</div></div>
                           </button>
                         </li>
                       ))}
                     </ul>
                   )}
+                  {!searching && skuSearched && skuHits.length === 0 && stub && (
+                    <div className="rcv-stub" style={{ marginTop: 8 }}>
+                      <div className="subform-label">No match — add new SKU (flagged needs review)</div>
+                      <input type="text" placeholder="SKU code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => { setStubTouched(true); setStub({ ...stub, item_code: e.target.value }); }} />
+                      <input type="text" placeholder="original name" value={stub.original} onChange={(e) => { setStubTouched(true); setStub({ ...stub, original: e.target.value }); }} onBlur={(e) => autoTranslate(e.target.value)} />
+                      <input type="text" placeholder="translated name (English)" value={stub.name} onChange={(e) => { setStubTouched(true); setStub({ ...stub, name: e.target.value }); }} />
+                      {translating && <div className="hint"><em>Translating…</em></div>}
+                      <input type="text" placeholder="barcode (optional)" value={stub.barcode} onChange={(e) => { setStubTouched(true); setStub({ ...stub, barcode: e.target.value }); }} />
+                      <div className="subform-actions">
+                        <button className="btn-primary" onClick={createStub} disabled={!stub.item_code.trim()} title={!stub.item_code.trim() ? 'Enter a SKU code' : undefined}>create + add</button>
+                      </div>
+                    </div>
+                  )}
                 </>
-              ) : mappingRaw ? (
-                // Map mode: just the SKU code, pre-filled from the placeholder. Name/brand are dropped —
-                // brand is auto-derived from the code's prefix; the row is flagged needs-review to name later.
-                <div className="rcv-stub">
-                  <div className="subform-label">Create &amp; map a new SKU (flagged needs review)</div>
-                  <label className="rcv-map-field">
-                    <span className="fd-label">SKU code</span>
-                    <input type="text" placeholder="brand-prefix convention, e.g. APP-300-358" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
-                  </label>
-                  <div className="subform-actions">
-                    <button className="btn-link" onClick={() => setStub(null)}>← back to search</button>
-                    <button className="btn-primary" onClick={createStub}>Create + map</button>
-                  </div>
-                </div>
-              ) : (
-                // Manual add: create a new SKU (needs-review stub). PR257 — four fields: SKU (pre-
-                // filled from the search), original (native) name, translated name (auto-filled from
-                // the original via best-effort translation), and an optional barcode to link.
-                <div className="rcv-stub">
-                  <div className="subform-label">+ add new SKU (flagged needs review)</div>
-                  <input type="text" placeholder="SKU code (brand-prefix convention, e.g. APP-300-358)" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
-                  <input type="text" placeholder="original name" value={stub.original} onChange={(e) => setStub({ ...stub, original: e.target.value })} onBlur={(e) => autoTranslate(e.target.value)} />
-                  <input type="text" placeholder="translated name (English)" value={stub.name} onChange={(e) => setStub({ ...stub, name: e.target.value })} />
-                  {translating && <div className="hint"><em>Translating…</em></div>}
-                  <input type="text" placeholder="barcode (optional)" value={stub.barcode} onChange={(e) => setStub({ ...stub, barcode: e.target.value })} />
-                  <div className="subform-actions">
-                    <button className="btn-link" onClick={() => setStub(null)}>← back to search</button>
-                    <button className="btn-primary" onClick={createStub}>create + add</button>
-                  </div>
-                </div>
               )}
             </div>
             <div className="sc-modal-foot">
