@@ -12,6 +12,7 @@ import {
   getOpenPOs,
   getOpenShipments,
   getRecentShipIds,
+  getShipmentItems,
   groupIntoShipment,
   searchCustomers,
   searchSkus,
@@ -20,7 +21,7 @@ import {
   setShipmentNote,
   updatePO,
 } from '@/app/purchasing/actions';
-import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
+import type { CustomerHit, OpenShipmentRow, ShipmentItemRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { StoreIcon, TruckIcon, PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
@@ -195,6 +196,8 @@ export default function OrderBoard({
   const [editPo, setEditPo] = useState<OpenPORow | null>(null);
   const [shipNote, setShipNote] = useState(''); // the edited PO's Ship-ID note (To-ship), seeded on open
   const [attachShipId, setAttachShipId] = useState(''); // PR152: To-ship attach-to-open-shipment pick
+  // PR286 — picking a shipment opens a preview/confirm overlay (its details + items) before attaching.
+  const [attachPreview, setAttachPreview] = useState<{ ship: OpenShipmentRow; items: ShipmentItemRow[]; loading: boolean } | null>(null);
   const [shipEditing, setShipEditing] = useState(false); // PR256: To-ship detail edit mode (fields unlocked)
   const [copiedKey, setCopiedKey] = useState<string | null>(null); // PR256: which easy-copy chip just fired
   const [form, setForm] = useState<PoForm>(emptyForm());
@@ -783,6 +786,19 @@ export default function OrderBoard({
     }
   }
 
+  // ── PR286: picking a shipment in the dropdown opens a preview/confirm overlay (its details + items)
+  // before attaching — no separate "Attach" button. ──
+  function pickShipmentToAttach(shipId: string) {
+    setAttachShipId(shipId);
+    if (!shipId) { setAttachPreview(null); return; }
+    const ship = shipments.find((s) => s.ship_id === shipId);
+    if (!ship) return;
+    setAttachPreview({ ship, items: [], loading: true });
+    getShipmentItems(shipId)
+      .then((items) => setAttachPreview((p) => (p && p.ship.ship_id === shipId ? { ...p, items, loading: false } : p)))
+      .catch(() => setAttachPreview((p) => (p ? { ...p, loading: false } : p)));
+  }
+
   // ── PR152: attach a With-Forwarder PO to an already-open shipment (To-ship's one editable field) ──
   async function attachShip() {
     if (!editPo || !attachShipId) return;
@@ -795,6 +811,7 @@ export default function OrderBoard({
       setEditPo((prev) => (prev ? { ...prev, ship_id: attachShipId } : prev));
       setShipNote(shipmentById.get(attachShipId)?.note ?? '');
       setAttachShipId('');
+      setAttachPreview(null);
       await refreshQueue();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to attach.');
@@ -948,8 +965,7 @@ export default function OrderBoard({
       {error && <div className="validation err">{error}</div>}
       {success && <div className="validation ok">{success}</div>}
 
-      {!shipDetailOpen ? (
-        <>
+      <>
           {/* country sub-tabs (by supplier origin) so same-origin items group together */}
           {shipCountryTabs.some((t) => t.key !== ALL_COUNTRIES && t.key !== OTHER_COUNTRY) && (
             <div className="fq-filters" role="tablist" aria-label="Country">
@@ -1013,28 +1029,22 @@ export default function OrderBoard({
           </ul>
 
         </>
-      ) : (
-        <>
-          <button className="btn-link bv-back" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }}>← back</button>
-          <div className="bv-detail">
-            {/* same body-header as To forwarder */}
-            <div className="po-bvhead">
-              <SkuImage status={imgMap[editPo!.item_code ?? '']?.status} displayUrl={imgMap[editPo!.item_code ?? '']?.displayUrl} name={editPo!.name} size={SKU_IMG.smd} />
-              <div className="po-bvhead-main">
-                <div className="po-card-l1">
-                  <span className="ff-code">{editPo!.item_code ?? editPo!.item_code_raw ?? '—'}</span>
-                  <span className="po-card-date">{fmtNiceDate(editPo!.status_since)}</span>
-                </div>
-                <div className="po-card-l1 po-card-mid">
-                  {isRealName(editPo!.name, editPo!.item_code ?? editPo!.item_code_raw) && <span className="ff-name">{editPo!.name}</span>}
-                  <span className="po-card-qty">×{editPo!.qty}</span>
-                </div>
-                <div className="po-card-l2 hint">PO #{editPo!.po_id}</div>
+      {/* PR286 — Ship item detail as an OVERLAY (was a bodyview); read-only until "Edit item". */}
+      {shipDetailOpen && editPo && (
+        <div className="sc-modal-backdrop" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }}>
+          <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Ship item" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <div>
+                <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
+                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name} · ×{editPo.qty}</div>}
               </div>
+              <button className="sc-modal-x" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }} aria-label="Close">×</button>
             </div>
-            {renderShipDetail()}
+            <div className="sc-modal-body">
+              {renderShipDetail()}
+            </div>
           </div>
-        </>
+        </div>
       )}
       {mode === 'group' && renderGroupModal()}
     </div>
@@ -1286,23 +1296,60 @@ export default function OrderBoard({
               />
             </>
           ) : (
-            <div className="po-inline2">
-              <select value={attachShipId} onChange={(e) => setAttachShipId(e.target.value)}>
-                <option value="">— pick an open shipment —</option>
-                {shipments.map((s) => (
-                  <option key={s.ship_id} value={s.ship_id}>{s.ship_id}</option>
-                ))}
-              </select>
-              <button className="btn-secondary" onClick={attachShip} disabled={busy || !attachShipId}>Attach</button>
-            </div>
+            /* PR286 — pick a shipment → preview/confirm overlay attaches it (no Attach button). */
+            <select value={attachShipId} onChange={(e) => pickShipmentToAttach(e.target.value)} disabled={busy}>
+              <option value="">— pick an open shipment —</option>
+              {shipments.map((s) => (
+                <option key={s.ship_id} value={s.ship_id}>{s.ship_id}</option>
+              ))}
+            </select>
           )}
         </div>
+
+        {/* PR286 — attach preview: the picked shipment's details + items, then confirm to attach. */}
+        {attachPreview && (
+          <div className="sc-modal-backdrop" onClick={() => { if (!busy) { setAttachPreview(null); setAttachShipId(''); } }}>
+            <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Attach to shipment" onClick={(e) => e.stopPropagation()}>
+              <div className="sc-modal-head sc-modal-head-row">
+                <span className="sc-modal-title">Attach to {attachPreview.ship.ship_id}?</span>
+                <button className="sc-modal-x" onClick={() => { setAttachPreview(null); setAttachShipId(''); }} disabled={busy} aria-label="Close">×</button>
+              </div>
+              <div className="sc-modal-body">
+                <div className="hint" style={{ marginBottom: 8 }}>
+                  {[attachPreview.ship.origin_country, attachPreview.ship.ship_date ? fmtNiceDate(attachPreview.ship.ship_date) : null].filter(Boolean).join(' · ') || 'Open shipment'}
+                  {attachPreview.ship.note ? ` · ${attachPreview.ship.note}` : ''}
+                </div>
+                <div className="fd-section-head">Already in this shipment</div>
+                {attachPreview.loading ? (
+                  <div className="hint">Loading items…</div>
+                ) : attachPreview.items.length === 0 ? (
+                  <div className="hint">No items yet — this PO will be the first.</div>
+                ) : (
+                  <ul className="po-cards po-cards-compact">
+                    {attachPreview.items.map((it) => (
+                      <li key={it.po_id}>
+                        <div className="po-card po-card-mini">
+                          <div className="po-card-main"><span className="ff-code">{it.item_code || '—'}</span>{isRealName(it.name, it.item_code) && <span className="ff-name po-card-name">{it.name}</span>}</div>
+                          <span className="po-card-qty">×{it.qty}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="sc-modal-foot">
+                <button className="btn-secondary" onClick={() => { setAttachPreview(null); setAttachShipId(''); }} disabled={busy}>Cancel</button>
+                <button className="btn-primary" onClick={attachShip} disabled={busy}>{busy ? 'Attaching…' : `Attach to ${attachPreview.ship.ship_id}`}</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* PR256 — the Sales / To-forwarder action-bar standard: secondary (Edit) then destructive
             last; Delete opens a modal confirm instead of the old bare trash + inline ask. */}
         <div className="td-actions">
           <button className="btn-secondary btn-ico" onClick={() => setShipEditing((v) => !v)} disabled={busy}>
-            <PencilIcon />{shipEditing ? 'Done' : 'Edit'}
+            <PencilIcon />{shipEditing ? 'Done' : 'Edit item'}
           </button>
           <button className="btn-danger btn-ico" onClick={() => setConfirmDel(true)} disabled={busy}><TrashIcon />Delete PO</button>
         </div>
