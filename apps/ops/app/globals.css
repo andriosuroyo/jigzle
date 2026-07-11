@@ -150,7 +150,10 @@ input, textarea, select, button { font-family: inherit; }
 .td-qtyline { display: flex; align-items: center; gap: 8px; }
 .po-card-qtyline { display: inline-flex; align-items: center; gap: 6px; }
 .td-source-row { display: flex; flex-direction: row; align-items: flex-end; gap: 14px; }
-.td-source-grow { flex: 1; min-width: 0; margin-bottom: 0; }
+/* PR315 — the source field drops its .po-field bottom margin so its select bottom-aligns with the
+   OOS checkbox (the flex-end row centres the 34px checkbox on the 34px select). Scoped past
+   `.po-field { margin-bottom: 12px }`, which otherwise wins by source order and shifts them 12px. */
+.td-source-row .td-source-grow { flex: 1; min-width: 0; margin-bottom: 0; }
 .td-oos-check { display: flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; height: 34px; }
 .td-oos-check input { width: 16px; height: 16px; }
 .td-context { margin-top: 12px; }
