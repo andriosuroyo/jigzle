@@ -12,7 +12,6 @@ import {
   getOpenPOs,
   getOpenShipments,
   getRecentShipIds,
-  getShipmentItems,
   groupIntoShipment,
   searchCustomers,
   searchSkus,
@@ -21,7 +20,7 @@ import {
   setShipmentNote,
   updatePO,
 } from '@/app/purchasing/actions';
-import type { CustomerHit, OpenShipmentRow, ShipmentItemRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
+import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
 import { StoreIcon, TruckIcon, PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
@@ -195,9 +194,9 @@ export default function OrderBoard({
   const [mode, setMode] = useState<RightMode>(null);
   const [editPo, setEditPo] = useState<OpenPORow | null>(null);
   const [shipNote, setShipNote] = useState(''); // the edited PO's Ship-ID note (To-ship), seeded on open
-  const [attachShipId, setAttachShipId] = useState(''); // PR152: To-ship attach-to-open-shipment pick
-  // PR286 — picking a shipment opens a preview/confirm overlay (its details + items) before attaching.
-  const [attachPreview, setAttachPreview] = useState<{ ship: OpenShipmentRow; items: ShipmentItemRow[]; loading: boolean } | null>(null);
+  // PR290 — the To-ship detail's Shipment ID is a free-text field (mirrors Create shipment step 2):
+  // type an id and it attaches on blur; the shipment code is derived from the leading letters.
+  const [shipIdDraft, setShipIdDraft] = useState('');
   const [shipEditing, setShipEditing] = useState(false); // PR256: To-ship detail edit mode (fields unlocked)
   const [copiedKey, setCopiedKey] = useState<string | null>(null); // PR256: which easy-copy chip just fired
   const [form, setForm] = useState<PoForm>(emptyForm());
@@ -397,7 +396,8 @@ export default function OrderBoard({
     setMode('edit');
     setEditPo(po);
     setShipNote((po.ship_id ? shipmentById.get(po.ship_id)?.note : '') ?? '');
-    setAttachShipId('');
+    setShipIdDraft(po.ship_id ?? '');
+    if (bucket === 'ship') getRecentShipIds().then(setShipIdOpts).catch(() => {}); // PR290: autocomplete the Shipment ID field
     setShipEditing(false);
     setCopiedKey(null);
     setForm(formFromPO(po));
@@ -789,35 +789,47 @@ export default function OrderBoard({
     }
   }
 
-  // ── PR286: picking a shipment in the dropdown opens a preview/confirm overlay (its details + items)
-  // before attaching — no separate "Attach" button. ──
-  function pickShipmentToAttach(shipId: string) {
-    setAttachShipId(shipId);
-    if (!shipId) { setAttachPreview(null); return; }
-    const ship = shipments.find((s) => s.ship_id === shipId);
-    if (!ship) return;
-    setAttachPreview({ ship, items: [], loading: true });
-    getShipmentItems(shipId)
-      .then((items) => setAttachPreview((p) => (p && p.ship.ship_id === shipId ? { ...p, items, loading: false } : p)))
-      .catch(() => setAttachPreview((p) => (p ? { ...p, loading: false } : p)));
-  }
-
-  // ── PR152: attach a With-Forwarder PO to an already-open shipment (To-ship's one editable field) ──
-  async function attachShip() {
-    if (!editPo || !attachShipId) return;
+  // ── PR290: attach a With-Forwarder PO to a shipment by TYPING its Shipment ID (free text, like Create
+  // shipment step 2). Blank detaches; a new id creates the shipment (code derived from the leading
+  // letters) via groupIntoShipment; an existing id attaches to it. Commits on blur. ──
+  async function commitShipId(raw: string) {
+    if (!editPo) return;
+    const shipId = raw.trim();
+    const current = editPo.ship_id ?? '';
+    if (shipId === current) return; // unchanged — nothing to do
     resetMessages();
     setBusy(true);
     try {
-      await updatePO(editPo.po_id, { ship_id: attachShipId });
-      setSuccess(`PO #${editPo.po_id} attached to ${attachShipId}.`);
-      setForm((f) => ({ ...f, ship_id: attachShipId }));
-      setEditPo((prev) => (prev ? { ...prev, ship_id: attachShipId } : prev));
-      setShipNote(shipmentById.get(attachShipId)?.note ?? '');
-      setAttachShipId('');
-      setAttachPreview(null);
+      if (!shipId) {
+        await updatePO(editPo.po_id, { ship_id: null });
+        setForm((f) => ({ ...f, ship_id: null }));
+        setEditPo((prev) => (prev ? { ...prev, ship_id: null } : prev));
+        setShipNote('');
+        setSuccess(`PO #${editPo.po_id} detached${current ? ` from ${current}` : ''}.`);
+      } else {
+        // PR290 — derive the shipment CODE from the leading letters ("SUB 193" → "SUB"), same as
+        // Create shipment; ensure it exists, then group this single PO into the shipment.
+        const prefix = (shipId.match(/^[A-Za-z]+/)?.[0] ?? '').toUpperCase();
+        if (!prefix) { setError('Enter a Shipment ID that starts with a code, e.g. "SUB 193".'); setBusy(false); return; }
+        const known = forwarders.find((f) => f.prefix.toUpperCase() === prefix);
+        if (!known) { try { await addForwarder({ prefix }); } catch { /* non-fatal: may already exist */ } }
+        const sup = suppliers.find((s) => s.supplier_id === editPo.supplier_id);
+        await groupIntoShipment({
+          ship_id: shipId,
+          items: [{ po_id: editPo.po_id, qty: editPo.qty }],
+          forwarder_prefix: prefix,
+          origin_country: (sup?.country || known?.country || '').trim() || null,
+          ship_date: null,
+        });
+        setForm((f) => ({ ...f, ship_id: shipId }));
+        setEditPo((prev) => (prev ? { ...prev, ship_id: shipId } : prev));
+        setShipNote(shipmentById.get(shipId)?.note ?? '');
+        setSuccess(`PO #${editPo.po_id} attached to ${shipId}.`);
+      }
       await refreshQueue();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to attach.');
+      setError(e instanceof Error ? e.message : 'Failed to update shipment.');
+      setShipIdDraft(current); // revert the field to the committed value on failure
     } finally {
       setBusy(false);
     }
@@ -1151,31 +1163,48 @@ export default function OrderBoard({
     return (
       <div className="po-form">
         {!shipEditing ? (
-          /* what was set in To forwarder — read-only rows; unit cost + item link are easy-copy */
-          <div className="po-roview">
-            <div className="po-rorow"><span className="po-rok">Source</span><span className="po-rov">{supplierName || '—'}</span></div>
-            <div className="po-rorow">
-              <span className="po-rok">Item link</span>
-              <span className="po-rov po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
-              {editPo.product_link && (
-                <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
-                  {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}
-                </button>
-              )}
+          /* PR290 — read-only, but in the SAME .po-field/label layout as Confirm (locked values);
+             item link + unit cost keep their easy-copy button. Unlocks via "Edit item". */
+          <>
+            <div className="po-field">
+              <label>Source</label>
+              <div className="po-ro-locked">{supplierName || '—'}</div>
             </div>
-            <div className="po-rorow">
-              <span className="po-rok">Unit cost</span>
-              <span className="po-rov">{costText || '—'}</span>
-              {editPo.item_cost != null && (
-                <button className="po-rocopy" onClick={() => copyVal(String(editPo.item_cost), 'cost')} aria-label={copiedKey === 'cost' ? 'Unit cost copied' : 'Copy unit cost'} title="Copy unit cost">
-                  {copiedKey === 'cost' ? <CheckIcon /> : <CopyIcon />}
-                </button>
-              )}
+            <div className="po-field">
+              <label>Item link</label>
+              <div className="po-ro-locked po-ro-locked-row">
+                <span className="po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
+                {editPo.product_link && (
+                  <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
+                    {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="po-rorow"><span className="po-rok">Local courier</span><span className="po-rov">{courierText || '—'}</span></div>
-            <div className="po-rorow"><span className="po-rok">Marketplace ID</span><span className="po-rov">{editPo.marketplace_order_id || '—'}</span></div>
-            <div className="po-rorow"><span className="po-rok">Notes</span><span className="po-rov">{editPo.item_note || '—'}</span></div>
-          </div>
+            <div className="po-field">
+              <label>Unit cost</label>
+              <div className="po-ro-locked po-ro-locked-row">
+                <span>{costText || '—'}</span>
+                {editPo.item_cost != null && (
+                  <button className="po-rocopy" onClick={() => copyVal(String(editPo.item_cost), 'cost')} aria-label={copiedKey === 'cost' ? 'Unit cost copied' : 'Copy unit cost'} title="Copy unit cost">
+                    {copiedKey === 'cost' ? <CheckIcon /> : <CopyIcon />}
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="po-field">
+              <label>Local courier &amp; tracking</label>
+              <div className="po-ro-locked">{courierText || '—'}</div>
+            </div>
+            <div className="po-field">
+              <label>Marketplace ID</label>
+              <div className="po-ro-locked">{editPo.marketplace_order_id || '—'}</div>
+            </div>
+            <div className="po-field">
+              <label>Notes</label>
+              <div className="po-ro-locked">{editPo.item_note || '—'}</div>
+            </div>
+          </>
         ) : (
           <>
             {/* Edit mode — the To-forwarder field set, auto-saving on blur/change */}
@@ -1263,73 +1292,34 @@ export default function OrderBoard({
           </>
         )}
 
-        {/* Shipment — attach / detach an open Ship ID; its warehouse note rides along when attached */}
+        {/* PR290 — Shipment ID as FREE TEXT (mirrors Create shipment step 2): type an id (autocomplete
+            surfaces recent/open ones) and it attaches on blur; the shipment code is derived from the
+            leading letters. Blank detaches. This is the one field always editable (no "Edit item"). */}
         <div className="po-field">
-          <label>Shipment</label>
-          {form.ship_id ? (
-            <>
-              <div className="po-shipbox">
-                <span className="fwd-prefix">{form.ship_id}</span>
-                <button className="btn-link" onClick={detach} disabled={busy}>detach</button>
-              </div>
-              <textarea
-                style={{ marginTop: 8 }}
-                value={shipNote}
-                onChange={(e) => setShipNote(e.target.value)}
-                onBlur={(e) => saveShipNote(e.target.value)}
-                placeholder="Note for this Ship ID — shown to the warehouse on Inbound receiving"
-                rows={2}
-              />
-            </>
-          ) : (
-            /* PR286 — pick a shipment → preview/confirm overlay attaches it (no Attach button). */
-            <select value={attachShipId} onChange={(e) => pickShipmentToAttach(e.target.value)} disabled={busy}>
-              <option value="">— pick an open shipment —</option>
-              {shipments.map((s) => (
-                <option key={s.ship_id} value={s.ship_id}>{s.ship_id}</option>
-              ))}
-            </select>
+          <label>Shipment id</label>
+          <input
+            type="text"
+            list="ship-detail-ids"
+            placeholder='e.g. "SUB 193"'
+            value={shipIdDraft}
+            onChange={(e) => setShipIdDraft(e.target.value)}
+            onBlur={(e) => commitShipId(e.target.value)}
+            disabled={busy}
+          />
+          <datalist id="ship-detail-ids">
+            {[...new Set([...shipments.map((s) => s.ship_id), ...shipIdOpts])].map((s) => <option key={s} value={s} />)}
+          </datalist>
+          {form.ship_id && (
+            <textarea
+              style={{ marginTop: 8 }}
+              value={shipNote}
+              onChange={(e) => setShipNote(e.target.value)}
+              onBlur={(e) => saveShipNote(e.target.value)}
+              placeholder="Note for this Shipment ID — shown to the warehouse on Inbound receiving"
+              rows={2}
+            />
           )}
         </div>
-
-        {/* PR286 — attach preview: the picked shipment's details + items, then confirm to attach. */}
-        {attachPreview && (
-          <div className="sc-modal-backdrop" onClick={() => { if (!busy) { setAttachPreview(null); setAttachShipId(''); } }}>
-            <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Attach to shipment" onClick={(e) => e.stopPropagation()}>
-              <div className="sc-modal-head sc-modal-head-row">
-                <span className="sc-modal-title">Attach to {attachPreview.ship.ship_id}?</span>
-                <button className="sc-modal-x" onClick={() => { setAttachPreview(null); setAttachShipId(''); }} disabled={busy} aria-label="Close">×</button>
-              </div>
-              <div className="sc-modal-body">
-                <div className="hint" style={{ marginBottom: 8 }}>
-                  {[attachPreview.ship.origin_country, attachPreview.ship.ship_date ? fmtNiceDate(attachPreview.ship.ship_date) : null].filter(Boolean).join(' · ') || 'Open shipment'}
-                  {attachPreview.ship.note ? ` · ${attachPreview.ship.note}` : ''}
-                </div>
-                <div className="fd-section-head">Already in this shipment</div>
-                {attachPreview.loading ? (
-                  <div className="hint">Loading items…</div>
-                ) : attachPreview.items.length === 0 ? (
-                  <div className="hint">No items yet — this PO will be the first.</div>
-                ) : (
-                  <ul className="po-cards po-cards-compact">
-                    {attachPreview.items.map((it) => (
-                      <li key={it.po_id}>
-                        <div className="po-card po-card-mini">
-                          <div className="po-card-main"><span className="ff-code">{it.item_code || '—'}</span>{isRealName(it.name, it.item_code) && <span className="ff-name po-card-name">{it.name}</span>}</div>
-                          <span className="po-card-qty">×{it.qty}</span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="sc-modal-foot">
-                <button className="btn-secondary" onClick={() => { setAttachPreview(null); setAttachShipId(''); }} disabled={busy}>Cancel</button>
-                <button className="btn-primary" onClick={attachShip} disabled={busy}>{busy ? 'Attaching…' : `Attach to ${attachPreview.ship.ship_id}`}</button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* PR256 — the Sales / To-forwarder action-bar standard: secondary (Edit) then destructive
             last; Delete opens a modal confirm instead of the old bare trash + inline ask. */}
