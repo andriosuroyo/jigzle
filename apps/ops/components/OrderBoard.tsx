@@ -224,9 +224,10 @@ export default function OrderBoard({
   // PR263 — Batch confirm / Create shipment ID are now in-list entry buttons (openBatch / openGroup
   // called directly); the old shell tab-row buttons + signal plumbing are gone.
 
-  // PR153: a bucketed bodyview detail is open → the shell hides the pipeline tabs.
-  const bvDetailOpen = !!bucket && mode === 'edit' && !!editPo;
-  useEffect(() => { onDetailOpenChange?.(bvDetailOpen); }, [bvDetailOpen, onDetailOpenChange]);
+  // PR319 — the Confirm/Ship item detail is a MODAL overlay (PR284/PR286), not a bodyview, so it must
+  // NOT hide the shell's pipeline tabs (that was leftover bodyview behaviour — the bug where Buy/Confirm/
+  // Ship/History vanished on opening a Confirm or Ship item). Always report closed; Buy already does this.
+  useEffect(() => { onDetailOpenChange?.(false); }, [onDetailOpenChange]);
 
   // SKU search
   const [skuQuery, setSkuQuery] = useState('');
@@ -995,8 +996,12 @@ export default function OrderBoard({
           <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Confirm item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <div>
-                <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
-                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name} · ×{editPo.qty}</div>}
+                {/* PR319 — qty beside the SKU in the header (matches the History item detail). */}
+                <div className="sc-modal-title-line">
+                  <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
+                  <span className="po-card-qty">×{editPo.qty}</span>
+                </div>
+                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name}</div>}
               </div>
               <button className="sc-modal-x" onClick={closeForwardDetail} aria-label="Close">×</button>
             </div>
@@ -1073,8 +1078,12 @@ export default function OrderBoard({
           <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Ship item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <div>
-                <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
-                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name} · ×{editPo.qty}</div>}
+                {/* PR319 — qty beside the SKU in the header (matches the History item detail). */}
+                <div className="sc-modal-title-line">
+                  <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
+                  <span className="po-card-qty">×{editPo.qty}</span>
+                </div>
+                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name}</div>}
               </div>
               <button className="sc-modal-x" onClick={shipDetailClose.requestClose} aria-label="Close">×</button>
             </div>

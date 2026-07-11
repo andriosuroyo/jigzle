@@ -14,6 +14,7 @@
   --paper:        #F3EEE5;
   --line:         #E1DAD0;
   --muted:        #8B8275;
+  --muted-light:  #B7AE9F;  /* PR319 — lighter warm grey for placeholder "filler" text */
   --ink:          #2D2419;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -1759,7 +1760,7 @@ input.batch-field, select.batch-field {
 /* PR308 — STANDARD placeholder ("filler") look, app-wide: italic + a lighter/thinner weight so hints
    read as clearly secondary to typed values. Size is left at the input's own font-size (16px on the
    standard field) — that's what governs iOS focus-zoom, not the placeholder, so hints stay zoom-safe. */
-::placeholder { font-style: italic; font-weight: 300; opacity: 1; color: var(--muted); }
+::placeholder { font-style: italic; font-weight: 300; opacity: 1; color: var(--muted-light); }
 /* PR309 — 16px is THE standard control font size. On mobile, Safari zooms in on focus for any text
    control whose font is < 16px, so force every input/select/textarea to 16px at the mobile breakpoint
    (the denser 13–14px desktop sizes never zoom, so they're left as-is). This makes the 16px standard
@@ -1867,7 +1868,7 @@ input.batch-field, select.batch-field {
 .search-input-icon { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--muted); pointer-events: none; }
 .search-input input { width: 100%; padding: 9px 34px 9px 33px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; background: white; color: var(--ink); }
 .search-input input:focus { outline: none; border-color: var(--brown-light); }
-.search-input input::placeholder { color: var(--muted); }
+.search-input input::placeholder { color: var(--muted-light); }
 /* kill the native webkit clear so only our × shows */
 .search-input input::-webkit-search-cancel-button, .search-input input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
 .search-input-clear { position: absolute; right: 7px; width: 22px; height: 22px; border: none; border-radius: 50%; background: var(--paper); color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
