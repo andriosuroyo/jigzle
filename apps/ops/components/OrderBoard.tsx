@@ -785,6 +785,33 @@ export default function OrderBoard({
     }
   }
 
+  // ── PR297: To-ship detail "Save changes" — the edit fields are committed only here (no auto-save on
+  // blur), then the detail returns to its locked read-only view. Shipment ID has its own attach flow. ──
+  async function saveShipChanges() {
+    if (!editPo) return;
+    resetMessages();
+    const patch: UpdatePOPatch = {
+      product_link: form.product_link.trim() || null,
+      item_cost: numOrNull(form.item_cost),
+      method: form.method.trim() || null,
+      marketplace_order_id: form.marketplace_order_id.trim() || null,
+      item_note: form.item_note.trim() || null,
+      tracking_to_forwarder: form.tracking_to_forwarder.trim() || null,
+    };
+    if (form.supplier_id) patch.supplier_id = Number(form.supplier_id);
+    setBusy(true);
+    try {
+      await updatePO(editPo.po_id, patch);
+      setQueue((prev) => prev.map((p) => (p.po_id === editPo.po_id ? ({ ...p, ...patch } as OpenPORow) : p)));
+      setEditPo((prev) => (prev ? ({ ...prev, ...patch } as OpenPORow) : prev));
+      setShipEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // ── PR290: attach a With-Forwarder PO to a shipment by TYPING its Shipment ID (free text, like Create
   // shipment step 2). Blank detaches; a new id creates the shipment (code derived from the leading
   // letters) via groupIntoShipment; an existing id attaches to it. Commits on blur. ──
@@ -1166,26 +1193,24 @@ export default function OrderBoard({
               <label>Source</label>
               <div className="po-ro-locked">{supplierName || '—'}</div>
             </div>
-            <div className="po-field">
-              <label>Item link</label>
-              <div className="po-ro-locked po-ro-locked-row">
-                <span className="po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
-                {editPo.product_link && (
-                  <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
-                    {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}
-                  </button>
-                )}
+            {/* PR297 — Unit cost (narrow, left) + Item link (grow, right) share one line, mirroring the
+                Confirm detail. Item link keeps its easy-copy button. Top-aligned since the locked link
+                value can wrap to two lines. */}
+            <div className="po-field-row po-field-row-top">
+              <div className="po-field po-field-cost">
+                <label>Unit cost</label>
+                <div className="po-ro-locked">{costText || '—'}</div>
               </div>
-            </div>
-            <div className="po-field">
-              <label>Unit cost</label>
-              <div className="po-ro-locked po-ro-locked-row">
-                <span>{costText || '—'}</span>
-                {editPo.item_cost != null && (
-                  <button className="po-rocopy" onClick={() => copyVal(String(editPo.item_cost), 'cost')} aria-label={copiedKey === 'cost' ? 'Unit cost copied' : 'Copy unit cost'} title="Copy unit cost">
-                    {copiedKey === 'cost' ? <CheckIcon /> : <CopyIcon />}
-                  </button>
-                )}
+              <div className="po-field grow">
+                <label>Item link</label>
+                <div className="po-ro-locked po-ro-locked-row">
+                  <span className="po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
+                  {editPo.product_link && (
+                    <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
+                      {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             <div className="po-field">
@@ -1203,7 +1228,8 @@ export default function OrderBoard({
           </>
         ) : (
           <>
-            {/* Edit mode — the To-forwarder field set, auto-saving on blur/change */}
+            {/* PR297 — Edit mode. Fields update local state only; nothing persists until "Save changes"
+                is pressed (no auto-save on blur). */}
             <div className="po-field">
               <label>Source</label>
               <select
@@ -1211,7 +1237,6 @@ export default function OrderBoard({
                 onChange={(e) => {
                   const supplier_id = e.target.value ? Number(e.target.value) : '';
                   setForm((f) => ({ ...f, supplier_id }));
-                  autoSaveForwarder({ supplier_id: supplier_id ? Number(supplier_id) : undefined });
                 }}
               >
                 <option value="">— pick a supplier —</option>
@@ -1220,49 +1245,46 @@ export default function OrderBoard({
                 ))}
               </select>
             </div>
-            <div className="po-field">
-              <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-              <input
-                type="text"
-                placeholder="https://…"
-                value={form.product_link}
-                onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
-                onBlur={(e) => autoSaveForwarder({ product_link: e.target.value.trim() || null })}
-              />
-            </div>
-            <div className="po-field">
-              <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-              <div className="po-cost-row">
-                {editCcy && <span className="po-cost-ccy">{editCcy.symbol}</span>}
+            {/* Unit cost (narrow, left, no number-spinner) + Item link (grow, right) share one line. */}
+            <div className="po-field-row">
+              <div className="po-field po-field-cost">
+                <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                <div className="po-cost-row">
+                  {editCcy && <span className="po-cost-ccy">{editCcy.symbol}</span>}
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={form.item_cost}
+                    onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="po-field grow">
+                <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
                 <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="any"
-                  placeholder="0"
-                  value={form.item_cost}
-                  onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
-                  onBlur={(e) => autoSaveForwarder({ item_cost: numOrNull(e.target.value) })}
+                  type="text"
+                  placeholder="https://…"
+                  value={form.product_link}
+                  onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
                 />
               </div>
             </div>
             <div className="po-field">
               <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-              <div className="po-inline2">
+              <div className="po-inline2 po-inline-courier">
                 <input
                   type="text"
                   list="ship-methods"
                   placeholder="courier"
                   value={form.method}
                   onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
-                  onBlur={(e) => autoSaveForwarder({ method: e.target.value.trim() || null })}
                 />
                 <input
                   type="text"
                   placeholder="tracking number"
                   value={form.tracking_to_forwarder}
                   onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))}
-                  onBlur={(e) => autoSaveForwarder({ tracking_to_forwarder: e.target.value.trim() || null })}
                 />
               </div>
               <datalist id="ship-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
@@ -1274,7 +1296,6 @@ export default function OrderBoard({
                 placeholder="marketplace order id"
                 value={form.marketplace_order_id}
                 onChange={(e) => setForm((f) => ({ ...f, marketplace_order_id: e.target.value }))}
-                onBlur={(e) => autoSaveForwarder({ marketplace_order_id: e.target.value.trim() || null })}
               />
             </div>
             <div className="po-field">
@@ -1282,7 +1303,6 @@ export default function OrderBoard({
               <textarea
                 value={form.item_note}
                 onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
-                onBlur={(e) => autoSaveForwarder({ item_note: e.target.value.trim() || null })}
               />
             </div>
           </>
@@ -1320,9 +1340,11 @@ export default function OrderBoard({
         {/* PR256 — the Sales / To-forwarder action-bar standard: secondary (Edit) then destructive
             last; Delete opens a modal confirm instead of the old bare trash + inline ask. */}
         <div className="td-actions">
-          <button className="btn-secondary btn-ico" onClick={() => setShipEditing((v) => !v)} disabled={busy}>
-            <PencilIcon />{shipEditing ? 'Done' : 'Edit item'}
-          </button>
+          {shipEditing ? (
+            <button className="btn-primary btn-ico" onClick={saveShipChanges} disabled={busy}><SaveIcon />{busy ? '…' : 'Save changes'}</button>
+          ) : (
+            <button className="btn-secondary btn-ico" onClick={() => setShipEditing(true)} disabled={busy}><PencilIcon />Edit item</button>
+          )}
           <button className="btn-danger btn-ico" onClick={() => setConfirmDel(true)} disabled={busy}><TrashIcon />Delete PO</button>
         </div>
         {confirmDel && (
