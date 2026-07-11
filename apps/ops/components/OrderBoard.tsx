@@ -1716,7 +1716,7 @@ export default function OrderBoard({
             <input type="number" inputMode="numeric" min={0} step={1} value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} />
           </div>
           <div className="po-field">
-            <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(supplier ccy)</em></label>
+            <label>Unit cost <em className="po-sub">(supplier ccy)</em></label>
             <input type="number" inputMode="decimal" min={0} step="any" value={form.item_cost} onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))} />
           </div>
         </div>
