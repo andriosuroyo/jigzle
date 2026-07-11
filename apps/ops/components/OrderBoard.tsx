@@ -1836,7 +1836,11 @@ export default function OrderBoard({
         {groupClose.confirm}
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Create shipment" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <div className="sc-modal-title">{grpStep === 'pick' ? 'Create shipment · step 1 of 2' : 'Create shipment · step 2 of 2'}</div>
+            {/* PR319 — two-line header (title + step subheader), matching the Confirm item(s) modal. */}
+            <div>
+              <div className="sc-modal-title">Create shipment</div>
+              <div className="sc-modal-sub">Step {grpStep === 'pick' ? '1' : '2'} of 2</div>
+            </div>
             <button className="sc-modal-x" onClick={groupClose.requestClose} aria-label="Close">×</button>
           </div>
           <div className="sc-modal-body">
@@ -1904,7 +1908,7 @@ export default function OrderBoard({
             {/* PR292 — the selected-item list sits LAST (like Confirm step 2). Qty is a right-aligned,
                 vertically-centred control; a single-qty item reads "1 / 1" for consistency with N/M. */}
             <div className="batch-group">
-              <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
+              <div className="fd-section-head">Selected items</div>
               <ul className="po-cards po-cards-compact">
                 {selectedPOs.map((po) => (
                   <li key={po.po_id}>

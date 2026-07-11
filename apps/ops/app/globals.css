@@ -746,6 +746,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-search { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
 .po-searchbar .btn-secondary { flex-shrink: 0; }
 /* Group panel: per-PO ship-qty stepper (partial split) sits at the end of the name line */
+/* PR319 — the selected-items cards are cream, like the Confirm step-2 item cards (override the white
+   .purch-panels card; same specificity as that rule but later in source, so it wins). */
+.po-card.grp-card { background: var(--cream); }
 .grp-qty { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
 .grp-qty .qty-step { display: inline-flex; align-items: center; }
 .grp-qty .qty-step button { width: 26px; height: 28px; font-size: 16px; }
