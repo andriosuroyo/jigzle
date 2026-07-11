@@ -617,25 +617,27 @@ export default function ToBuyBoard({
               <>
                 <div className="sc-modal-body">
                   {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
-                  {/* PR299 — the summary (image · PO#/priority/note · qty · status) sits inside one item
-                      card. Priority and note always show a line ("No priority set" / "No notes" when
-                      unset); qty + status are plain (no pill bubble). */}
-                  <div className="td-head2 td-head-card">
-                    <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : detail.code} size={SKU_IMG.md} />
-                    <div className="td-info">
-                      <div className="td-ctx">{detail.context}</div>
-                      {detail.urgency ? (
-                        <div className={`td-prio td-prio-${detail.urgency}`}><span className="td-prio-dot" />{detail.urgency[0].toUpperCase() + detail.urgency.slice(1)} priority</div>
-                      ) : (
-                        <div className="td-ctx td-prio-none">No priority set</div>
-                      )}
-                      <div className="td-ctx td-note">{detail.note || 'No notes'}</div>
+                  {/* PR299/PR301 — summary item card: a top row (image · PO#/priority · qty/status) with
+                      the qty on line 1 and status on line 2, then Notes on its own full-width third line
+                      (kept separate so a longer note wraps cleanly — also better on mobile). */}
+                  <div className="td-head-card">
+                    <div className="td-head2">
+                      <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : detail.code} size={SKU_IMG.md} />
+                      <div className="td-info">
+                        <div className="td-ctx">{detail.context}</div>
+                        {detail.urgency ? (
+                          <div className={`td-prio td-prio-${detail.urgency}`}><span className="td-prio-dot" />{detail.urgency[0].toUpperCase() + detail.urgency.slice(1)} priority</div>
+                        ) : (
+                          <div className="td-ctx td-prio-none">No priority set</div>
+                        )}
+                      </div>
+                      <div className="td-controls">
+                        {/* PR249 — qty is read-only here; edit it via Edit PO. PR299 — plain, no bubble. */}
+                        <span className="td-qty" aria-label="quantity">×{detail.qty}</span>
+                        <span className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} combined /></span>
+                      </div>
                     </div>
-                    <div className="td-controls">
-                      {/* PR249 — qty is read-only here; edit it via Edit PO. PR299 — plain, no bubble. */}
-                      <span className="td-qty" aria-label="quantity">×{detail.qty}</span>
-                      <span className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} combined /></span>
-                    </div>
+                    <div className="td-card-note td-ctx">{detail.note || 'No notes'}</div>
                   </div>
 
                   <div className="fd-section-head td-links-head">Where to buy</div>

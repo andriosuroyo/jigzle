@@ -124,18 +124,24 @@ input, textarea, select, button { font-family: inherit; }
 .td-prio-mid  .td-prio-dot { background: var(--orange); }
 .td-prio-low  .td-prio-dot { background: var(--green); }
 /* image + a right-hand column that fits within the image's height */
-.td-head2 { display: flex; gap: 14px; align-items: flex-start; }
-/* PR299 — the summary sits inside one item card (image · context · qty/status). */
+/* PR299/PR301 — the summary sits inside one item card: a top row (image · context · qty/status) plus
+   Notes on its own full-width third line. */
 .td-head-card { background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-/* PR240 — beside the 72px image: a left CONTEXT column (PO#/customer · priority · note) and a right
-   CONTROLS column (qty + the combined stock figures). No "Qty to buy" / "Stock" labels. */
+.td-head2 { display: flex; gap: 14px; align-items: flex-start; }
+/* PR240 — beside the 72px image: a left CONTEXT column (PO#/customer · priority) and a right CONTROLS
+   column (qty · combined stock). Both columns share the same 6px line rhythm so line 1 (PO# · qty) and
+   line 2 (priority · status) sit level with each other. */
 .td-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.td-ctx { font-size: 12px; color: var(--muted); }
-.td-controls { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-/* PR299 — qty + status are plain (no pill bubble). */
-.td-controls .td-qty { font-size: 15px; font-weight: 700; color: var(--ink); }
+.td-ctx { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.td-controls { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+/* PR299 — qty + status are plain (no pill bubble); PR301 — line-height matches td-ctx so rows align. */
+.td-controls .td-qty { font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.5; }
+.td-prio { line-height: 1.5; }
 .td-stock .stock-pill { font-size: 13px; padding: 0; background: none; }
 .td-stock .stock-cell svg { width: 15px; height: 15px; }
+/* PR301 — Notes on its own full-width third line, separated from the row above, so a longer note wraps
+   cleanly (and stacks better on mobile). */
+.td-card-note { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); white-space: pre-wrap; word-break: break-word; }
 .td-context { margin-top: 12px; }
 .td-links-head { margin-top: 14px; }
 /* PR239 — the standard detail action bar: left-aligned, one horizontally-scrollable row (slides on
