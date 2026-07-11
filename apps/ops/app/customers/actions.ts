@@ -508,6 +508,22 @@ export async function getDataHealth(): Promise<DataHealth> {
     .filter((r) => hasOrders.has(r.customer_id))
     .map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
 
+  // ── PR321: repeated region fields — an address where ≥2 of {ward, subdistrict, city, province} are the
+  // EXACT same value (Kuningan×3 style). Case/space-normalized equality, so "Kuningan" vs "Kuningan Barat"
+  // is NOT a repeat. Flags the customer once (a click opens the address editor to fix it manually).
+  const repeatRegionIds = new Set<number>();
+  for (const a of addrRows) {
+    const counts = new Map<string, number>();
+    for (const v of [a.kelurahan, a.kecamatan, a.kota, a.provinsi]) {
+      const norm = (v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+      if (norm) counts.set(norm, (counts.get(norm) ?? 0) + 1);
+    }
+    if ([...counts.values()].some((c) => c >= 2)) repeatRegionIds.add(a.customer_id);
+  }
+  const repeatRegion: FlaggedCustomer[] = rows
+    .filter((r) => repeatRegionIds.has(r.customer_id))
+    .map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
+
   return {
     totalCustomers: rows.length,
     noName,
@@ -525,6 +541,8 @@ export async function getDataHealth(): Promise<DataHealth> {
     blankNames: blankNames.slice(0, 200),
     oddPhoneCount: oddPhones.length,
     oddPhones: oddPhones.slice(0, 200),
+    repeatRegionCount: repeatRegion.length,
+    repeatRegion: repeatRegion.slice(0, 200),
   };
 }
 
