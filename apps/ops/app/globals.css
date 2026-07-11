@@ -255,7 +255,7 @@ input, textarea, select, button { font-family: inherit; }
    ~8 digits — PR315 widened from ~5). The width is fixed on the FIELD container (not the input) so the
    shared full-width input rule can't override it; the input/locked value just fills the field. A little
    extra right margin separates it from the Item link beside it. */
-.po-field-cost { flex: 0 0 8.5rem; margin-right: 6px; }
+.po-field-cost { flex: 0 0 8.5rem; }  /* PR318 — dropped the extra 6px right margin; the 8px row gap now matches Local courier ↔ tracking */
 .po-field-cost .po-cost-row input { flex: 1; min-width: 0; }
 .po-field-cost .po-ro-locked { width: 100%; }
 /* PR297/PR303 — the courier field (edit) matches the Unit cost field width; tracking takes the rest.
@@ -317,7 +317,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-pick-mid { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-pick-mid .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 /* PR158 — add-item overlay: Qty + Product link share one line */
-.po-field-row { display: flex; align-items: flex-end; gap: 10px; }
+.po-field-row { display: flex; align-items: flex-end; gap: 8px; }  /* PR318 — 8px matches .po-inline2 (Unit cost ↔ Item link now spaced like Local courier ↔ tracking) */
 .po-field-row.po-field-row-top { align-items: flex-start; }
 .po-field-row .po-field { margin-bottom: 0; }
 .po-field-row .po-field.grow { flex: 1; min-width: 0; }
