@@ -75,7 +75,8 @@ export interface DataHealth {
   sharedAddressGroupCount: number;
   addressGroups: AddressDupGroup[];     // capped; excludes ones already shown as shared-number groups
   emptyStrayCount: number;
-  emptyStrays: EmptyStray[];      // capped list of deletable empties
+  emptyStrays: EmptyStray[];      // capped list of deletable empties (for display)
+  emptyStrayIds: number[];        // PR323 — the FULL id set, so "Delete all" purges every empty in one pass
   // PR190 — extra "keep an eye on future inputs" scans, each a capped list + full count:
   noAddressCount: number;         // customers who have ordered but have no address on file
   noAddress: FlaggedCustomer[];

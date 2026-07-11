@@ -172,7 +172,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     setBusy(true);
     setNotice(null);
     try {
-      const res = await deleteEmptyStrays(health.emptyStrays.map((s) => s.id));
+      const res = await deleteEmptyStrays(health.emptyStrayIds);
       note('ok', `Deleted ${res.deleted} empty record${res.deleted === 1 ? '' : 's'}${res.skipped ? `, skipped ${res.skipped} (had attached data)` : ''}.`);
       setConfirmStrays(false);
       await loadFix();
@@ -671,28 +671,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   <button className="btn-secondary" onClick={loadFix} disabled={fixLoading || busy}>{fixLoading ? 'Refreshing…' : 'Refresh'}</button>
                 </div>
 
-                <div className="cust-stats" style={{ marginTop: 8 }}>
-                  <div className="cust-stat">
-                    <div className="cust-stat-label">Customers</div>
-                    <div className="cust-stat-value cust-stat-figure">{health.totalCustomers.toLocaleString('en-US')}</div>
-                    <div className="cust-stat-sub">total records</div>
-                  </div>
-                  <div className="cust-stat">
-                    <div className="cust-stat-label">Duplicates</div>
-                    <div className="cust-stat-value cust-stat-figure">{dupGroups?.length ?? 0}</div>
-                    <div className="cust-stat-sub">same-name groups</div>
-                  </div>
-                  <div className="cust-stat">
-                    <div className="cust-stat-label">Shared number</div>
-                    <div className="cust-stat-value cust-stat-figure">{health.sharedPhoneGroupCount}</div>
-                    <div className="cust-stat-sub">{health.overThreeCount} need a manual choice</div>
-                  </div>
-                  <div className="cust-stat">
-                    <div className="cust-stat-label">Shared address</div>
-                    <div className="cust-stat-value cust-stat-figure">{health.sharedAddressGroupCount}</div>
-                    <div className="cust-stat-sub">groups (no shared number)</div>
-                  </div>
-                </div>
+                {/* PR323 — the four summary tiles (Customers / Duplicates / Shared number / Shared address)
+                    are gone; every maintainable thing is now its own counter-bearing list below. */}
 
                 {health.missingCode > 0 && (
                   <div className="dh-maint">
@@ -856,23 +836,24 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
 
                 {/* empty strays */}
                 <div className="po-tobuy-head" style={{ marginTop: 20 }}>
-                  <div className="fd-section-head" style={{ marginBottom: 0 }}>Empty records {health.emptyStrays.length ? `(${health.emptyStrays.length})` : ''}</div>
-                  {health.emptyStrays.length > 0 && !confirmStrays && (
+                  <div className="fd-section-head" style={{ marginBottom: 0 }}>Empty records {health.emptyStrayCount ? `(${health.emptyStrayCount})` : ''}</div>
+                  {health.emptyStrayCount > 0 && !confirmStrays && (
                     <button className="btn-secondary" onClick={() => { setNotice(null); setConfirmStrays(true); }} disabled={busy}>Delete all</button>
                   )}
                   {confirmStrays && (
                     <span className="dh-confirm">
-                      <span className="hint">Delete {health.emptyStrays.length} empty record{health.emptyStrays.length === 1 ? '' : 's'}?</span>
+                      <span className="hint">Delete {health.emptyStrayCount} empty record{health.emptyStrayCount === 1 ? '' : 's'}?</span>
                       <button className="btn-secondary" onClick={() => setConfirmStrays(false)} disabled={busy}>Cancel</button>
                       <button className="btn-link danger" onClick={deleteStrays} disabled={busy}>{busy ? 'Deleting…' : 'Delete'}</button>
                     </span>
                   )}
                 </div>
-                {health.emptyStrays.length === 0 ? (
-                  <div className="validation ok">No empty records — every customer has a number, address, channel or order.</div>
+                {health.emptyStrayCount === 0 ? (
+                  <div className="validation ok">No empty records — every customer has a number, address or order.</div>
                 ) : (
                   <div className="dh-stray-list hint">
                     {health.emptyStrays.map((s) => `${s.name || '(no name)'} #${s.id}`).join('  ·  ')}
+                    {health.emptyStrayCount > health.emptyStrays.length && `  ·  … +${(health.emptyStrayCount - health.emptyStrays.length).toLocaleString('en-US')} more`}
                   </div>
                 )}
 

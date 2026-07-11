@@ -497,10 +497,11 @@ export async function getDataHealth(): Promise<DataHealth> {
   }
   addressGroups.sort((a, b) => b.memberIds.length - a.memberIds.length);
 
-  // ── empty strays: no number, no address, no channels, and (verified) no orders/operational refs
+  // ── PR323: empty strays — no phone, no address, and (verified) no orders/operational refs. Per the
+  // user's rule ("remove records with no orders AND no phone AND 0 addresses") a leftover channel handle
+  // no longer keeps a record alive — a contactless, orderless record is purgeable even if it carries one.
   const candidates = rows.filter((r) => rowPhones(r).length === 0
-    && (addrCount.get(r.customer_id) ?? 0) === 0
-    && !(Array.isArray(r.channels) ? r.channels : []).some((c) => c && typeof c === 'object' && (c as { platform?: unknown }).platform));
+    && (addrCount.get(r.customer_id) ?? 0) === 0);
   const candIds = candidates.map((r) => r.customer_id);
   const referenced = new Set<number>();
   for (const table of ['orders', 'holds', 'outbound_shipments', 'purchase_orders', 'missing_pieces'] as const) {
@@ -589,6 +590,7 @@ export async function getDataHealth(): Promise<DataHealth> {
     addressGroups: addressGroups.slice(0, 200),
     emptyStrayCount: emptyStrays.length,
     emptyStrays: emptyStrays.slice(0, 200),
+    emptyStrayIds: emptyStrays.map((s) => s.id),
     noAddressCount: noAddress.length,
     noAddress: noAddress.slice(0, 200),
     blankNameCount: blankNames.length,
@@ -649,8 +651,10 @@ export async function deleteEmptyStrays(ids: number[]): Promise<{ deleted: numbe
     for (const f of found) referenced.add(f.customer_id);
   }
   const deletable = ids.filter((id) => !referenced.has(id));
-  if (deletable.length) {
-    const { error } = await supabase.from('customers').delete().in('customer_id', deletable);
+  // PR323 — chunk the delete so "Delete all" can purge an arbitrarily large empty set in one pass
+  // without overflowing the PostgREST `in(...)` URL.
+  for (let i = 0; i < deletable.length; i += 200) {
+    const { error } = await supabase.from('customers').delete().in('customer_id', deletable.slice(i, i + 200));
     if (error) throw new Error(`deleteEmptyStrays: ${error.message}`);
   }
   return { deleted: deletable.length, skipped: ids.length - deletable.length };
