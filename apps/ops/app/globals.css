@@ -1749,6 +1749,13 @@ input.batch-field, select.batch-field {
    read as clearly secondary to typed values. Size is left at the input's own font-size (16px on the
    standard field) — that's what governs iOS focus-zoom, not the placeholder, so hints stay zoom-safe. */
 ::placeholder { font-style: italic; font-weight: 300; opacity: 1; color: var(--muted); }
+/* PR309 — 16px is THE standard control font size. On mobile, Safari zooms in on focus for any text
+   control whose font is < 16px, so force every input/select/textarea to 16px at the mobile breakpoint
+   (the denser 13–14px desktop sizes never zoom, so they're left as-is). This makes the 16px standard
+   apply where it actually matters — no focus-zoom on any field, anywhere on mobile. */
+@media (max-width: 760px) {
+  input, select, textarea { font-size: 16px !important; }
+}
 /* PR250 — a catalogue SKU's code can't be recoded here: locked look (greyed fill, muted text, not-allowed). */
 .le-field input.le-locked { background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1; }
 /* PR254 — the Qty stepper in the Edit PO row keeps its natural width; without this the full-width
