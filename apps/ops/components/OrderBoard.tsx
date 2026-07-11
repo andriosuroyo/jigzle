@@ -1421,8 +1421,8 @@ export default function OrderBoard({
                   <textarea className="batch-field" value={batchNote} onChange={(e) => setBatchNote(e.target.value)} />
                 </div>
 
-                {/* item list (PR256) — plain flush-left rows (no card box): 54px image + two lines,
-                    SKU ×qty / unit cost (no spinner) · name / item link */}
+                {/* PR291 — item list as separate cards: image + two lines. Line 1: SKU + name (left) /
+                    qty (right). Line 2: unit cost (no spinner) + item link, side-by-side full width. */}
                 <div className="fd-section-head batch-items-head">Item list, costs &amp; links</div>
                 <ul className="batch-items">
                   {picked.map((po) => {
@@ -1431,17 +1431,20 @@ export default function OrderBoard({
                       <li key={po.po_id} className="batch-item">
                         <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.smd} />
                         <div className="batch-item-body">
-                          <div className="batch-item-row">
-                            <span className="batch-item-id"><span className="ff-code">{code}</span><span className="po-card-qty">×{po.qty}</span></span>
+                          <div className="batch-item-row batch-item-head">
+                            <span className="batch-item-id">
+                              <span className="ff-code">{code}</span>
+                              {isRealName(po.name, code) && <span className="ff-name batch-item-name">{po.name}</span>}
+                            </span>
+                            <span className="po-card-qty">×{po.qty}</span>
+                          </div>
+                          <div className="batch-item-row batch-item-fields">
                             <input
                               className="batch-field batch-cost"
                               type="number" inputMode="decimal" min={0} step="any" placeholder="unit cost"
                               value={batchPer[po.po_id]?.cost ?? ''}
                               onChange={(e) => setBatchPer((p) => ({ ...p, [po.po_id]: { cost: e.target.value, link: p[po.po_id]?.link ?? '' } }))}
                             />
-                          </div>
-                          <div className="batch-item-row">
-                            <span className="ff-name batch-item-name">{isRealName(po.name, code) ? po.name : ''}</span>
                             <input
                               className="batch-field batch-link"
                               type="text" placeholder="item link"
