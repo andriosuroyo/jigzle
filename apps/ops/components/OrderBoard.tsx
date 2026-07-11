@@ -1407,17 +1407,16 @@ export default function OrderBoard({
                     <li key={po.po_id}>
                       <label className="po-row-wrap batch-pickrow">
                         <input type="checkbox" className="po-check" checked={batchIds.has(po.po_id)} onChange={() => toggleBatch(po.po_id)} aria-label={`select PO ${po.po_id}`} />
-                        <span className="po-card batch-pickcard" style={{ flex: 1, minWidth: 0 }}>
+                        {/* PR315 — mirror the outside To-buy card: SKU (+name) left, qty ABOVE date on the right. */}
+                        <span className="po-card po-card-mini batch-pickcard" style={{ flex: 1, minWidth: 0 }}>
                           <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
                           <div className="po-card-main">
-                            <div className="po-card-l1">
-                              <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
-                              <span className="po-card-poid">{fmtNiceDate(po.status_since)}</span>
-                            </div>
-                            <div className="po-card-l2">
-                              {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
-                              <span className="po-card-qty">×{po.qty}</span>
-                            </div>
+                            <span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span>
+                            {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name po-card-name">{po.name}</span>}
+                          </div>
+                          <div className="po-card-side">
+                            <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
+                            <div className="po-card-meta"><span className="po-card-date">{fmtNiceDate(po.status_since)}</span></div>
                           </div>
                         </span>
                       </label>
@@ -1445,7 +1444,7 @@ export default function OrderBoard({
                 </div>
                 <div className="batch-group">
                   <div className="fd-section-head">Local courier &amp; tracking</div>
-                  <div className="po-inline2">
+                  <div className="po-inline2 po-inline-courier">
                     <input className="batch-field" type="text" list="batch-methods" placeholder="courier" value={batchMethod} onChange={(e) => setBatchMethod(e.target.value)} />
                     <input className="batch-field" type="text" placeholder="tracking number" value={batchTracking} onChange={(e) => setBatchTracking(e.target.value)} />
                   </div>
@@ -1883,7 +1882,7 @@ export default function OrderBoard({
             <div className="batch-group">
               {/* PR274/PR285 — Consolidator → Shipper leg: courier (dropdown, shared local list) + tracking. */}
               <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
-              <div className="po-inline2">
+              <div className="po-inline2 po-inline-courier">
                 <select className="field" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)}>
                   <option value="">— courier —</option>
                   {(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m}>{m}</option>)}

@@ -150,7 +150,10 @@ input, textarea, select, button { font-family: inherit; }
 .td-qtyline { display: flex; align-items: center; gap: 8px; }
 .po-card-qtyline { display: inline-flex; align-items: center; gap: 6px; }
 .td-source-row { display: flex; flex-direction: row; align-items: flex-end; gap: 14px; }
-.td-source-grow { flex: 1; min-width: 0; margin-bottom: 0; }
+/* PR315 — the source field drops its .po-field bottom margin so its select bottom-aligns with the
+   OOS checkbox (the flex-end row centres the 34px checkbox on the 34px select). Scoped past
+   `.po-field { margin-bottom: 12px }`, which otherwise wins by source order and shifts them 12px. */
+.td-source-row .td-source-grow { flex: 1; min-width: 0; margin-bottom: 0; }
 .td-oos-check { display: flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; height: 34px; }
 .td-oos-check input { width: 16px; height: 16px; }
 .td-context { margin-top: 12px; }
@@ -166,7 +169,7 @@ input, textarea, select, button { font-family: inherit; }
 /* PR250 — To-forwarder batch overlay */
 .batch-modal { max-width: 560px; }
 .batch-picklist { max-height: 48vh; overflow-y: auto; gap: 5px; }
-.batch-picklist > li .po-card { padding: 6px 8px; }
+.batch-picklist > li .po-card { padding: 6px 8px; background: var(--cream); }  /* PR315 — cream like the step-2 item cards (overrides the white .purch-panels card) */
 .batch-pickrow { cursor: pointer; padding: 2px 0; }
 .batch-pickcard { pointer-events: none; }
 /* .batch-field derives from the shared .field standard (defined once, near .le-field). */
@@ -180,7 +183,7 @@ input, textarea, select, button { font-family: inherit; }
 .chip.active { background: var(--orange-tint); border-color: var(--orange); color: var(--brown-dark); }
 .batch-group textarea.batch-field { min-height: 60px; resize: vertical; }
 .batch-items-head { margin-top: 4px; }
-.batch-items { display: flex; flex-direction: column; gap: 10px; }
+.batch-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }  /* PR315 — reset the default <ul> left padding (looked like reserved checkbox space) */
 /* PR291/PR294 — each item is its own card: a 54px image (flush to the card's left edge — no left
    padding) beside two lines. Line 1: SKU + name (left) / qty (right). Line 2: unit cost + item link
    side-by-side, together full width. The two lines are kept short so the block matches the image
@@ -249,14 +252,15 @@ input, textarea, select, button { font-family: inherit; }
 .po-cost-row .po-cost-ccy { flex-shrink: 0; font-weight: 700; color: var(--muted); }
 .po-cost-row input { flex: 1; min-width: 0; }
 /* PR296/PR297/PR303 — Confirm & Ship detail: Unit cost sits left of Item link, narrow (just enough for
-   ~5 digits). The width is fixed on the FIELD container (not the input) so the shared full-width input
-   rule can't override it; the input/locked value just fills the field. A little extra right margin
-   separates it from the Item link beside it. */
-.po-field-cost { flex: 0 0 5.5rem; margin-right: 6px; }
+   ~8 digits — PR315 widened from ~5). The width is fixed on the FIELD container (not the input) so the
+   shared full-width input rule can't override it; the input/locked value just fills the field. A little
+   extra right margin separates it from the Item link beside it. */
+.po-field-cost { flex: 0 0 8.5rem; margin-right: 6px; }
 .po-field-cost .po-cost-row input { flex: 1; min-width: 0; }
 .po-field-cost .po-ro-locked { width: 100%; }
-/* PR297/PR303 — the courier field (edit) matches the Unit cost field width; tracking takes the rest. */
-.po-inline2.po-inline-courier > input:first-child { flex: 0 0 5.5rem; }
+/* PR297/PR303 — the courier field (edit) matches the Unit cost field width; tracking takes the rest.
+   PR315 — `:first-child` (not `input:first-child`) so it also narrows a courier <select> (Ship step 2). */
+.po-inline2.po-inline-courier > :first-child { flex: 0 0 8.5rem; }
 /* PR267 — "Send back to Ship" action in the History item overlay (separated from the fields above). */
 /* PR268 — a modal-foot button pinned to the LEFT (e.g. "Send back to Ship"), Cancel/Save grouped right. */
 .sc-foot-lead { margin-right: auto; }
@@ -748,7 +752,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .grp-qty-one { min-width: 40px; text-align: center; font-size: 14px; font-weight: 700; color: var(--ink); }
 .po-newbtn { padding: 8px; }
 .po-row-wrap { display: flex; align-items: center; gap: 8px; }
-.po-row-wrap .po-check { flex-shrink: 0; width: 16px; height: 16px; }
+.po-row-wrap .po-check { flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--green); }  /* PR315 — green (not default blue) when ticked */
 .po-row-wrap .fq-row { flex: 1; min-width: 0; }
 .po-status { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; margin-left: auto; white-space: nowrap; }
 .po-status.processing { background: var(--yellow-tint); color: #9C6F1C; }
@@ -1255,6 +1259,8 @@ img.sku-img { background: #e8e8e8; }
 .sc-modal-x { background: var(--paper); border: none; color: var(--brown-dark); width: 32px; height: 32px; border-radius: 8px; font-size: 20px; line-height: 1; cursor: pointer; flex-shrink: 0; }
 .sc-modal-x:active { background: var(--line); }
 .sc-modal-title { font-size: 16px; font-weight: 700; color: var(--brown-dark); }
+/* PR315 — SKU title with the qty sitting beside it on the same line. */
+.sc-modal-title-line { display: flex; align-items: baseline; gap: 8px; }
 .sc-modal-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .sc-modal-body { padding: 14px 18px; overflow: auto; }
 .sc-modal-foot { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; }
