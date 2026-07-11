@@ -1369,6 +1369,24 @@ img.sku-img { background: #e8e8e8; }
 .fwd-prefix-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* FlagSelect — compact flag button + searchable country dropdown */
+/* PR322 — dropsearch: a searchable dropdown (button + popup with an auto-focused search + filtered list).
+   The button mirrors the standard .field look (34px, hairline border) so it drops in for a native select. */
+.ds { position: relative; width: 100%; }
+.ds-btn { width: 100%; height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; font-size: 16px; color: var(--ink); cursor: pointer; text-align: left; }
+.ds-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ds-val { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.ds-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-ph { color: var(--muted-light); }
+.ds-ico { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; }
+.ds-caret { flex-shrink: 0; color: var(--muted); font-size: 11px; }
+.ds.open .ds-caret { transform: rotate(180deg); }
+.ds-pop { position: absolute; z-index: 60; top: calc(100% + 4px); left: 0; width: 100%; min-width: 200px; background: white; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); padding: 6px; }
+.ds-search { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; background: var(--cream); margin-bottom: 6px; }
+.ds-list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.ds-opt { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 9px; border: none; border-radius: 6px; background: none; font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; }
+.ds-opt.hi { background: var(--paper); }
+.ds-opt.active { font-weight: 600; }
+.ds-empty { padding: 8px 9px; font-size: 13px; color: var(--muted); }
 .flag-select { position: relative; }
 .flag-select-btn { width: 100%; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; padding: 0; }
 .flag-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }

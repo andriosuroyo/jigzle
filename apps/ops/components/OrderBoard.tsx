@@ -22,6 +22,7 @@ import {
 } from '@/app/purchasing/actions';
 import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/purchasing/types';
 import SkuImage from '@/components/SkuImage';
+import DropSearch from '@/components/DropSearch';
 import { StoreIcon, TruckIcon, PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
 import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
@@ -185,6 +186,8 @@ export default function OrderBoard({
 }) {
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
+  // PR322 — dropsearch options for every Source/supplier picker (flag + name; value = supplier id string).
+  const supplierOpts = useMemo(() => suppliers.map((s) => ({ value: String(s.supplier_id), label: `${s.flag ? `${s.flag} ` : ''}${s.name}` })), [suppliers]);
   const [forwarders] = useState<Forwarder[]>(initialForwarders); // curated in Settings → Forwarders
   const [shipments, setShipments] = useState<OpenShipmentRow[]>(initialShipments);
 
@@ -1258,18 +1261,13 @@ export default function OrderBoard({
                 is pressed (no auto-save on blur). */}
             <div className="po-field">
               <label>Source</label>
-              <select
-                value={form.supplier_id}
-                onChange={(e) => {
-                  const supplier_id = e.target.value ? Number(e.target.value) : '';
-                  setForm((f) => ({ ...f, supplier_id }));
-                }}
-              >
-                <option value="">— pick a supplier —</option>
-                {suppliers.map((s) => (
-                  <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
-                ))}
-              </select>
+              <DropSearch
+                value={form.supplier_id ? String(form.supplier_id) : null}
+                onChange={(v) => setForm((f) => ({ ...f, supplier_id: v ? Number(v) : '' }))}
+                options={supplierOpts}
+                placeholder="— pick a supplier —"
+                ariaLabel="Source"
+              />
             </div>
             {/* Unit cost (narrow, left, no number-spinner) + Item link (grow, right) share one line. */}
             <div className="po-field-row">
@@ -1444,12 +1442,13 @@ export default function OrderBoard({
                 {/* group fields — each its own subheader; applied to every picked item */}
                 <div className="batch-group">
                   <div className="fd-section-head">Source</div>
-                  <select className="batch-field" value={batchSupplier} onChange={(e) => setBatchSupplier(e.target.value ? Number(e.target.value) : '')}>
-                    <option value="">— pick a supplier —</option>
-                    {suppliers.map((s) => (
-                      <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
-                    ))}
-                  </select>
+                  <DropSearch
+                    value={batchSupplier ? String(batchSupplier) : null}
+                    onChange={(v) => setBatchSupplier(v ? Number(v) : '')}
+                    options={supplierOpts}
+                    placeholder="— pick a supplier —"
+                    ariaLabel="Source"
+                  />
                 </div>
                 <div className="batch-group">
                   <div className="fd-section-head">Local courier &amp; tracking</div>
@@ -1531,19 +1530,13 @@ export default function OrderBoard({
           {form.supplier_id ? (
             <div className="po-ro-locked">{selSup ? `${selSup.flag ? selSup.flag + ' ' : ''}${selSup.name}` : '—'}</div>
           ) : (
-            <select
-              value={form.supplier_id}
-              onChange={(e) => {
-                const supplier_id = e.target.value ? Number(e.target.value) : '';
-                setForm((f) => ({ ...f, supplier_id }));
-                autoSaveForwarder({ supplier_id: supplier_id ? Number(supplier_id) : undefined });
-              }}
-            >
-              <option value="">— pick a source —</option>
-              {suppliers.map((s) => (
-                <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
-              ))}
-            </select>
+            <DropSearch
+              value={form.supplier_id ? String(form.supplier_id) : null}
+              onChange={(v) => { const supplier_id = v ? Number(v) : ''; setForm((f) => ({ ...f, supplier_id })); autoSaveForwarder({ supplier_id: supplier_id ? Number(supplier_id) : undefined }); }}
+              options={supplierOpts}
+              placeholder="— pick a source —"
+              ariaLabel="Source"
+            />
           )}
         </div>
 
@@ -1654,12 +1647,13 @@ export default function OrderBoard({
           <label>Source</label>
           <div className="po-inline">
             <div className="po-field" style={{ marginBottom: 0 }}>
-              <select value={form.supplier_id} onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value ? Number(e.target.value) : '' }))}>
-                <option value="">— pick a supplier —</option>
-                {suppliers.map((s) => (
-                  <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
-                ))}
-              </select>
+              <DropSearch
+                value={form.supplier_id ? String(form.supplier_id) : null}
+                onChange={(v) => setForm((f) => ({ ...f, supplier_id: v ? Number(v) : '' }))}
+                options={supplierOpts}
+                placeholder="— pick a supplier —"
+                ariaLabel="Source"
+              />
             </div>
             <button className="btn-brown btn-ico" onClick={() => setSupForm(supForm ? null : { name: '', country: '', flag: '', type: 'Taobao account' })}><StoreIcon />add supplier</button>
           </div>

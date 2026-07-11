@@ -44,6 +44,7 @@ import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
 import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
+import DropSearch from '@/components/DropSearch';
 import { isRealName } from '@/components/skuName';
 import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
 import { fmtNiceDate } from '@jigzle/lib';
@@ -147,6 +148,8 @@ export default function ToBuyBoard({
   // PR283 — the picked Source for the open Buy item. For a real PO (manual/oos) it auto-saves; for a
   // from-sales preorder it's held here and rides buyPreorder at Done. Mandatory before Done.
   const [buySource, setBuySource] = useState('');
+  // PR322 — dropsearch options for the Source picker (flag + name; value = supplier id as a string).
+  const supplierOpts = useMemo(() => suppliers.map((s) => ({ value: String(s.supplier_id), label: `${s.flag ? `${s.flag} ` : ''}${s.name}` })), [suppliers]);
 
   // PR240 — inline edit of a Manual buy-list item (SKU / qty / priority / note). Writes only to the PO,
   // never the catalogue (the SKU is resolved server-side; unknown codes stay placeholders for Inbound).
@@ -648,12 +651,14 @@ export default function ToBuyBoard({
                   <div className="td-source-row" style={{ marginTop: 12 }}>
                     <div className="po-field td-source-grow">
                       <label>Source<span className="req" aria-hidden="true">*</span></label>
-                      <select value={buySource} onChange={(e) => changeSource(e.target.value)} disabled={busy}>
-                        <option value="">— pick a source —</option>
-                        {suppliers.map((s) => (
-                          <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
-                        ))}
-                      </select>
+                      <DropSearch
+                        value={buySource || null}
+                        onChange={(v) => changeSource(v)}
+                        options={supplierOpts}
+                        placeholder="— pick a source —"
+                        disabled={busy}
+                        ariaLabel="Source"
+                      />
                     </div>
                     <label className="td-oos-check">
                       <input type="checkbox" checked={detail.out_of_stock} onChange={(e) => toggleOOS(e.target.checked)} disabled={busy} />
