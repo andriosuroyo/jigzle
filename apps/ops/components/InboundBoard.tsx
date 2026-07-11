@@ -917,7 +917,7 @@ export default function InboundBoard({
               {/* Ad-hoc id (editable; operator can override with free text) */}
               {mode === 'adhoc' && (
                 <section className="fd-section">
-                  <div className="fd-section-head">Unmarked shipment id</div>
+                  <div className="fd-section-head">Unmarked shipment id<span className="req" aria-hidden="true">*</span></div>
                   <input
                     type="text"
                     className="rcv-shipid"
@@ -1011,7 +1011,7 @@ export default function InboundBoard({
                 <>
                   <div className="hint rcv-map-intro">Mapping placeholder <b>{mappingRaw}</b> — this updates the shipment&apos;s open line.</div>
                   <label className="rcv-map-field">
-                    <span className="fd-label">Barcode (optional)</span>
+                    <span className="fd-label">Barcode</span>
                     <input
                       type="text"
                       placeholder="scan / type the box's barcode"
@@ -1052,7 +1052,7 @@ export default function InboundBoard({
                   <div className="rcv-stub">
                     <div className="subform-label">Create &amp; map a new SKU (flagged needs review)</div>
                     <label className="rcv-map-field">
-                      <span className="fd-label">SKU code</span>
+                      <span className="fd-label">SKU code<span className="req" aria-hidden="true">*</span></span>
                       <input type="text" placeholder="brand-prefix convention, e.g. APP-300-358" value={stub.item_code} onChange={(e) => setStub({ ...stub, item_code: e.target.value })} />
                     </label>
                     <div className="subform-actions">
@@ -1089,7 +1089,7 @@ export default function InboundBoard({
                       <input type="text" placeholder="original name" value={stub.original} onChange={(e) => { setStubTouched(true); setStub({ ...stub, original: e.target.value }); }} onBlur={(e) => autoTranslate(e.target.value)} />
                       <input type="text" placeholder="translated name (English)" value={stub.name} onChange={(e) => { setStubTouched(true); setStub({ ...stub, name: e.target.value }); }} />
                       {translating && <div className="hint"><em>Translating…</em></div>}
-                      <input type="text" placeholder="barcode (optional)" value={stub.barcode} onChange={(e) => { setStubTouched(true); setStub({ ...stub, barcode: e.target.value }); }} />
+                      <input type="text" placeholder="barcode" value={stub.barcode} onChange={(e) => { setStubTouched(true); setStub({ ...stub, barcode: e.target.value }); }} />
                       {/* PR312 — the create button moved to the footer (Cancel · Add item), aligned right. */}
                     </div>
                   )}

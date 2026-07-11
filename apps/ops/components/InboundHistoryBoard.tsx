@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getReceiveHistory, deleteInboundShipment, moveShipId } from '@/app/inbound/actions';
+import { setShipmentCourier } from '@/app/purchasing/actions';
 import type { InboundHistoryRow } from '@/app/inbound/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -41,8 +42,11 @@ export default function InboundHistoryBoard({
   onCountChange,
   onDetailOpenChange,
   reloadKey = 0,
+  shipmentCouriers = [],
 }: {
   initialRows: InboundHistoryRow[];
+  // PR317 — Settings-managed shipment-courier pick-list, for editing courier/tracking here (see below).
+  shipmentCouriers?: string[];
   // PR181: whether the History tab is on screen. The shell no longer preloads the (paged full-scan)
   // received history; we fetch it once the first time this turns true, so Inbound opens fast on Active.
   active?: boolean;
@@ -58,9 +62,12 @@ export default function InboundHistoryBoard({
   const [selKey, setSelKey] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  // edit-ship-id overlay
+  // edit-ship-id overlay (PR317 — also edits shipment courier + tracking, since the tracking lives on the
+  // shipments row keyed by ship_id and can end up on the wrong entry).
   const [editing, setEditing] = useState(false);
   const [editShipId, setEditShipId] = useState('');
+  const [editCourier, setEditCourier] = useState('');
+  const [editTracking, setEditTracking] = useState('');
   const [editBusy, setEditBusy] = useState(false);
   const [editErr, setEditErr] = useState<string | null>(null);
   const reqRef = useRef(0);
@@ -135,10 +142,12 @@ export default function InboundHistoryBoard({
     }
   }
 
-  // open the edit-ship-id overlay for the selected entry
+  // open the edit-ship-id overlay for the selected entry (seed id + courier/tracking drafts)
   function openEdit() {
     if (!sel) return;
     setEditShipId(sel.ship_id);
+    setEditCourier(sel.courier ?? '');
+    setEditTracking(sel.tracking ?? '');
     setEditErr(null);
     setEditing(true);
   }
@@ -146,17 +155,25 @@ export default function InboundHistoryBoard({
     if (!sel) return;
     const next = editShipId.trim();
     if (!next) { setEditErr('Enter a ship id.'); return; }
-    if (next === sel.ship_id) { setEditing(false); return; }
+    const idChanged = next !== sel.ship_id;
+    // PR317 — courier/tracking live on the shipments row; save them (on the possibly-new id) when changed.
+    const courierChanged = (editCourier.trim() || null) !== (sel.courier ?? null)
+      || (editTracking.trim() || null) !== (sel.tracking ?? null);
+    if (!idChanged && !courierChanged) { setEditing(false); return; }
     setEditBusy(true); setEditErr(null);
     try {
       // PR314 — SOP: moving a received entry closes the target shipment (all goods accounted for).
-      await moveShipId(sel.ship_id, next, true);
+      if (idChanged) await moveShipId(sel.ship_id, next, true);
+      if (courierChanged) {
+        const { error } = await setShipmentCourier(next, editCourier, editTracking);
+        if (error) { setEditErr(error); setEditBusy(false); return; }
+      }
       setEditing(false);
       const r = await getReceiveHistory(query.trim());
       setRows(r);
-      setSelKey(next); // follow the entry to its new id
+      setSelKey(next); // follow the entry to its (possibly new) id
     } catch (e) {
-      setEditErr(e instanceof Error ? e.message : 'Move failed.');
+      setEditErr(e instanceof Error ? e.message : 'Save failed.');
     } finally {
       setEditBusy(false);
     }
@@ -167,7 +184,9 @@ export default function InboundHistoryBoard({
   const editIdClose = useOverlayClose({
     open: editing && !!sel,
     onClose: () => { if (!editBusy) setEditing(false); },
-    dirty: editShipId.trim() !== (sel?.ship_id ?? ''),
+    dirty: editShipId.trim() !== (sel?.ship_id ?? '')
+      || editCourier.trim() !== (sel?.courier ?? '')
+      || editTracking.trim() !== (sel?.tracking ?? ''),
   });
 
   useEffect(() => { onCountChange?.(rows.length); }, [rows, onCountChange]);
@@ -308,8 +327,10 @@ export default function InboundHistoryBoard({
               <div className="sc-modal-title">Edit shipment ID</div>
             </div>
             <div className="sc-modal-body">
-              <label className="rcv-map-barcode">
-                <span className="fd-label">New shipment ID</span>
+              {/* PR317 — full-width ship-id field; below it the shipment courier + tracking (edited here
+                  because the tracking sits on the shipments row and can land on the wrong received entry). */}
+              <label className="rcv-map-field">
+                <span className="fd-section-head">New shipment ID</span>
                 <input
                   type="text"
                   autoFocus
@@ -319,6 +340,27 @@ export default function InboundHistoryBoard({
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } }}
                 />
               </label>
+              {/* only a ledger shipment carries a courier/tracking (an ad-hoc 📦 entry has no shipments row). */}
+              {!sel.is_adhoc && (
+                <div className="rcv-map-field">
+                  <span className="fd-section-head">Shipment courier &amp; tracking</span>
+                  <div className="po-inline2 po-inline-courier">
+                    <select className="field" value={editCourier} onChange={(e) => setEditCourier(e.target.value)}>
+                      <option value="">— Pick courier —</option>
+                      {shipmentCouriers.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {editCourier && !shipmentCouriers.includes(editCourier) && <option value={editCourier}>{editCourier}</option>}
+                    </select>
+                    <input
+                      className="field"
+                      type="text"
+                      placeholder="Tracking number"
+                      value={editTracking}
+                      onChange={(e) => setEditTracking(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } }}
+                    />
+                  </div>
+                </div>
+              )}
               {editErr && <div className="validation err" style={{ marginTop: 10 }}>{editErr}</div>}
             </div>
             <div className="sc-modal-foot">

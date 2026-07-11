@@ -319,7 +319,7 @@ export default function FulfillBoard({
 
               {/* Address (FT-6: radio + needs-address flag) */}
               <section className="fd-section">
-                <div className="fd-section-head">Ship to</div>
+                <div className="fd-section-head">Ship to<span className="req" aria-hidden="true">*</span></div>
                 {detail.addresses.length === 0 && <div className="hint">No saved address for this customer — add one in Sales.</div>}
                 <ul className="addr-list">
                   {detail.addresses.map((a) => (
@@ -358,7 +358,7 @@ export default function FulfillBoard({
               {/* Courier (from SETTINGS) + optional tracking */}
               <section className="fd-section fd-courier">
                 <div>
-                  <label className="fd-label">Courier</label>
+                  <label className="fd-label">Courier<span className="req" aria-hidden="true">*</span></label>
                   {courierServices.length === 0 ? (
                     <div className="hint">No couriers configured — add them in Settings.</div>
                   ) : (
@@ -371,7 +371,7 @@ export default function FulfillBoard({
                   )}
                 </div>
                 <div>
-                  <label className="fd-label">Tracking <em>(optional)</em></label>
+                  <label className="fd-label">Tracking</label>
                   <input type="text" placeholder="tracking #" value={tracking} onChange={(e) => setTracking(e.target.value)} />
                 </div>
               </section>
@@ -381,7 +381,7 @@ export default function FulfillBoard({
                   pick up locally. Required before sending an international order to Outbound. */}
               {isIntl && (
                 <section className="fd-section fd-export">
-                  <div className="fd-section-head">Export courier</div>
+                  <div className="fd-section-head">Export courier<span className="req" aria-hidden="true">*</span></div>
                   <div className="hint" style={{ marginBottom: 6 }}>Ship-to is outside Indonesia ({selectedAddress?.negara}). Pick the export courier that carries this parcel abroad.</div>
                   {exportCouriers.length === 0 ? (
                     <div className="validation warn">No export couriers configured — add them in Settings → Shipping → Export couriers.</div>
@@ -427,7 +427,7 @@ export default function FulfillBoard({
                         </div>
                       </div>
                       <div className="le-field le-note">
-                        <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                        <label>Note</label>
                         <input type="text" list="ff-notes" placeholder="Add a note…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} disabled={noteBusy} autoComplete="off" />
                         <datalist id="ff-notes">{commonNotes.map((n) => <option key={n.id} value={n.label} />)}</datalist>
                       </div>

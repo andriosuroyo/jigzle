@@ -224,9 +224,10 @@ export default function OrderBoard({
   // PR263 — Batch confirm / Create shipment ID are now in-list entry buttons (openBatch / openGroup
   // called directly); the old shell tab-row buttons + signal plumbing are gone.
 
-  // PR153: a bucketed bodyview detail is open → the shell hides the pipeline tabs.
-  const bvDetailOpen = !!bucket && mode === 'edit' && !!editPo;
-  useEffect(() => { onDetailOpenChange?.(bvDetailOpen); }, [bvDetailOpen, onDetailOpenChange]);
+  // PR319 — the Confirm/Ship item detail is a MODAL overlay (PR284/PR286), not a bodyview, so it must
+  // NOT hide the shell's pipeline tabs (that was leftover bodyview behaviour — the bug where Buy/Confirm/
+  // Ship/History vanished on opening a Confirm or Ship item). Always report closed; Buy already does this.
+  useEffect(() => { onDetailOpenChange?.(false); }, [onDetailOpenChange]);
 
   // SKU search
   const [skuQuery, setSkuQuery] = useState('');
@@ -995,8 +996,12 @@ export default function OrderBoard({
           <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Confirm item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <div>
-                <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
-                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name} · ×{editPo.qty}</div>}
+                {/* PR319 — qty beside the SKU in the header (matches the History item detail). */}
+                <div className="sc-modal-title-line">
+                  <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
+                  <span className="po-card-qty">×{editPo.qty}</span>
+                </div>
+                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name}</div>}
               </div>
               <button className="sc-modal-x" onClick={closeForwardDetail} aria-label="Close">×</button>
             </div>
@@ -1073,8 +1078,12 @@ export default function OrderBoard({
           <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Ship item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <div>
-                <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
-                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name} · ×{editPo.qty}</div>}
+                {/* PR319 — qty beside the SKU in the header (matches the History item detail). */}
+                <div className="sc-modal-title-line">
+                  <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
+                  <span className="po-card-qty">×{editPo.qty}</span>
+                </div>
+                {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name}</div>}
               </div>
               <button className="sc-modal-x" onClick={shipDetailClose.requestClose} aria-label="Close">×</button>
             </div>
@@ -1265,7 +1274,7 @@ export default function OrderBoard({
             {/* Unit cost (narrow, left, no number-spinner) + Item link (grow, right) share one line. */}
             <div className="po-field-row">
               <div className="po-field po-field-cost">
-                <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                <label>Unit cost</label>
                 <div className="po-cost-row">
                   {editCcy && <span className="po-cost-ccy">{editCcy.symbol}</span>}
                   <input
@@ -1278,7 +1287,7 @@ export default function OrderBoard({
                 </div>
               </div>
               <div className="po-field grow">
-                <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                <label>Item link</label>
                 <input
                   type="text"
                   placeholder="https://…"
@@ -1288,7 +1297,7 @@ export default function OrderBoard({
               </div>
             </div>
             <div className="po-field">
-              <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <label>Local courier &amp; tracking</label>
               <div className="po-inline2 po-inline-courier">
                 <input
                   type="text"
@@ -1307,7 +1316,7 @@ export default function OrderBoard({
               <datalist id="ship-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
             </div>
             <div className="po-field">
-              <label>Marketplace ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <label>Marketplace ID</label>
               <input
                 type="text"
                 placeholder="marketplace order id"
@@ -1316,7 +1325,7 @@ export default function OrderBoard({
               />
             </div>
             <div className="po-field">
-              <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+              <label>Notes</label>
               <textarea
                 value={form.item_note}
                 onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
@@ -1542,7 +1551,7 @@ export default function OrderBoard({
             plain text (inputMode decimal) so there's no number-spinner; its symbol follows the source. */}
         <div className="po-field-row">
           <div className="po-field po-field-cost">
-            <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+            <label>Unit cost</label>
             <div className="po-cost-row">
               {ccy && <span className="po-cost-ccy">{ccy.symbol}</span>}
               <input
@@ -1556,7 +1565,7 @@ export default function OrderBoard({
             </div>
           </div>
           <div className="po-field grow">
-            <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+            <label>Item link</label>
             <input
               type="text"
               placeholder="https://…"
@@ -1571,7 +1580,7 @@ export default function OrderBoard({
             distinct from the mandatory outbound Shipping courier. Suggestions come from Settings →
             Purchasing → Local couriers (0055; falls back to the legacy hard-wired list). */}
         <div className="po-field">
-          <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>Local courier &amp; tracking</label>
           <div className="po-inline2 po-inline-courier">
             <input
               type="text"
@@ -1594,7 +1603,7 @@ export default function OrderBoard({
 
         {/* 5 · Marketplace ID (PR151: always shown, no longer China-only) */}
         <div className="po-field">
-          <label>Marketplace ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>Marketplace ID</label>
           <input
             type="text"
             placeholder="marketplace order id"
@@ -1606,7 +1615,7 @@ export default function OrderBoard({
 
         {/* 6 · Notes (optional) */}
         <div className="po-field">
-          <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>Notes</label>
           <textarea
             value={form.item_note}
             onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
@@ -1733,7 +1742,7 @@ export default function OrderBoard({
 
         {/* for customer (optional) */}
         <div className="po-field">
-          <label>For customer <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+          <label>For customer</label>
           {form.customer_id != null ? (
             <div className="po-current">
               <span className="ff-name">{form.customer_label}</span>
@@ -1827,7 +1836,11 @@ export default function OrderBoard({
         {groupClose.confirm}
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Create shipment" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <div className="sc-modal-title">{grpStep === 'pick' ? 'Create shipment · step 1 of 2' : 'Create shipment · step 2 of 2'}</div>
+            {/* PR319 — two-line header (title + step subheader), matching the Confirm item(s) modal. */}
+            <div>
+              <div className="sc-modal-title">Create shipment</div>
+              <div className="sc-modal-sub">Step {grpStep === 'pick' ? '1' : '2'} of 2</div>
+            </div>
             <button className="sc-modal-x" onClick={groupClose.requestClose} aria-label="Close">×</button>
           </div>
           <div className="sc-modal-body">
@@ -1860,7 +1873,7 @@ export default function OrderBoard({
                 last-used, e.g. SUB 192, so you can bump to SUB 193). The shipment CODE (the leading
                 letters) is derived from what you type — no separate picker. */}
             <div className="batch-group">
-              <div className="fd-section-head">Shipment ID</div>
+              <div className="fd-section-head">Shipment ID<span className="req" aria-hidden="true">*</span></div>
               <input className="field" type="text" list="grp-shipids" placeholder='e.g. "SUB 193"' value={grpShipId} onChange={(e) => setGrpShipId(e.target.value)} />
               <datalist id="grp-shipids">{shipIdOpts.map((s) => <option key={s} value={s} />)}</datalist>
               {openShipmentChoices.length > 0 && (
@@ -1881,7 +1894,7 @@ export default function OrderBoard({
             </div>
             <div className="batch-group">
               {/* PR274/PR285 — Consolidator → Shipper leg: courier (dropdown, shared local list) + tracking. */}
-              <div className="fd-section-head">Consolidator courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
+              <div className="fd-section-head">Consolidator courier &amp; tracking</div>
               <div className="po-inline2 po-inline-courier">
                 <select className="field" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)}>
                   <option value="">— courier —</option>
@@ -1895,7 +1908,7 @@ export default function OrderBoard({
             {/* PR292 — the selected-item list sits LAST (like Confirm step 2). Qty is a right-aligned,
                 vertically-centred control; a single-qty item reads "1 / 1" for consistency with N/M. */}
             <div className="batch-group">
-              <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
+              <div className="fd-section-head">Selected items</div>
               <ul className="po-cards po-cards-compact">
                 {selectedPOs.map((po) => (
                   <li key={po.po_id}>

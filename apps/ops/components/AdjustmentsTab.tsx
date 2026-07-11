@@ -335,7 +335,7 @@ function NewManual({
           <span className="ff-name">{picked.name}</span>
           <button className="btn-link" onClick={() => setPicked(null)}>change</button>
           <input type="number" className="sc-qty" placeholder="±qty" value={delta} onChange={(e) => setDelta(e.target.value)} />
-          <input type="text" className="sc-note" placeholder="note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input type="text" className="sc-note" placeholder="note" value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="btn-primary sc-mini" onClick={() => void save()} disabled={saving}>{saving ? 'saving…' : 'save'}</button>
         </div>
       ) : (

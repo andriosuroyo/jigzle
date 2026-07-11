@@ -244,7 +244,7 @@ export default function CalculatorBoard({
             <section className="fd-section">
               <div className="fd-section-head">Item details</div>
               <div className="po-form">
-                <div className="po-field"><label>SKU <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label><input type="text" placeholder="e.g. 3DC-50001" value={sku} onChange={(e) => setSku(e.target.value)} /></div>
+                <div className="po-field"><label>SKU</label><input type="text" placeholder="e.g. 3DC-50001" value={sku} onChange={(e) => setSku(e.target.value)} /></div>
                 <div className="po-inline">
                   <div className="po-field"><label>Purchase price</label><div className="calc-inrow"><input type="number" min={0} step={0.01} value={purchasePrice} onChange={(e) => setPurchasePrice(+e.target.value || 0)} /><span className="calc-unit">{method.source_currency}</span></div></div>
                   <div className="po-field"><label>Local shipping</label><div className="calc-inrow"><input type="number" min={0} step={0.01} value={localShipping} onChange={(e) => setLocalShipping(+e.target.value || 0)} /><span className="calc-unit">{method.source_currency}</span></div></div>

@@ -240,7 +240,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
             <div className="sc-modal-head sc-modal-head-row"><span className="sc-modal-title">Rename {renaming.from}</span><button className="sc-modal-x" onClick={renameClose.requestClose} disabled={busy} aria-label="Close">×</button></div>
             <div className="sc-modal-body">
               <div className="po-field">
-                <label>New prefix</label>
+                <label>New prefix<span className="req" aria-hidden="true">*</span></label>
                 <input type="text" autoFocus value={renaming.to} onChange={(e) => setRenaming((r) => (r ? { ...r, to: e.target.value.toUpperCase() } : r))} placeholder="e.g. SBY" disabled={busy} />
               </div>
               <div className="hint" style={{ marginTop: 8 }}>

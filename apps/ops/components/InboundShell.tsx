@@ -22,12 +22,14 @@ export default function InboundShell({
   inboundLabels,
   historyRows,
   staffOptions,
+  shipmentCouriers,
   userEmail,
 }: {
   initialQueue: ReceiveQueueRow[];
   inboundLabels: InboundLabel[];
   historyRows: InboundHistoryRow[];
   staffOptions: StaffMember[];
+  shipmentCouriers: string[]; // PR317 — Settings-managed courier list, for editing in History
   userEmail: string;
 }) {
   // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
@@ -91,7 +93,7 @@ export default function InboundShell({
           />
         </div>
         <div hidden={tab !== 'history'}>
-          <InboundHistoryBoard active={tab === 'history'} initialRows={historyRows} onDetailOpenChange={onHistoryDetail} />
+          <InboundHistoryBoard active={tab === 'history'} initialRows={historyRows} shipmentCouriers={shipmentCouriers} onDetailOpenChange={onHistoryDetail} />
         </div>
       </div>
     </div>

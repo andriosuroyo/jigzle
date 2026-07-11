@@ -14,6 +14,7 @@
   --paper:        #F3EEE5;
   --line:         #E1DAD0;
   --muted:        #8B8275;
+  --muted-light:  #B7AE9F;  /* PR319 — lighter warm grey for placeholder "filler" text */
   --ink:          #2D2419;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -188,7 +189,7 @@ input, textarea, select, button { font-family: inherit; }
    padding) beside two lines. Line 1: SKU + name (left) / qty (right). Line 2: unit cost + item link
    side-by-side, together full width. The two lines are kept short so the block matches the image
    height (its top/bottom align with the image's). */
-.batch-item { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 0; overflow: hidden; }
+.batch-item { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; overflow: hidden; }  /* PR319 — equal left/right padding: image inset matches the qty inset */
 .batch-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .batch-item-row { display: flex; align-items: center; gap: 8px; }
 .batch-item-head { gap: 8px; }
@@ -255,7 +256,7 @@ input, textarea, select, button { font-family: inherit; }
    ~8 digits — PR315 widened from ~5). The width is fixed on the FIELD container (not the input) so the
    shared full-width input rule can't override it; the input/locked value just fills the field. A little
    extra right margin separates it from the Item link beside it. */
-.po-field-cost { flex: 0 0 8.5rem; margin-right: 6px; }
+.po-field-cost { flex: 0 0 8.5rem; }  /* PR318 — dropped the extra 6px right margin; the 8px row gap now matches Local courier ↔ tracking */
 .po-field-cost .po-cost-row input { flex: 1; min-width: 0; }
 .po-field-cost .po-ro-locked { width: 100%; }
 /* PR297/PR303 — the courier field (edit) matches the Unit cost field width; tracking takes the rest.
@@ -317,7 +318,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-pick-mid { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .po-pick-mid .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 /* PR158 — add-item overlay: Qty + Product link share one line */
-.po-field-row { display: flex; align-items: flex-end; gap: 10px; }
+.po-field-row { display: flex; align-items: flex-end; gap: 8px; }  /* PR318 — 8px matches .po-inline2 (Unit cost ↔ Item link now spaced like Local courier ↔ tracking) */
 .po-field-row.po-field-row-top { align-items: flex-start; }
 .po-field-row .po-field { margin-bottom: 0; }
 .po-field-row .po-field.grow { flex: 1; min-width: 0; }
@@ -503,6 +504,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .fd-courier > div { flex: 1; }
 .fd-label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
 .fd-label em { font-style: normal; opacity: 0.7; }
+/* PR318 — required-field marker: a red asterisk after the label text (mandatory = blocks the form's
+   primary submit). Optional fields carry no marker (we dropped the old "(optional)" text). */
+.req { color: var(--red); font-weight: 700; margin-left: 2px; }
 .fd-courier select, .fd-courier input { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
 
 /* ── Outbound: scan + boxes ── */
@@ -742,6 +746,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-search { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: var(--cream); }
 .po-searchbar .btn-secondary { flex-shrink: 0; }
 /* Group panel: per-PO ship-qty stepper (partial split) sits at the end of the name line */
+/* PR319 — the selected-items cards are cream, like the Confirm step-2 item cards (override the white
+   .purch-panels card; same specificity as that rule but later in source, so it wins). */
+.po-card.grp-card { background: var(--cream); }
 .grp-qty { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
 .grp-qty .qty-step { display: inline-flex; align-items: center; }
 .grp-qty .qty-step button { width: 26px; height: 28px; font-size: 16px; }
@@ -1756,7 +1763,7 @@ input.batch-field, select.batch-field {
 /* PR308 — STANDARD placeholder ("filler") look, app-wide: italic + a lighter/thinner weight so hints
    read as clearly secondary to typed values. Size is left at the input's own font-size (16px on the
    standard field) — that's what governs iOS focus-zoom, not the placeholder, so hints stay zoom-safe. */
-::placeholder { font-style: italic; font-weight: 300; opacity: 1; color: var(--muted); }
+::placeholder { font-style: italic; font-weight: 300; opacity: 1; color: var(--muted-light); }
 /* PR309 — 16px is THE standard control font size. On mobile, Safari zooms in on focus for any text
    control whose font is < 16px, so force every input/select/textarea to 16px at the mobile breakpoint
    (the denser 13–14px desktop sizes never zoom, so they're left as-is). This makes the 16px standard
@@ -1864,7 +1871,7 @@ input.batch-field, select.batch-field {
 .search-input-icon { position: absolute; left: 11px; width: 15px; height: 15px; color: var(--muted); pointer-events: none; }
 .search-input input { width: 100%; padding: 9px 34px 9px 33px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; background: white; color: var(--ink); }
 .search-input input:focus { outline: none; border-color: var(--brown-light); }
-.search-input input::placeholder { color: var(--muted); }
+.search-input input::placeholder { color: var(--muted-light); }
 /* kill the native webkit clear so only our × shows */
 .search-input input::-webkit-search-cancel-button, .search-input input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
 .search-input-clear { position: absolute; right: 7px; width: 22px; height: 22px; border: none; border-radius: 50%; background: var(--paper); color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

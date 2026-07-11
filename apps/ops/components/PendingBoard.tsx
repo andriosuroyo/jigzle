@@ -417,7 +417,7 @@ export default function PendingBoard({
                     <div className="sc-modal-body">
                       {leErr && <div className="validation err" style={{ marginBottom: 10 }}>{leErr}</div>}
 
-                      <div className="fd-section-head">SKU</div>
+                      <div className="fd-section-head">SKU<span className="req" aria-hidden="true">*</span></div>
                       {leChanging ? (
                         <SkuSearchAdd
                           listed={new Set(sel.lines.map((l) => l.item_code).filter((c): c is string => !!c && !(lineEdit.mode === 'edit' && c === lineEdit.line.item_code)))}
@@ -452,7 +452,7 @@ export default function PendingBoard({
                       </div>
 
                       <div className="le-field le-note">
-                        <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                        <label>Note</label>
                         <input type="text" list="le-notes" placeholder="Add a note…" value={leNote} onChange={(e) => setLeNote(e.target.value)} disabled={leBusy} />
                         <datalist id="le-notes">{commonNotes.map((n) => <option key={n.id} value={n.label} />)}</datalist>
                       </div>

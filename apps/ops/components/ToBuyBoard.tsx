@@ -562,7 +562,7 @@ export default function ToBuyBoard({
                 <div className="sc-modal-body">
                   {eErr && <div className="validation err" style={{ marginBottom: 10 }}>{eErr}</div>}
                   <div className="le-field">
-                    <label>SKU code</label>
+                    <label>SKU code<span className="req" aria-hidden="true">*</span></label>
                     <input type="text" className={detail.item_code != null ? 'le-locked' : undefined} value={eSku} onChange={(e) => setESku(e.target.value)} placeholder="type the SKU code" disabled={eBusy || detail.item_code != null} autoComplete="off" data-1p-ignore="true" data-lpignore="true" />
                   </div>
                   <div className="le-row">
@@ -589,7 +589,7 @@ export default function ToBuyBoard({
                     </div>
                   </div>
                   <div className="le-field le-note">
-                    <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                    <label>Notes</label>
                     <input type="text" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="e.g. buy one set" disabled={eBusy} autoComplete="off" />
                   </div>
                 </div>
@@ -647,7 +647,7 @@ export default function ToBuyBoard({
                       (red pill) instead of moving it to a separate list. */}
                   <div className="td-source-row" style={{ marginTop: 12 }}>
                     <div className="po-field td-source-grow">
-                      <label>Source</label>
+                      <label>Source<span className="req" aria-hidden="true">*</span></label>
                       <select value={buySource} onChange={(e) => changeSource(e.target.value)} disabled={busy}>
                         <option value="">— pick a source —</option>
                         {suppliers.map((s) => (
@@ -764,13 +764,13 @@ export default function ToBuyBoard({
                     </span>
                   </div>
                   <div className="po-field grow">
-                    <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                    <label>Item link</label>
                     <input type="text" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} />
                   </div>
                 </div>
 
                 <div className="po-field">
-                  <label>Short note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                  <label>Short note</label>
                   <input type="text" placeholder="e.g. confirm colour" value={note} onChange={(e) => setNote(e.target.value)} />
                 </div>
 
