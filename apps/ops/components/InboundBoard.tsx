@@ -833,7 +833,7 @@ export default function InboundBoard({
             )}
 
             {sortedQueue.length === 0 && <div className="hint fq-empty">No open shipments.</div>}
-            <ul className="fq-list">
+            <ul className="fq-list fq-list-arrivals">
               {sortedQueue.map((q) => (
                 <li key={q.ship_id}>
                   <button className="fq-row" onClick={() => openShipment(q.ship_id)}>
