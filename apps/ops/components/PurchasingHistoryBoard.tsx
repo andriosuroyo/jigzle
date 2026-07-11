@@ -441,7 +441,7 @@ export default function PurchasingHistoryBoard({
                   {/* PR274 — consolidator courier + tracking (Consolidator → Shipper leg), before the
                       shipper leg. Courier uses the shared LOCAL + CONSOLIDATOR list (localCouriers). */}
                   <div className="fd-section-head">Consolidator courier &amp; tracking</div>
-                  <div className="po-inline2">
+                  <div className="po-inline2 po-inline-courier">
                     {/* PR308 — consolidator courier is a dropdown (shared LOCAL + CONSOLIDATOR list), like the shipment courier. */}
                     <select value={consolCourierDraft} onChange={(e) => { setConsolCourierDraft(e.target.value); void saveConsolidator(e.target.value, consolTrackDraft); }}>
                       <option value="">— Pick courier —</option>
@@ -455,7 +455,7 @@ export default function PurchasingHistoryBoard({
                   {/* PR261 — subheaders styled like the detail view (uppercase .fd-section-head) */}
                   <div className="fd-section-head">Shipment courier &amp; tracking</div>
                   {courierErr && <div className="validation err" style={{ marginBottom: 8 }}>{courierErr}</div>}
-                  <div className="po-inline2">
+                  <div className="po-inline2 po-inline-courier">
                     <select value={courierDraft} onChange={(e) => { setCourierDraft(e.target.value); void saveCourier(e.target.value, trackingDraft); }}>
                       <option value="">— Pick courier —</option>
                       {shipmentCouriers.map((c) => <option key={c} value={c}>{c}</option>)}
