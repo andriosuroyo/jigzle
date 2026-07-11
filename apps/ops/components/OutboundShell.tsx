@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
+import { useEscToClose } from '@/components/useOverlayClose';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import OutboundBoard from '@/components/OutboundBoard';
@@ -14,6 +15,16 @@ import { getMonthlyShipmentsXlsx, getShipmentMonthRange } from '@/app/outbound/a
 import type { ShipQueueRow } from '@jigzle/db/types';
 import type { ShipmentHistoryRow } from '@/app/outbound/types';
 import type { BoxPreset, StaffMember } from '@/app/settings/types';
+
+// PR320 — report (document) icon for the Monthly report button.
+const ReportIcon = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="8" y1="13" x2="16" y2="13" />
+    <line x1="8" y1="17" x2="16" y2="17" />
+  </svg>
+);
 
 type OutboundTab = 'ready' | 'history';
 const TAB_LABELS: Record<OutboundTab, string> = { ready: 'Ready to ship', history: 'History' };
@@ -98,6 +109,9 @@ export default function OutboundShell({
     return out;
   }, [range]);
 
+  // PR320 — Esc closes the Monthly report modal (matches every other overlay).
+  useEscToClose(showReport, () => setShowReport(false));
+
   async function exportMonth(mo: { year: number; month0: number; label: string; key: string }) {
     setReportBusy(mo.key);
     setReportError(null);
@@ -147,7 +161,7 @@ export default function OutboundShell({
             History
           </button>
         </nav>
-        <button className="orders-new" onClick={() => setShowReport(true)}>Monthly report</button>
+        <button className="orders-new btn-ico" onClick={() => setShowReport(true)}><ReportIcon />Monthly report</button>
       </div>
       )}
 
@@ -171,26 +185,28 @@ export default function OutboundShell({
         </div>
       </div>
 
-      {/* Monthly report — pick a completed month, download an .xlsx of that month's shipments. */}
+      {/* Monthly report — a standard centered modal (PR320): pick a completed month, download its .xlsx. */}
       {showReport && (
-        <div className="orders-overlay" role="dialog" aria-modal="true" aria-label="Monthly report">
-          <div className="orders-overlay-bar">
-            <span className="orders-overlay-title">Monthly shipment report</span>
-            <button className="orders-overlay-close" onClick={() => setShowReport(false)} aria-label="Close">×</button>
-          </div>
-          <div className="orders-overlay-body report-body">
-            <p className="hint">Pick a month to download an Excel report of that month&apos;s shipments.</p>
-            {reportError && <div className="validation err">{reportError}</div>}
-            <ul className="month-list">
-              {months.map((mo) => (
-                <li key={mo.key}>
-                  <button className="month-btn" onClick={() => exportMonth(mo)} disabled={!!reportBusy}>
-                    <span>{mo.label}</span>
-                    <span className="month-btn-cta">{reportBusy === mo.key ? 'generating…' : 'download .xlsx'}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+        <div className="sc-modal-backdrop" onClick={() => setShowReport(false)}>
+          <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Monthly report" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <div className="sc-modal-title">Monthly shipment report</div>
+              <button className="sc-modal-x" onClick={() => setShowReport(false)} aria-label="Close">×</button>
+            </div>
+            <div className="sc-modal-body">
+              <p className="hint" style={{ marginBottom: 10 }}>Pick a month to download an Excel report of that month&apos;s shipments.</p>
+              {reportError && <div className="validation err" style={{ marginBottom: 10 }}>{reportError}</div>}
+              <ul className="month-list">
+                {months.map((mo) => (
+                  <li key={mo.key}>
+                    <button className="month-btn" onClick={() => exportMonth(mo)} disabled={!!reportBusy}>
+                      <span>{mo.label}</span>
+                      <span className="month-btn-cta">{reportBusy === mo.key ? 'generating…' : 'download .xlsx'}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       )}
