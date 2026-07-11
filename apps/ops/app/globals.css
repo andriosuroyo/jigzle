@@ -250,9 +250,11 @@ input, textarea, select, button { font-family: inherit; }
 .qty-step input { width: 46px; height: 32px; border: none; border-left: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center; font-size: 14px; font-weight: 700; background: white; -moz-appearance: textfield; }
 .qty-step input::-webkit-outer-spin-button, .qty-step input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .qty-ro { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font-size: 14px; font-weight: 700; }
-/* PR295 — Add-item overlay: compact 32px text inputs so Item link lines up with the Qty stepper on
-   its row (both 32px) and the Short note isn't oversized. Scoped so the global field height is unchanged. */
-.addpo-modal .po-field input[type=text] { height: 32px; padding: 4px 10px; font-size: 14px; }
+/* PR295/PR298 — Add-item overlay: compact text inputs + urgency buttons all match the Qty stepper's
+   outer height (34px = its 32px inner controls + 1px borders), so Item link, Short note and Urgency
+   line up exactly. Scoped so the global field height is unchanged. */
+.addpo-modal .po-field input[type=text] { height: 34px; padding: 4px 10px; font-size: 14px; }
+.addpo-modal .urg-btn { height: 34px; padding: 4px 10px; }
 
 /* urgency chip (on a card) + the low/mid/high selector (forms) — green / yellow / red */
 .urg-chip { flex-shrink: 0; margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 20px; }
