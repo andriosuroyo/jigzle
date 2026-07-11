@@ -954,7 +954,7 @@ export default function InboundBoard({
                 {/* PR288 — an unknown scan now opens the Manual-add overlay (prefilled); no inline stub here. */}
 
                 {detail.expected.length === 0 && extras.length === 0 && (
-                  <div className="hint">No item list — scan or use Manual add to record what arrived.</div>
+                  <div className="hint">No items yet — scan or use Manual add to record an item.</div>
                 )}
                 <ul className="ff-lines">
                   {expectedResolved.map((e) => renderItemLine(e.item_code!, e.name, e.expected_qty))}
