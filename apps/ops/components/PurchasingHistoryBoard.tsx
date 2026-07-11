@@ -518,14 +518,20 @@ export default function PurchasingHistoryBoard({
                   <label>Source</label>
                   <div className="po-ro-locked">{selSup ? `${selSup.flag ? selSup.flag + ' ' : ''}${selSup.name}` : (selItem.supplier_name || '—')}</div>
                 </div>
-                <div className="po-field">
-                  <label>Item link</label>
-                  <div className="po-ro-locked">{selItem.product_link ? <a href={selItem.product_link} target="_blank" rel="noreferrer">{selItem.product_link}</a> : '—'}</div>
-                </div>
-                <div className="po-field">
-                  <label>Unit cost</label>
-                  {/* PR269 read-only currency rule: symbol AFTER the number ("108元 each"). */}
-                  <div className="po-ro-locked">{selItem.item_cost != null ? `${selItem.item_cost}${costSym} each` : '—'}</div>
+                {/* PR319 — Unit cost (narrow, left) + Item link (grow, right) share one line, mirroring the
+                    Ship detail. Top-aligned since the locked link can wrap (clamped) to two lines. */}
+                <div className="po-field-row po-field-row-top">
+                  <div className="po-field po-field-cost">
+                    <label>Unit cost</label>
+                    {/* PR269 read-only currency rule: symbol AFTER the number ("108元 each"). */}
+                    <div className="po-ro-locked">{selItem.item_cost != null ? `${selItem.item_cost}${costSym} each` : '—'}</div>
+                  </div>
+                  <div className="po-field grow">
+                    <label>Item link</label>
+                    <div className="po-ro-locked po-ro-locked-row">
+                      <span className="po-rov-link">{selItem.product_link ? <a href={selItem.product_link} target="_blank" rel="noreferrer">{selItem.product_link}</a> : '—'}</span>
+                    </div>
+                  </div>
                 </div>
                 <div className="po-field">
                   <label>Local courier &amp; tracking</label>
