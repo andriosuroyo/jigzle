@@ -57,6 +57,23 @@ function bucketOf(name: string | null): string {
 
 type Tab = 'search' | 'fix';
 
+// PR325 — the Fix tab's ten maintenance lists, each its own sub-tab (Buy-board style: an underline tab
+// strip with a live count pill). `count` reads the true total from the health scan (not the capped list).
+type FixList = 'dupes' | 'phone' | 'address' | 'noaddr' | 'blank' | 'oddphone' | 'region' | 'mismatch' | 'nopost' | 'empty';
+const FIX_LISTS: { key: FixList; label: string; count: (h: DataHealth, dupCount: number) => number }[] = [
+  { key: 'dupes', label: 'Duplicates', count: (_h, d) => d },
+  { key: 'phone', label: 'Sharing a number', count: (h) => h.sharedPhoneGroupCount },
+  { key: 'address', label: 'Sharing an address', count: (h) => h.sharedAddressGroupCount },
+  { key: 'noaddr', label: 'No address', count: (h) => h.noAddressCount },
+  { key: 'blank', label: 'Blank name', count: (h) => h.blankNameCount },
+  { key: 'oddphone', label: 'Odd phone', count: (h) => h.oddPhoneCount },
+  { key: 'region', label: 'Repeated region', count: (h) => h.repeatRegionCount },
+  { key: 'mismatch', label: 'Postcode ≠ province', count: (h) => h.postcodeMismatchCount },
+  { key: 'nopost', label: 'Missing postcode', count: (h) => h.missingPostcodeCount },
+  { key: 'empty', label: 'Empty records', count: (h) => h.emptyStrayCount },
+];
+const FIX_LIST_KEYS = FIX_LISTS.map((l) => l.key);
+
 type AddrDraft = { recipient_name: string; contact_phone: string; negara: string; provinsi: string; kota: string; kecamatan: string; kelurahan: string; kode_pos: string; street: string; delivery_note: string };
 const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
   recipient_name: a?.recipient_name ?? '',
@@ -97,6 +114,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const tiers = initialTiers;
   // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
   const [tab, setTab] = useUrlTab<Tab>('tab', 'search', ['search', 'fix']);
+  // PR325 — which of the ten Fix lists is showing (own URL param so a Refresh lands back on it)
+  const [fixList, setFixList] = useUrlTab<FixList>('list', 'dupes', FIX_LIST_KEYS);
   const [letter, setLetter] = useState<string>('A');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
@@ -749,8 +768,25 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   </div>
                 )}
 
+                {/* PR325 — one underline sub-tab per maintenance list (Buy-board style), each with a live
+                    count pill; only the selected list renders below (no more 3,000-row scroll). */}
+                <div className="fq-filters cust-fix-tabs" role="tablist" aria-label="Maintenance lists">
+                  {FIX_LISTS.map((l) => (
+                    <button
+                      key={l.key}
+                      role="tab"
+                      aria-selected={fixList === l.key}
+                      className={`fq-filter ${fixList === l.key ? 'active' : ''}`}
+                      onClick={() => setFixList(l.key)}
+                    >
+                      {l.label}<span className="fq-filter-count">{l.count(health, dupGroups?.length ?? 0).toLocaleString('en-US')}</span>
+                    </button>
+                  ))}
+                </div>
+
                 {/* Duplicates — same-name groups with a likely stray (the "Find duplicates" scan) */}
-                <div className="fd-section-head" style={{ marginTop: 16 }}>Duplicates {dupGroups?.length ? `(${dupGroups.length})` : ''}</div>
+                {fixList === 'dupes' && (<>
+                <div className="fd-section-head cust-fix-head">Duplicates</div>
                 {dupGroups && dupGroups.length === 0 && <div className="validation ok">No same-name duplicates found.</div>}
                 <ul className="dh-list">
                   {(dupGroups ?? []).map((g) => (
@@ -770,9 +806,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     </li>
                   ))}
                 </ul>
+                </>)}
 
                 {/* shared number */}
-                <div className="fd-section-head" style={{ marginTop: 20 }}>Sharing a number {health.groups.length ? `(${health.groups.length})` : ''}</div>
+                {fixList === 'phone' && (<>
+                <div className="fd-section-head cust-fix-head">Sharing a number</div>
                 {health.groups.length === 0 && <div className="validation ok">No customers share a phone number.</div>}
                 <ul className="dh-list">
                   {health.groups.map((g) => (
@@ -793,9 +831,14 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     </li>
                   ))}
                 </ul>
+                {health.sharedPhoneGroupCount > health.groups.length && (
+                  <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.groups.length} of {health.sharedPhoneGroupCount}.</div>
+                )}
+                </>)}
 
                 {/* shared address */}
-                <div className="fd-section-head" style={{ marginTop: 20 }}>Sharing an address {health.addressGroups.length ? `(${health.addressGroups.length})` : ''}</div>
+                {fixList === 'address' && (<>
+                <div className="fd-section-head cust-fix-head">Sharing an address</div>
                 {health.addressGroups.length === 0 && <div className="validation ok">No customers share an address (beyond those already sharing a number).</div>}
                 <ul className="dh-list">
                   {health.addressGroups.map((g) => (
@@ -815,9 +858,14 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     </li>
                   ))}
                 </ul>
+                {health.sharedAddressGroupCount > health.addressGroups.length && (
+                  <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.addressGroups.length} of {health.sharedAddressGroupCount}.</div>
+                )}
+                </>)}
 
                 {/* no address (has orders) */}
-                <div className="fd-section-head" style={{ marginTop: 20 }}>No address {health.noAddressCount ? `(${health.noAddressCount})` : ''}</div>
+                {fixList === 'noaddr' && (<>
+                <div className="fd-section-head cust-fix-head">No address</div>
                 {health.noAddressCount === 0 ? (
                   <div className="validation ok">Every customer with an order has an address on file.</div>
                 ) : (
@@ -829,9 +877,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     )}
                   </>
                 )}
+                </>)}
 
                 {/* blank name */}
-                <div className="fd-section-head" style={{ marginTop: 20 }}>Blank name {health.blankNameCount ? `(${health.blankNameCount})` : ''}</div>
+                {fixList === 'blank' && (<>
+                <div className="fd-section-head cust-fix-head">Blank name</div>
                 {health.blankNameCount === 0 ? (
                   <div className="validation ok">Every customer record has a name.</div>
                 ) : (
@@ -843,9 +893,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     )}
                   </>
                 )}
+                </>)}
 
                 {/* odd phone */}
-                <div className="fd-section-head" style={{ marginTop: 20 }}>Odd phone format {health.oddPhoneCount ? `(${health.oddPhoneCount})` : ''}</div>
+                {fixList === 'oddphone' && (<>
+                <div className="fd-section-head cust-fix-head">Odd phone format</div>
                 {health.oddPhoneCount === 0 ? (
                   <div className="validation ok">Every number on file looks like a valid phone number.</div>
                 ) : (
@@ -857,9 +909,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     )}
                   </>
                 )}
+                </>)}
 
                 {/* PR321 — repeated region fields (mis-filled address, e.g. Kuningan×3) */}
-                <div className="fd-section-head" style={{ marginTop: 20 }}>Repeated region fields {health.repeatRegionCount ? `(${health.repeatRegionCount})` : ''}</div>
+                {fixList === 'region' && (<>
+                <div className="fd-section-head cust-fix-head">Repeated region fields</div>
                 {health.repeatRegionCount === 0 ? (
                   <div className="validation ok">No address repeats a value across Province / City / Subdistrict / Ward.</div>
                 ) : (
@@ -871,9 +925,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     )}
                   </>
                 )}
+                </>)}
 
                 {/* PR321 — postcode ↔ province mismatch (crosscheck against the bundled dataset) */}
-                <div className="fd-section-head" style={{ marginTop: 20 }}>Postcode ≠ province {health.postcodeMismatchCount ? `(${health.postcodeMismatchCount})` : ''}</div>
+                {fixList === 'mismatch' && (<>
+                <div className="fd-section-head cust-fix-head">Postcode ≠ province</div>
                 {health.postcodeMismatchCount === 0 ? (
                   <div className="validation ok">No address has a postcode whose province contradicts the dataset.</div>
                 ) : (
@@ -885,9 +941,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     )}
                   </>
                 )}
+                </>)}
 
                 {/* PR321 — Indonesia address with no postcode (flag; we deliberately don't assume one) */}
-                <div className="fd-section-head" style={{ marginTop: 20 }}>Missing postcode {health.missingPostcodeCount ? `(${health.missingPostcodeCount})` : ''}</div>
+                {fixList === 'nopost' && (<>
+                <div className="fd-section-head cust-fix-head">Missing postcode</div>
                 {health.missingPostcodeCount === 0 ? (
                   <div className="validation ok">Every filled Indonesia address has a postcode.</div>
                 ) : (
@@ -899,10 +957,12 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     )}
                   </>
                 )}
+                </>)}
 
                 {/* empty strays */}
-                <div className="po-tobuy-head" style={{ marginTop: 20 }}>
-                  <div className="fd-section-head" style={{ marginBottom: 0 }}>Empty records {health.emptyStrayCount ? `(${health.emptyStrayCount})` : ''}</div>
+                {fixList === 'empty' && (<>
+                <div className="po-tobuy-head cust-fix-head">
+                  <div className="fd-section-head" style={{ marginBottom: 0 }}>Empty records</div>
                   {health.emptyStrayCount > 0 && !confirmStrays && (
                     <button className="btn-secondary" onClick={() => { setNotice(null); setConfirmStrays(true); }} disabled={busy}>Delete all</button>
                   )}
@@ -922,6 +982,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     {health.emptyStrayCount > health.emptyStrays.length && `  ·  … +${(health.emptyStrayCount - health.emptyStrays.length).toLocaleString('en-US')} more`}
                   </div>
                 )}
+                </>)}
 
                 <div className="dh-foot hint">
                   For a bulk reconcile against the source spreadsheets, see <code>scripts/import/reconcile_customers.py</code>.
