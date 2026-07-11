@@ -7,7 +7,7 @@
 // the shipment, so searching a SKU surfaces which ship_ids contain it. Read-only.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, setConsolidator, getShipmentBoxes, setShipmentBoxes, deleteShipment, updateShipmentPO, sendPoBackToShip } from '@/app/purchasing/actions';
+import { getShipmentHistory, getShipmentItems, setShipmentNote, setShipmentCourier, setConsolidator, getShipmentBoxes, setShipmentBoxes, deleteShipment } from '@/app/purchasing/actions';
 import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/purchasing/types';
 import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
@@ -29,8 +29,6 @@ const draftToBox = (d: BoxDraft): ShipmentBox => ({ dim_p: numOrNull(d.p), dim_l
 const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 16, height: 16, 'aria-hidden': true };
 const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
-// PR267 — "send back" return arrow (arrow-uturn-left) for the Send-back-to-Ship action.
-const BackIcon = () => (<svg {..._ic}><polyline points="9 14 4 9 9 4" /><path d="M20 20v-7a4 4 0 0 0-4-4H4" /></svg>);
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 // one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg" (PR273 — box is dims only)
@@ -114,19 +112,10 @@ export default function PurchasingHistoryBoard({
   const [boxErr, setBoxErr] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false); // PR261 — Done saves boxes + note together
 
-  // PR255 — per-item detail overlay: the tapped item + editable drafts for its captured To-forwarder data.
+  // PR293 — per-item detail overlay is now READ-ONLY: History items are finalised, so the overlay
+  // shows the captured To-forwarder data locked (no edit, no Send back to Ship — a short line is
+  // returned to Ship automatically at Inbound receiving). Just the tapped line.
   const [selItem, setSelItem] = useState<ShipmentItemRow | null>(null);
-  const [itSupplier, setItSupplier] = useState<string>('');   // supplier_id as string ('' = none)
-  const [itCost, setItCost] = useState('');
-  const [itMethod, setItMethod] = useState('');
-  const [itTracking, setItTracking] = useState('');
-  const [itMarket, setItMarket] = useState('');
-  const [itLink, setItLink] = useState('');
-  const [itNote, setItNote] = useState('');
-  const [itSaving, setItSaving] = useState(false);
-  const [itErr, setItErr] = useState<string | null>(null);
-  // PR267 — "Send back to Ship": detach a not-yet-received line from this shipment (whole line).
-  const [sbBusy, setSbBusy] = useState(false);
 
   // PR153: tell the shell when a detail is open (it hides the pipeline tabs, keeps the breadcrumb)
   useEffect(() => { onDetailOpenChange?.(!!openShip); }, [openShip, onDetailOpenChange]);
@@ -286,63 +275,9 @@ export default function PurchasingHistoryBoard({
     setOpenShip((prev) => (prev ? { ...prev, consolidator_courier: cc, consolidator_tracking: t } : prev));
   }
 
-  // PR255 — open the per-item detail overlay, seeding the editable drafts from the tapped line.
+  // PR293 — open the read-only per-item detail overlay for the tapped line.
   function openItem(it: ShipmentItemRow) {
     setSelItem(it);
-    setItSupplier(it.supplier_id != null ? String(it.supplier_id) : '');
-    setItCost(it.item_cost != null ? String(it.item_cost) : '');
-    setItMethod(it.method ?? '');
-    setItTracking(it.tracking_to_forwarder ?? '');
-    setItMarket(it.marketplace_order_id ?? '');
-    setItLink(it.product_link ?? '');
-    setItNote(it.item_note ?? '');
-    setItErr(null);
-  }
-
-  // PR267/PR268 — send the WHOLE line back to Ship (unassigned from this shipment) to re-group /
-  // investigate. Partial shorts (2 of 3 arrived) are handled automatically at receiving, not here.
-  async function sendBack() {
-    if (!selItem || !openShip) return;
-    setSbBusy(true); setItErr(null);
-    const { error } = await sendPoBackToShip(selItem.po_id, selItem.qty);
-    if (error) { setItErr(error); setSbBusy(false); return; }
-    const nextItems = shipItems.filter((r) => r.po_id !== selItem.po_id);
-    setShipItems(nextItems);
-    const distinct = new Set(nextItems.map((i) => i.item_code ?? `raw:${i.po_id}`)).size;
-    setOpenShip((prev) => (prev ? { ...prev, item_count: distinct } : prev));
-    setSbBusy(false); setSelItem(null);
-  }
-
-  // PR255 — save the per-item detail (descriptive metadata only), reflected in the loaded list.
-  async function saveItem() {
-    if (!selItem) return;
-    const cost = itCost.trim() === '' ? null : Number(itCost);
-    if (cost != null && (!Number.isFinite(cost) || cost < 0)) { setItErr('Unit cost must be a number ≥ 0.'); return; }
-    const supplier_id = itSupplier === '' ? null : Number(itSupplier);
-    setItSaving(true); setItErr(null);
-    const { error } = await updateShipmentPO(selItem.po_id, {
-      supplier_id,
-      item_cost: cost,
-      method: itMethod,
-      tracking_to_forwarder: itTracking,
-      marketplace_order_id: itMarket,
-      product_link: itLink,
-      item_note: itNote,
-    });
-    if (error) { setItErr(error); setItSaving(false); return; }
-    const sup = suppliers.find((s) => s.supplier_id === supplier_id);
-    setShipItems((prev) => prev.map((r) => (r.po_id === selItem.po_id ? {
-      ...r,
-      supplier_id,
-      supplier_name: supplier_id == null ? null : sup?.name ?? r.supplier_name,
-      item_cost: cost,
-      method: itMethod.trim() || null,
-      tracking_to_forwarder: itTracking.trim() || null,
-      marketplace_order_id: itMarket.trim() || null,
-      product_link: itLink.trim() || null,
-      item_note: itNote.trim() || null,
-    } : r)));
-    setItSaving(false); setSelItem(null);
   }
 
   const TABS: { key: 'active' | 'completed'; label: string; count: number }[] = [
@@ -361,8 +296,8 @@ export default function PurchasingHistoryBoard({
     // header item-cost, recomputed live from the loaded lines (Σ cost×qty) so an item edit reflects at once.
     const loadedCost = shipItems.some((it) => it.item_cost != null) ? shipItems.reduce((n, it) => n + (it.item_cost ?? 0) * it.qty, 0) : null;
     const itemsCost = costText(shipItems.length ? loadedCost : openShip.total_cost, shipItems.find((it) => it.currency)?.currency ?? openShip.currency);
-    // PR267 — the item overlay's cost prefix follows the picked Supplier's country (else the line's stored currency).
-    const selSup = selItem ? suppliers.find((s) => String(s.supplier_id) === itSupplier) : null;
+    // PR267/PR293 — the item overlay's cost symbol follows the line's Source country (else stored currency).
+    const selSup = selItem ? suppliers.find((s) => s.supplier_id === selItem.supplier_id) : null;
     const costSym = selItem ? (symbolForCountry(selSup?.country) || ccySymbol(selItem.currency)) : '';
     return (
       <div className="purch-history">
@@ -512,65 +447,48 @@ export default function PurchasingHistoryBoard({
           </div>
         )}
 
-        {/* per-item detail overlay — the PO data captured at To forwarder (editable) */}
+        {/* per-item detail overlay — the PO data captured at To forwarder (read-only; PR293) */}
         {selItem && (
-          <div className="sc-modal-backdrop" onClick={() => { if (!itSaving) setSelItem(null); }}>
+          <div className="sc-modal-backdrop" onClick={() => setSelItem(null)}>
             <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Item detail" onClick={(e) => e.stopPropagation()}>
               <div className="sc-modal-head sc-modal-head-row">
                 <div>
                   <span className="sc-modal-title">{selItem.item_code || '—'}</span>
                   {isRealName(selItem.name, selItem.item_code) && <div className="sc-modal-sub">{selItem.name} · ×{selItem.qty}</div>}
                 </div>
-                <button className="sc-modal-x" onClick={() => { if (!itSaving) setSelItem(null); }} aria-label="Close">×</button>
+                <button className="sc-modal-x" onClick={() => setSelItem(null)} aria-label="Close">×</button>
               </div>
+              {/* PR293 — READ-ONLY: History lines are finalised. Same field order as the Ship detail,
+                  values locked (no edit, no Send back to Ship). */}
               <div className="sc-modal-body">
-                {itErr && <div className="validation err" style={{ marginBottom: 10 }}>{itErr}</div>}
                 <div className="po-field">
                   <label>Source</label>
-                  <select value={itSupplier} onChange={(e) => setItSupplier(e.target.value)} disabled={itSaving}>
-                    <option value="">— none —</option>
-                    {suppliers.map((s) => <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>)}
-                  </select>
-                </div>
-                {/* PR268 — Item link directly under Supplier (mirrors the Ship detail's field order). */}
-                <div className="po-field">
-                  <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  <input type="text" placeholder="https://…" value={itLink} onChange={(e) => setItLink(e.target.value)} disabled={itSaving} />
+                  <div className="po-ro-locked">{selSup ? `${selSup.flag ? selSup.flag + ' ' : ''}${selSup.name}` : (selItem.supplier_name || '—')}</div>
                 </div>
                 <div className="po-field">
-                  <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  {/* PR266 — currency symbol in FRONT of the input (like ¥100 / $10); "each" trails it. */}
-                  <div className="po-cost-row">
-                    {costSym && <span className="po-cost-ccy">{costSym}</span>}
-                    <input type="number" inputMode="decimal" min={0} step="any" placeholder="0" value={itCost} onChange={(e) => setItCost(e.target.value)} disabled={itSaving} />
-                    <span className="po-cost-ccy">each</span>
-                  </div>
+                  <label>Item link</label>
+                  <div className="po-ro-locked">{selItem.product_link ? <a href={selItem.product_link} target="_blank" rel="noreferrer">{selItem.product_link}</a> : '—'}</div>
                 </div>
                 <div className="po-field">
-                  <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  <div className="po-inline2">
-                    <input type="text" list="hist-methods" placeholder="courier" value={itMethod} onChange={(e) => setItMethod(e.target.value)} disabled={itSaving} />
-                    <input type="text" placeholder="tracking number" value={itTracking} onChange={(e) => setItTracking(e.target.value)} disabled={itSaving} />
-                  </div>
-                  <datalist id="hist-methods">{localCouriers.map((m) => <option key={m} value={m} />)}</datalist>
+                  <label>Unit cost</label>
+                  {/* PR269 read-only currency rule: symbol AFTER the number ("108元 each"). */}
+                  <div className="po-ro-locked">{selItem.item_cost != null ? `${selItem.item_cost}${costSym} each` : '—'}</div>
                 </div>
                 <div className="po-field">
-                  <label>Marketplace ID <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  <input type="text" placeholder="marketplace order id" value={itMarket} onChange={(e) => setItMarket(e.target.value)} disabled={itSaving} />
+                  <label>Local courier &amp; tracking</label>
+                  <div className="po-ro-locked">{[selItem.method || null, selItem.tracking_to_forwarder ? `#${selItem.tracking_to_forwarder}` : null].filter(Boolean).join(' · ') || '—'}</div>
                 </div>
                 <div className="po-field">
-                  <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                  <textarea value={itNote} onChange={(e) => setItNote(e.target.value)} disabled={itSaving} rows={2} />
+                  <label>Marketplace ID</label>
+                  <div className="po-ro-locked">{selItem.marketplace_order_id || '—'}</div>
+                </div>
+                <div className="po-field">
+                  <label>Notes</label>
+                  <div className="po-ro-locked">{selItem.item_note || '—'}</div>
                 </div>
               </div>
-              {/* PR268 — Send back to Ship shares the footer with Cancel/Save. Whole line only: the
-                  short/split (2 of 3 arrived) is handled automatically at receiving (record_receipt). */}
               <div className="sc-modal-foot">
-                {!openShip.completed && (
-                  <button className="btn-brown btn-ico sc-foot-lead" onClick={sendBack} disabled={sbBusy || itSaving} title={`Unassign this line from ${openShip.ship_id} back to Ship`}><BackIcon />{sbBusy ? 'Sending…' : 'Send back to Ship'}</button>
-                )}
-                <button className="btn-secondary" onClick={() => setSelItem(null)} disabled={itSaving || sbBusy}>Cancel</button>
-                <button className="btn-primary" onClick={saveItem} disabled={itSaving || sbBusy}>{itSaving ? 'Saving…' : 'Save'}</button>
+                <button className="btn-secondary" onClick={() => setSelItem(null)}>Close</button>
               </div>
             </div>
           </div>
