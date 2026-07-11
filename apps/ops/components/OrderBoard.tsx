@@ -245,6 +245,7 @@ export default function OrderBoard({
   const [grpConsolCourier, setGrpConsolCourier] = useState('');   // PR274: consolidator courier (optional)
   const [grpConsolTracking, setGrpConsolTracking] = useState(''); // PR272: consolidator tracking (optional)
   const [grpShipId, setGrpShipId] = useState('');
+  const [grpStep, setGrpStep] = useState<'pick' | 'details'>('pick'); // PR287: two-step Create shipment
   const [shipIdOpts, setShipIdOpts] = useState<string[]>([]); // PR285: recent ship_ids for autocomplete
   const [grpOrigin, setGrpOrigin] = useState(''); // kept internally (from an existing shipment) — no UI field
   const [grpDate, setGrpDate] = useState(todayStr());
@@ -577,8 +578,10 @@ export default function OrderBoard({
 
   // open the group overlay for the current selection (seeds fresh forwarder / ship id / date / qty)
   function openGroup() {
-    if (selectedPoIds.size === 0) return;
+    // PR287 — two-step: open on the item picker (list stays checkbox-free), then the shipment details.
     resetMessages();
+    setGrpStep('pick');
+    setSelectedPoIds(new Set());
     setGrpForwarder('');
     setGrpConsolCourier('');
     setGrpConsolTracking('');
@@ -982,47 +985,30 @@ export default function OrderBoard({
               ))}
             </div>
           )}
-          {/* PR263 — Create shipment is an entry button at the top of the list (mirrors Batch confirm);
-              disabled until rows are ticked. */}
-          <button
-            className="btn-brown btn-ico po-add-full po-add-toplist"
-            onClick={openGroup}
-            disabled={selectedCount === 0}
-            title={selectedCount === 0 ? 'Tick items in the list first' : `Create a shipment from ${selectedCount} selected`}
-          >
-            <PackageIcon />Create shipment{selectedCount > 0 ? ` · ${selectedCount}` : ''}
-          </button>
+          {/* PR287 — Create shipment is a two-step picker (list stays checkbox-free, like Confirm). */}
+          <button className="btn-brown btn-ico po-add-full po-add-toplist" onClick={openGroup}><PackageIcon />Create shipment</button>
           {shownFiltered.length === 0 && <div className="hint fq-empty">Nothing here yet.</div>}
           <ul className="po-cards po-cards-compact">
             {shownFiltered.map((po) => {
               const code = po.item_code ?? po.item_code_raw ?? '—';
               return (
               <li key={po.po_id}>
-                <div className="po-row-wrap">
-                  <input
-                    type="checkbox"
-                    className="po-check"
-                    checked={selectedPoIds.has(po.po_id)}
-                    onChange={() => toggleSelect(po.po_id)}
-                    aria-label={`select PO ${po.po_id}`}
-                  />
-                  {/* PR254 — same To-buy card standard as To forwarder: qty above date, SKU centred. */}
-                  <button className="po-card po-card-btn po-card-mini" style={{ flex: 1, minWidth: 0 }} onClick={() => openEdit(po)}>
-                    <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                    <div className="po-card-main">
-                      <span className="ff-code">{code}</span>
-                      {isRealName(po.name, code) && <span className="ff-name po-card-name">{po.name}</span>}
-                      {shortFromShip(po) && <span className="badge short">Short · from {shortFromShip(po)}</span>}
+                {/* PR254 — same To-buy card standard as To forwarder: qty above date, SKU centred. */}
+                <button className="po-card po-card-btn po-card-mini" onClick={() => openEdit(po)}>
+                  <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                  <div className="po-card-main">
+                    <span className="ff-code">{code}</span>
+                    {isRealName(po.name, code) && <span className="ff-name po-card-name">{po.name}</span>}
+                    {shortFromShip(po) && <span className="badge short">Short · from {shortFromShip(po)}</span>}
+                  </div>
+                  <div className="po-card-side">
+                    <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
+                    <div className="po-card-meta">
+                      <span className="po-card-date">{fmtNiceDate(po.status_since)}</span>
                     </div>
-                    <div className="po-card-side">
-                      <span className="po-card-qty po-card-qty-lg">×{po.qty}</span>
-                      <div className="po-card-meta">
-                        <span className="po-card-date">{fmtNiceDate(po.status_since)}</span>
-                      </div>
-                    </div>
-                    <span className="po-chev" aria-hidden>›</span>
-                  </button>
-                </div>
+                  </div>
+                  <span className="po-chev" aria-hidden>›</span>
+                </button>
               </li>
               );
             })}
@@ -1811,12 +1797,35 @@ export default function OrderBoard({
       <div className="sc-modal-backdrop" onClick={close}>
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Create shipment" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <div className="sc-modal-title">Create shipment · {totalItems} item{totalItems === 1 ? '' : 's'}</div>
+            <div className="sc-modal-title">{grpStep === 'pick' ? 'Create shipment · step 1 of 2' : 'Create shipment · step 2 of 2'}</div>
             <button className="sc-modal-x" onClick={close} aria-label="Close">×</button>
           </div>
           <div className="sc-modal-body">
             {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
 
+            {grpStep === 'pick' ? (
+              <>
+                <div className="hint" style={{ marginBottom: 8 }}>Tick the items to group into this shipment.</div>
+                {shownFiltered.length === 0 && <div className="hint">Nothing to ship yet.</div>}
+                <ul className="po-cards po-cards-compact batch-picklist">
+                  {shownFiltered.map((po) => (
+                    <li key={po.po_id}>
+                      <label className="po-row-wrap batch-pickrow">
+                        <input type="checkbox" className="po-check" checked={selectedPoIds.has(po.po_id)} onChange={() => toggleSelect(po.po_id)} aria-label={`select PO ${po.po_id}`} />
+                        <span className="po-card batch-pickcard" style={{ flex: 1, minWidth: 0 }}>
+                          <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                          <div className="po-card-main">
+                            <div className="po-card-l1"><span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span><span className="po-card-poid">{fmtNiceDate(po.status_since)}</span></div>
+                            <div className="po-card-l2">{isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}<span className="po-card-qty">×{po.qty}</span></div>
+                          </div>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+            <>
             <div className="batch-group">
               <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
               <ul className="po-cards po-cards-compact">
@@ -1883,10 +1892,21 @@ export default function OrderBoard({
                 <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
               </div>
             </div>
+            </>
+            )}
           </div>
           <div className="sc-modal-foot">
-            <button className="btn-secondary" onClick={close} disabled={busy}>Cancel</button>
-            <button className="btn-primary btn-ico" onClick={submitGroup} disabled={busy || selectedCount === 0}><PackageIcon />{busy ? 'Grouping…' : 'Group shipment'}</button>
+            {grpStep === 'pick' ? (
+              <>
+                <button className="btn-secondary" onClick={close} disabled={busy}>Cancel</button>
+                <button className="btn-primary" onClick={() => setGrpStep('details')} disabled={selectedCount === 0}>Next · {selectedCount} selected</button>
+              </>
+            ) : (
+              <>
+                <button className="btn-secondary" onClick={() => setGrpStep('pick')} disabled={busy}>Back</button>
+                <button className="btn-primary btn-ico" onClick={submitGroup} disabled={busy || selectedCount === 0}><PackageIcon />{busy ? 'Grouping…' : 'Group shipment'}</button>
+              </>
+            )}
           </div>
         </div>
       </div>
