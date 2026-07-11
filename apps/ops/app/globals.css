@@ -161,17 +161,21 @@ input, textarea, select, button { font-family: inherit; }
 .batch-group textarea.batch-field { min-height: 60px; resize: vertical; }
 .batch-items-head { margin-top: 4px; }
 .batch-items { display: flex; flex-direction: column; gap: 10px; }
-/* PR291 — each item is its own card: a 54px image beside two lines. Line 1: SKU + name (left) / qty
-   (right). Line 2: unit cost + item link side-by-side, together full width. No extra left padding. */
-.batch-item { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
-.batch-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* PR291/PR294 — each item is its own card: a 54px image (flush to the card's left edge — no left
+   padding) beside two lines. Line 1: SKU + name (left) / qty (right). Line 2: unit cost + item link
+   side-by-side, together full width. The two lines are kept short so the block matches the image
+   height (its top/bottom align with the image's). */
+.batch-item { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 0; overflow: hidden; }
+.batch-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .batch-item-row { display: flex; align-items: center; gap: 8px; }
 .batch-item-head { gap: 8px; }
 .batch-item-id { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
 .batch-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .batch-item-head .po-card-qty { flex-shrink: 0; }
-/* line 2 — cost + link span the full width together (cost sized to content, link takes the rest) */
-.batch-item-fields .batch-cost { flex: 0 0 100px; -moz-appearance: textfield; }
+/* line 2 — cost + link span the full width together (cost sized to content, link takes the rest); the
+   inputs are compact (short) so line1 + line2 ≈ the 54px image height. */
+.batch-item-fields .batch-cost, .batch-item-fields .batch-link { height: 30px; padding: 4px 9px; font-size: 13px; }
+.batch-item-fields .batch-cost { flex: 0 0 92px; -moz-appearance: textfield; }
 .batch-item-fields .batch-cost::-webkit-outer-spin-button, .batch-item-fields .batch-cost::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .batch-item-fields .batch-link { flex: 1; min-width: 0; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -224,6 +228,12 @@ input, textarea, select, button { font-family: inherit; }
 .po-cost-row { display: flex; align-items: center; gap: 8px; }
 .po-cost-row .po-cost-ccy { flex-shrink: 0; font-weight: 700; color: var(--muted); }
 .po-cost-row input { flex: 1; min-width: 0; }
+/* PR296/PR297 — Confirm & Ship detail: Unit cost sits left of Item link, sized just wide enough for
+   ~5 digits (applies to the edit input and the read-only locked value). */
+.po-field-cost { flex: 0 0 auto; }
+.po-field-cost .po-cost-row input, .po-field-cost .po-ro-locked { flex: 0 0 auto; width: 4.5rem; }
+/* PR297 — Ship detail edit: the courier field matches the Unit cost width; tracking takes the rest. */
+.po-inline2.po-inline-courier > input:first-child { flex: 0 0 4.5rem; }
 /* PR267 — "Send back to Ship" action in the History item overlay (separated from the fields above). */
 /* PR268 — a modal-foot button pinned to the LEFT (e.g. "Send back to Ship"), Cancel/Save grouped right. */
 .sc-foot-lead { margin-right: auto; }
@@ -240,6 +250,9 @@ input, textarea, select, button { font-family: inherit; }
 .qty-step input { width: 46px; height: 32px; border: none; border-left: 1px solid var(--line); border-right: 1px solid var(--line); text-align: center; font-size: 14px; font-weight: 700; background: white; -moz-appearance: textfield; }
 .qty-step input::-webkit-outer-spin-button, .qty-step input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .qty-ro { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font-size: 14px; font-weight: 700; }
+/* PR295 — Add-item overlay: compact 32px text inputs so Item link lines up with the Qty stepper on
+   its row (both 32px) and the Short note isn't oversized. Scoped so the global field height is unchanged. */
+.addpo-modal .po-field input[type=text] { height: 32px; padding: 4px 10px; font-size: 14px; }
 
 /* urgency chip (on a card) + the low/mid/high selector (forms) — green / yellow / red */
 .urg-chip { flex-shrink: 0; margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 20px; }
@@ -280,6 +293,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .po-pick-mid .ff-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 /* PR158 — add-item overlay: Qty + Product link share one line */
 .po-field-row { display: flex; align-items: flex-end; gap: 10px; }
+.po-field-row.po-field-row-top { align-items: flex-start; }
 .po-field-row .po-field { margin-bottom: 0; }
 .po-field-row .po-field.grow { flex: 1; min-width: 0; }
 .po-pick-x { flex-shrink: 0; width: 30px; height: 30px; border: none; border-radius: 8px; background: var(--red-tint); color: var(--red); font-size: 18px; line-height: 1; cursor: pointer; }

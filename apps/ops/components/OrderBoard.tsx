@@ -34,6 +34,8 @@ const TrashIcon = () => (<svg width={16} height={16} viewBox="0 0 24 24" fill="n
 const PencilIcon = () => (<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 const CopyIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
 const CheckIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>);
+// PR296 — a floppy-disk "save" glyph for the Confirm detail's Save-changes button.
+const SaveIcon = () => (<svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>);
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -443,18 +445,14 @@ export default function OrderBoard({
 
   // ── To forwarder: confirm a single item is with the forwarder → With Forwarder (moves to To ship).
   // Per-item (not bulk) because cost / tracking differ per item, so they're handled one card at a time. ──
-  async function confirmOne() {
+  // PR296 — the Confirm detail no longer advances an item to Ship (that's the "Confirm item(s)" batch
+  // flow now); its primary button just SAVES the field edits and closes. Fields already auto-save on
+  // blur, but a value still focused when Save is tapped may not have fired its blur yet.
+  async function saveForwarderChanges() {
     if (!editPo) return;
     resetMessages();
-    // PR256 — a supplier is the one thing To-forwarder must record before an item can move on.
-    if (!form.supplier_id) {
-      setError('Pick a source before Ready to Ship.');
-      return;
-    }
     setBusy(true);
     try {
-      // persist any field edits made in the detail view before advancing (fields auto-save on blur,
-      // but a value still focused when Confirm is tapped may not have fired its blur yet)
       await updatePO(editPo.po_id, {
         supplier_id: form.supplier_id ? Number(form.supplier_id) : undefined,
         product_link: form.product_link.trim() || null,
@@ -464,13 +462,11 @@ export default function OrderBoard({
         item_note: form.item_note.trim() || null,
         tracking_to_forwarder: form.tracking_to_forwarder.trim() || null,
       });
-      await setPOStatus(editPo.po_id, 'With Forwarder');
-      setSuccess(`PO #${editPo.po_id} confirmed → Ship.`);
       setMode(null);
       setEditPo(null);
       await refreshQueue();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to confirm.');
+      setError(e instanceof Error ? e.message : 'Failed to save.');
     } finally {
       setBusy(false);
     }
@@ -784,6 +780,33 @@ export default function OrderBoard({
       await refreshQueue();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to detach.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ── PR297: To-ship detail "Save changes" — the edit fields are committed only here (no auto-save on
+  // blur), then the detail returns to its locked read-only view. Shipment ID has its own attach flow. ──
+  async function saveShipChanges() {
+    if (!editPo) return;
+    resetMessages();
+    const patch: UpdatePOPatch = {
+      product_link: form.product_link.trim() || null,
+      item_cost: numOrNull(form.item_cost),
+      method: form.method.trim() || null,
+      marketplace_order_id: form.marketplace_order_id.trim() || null,
+      item_note: form.item_note.trim() || null,
+      tracking_to_forwarder: form.tracking_to_forwarder.trim() || null,
+    };
+    if (form.supplier_id) patch.supplier_id = Number(form.supplier_id);
+    setBusy(true);
+    try {
+      await updatePO(editPo.po_id, patch);
+      setQueue((prev) => prev.map((p) => (p.po_id === editPo.po_id ? ({ ...p, ...patch } as OpenPORow) : p)));
+      setEditPo((prev) => (prev ? ({ ...prev, ...patch } as OpenPORow) : prev));
+      setShipEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save.');
     } finally {
       setBusy(false);
     }
@@ -1170,26 +1193,24 @@ export default function OrderBoard({
               <label>Source</label>
               <div className="po-ro-locked">{supplierName || '—'}</div>
             </div>
-            <div className="po-field">
-              <label>Item link</label>
-              <div className="po-ro-locked po-ro-locked-row">
-                <span className="po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
-                {editPo.product_link && (
-                  <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
-                    {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}
-                  </button>
-                )}
+            {/* PR297 — Unit cost (narrow, left) + Item link (grow, right) share one line, mirroring the
+                Confirm detail. Item link keeps its easy-copy button. Top-aligned since the locked link
+                value can wrap to two lines. */}
+            <div className="po-field-row po-field-row-top">
+              <div className="po-field po-field-cost">
+                <label>Unit cost</label>
+                <div className="po-ro-locked">{costText || '—'}</div>
               </div>
-            </div>
-            <div className="po-field">
-              <label>Unit cost</label>
-              <div className="po-ro-locked po-ro-locked-row">
-                <span>{costText || '—'}</span>
-                {editPo.item_cost != null && (
-                  <button className="po-rocopy" onClick={() => copyVal(String(editPo.item_cost), 'cost')} aria-label={copiedKey === 'cost' ? 'Unit cost copied' : 'Copy unit cost'} title="Copy unit cost">
-                    {copiedKey === 'cost' ? <CheckIcon /> : <CopyIcon />}
-                  </button>
-                )}
+              <div className="po-field grow">
+                <label>Item link</label>
+                <div className="po-ro-locked po-ro-locked-row">
+                  <span className="po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
+                  {editPo.product_link && (
+                    <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
+                      {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             <div className="po-field">
@@ -1207,7 +1228,8 @@ export default function OrderBoard({
           </>
         ) : (
           <>
-            {/* Edit mode — the To-forwarder field set, auto-saving on blur/change */}
+            {/* PR297 — Edit mode. Fields update local state only; nothing persists until "Save changes"
+                is pressed (no auto-save on blur). */}
             <div className="po-field">
               <label>Source</label>
               <select
@@ -1215,7 +1237,6 @@ export default function OrderBoard({
                 onChange={(e) => {
                   const supplier_id = e.target.value ? Number(e.target.value) : '';
                   setForm((f) => ({ ...f, supplier_id }));
-                  autoSaveForwarder({ supplier_id: supplier_id ? Number(supplier_id) : undefined });
                 }}
               >
                 <option value="">— pick a supplier —</option>
@@ -1224,49 +1245,46 @@ export default function OrderBoard({
                 ))}
               </select>
             </div>
-            <div className="po-field">
-              <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-              <input
-                type="text"
-                placeholder="https://…"
-                value={form.product_link}
-                onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
-                onBlur={(e) => autoSaveForwarder({ product_link: e.target.value.trim() || null })}
-              />
-            </div>
-            <div className="po-field">
-              <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-              <div className="po-cost-row">
-                {editCcy && <span className="po-cost-ccy">{editCcy.symbol}</span>}
+            {/* Unit cost (narrow, left, no number-spinner) + Item link (grow, right) share one line. */}
+            <div className="po-field-row">
+              <div className="po-field po-field-cost">
+                <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                <div className="po-cost-row">
+                  {editCcy && <span className="po-cost-ccy">{editCcy.symbol}</span>}
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={form.item_cost}
+                    onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="po-field grow">
+                <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
                 <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="any"
-                  placeholder="0"
-                  value={form.item_cost}
-                  onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
-                  onBlur={(e) => autoSaveForwarder({ item_cost: numOrNull(e.target.value) })}
+                  type="text"
+                  placeholder="https://…"
+                  value={form.product_link}
+                  onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
                 />
               </div>
             </div>
             <div className="po-field">
               <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-              <div className="po-inline2">
+              <div className="po-inline2 po-inline-courier">
                 <input
                   type="text"
                   list="ship-methods"
                   placeholder="courier"
                   value={form.method}
                   onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
-                  onBlur={(e) => autoSaveForwarder({ method: e.target.value.trim() || null })}
                 />
                 <input
                   type="text"
                   placeholder="tracking number"
                   value={form.tracking_to_forwarder}
                   onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))}
-                  onBlur={(e) => autoSaveForwarder({ tracking_to_forwarder: e.target.value.trim() || null })}
                 />
               </div>
               <datalist id="ship-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
@@ -1278,7 +1296,6 @@ export default function OrderBoard({
                 placeholder="marketplace order id"
                 value={form.marketplace_order_id}
                 onChange={(e) => setForm((f) => ({ ...f, marketplace_order_id: e.target.value }))}
-                onBlur={(e) => autoSaveForwarder({ marketplace_order_id: e.target.value.trim() || null })}
               />
             </div>
             <div className="po-field">
@@ -1286,7 +1303,6 @@ export default function OrderBoard({
               <textarea
                 value={form.item_note}
                 onChange={(e) => setForm((f) => ({ ...f, item_note: e.target.value }))}
-                onBlur={(e) => autoSaveForwarder({ item_note: e.target.value.trim() || null })}
               />
             </div>
           </>
@@ -1324,9 +1340,11 @@ export default function OrderBoard({
         {/* PR256 — the Sales / To-forwarder action-bar standard: secondary (Edit) then destructive
             last; Delete opens a modal confirm instead of the old bare trash + inline ask. */}
         <div className="td-actions">
-          <button className="btn-secondary btn-ico" onClick={() => setShipEditing((v) => !v)} disabled={busy}>
-            <PencilIcon />{shipEditing ? 'Done' : 'Edit item'}
-          </button>
+          {shipEditing ? (
+            <button className="btn-primary btn-ico" onClick={saveShipChanges} disabled={busy}><SaveIcon />{busy ? '…' : 'Save changes'}</button>
+          ) : (
+            <button className="btn-secondary btn-ico" onClick={() => setShipEditing(true)} disabled={busy}><PencilIcon />Edit item</button>
+          )}
           <button className="btn-danger btn-ico" onClick={() => setConfirmDel(true)} disabled={busy}><TrashIcon />Delete PO</button>
         </div>
         {confirmDel && (
@@ -1354,7 +1372,10 @@ export default function OrderBoard({
       <div className="sc-modal-backdrop" onClick={closeBatch}>
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Confirm items" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <div className="sc-modal-title">{batchStep === 'pick' ? 'Confirm item(s) · step 1 of 2' : 'Confirm item(s) · step 2 of 2'}</div>
+            <div>
+              <div className="sc-modal-title">Confirm item(s)</div>
+              <div className="sc-modal-sub">Step {batchStep === 'pick' ? '1' : '2'} of 2</div>
+            </div>
             <button className="sc-modal-x" onClick={closeBatch} aria-label="Close">×</button>
           </div>
 
@@ -1460,7 +1481,7 @@ export default function OrderBoard({
               </div>
               <div className="sc-modal-foot">
                 <button className="btn-secondary" onClick={() => setBatchStep('pick')}>← Back</button>
-                <button className="btn-primary btn-ico" onClick={submitBatch} disabled={batchBusy || batchIds.size === 0}><TruckIcon />{batchBusy ? 'Confirming…' : `Ready to Ship · ${batchIds.size}`}</button>
+                <button className="btn-primary btn-ico" onClick={submitBatch} disabled={batchBusy || batchIds.size === 0}><TruckIcon />{batchBusy ? 'Confirming…' : `Confirm ${batchIds.size} item${batchIds.size === 1 ? '' : 's'}`}</button>
               </div>
             </>
           )}
@@ -1500,32 +1521,31 @@ export default function OrderBoard({
           )}
         </div>
 
-        {/* 2 · Item link */}
-        <div className="po-field">
-          <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-          <input
-            type="text"
-            placeholder="https://…"
-            value={form.product_link}
-            onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
-            onBlur={(e) => autoSaveForwarder({ product_link: e.target.value.trim() || null })}
-          />
-        </div>
-
-        {/* 3 · Unit cost (optional) — the symbol filler still follows the supplier's country. */}
-        <div className="po-field">
-          <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-          <div className="po-cost-row">
-            {ccy && <span className="po-cost-ccy">{ccy.symbol}</span>}
+        {/* 2 · Unit cost (narrow, left) + Item link (grow, right) share one line (PR296). The cost is
+            plain text (inputMode decimal) so there's no number-spinner; its symbol follows the source. */}
+        <div className="po-field-row">
+          <div className="po-field po-field-cost">
+            <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+            <div className="po-cost-row">
+              {ccy && <span className="po-cost-ccy">{ccy.symbol}</span>}
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
+                value={form.item_cost}
+                onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
+                onBlur={(e) => autoSaveForwarder({ item_cost: numOrNull(e.target.value) })}
+              />
+            </div>
+          </div>
+          <div className="po-field grow">
+            <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
             <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="any"
-              placeholder="0"
-              value={form.item_cost}
-              onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
-              onBlur={(e) => autoSaveForwarder({ item_cost: numOrNull(e.target.value) })}
+              type="text"
+              placeholder="https://…"
+              value={form.product_link}
+              onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
+              onBlur={(e) => autoSaveForwarder({ product_link: e.target.value.trim() || null })}
             />
           </div>
         </div>
@@ -1580,7 +1600,7 @@ export default function OrderBoard({
         {/* PR248 — action-bar standard: left-aligned, slides on mobile; primary then destructive.
             Delete opens a Sales-style modal confirm. Edits auto-save on blur. */}
         <div className="td-actions">
-          <button className="btn-primary btn-ico" onClick={confirmOne} disabled={busy}><TruckIcon />{busy ? '…' : 'Ready to Ship'}</button>
+          <button className="btn-primary btn-ico" onClick={saveForwarderChanges} disabled={busy}><SaveIcon />{busy ? '…' : 'Save changes'}</button>
           <button className="btn-danger btn-ico" onClick={() => setConfirmDel(true)} disabled={busy}><TrashIcon />Delete PO</button>
         </div>
         {confirmDel && (

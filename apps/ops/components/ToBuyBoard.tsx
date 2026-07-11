@@ -681,9 +681,12 @@ export default function ToBuyBoard({
       {/* "+ add item" overlay (Manual only) — dimmed-backdrop modal */}
       {adding && (
         <div className="sc-modal-backdrop" onClick={closeAdd}>
-          <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Add planned item" onClick={(e) => e.stopPropagation()}>
+          <div className="sc-modal addpo-modal" role="dialog" aria-modal="true" aria-label="Add item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
-              <span className="sc-modal-title">Add planned item</span>
+              <div>
+                <div className="sc-modal-title">Add item</div>
+                <div className="sc-modal-sub">Manually add PO items</div>
+              </div>
               <button className="sc-modal-x" onClick={closeAdd} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
@@ -756,7 +759,7 @@ export default function ToBuyBoard({
                     </span>
                   </div>
                   <div className="po-field grow">
-                    <label>Product link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                    <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
                     <input type="text" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} />
                   </div>
                 </div>
