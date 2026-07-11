@@ -248,6 +248,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const [dupWarn, setDupWarn] = useState<string[] | null>(null);
   // PR321 — region-repeat detection: value(s) shared across ≥2 of the four region fields (shown as a confirm)
   const [regionWarn, setRegionWarn] = useState<string[] | null>(null);
+  // PR326 — the original-address STUB now sits below Delivery note and starts shown; this collapses it.
+  const [stubOpen, setStubOpen] = useState(true);
 
   // PR307 — the address add/edit form holds unsaved edits, so Esc/backdrop/× route through a discard
   // confirm whenever it's open (no clean dirty flag — the whole overlay is the edit).
@@ -369,7 +371,28 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     setAddrDraft(draftFrom(address));
     setDupWarn(null);
     setRegionWarn(null);
+    setStubOpen(true);
     setNotice(null);
+  }
+
+  // PR326 — resolve a region repeat by clearing the LOWER-level copy (walk province→city→kecamatan→
+  // kelurahan, keep the first occurrence of each value, blank the finer duplicates). E.g. kecamatan +
+  // kelurahan both "Pagedangan" → ward cleared; triple "Kuningan" → keep City only. It's fine for an
+  // address to lack a subdistrict/ward, and once the repeat is gone it drops off the Fix list.
+  function clearRegionDupes() {
+    const order: ('provinsi' | 'kota' | 'kecamatan' | 'kelurahan')[] = ['provinsi', 'kota', 'kecamatan', 'kelurahan'];
+    const seen = new Set<string>();
+    setAddrDraft((d) => {
+      const next = { ...d };
+      for (const f of order) {
+        const v = next[f].trim();
+        if (!v) continue;
+        const norm = v.toLowerCase().replace(/\s+/g, ' ');
+        if (seen.has(norm)) next[f] = ''; else seen.add(norm);
+      }
+      return next;
+    });
+    setRegionWarn(null);
   }
 
   // terms the street field repeats from the structured fields (so they aren't entered twice)
@@ -1002,14 +1025,6 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               <button className="sc-modal-x" onClick={addrClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
-              {/* PR324 — when editing, show the original address STUB (as first entered / imported) so the
-                  structured fields can be cross-checked against the source instead of drifting from it. */}
-              {addrEdit.address && (addrEdit.address.source_blob || addrEdit.address.raw_address) && (
-                <div className="cust-addr-stub">
-                  <div className="cust-addr-stub-label">Original — as first entered</div>
-                  <div className="cust-addr-stub-text">{addrEdit.address.source_blob || addrEdit.address.raw_address}</div>
-                </div>
-              )}
               <div className="po-form">
                 <div className="po-inline">
                   <div className="po-field">
@@ -1029,7 +1044,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 </div>
                 {isIndonesia(addrDraft.negara) && (
                   <div className="po-field">
-                    <label>Autofill <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(province / city / kecamatan / kelurahan / postcode)</em></label>
+                    <label>Autofill <em className="po-sub">(province / city / kecamatan / kelurahan / postcode)</em></label>
                     <PostcodeAutofill
                       disabled={busy}
                       onPick={(h) => { setAddrDraft((d) => ({ ...d, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })); if (regionWarn) setRegionWarn(null); }}
@@ -1063,13 +1078,24 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   <input type="text" inputMode="numeric" value={addrDraft.kode_pos} onChange={(e) => setAddrDraft({ ...addrDraft, kode_pos: e.target.value })} />
                 </div>
                 <div className="po-field">
-                  <label>Address <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(street, alley/gang, no. — not the city/province above)</em></label>
+                  <label>Address <em className="po-sub">(street, alley/gang, no. — not the city/province above)</em></label>
                   <textarea value={addrDraft.street} onChange={(e) => { setAddrDraft({ ...addrDraft, street: e.target.value }); if (dupWarn) setDupWarn(null); }} />
                 </div>
                 <div className="po-field">
-                  <label>Delivery note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(courier instructions / sender — printed below the courier line as “Note: …”)</em></label>
+                  <label>Delivery note <em className="po-sub">(courier instructions / sender — printed below the courier line as “Note: …”)</em></label>
                   <textarea value={addrDraft.delivery_note} onChange={(e) => setAddrDraft({ ...addrDraft, delivery_note: e.target.value })} />
                 </div>
+
+                {/* PR326 — the original address STUB moved below Delivery note; collapsible (starts shown) */}
+                {addrEdit.address && (addrEdit.address.source_blob || addrEdit.address.raw_address) && (
+                  <div className="cust-addr-stub">
+                    <div className="cust-addr-stub-head">
+                      <span className="cust-addr-stub-label">Original — as first entered</span>
+                      <button type="button" className="btn-link cust-addr-stub-toggle" onClick={() => setStubOpen((v) => !v)}>{stubOpen ? 'Hide' : 'Show'}</button>
+                    </div>
+                    {stubOpen && <div className="cust-addr-stub-text">{addrEdit.address.source_blob || addrEdit.address.raw_address}</div>}
+                  </div>
+                )}
 
                 {dupWarn && (
                   <div className="validation warn">
@@ -1078,7 +1104,10 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 )}
                 {regionWarn && (
                   <div className="validation warn">
-                    {regionWarn.map((d) => `“${d}”`).join(', ')} {regionWarn.length === 1 ? 'appears' : 'appear'} in two or more of Province / City / Subdistrict / Ward — likely a mis-fill. Save anyway?
+                    {regionWarn.map((d) => `“${d}”`).join(', ')} {regionWarn.length === 1 ? 'appears' : 'appear'} in two or more of Province / City / Subdistrict / Ward — likely a mis-fill. Clear the lower-level copy (a subdistrict/ward can be blank), or save as-is.
+                    <div className="dh-confirm" style={{ marginTop: 8 }}>
+                      <button type="button" className="btn-secondary" onClick={clearRegionDupes} disabled={busy}>Clear duplicate field{regionWarn.length === 1 ? '' : 's'}</button>
+                    </div>
                   </div>
                 )}
 
