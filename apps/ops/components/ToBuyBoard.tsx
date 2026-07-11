@@ -1,16 +1,19 @@
 'use client';
 
-// Purchasing → To buy tab (PR73). Three sub-tabs (styled like the Sales Pending readiness filters),
+// Purchasing → To buy tab (PR73). Two sub-tabs (styled like the Sales Pending readiness filters),
 // each a live count:
 //  • Manual    — manual buy-list (PO status 'Planned'). Has "+ add item". Qty is editable (± steppers).
 //  • From Sales — derived from Sales (read-only): unfulfilled lines for ≤0-available SKUs. No add button;
 //                 qty mirrors the order line (uneditable).
-//  • Out of Stock — PO status 'Sold out'. Qty uneditable; Restore → back to Manual.
+//
+// PR304 — "out of stock" is now an INLINE flag, not a separate tab: a checkbox on the detail (beside
+// Source) toggles it, and a red "Out of stock" pill shows left of the qty. A manual item flips its PO
+// between 'Planned' and 'Sold out'; a From-Sales line is flagged by a 'Sold out' PO created for it.
 //
 // Every card shares one layout (larger image): code + name, then context and stock pills. Tapping a card
 // opens a detail overlay (PR221): SKU + Edit (deep-link to the Catalog editor) with the name below; the
-// qty-to-buy stepper and stock statuses beside the image; the catalogue "where to buy" links listed inline;
-// and Out-of-stock / Done / Delete actions. "Done" sends the item to To Forwarder (a Processing PO).
+// qty and stock statuses beside the image; the catalogue "where to buy" links listed inline; and the
+// Source picker + Done / Delete actions. "Done" sends the item to To Forwarder (a Processing PO).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
@@ -22,7 +25,6 @@ import {
   getPreorders,
   getSkuSources,
   getSkuStock,
-  getSoldOutItems,
   markSkuSoldOut,
   searchSkus,
   setPOSource,
@@ -31,7 +33,7 @@ import {
   updatePlannedItem,
   updatePreorderLine,
 } from '@/app/purchasing/actions';
-import type { PlannedItemRow, PreorderRow, SoldOutRow, SkuStockInfo, Urgency } from '@/app/purchasing/types';
+import type { PlannedItemRow, PreorderRow, SkuStockInfo, Urgency } from '@/app/purchasing/types';
 import type { SkuHit } from '@/app/purchasing/types';
 import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
@@ -41,13 +43,14 @@ import StockPills from '@/components/StockPills';
 import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
+import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 import { isRealName } from '@/components/skuName';
 import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
 import { fmtNiceDate } from '@jigzle/lib';
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 
-type SubTab = 'manual' | 'sales' | 'oos';
+type SubTab = 'manual' | 'sales';
 
 // PR260 — the "add planned item" overlay draft: the typed content only (picked SKU + qty/link/note/
 // urgency). One at a time, so a single fixed key. A deliberate close discards it; only an involuntary
@@ -85,7 +88,6 @@ function BuyLink({ url, primary }: { url: string; primary?: boolean }) {
 
 // PR230 — action-button icons (out of stock / done buying / delete PO), matching the Sales style.
 const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 16, height: 16, 'aria-hidden': true };
-const BanIcon = () => (<svg {..._ic}><circle cx="12" cy="12" r="9" /><line x1="5.6" y1="5.6" x2="18.4" y2="18.4" /></svg>);
 const BagIcon = () => (<svg {..._ic}><path d="M6 2 3 6v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></svg>);
 const TrashIcon = () => (<svg {..._ic}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
 const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
@@ -97,28 +99,27 @@ type BuyTarget = {
   item_code: string;
   name: string;
   qty: number;
-  po_id: number | null;        // present for manual / oos (a real PO)
+  po_id: number | null;        // present for a manual PO
   customer_id: number | null;  // present for a from-sales preorder
   sales_id: string | null;     // the originating sale (from-sales preorder), kept on a sold-out mark
   product_link: string | null; // the card's own link (manual product_link / preorder item_link)
+  out_of_stock: boolean;       // PR304 — inline out-of-stock flag
+  oos_po_id: number | null;    // PR304 — for a From-Sales OOS: the 'Sold out' PO to delete on uncheck
 };
 
 export default function ToBuyBoard({
   planned: initialPlanned,
   preorders: initialPreorders,
-  soldOut: initialSoldOut,
   suppliers = [],
 }: {
   planned: PlannedItemRow[];
   preorders: PreorderRow[];
-  soldOut: SoldOutRow[];
   suppliers?: Supplier[]; // PR283 — the Source pick-list for Buy
 }) {
   // PR223 — the sub-tab is mirrored to ?buy= (distinct from Purchasing's ?tab=) so a hard Refresh stays put.
-  const [tab, setTab] = useUrlTab<SubTab>('buy', 'manual', ['manual', 'sales', 'oos']);
+  const [tab, setTab] = useUrlTab<SubTab>('buy', 'manual', ['manual', 'sales']);
   const [planned, setPlanned] = useState<PlannedItemRow[]>(initialPlanned);
   const [preorders, setPreorders] = useState<PreorderRow[]>(initialPreorders);
-  const [soldOut, setSoldOutList] = useState<SoldOutRow[]>(initialSoldOut);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,16 +168,14 @@ export default function ToBuyBoard({
   const imgCodes = useMemo(() => {
     const set = new Set<string>();
     planned.forEach((p) => { if (p.item_code) set.add(p.item_code); });
-    soldOut.forEach((p) => { if (p.item_code) set.add(p.item_code); });
     preorders.forEach((p) => { if (p.item_code) set.add(p.item_code); });
     skuHits.forEach((h) => set.add(h.item_code));
     return [...set];
-  }, [planned, soldOut, preorders, skuHits]);
+  }, [planned, preorders, skuHits]);
   const imgMap = useSkuImages(imgCodes);
 
   async function refresh() {
     try { setPlanned(await getPlannedItems()); } catch { /* keep */ }
-    try { setSoldOutList(await getSoldOutItems()); } catch { /* keep */ }
     try { setPreorders(await getPreorders()); } catch { /* keep */ }
   }
 
@@ -281,8 +280,7 @@ export default function ToBuyBoard({
   // remove the acted row from its list locally (optimistic) — avoids a full 3-list refetch on the hot path.
   function removeRow(s: { kind: SubTab; id: number | string }) {
     if (s.kind === 'manual') setPlanned((prev) => prev.filter((p) => p.po_id !== Number(s.id)));
-    else if (s.kind === 'sales') setPreorders((prev) => prev.filter((p) => p.line_id !== String(s.id)));
-    else setSoldOutList((prev) => prev.filter((p) => p.po_id !== Number(s.id)));
+    else setPreorders((prev) => prev.filter((p) => p.line_id !== String(s.id)));
   }
 
   // ── Done → To Forwarder (a Processing PO). Manual advances its own PO; a preorder spawns one. ──
@@ -292,47 +290,60 @@ export default function ToBuyBoard({
   async function done(t: BuyTarget, supplierId: number | null) {
     setBusy(true); setError(null);
     try {
-      // manual + out-of-stock are both real POs → advance to Processing (To forwarder); their Source was
-      // already saved on pick (setPOSource). A from-sales preorder isn't a PO yet, so it spawns one and
-      // carries its Source (PR283) into the new PO.
-      if ((t.kind === 'manual' || t.kind === 'oos') && t.po_id != null) await setPOStatus(t.po_id, 'Processing');
-      else if (t.kind === 'sales') await buyPreorder({ item_code: t.item_code, qty: t.qty, customer_id: t.customer_id, supplier_id: supplierId });
+      // A manual item is a real PO → advance to Processing (To forwarder); its Source was already saved
+      // on pick (setPOSource). A from-sales preorder isn't a PO yet, so it spawns one and carries its
+      // Source (PR283). PR304 — if it was flagged out of stock, drop the stale 'Sold out' PO too.
+      if (t.kind === 'manual' && t.po_id != null) await setPOStatus(t.po_id, 'Processing');
+      else if (t.kind === 'sales') {
+        if (t.oos_po_id != null) { try { await deletePO(t.oos_po_id); } catch { /* best-effort */ } }
+        await buyPreorder({ item_code: t.item_code, qty: t.qty, customer_id: t.customer_id, supplier_id: supplierId });
+      }
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); await refresh(); }
     finally { setBusy(false); }
   }
 
-  // PR283 — pick the Source. A real PO (manual/oos) auto-saves the pick; a from-sales preorder holds it
-  // locally (no PO yet) and carries it into buyPreorder at Done.
+  // PR283 — pick the Source. A manual PO auto-saves the pick; a from-sales preorder holds it locally
+  // (no PO yet) and carries it into buyPreorder at Done.
   async function changeSource(v: string) {
     setBuySource(v);
     const id = v ? Number(v) : null;
     if (detail?.po_id != null) {
       const { error: err } = await setPOSource(detail.po_id, id);
       if (err) { setError(err); return; }
-      if (detail.kind === 'manual') setPlanned((prev) => prev.map((p) => (p.po_id === detail.po_id ? { ...p, supplier_id: id } : p)));
-      else if (detail.kind === 'oos') setSoldOutList((prev) => prev.map((p) => (p.po_id === detail.po_id ? { ...p, supplier_id: id } : p)));
+      setPlanned((prev) => prev.map((p) => (p.po_id === detail.po_id ? { ...p, supplier_id: id } : p)));
     }
   }
 
-  // mark a SKU out of stock (all links sold out) — the row is removed locally first (optimistic), like Done.
-  async function markOutOfStock(t: BuyTarget, s: { kind: SubTab; id: number | string } | null) {
-    setSel(null);
-    if (s) removeRow(s);
+  // PR304 — toggle out-of-stock inline (checkbox in the detail). Manual: flip the PO's 'Sold out' status.
+  // From Sales (no PO yet): checking creates a 'Sold out' PO for the SKU + customer; unchecking deletes it.
+  // The item stays in its list either way; the pill reflects the flag.
+  async function toggleOOS(checked: boolean) {
+    if (!detail) return;
     setBusy(true); setError(null);
     try {
-      if (t.po_id != null) await setSoldOut(t.po_id, true, null);
-      else await markSkuSoldOut({ item_code: t.item_code, customer_id: t.customer_id, qty: t.qty, sales_id: t.sales_id });
+      if (detail.kind === 'manual' && detail.po_id != null) {
+        await setSoldOut(detail.po_id, checked, null);
+        setPlanned((prev) => prev.map((p) => (p.po_id === detail.po_id ? { ...p, out_of_stock: checked } : p)));
+      } else if (detail.kind === 'sales') {
+        const lineId = String(sel?.id);
+        if (checked) {
+          const { po_id } = await markSkuSoldOut({ item_code: detail.target.item_code, customer_id: detail.target.customer_id, qty: detail.target.qty, sales_id: detail.target.sales_id });
+          setPreorders((prev) => prev.map((p) => (p.line_id === lineId ? { ...p, out_of_stock: true, oos_po_id: po_id } : p)));
+        } else if (detail.oos_po_id != null) {
+          await deletePO(detail.oos_po_id);
+          setPreorders((prev) => prev.map((p) => (p.line_id === lineId ? { ...p, out_of_stock: false, oos_po_id: null } : p)));
+        }
+      }
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); await refresh(); }
     finally { setBusy(false); }
   }
 
-  // delete a real PO (manual buy-list item, or an out-of-stock row). From-Sales rows aren't POs → no delete.
+  // delete a real PO (manual buy-list item). From-Sales rows aren't POs → no delete.
   // Gated behind the "Cancel this item?" confirm overlay (confirmDelId).
   async function delItem(po_id: number) {
     setBusy(true); setError(null);
     // optimistic remove (no full refetch); resync only if the delete fails.
     setPlanned((prev) => prev.filter((p) => p.po_id !== po_id));
-    setSoldOutList((prev) => prev.filter((p) => p.po_id !== po_id));
     setConfirmDelId(null);
     try { await deletePO(po_id); }
     catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); await refresh(); }
@@ -349,25 +360,16 @@ export default function ToBuyBoard({
       if (!p) return null;
       return { kind: 'manual' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: p.supplier_id,
         wf: p.with_forwarder, otw: p.on_the_way, avail: p.available, context: `PO #${p.po_id}`, note: p.item_note,
-        qtyEditable: true, canDelete: true,
-        target: { kind: 'manual' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link } };
+        qtyEditable: true, canDelete: true, out_of_stock: p.out_of_stock, oos_po_id: null as number | null,
+        target: { kind: 'manual' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link, out_of_stock: p.out_of_stock, oos_po_id: null } };
     }
-    if (sel.kind === 'sales') {
-      const p = preorders.find((x) => x.line_id === sel.id);
-      if (!p) return null;
-      return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, code: p.item_code ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: null as number | null,
-        wf: 0, otw: 0, avail: p.available, context: `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}`, note: p.line_note as string | null,
-        qtyEditable: false, canDelete: false,
-        target: { kind: 'sales' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link } };
-    }
-    const p = soldOut.find((x) => x.po_id === sel.id);
+    const p = preorders.find((x) => x.line_id === sel.id);
     if (!p) return null;
-    return { kind: 'oos' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: p.supplier_id,
-      wf: p.with_forwarder, otw: p.on_the_way, avail: p.available,
-      context: p.origin === 'sales' ? `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}` : `PO #${p.po_id}`, note: p.sold_out_note,
-      qtyEditable: p.origin === 'manual', canDelete: true,
-      target: { kind: 'oos' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: p.sales_id, product_link: p.product_link } };
-  }, [sel, planned, preorders, soldOut]);
+    return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, code: p.item_code ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: null as number | null,
+      wf: 0, otw: 0, avail: p.available, context: `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}`, note: p.line_note as string | null,
+      qtyEditable: false, canDelete: false, out_of_stock: p.out_of_stock, oos_po_id: p.oos_po_id,
+      target: { kind: 'sales' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link, out_of_stock: p.out_of_stock, oos_po_id: p.oos_po_id } };
+  }, [sel, planned, preorders]);
 
   // PR221 — load the catalogue "where to buy" links when the detail overlay opens (keyed on the SKU code,
   // so the fetch runs once per opened item and not on every qty tick).
@@ -417,7 +419,7 @@ export default function ToBuyBoard({
     const sku = eSku.trim();
     if (!sku) { setEErr('A SKU code is required.'); return; }
     setEBusy(true); setEErr(null);
-    const { error: err } = await updatePlannedItem({ po_id: detail.po_id, sku, qty: eQty, urgency: ePrio, item_note: eNote.trim() || null, soldOut: detail.kind === 'oos' });
+    const { error: err } = await updatePlannedItem({ po_id: detail.po_id, sku, qty: eQty, urgency: ePrio, item_note: eNote.trim() || null, soldOut: detail.out_of_stock });
     if (err) { setEErr(err); setEBusy(false); return; }
     await refresh();
     setEBusy(false); setEditing(false);
@@ -427,12 +429,18 @@ export default function ToBuyBoard({
 
 
   // sub-tab counts
-  const counts = { manual: planned.length, sales: preorders.length, oos: soldOut.length };
+  const counts = { manual: planned.length, sales: preorders.length };
   const TABS: { key: SubTab; label: string }[] = [
     { key: 'manual', label: 'Manual' },
     { key: 'sales', label: 'From Sales' },
-    { key: 'oos', label: 'Out of Stock' },
   ];
+
+  // PR307 — Esc / backdrop / × close. The item detail guards while in edit mode; the add-item overlay
+  // guards when it has typed content; the delete confirm just closes.
+  const addDirty = !!(skuQuery.trim() || picked || link.trim() || note.trim() || addUrgency || qty !== 1);
+  const detailClose = useOverlayClose({ open: !!sel, onClose: () => setSel(null), dirty: editing });
+  const addClose = useOverlayClose({ open: adding, onClose: closeAdd, dirty: addDirty });
+  useEscToClose(confirmDelId != null, () => setConfirmDelId(null));
 
   return (
     <div className="purch-tobuy">
@@ -472,8 +480,11 @@ export default function ToBuyBoard({
                   </div>
                   <div className="po-card-side">
                     {/* PR250 — qty sits on the SKU row (top-right), like Inbound's unmatched rows;
-                        date + stock pills drop to the row below. */}
-                    <span className="po-card-qty po-card-qty-lg">×{p.qty}</span>
+                        date + stock pills drop to the row below. PR304 — OOS pill left of qty. */}
+                    <span className="po-card-qtyline">
+                      {p.out_of_stock && <span className="oos-pill">Out of stock</span>}
+                      <span className="po-card-qty po-card-qty-lg">×{p.qty}</span>
+                    </span>
                     <div className="po-card-meta">
                       <span className="po-card-date">{fmtDate(p.input_date)}</span>
                       <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} combined />
@@ -505,43 +516,13 @@ export default function ToBuyBoard({
                     {isRealName(p.name, code) && <span className="ff-name po-card-name">{p.name}</span>}
                   </div>
                   <div className="po-card-side">
-                    <span className="po-card-qty po-card-qty-lg">×{p.qty}</span>
+                    <span className="po-card-qtyline">
+                      {p.out_of_stock && <span className="oos-pill">Out of stock</span>}
+                      <span className="po-card-qty po-card-qty-lg">×{p.qty}</span>
+                    </span>
                     <div className="po-card-meta">
                       <span className="po-card-date">{fmtDate(p.order_date)}</span>
                       <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
-                    </div>
-                  </div>
-                  <span className="po-chev" aria-hidden>›</span>
-                </button>
-              </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      {/* Out of Stock — each card mirrors its origin (manual figures / sales order context) */}
-      {tab === 'oos' && (
-        <section className="fd-section">
-          {soldOut.length === 0 && <div className="hint">Nothing marked out of stock.</div>}
-          <ul className="po-cards">
-            {soldOut.map((p) => {
-              const code = p.item_code ?? p.item_code_raw ?? '—';
-              return (
-              <li key={p.po_id}>
-                <button className={`po-card po-card-btn po-card-mini${urgClass(p.urgency)}`} onClick={() => setSel({ kind: 'oos', id: p.po_id })}>
-                  <SkuImage status={imgMap[p.item_code ?? '']?.status} displayUrl={imgMap[p.item_code ?? '']?.displayUrl} name={p.name} size={SKU_IMG.sm} />
-                  <div className="po-card-main">
-                    <span className="ff-code">{code}</span>
-                    {isRealName(p.name, code) && <span className="ff-name po-card-name">{p.name}</span>}
-                  </div>
-                  <div className="po-card-side">
-                    <span className="po-card-qty po-card-qty-lg">×{p.qty}</span>
-                    <div className="po-card-meta">
-                      <span className="po-card-date">{fmtDate(p.origin === 'sales' ? p.order_date : p.input_date)}</span>
-                      {p.origin === 'sales'
-                        ? <span className="po-card-cust">{p.customer_name || 'no customer'}</span>
-                        : <StockPills wf={p.with_forwarder} otw={p.on_the_way} avail={p.available} combined />}
                     </div>
                   </div>
                   <span className="po-chev" aria-hidden>›</span>
@@ -558,14 +539,15 @@ export default function ToBuyBoard({
           priority, qty-to-buy stepper and the three stock statuses. The catalogue "where to buy" links are
           listed inline below (no separate Buy step). Actions: Out of stock / Done / Delete. */}
       {detail && (
-        <div className="sc-modal-backdrop" onClick={() => setSel(null)}>
+        <div className="sc-modal-backdrop" onClick={detailClose.requestClose}>
+          {detailClose.confirm}
           <div className="sc-modal tobuy-detail" role="dialog" aria-modal="true" aria-label="Item actions" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head td-head-block">
               <div className="td-head-titles">
                 <span className="sc-modal-title">{detail.code || '—'}</span>
                 {detailHasName && <div className="ff-name td-name">{detail.name}</div>}
               </div>
-              <button className="sc-modal-x" onClick={() => { if (!eBusy) setSel(null); }} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={() => { if (!eBusy) detailClose.requestClose(); }} aria-label="Close">×</button>
             </div>
 
             {editing ? (
@@ -622,7 +604,7 @@ export default function ToBuyBoard({
                       (kept separate so a longer note wraps cleanly — also better on mobile). */}
                   <div className="td-head-card">
                     <div className="td-head2">
-                      <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : detail.code} size={SKU_IMG.md} />
+                      <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : detail.code} size={SKU_IMG.smd} />
                       <div className="td-info">
                         <div className="td-ctx">{detail.context}</div>
                         {detail.urgency ? (
@@ -632,8 +614,12 @@ export default function ToBuyBoard({
                         )}
                       </div>
                       <div className="td-controls">
-                        {/* PR249 — qty is read-only here; edit it via Edit PO. PR299 — plain, no bubble. */}
-                        <span className="td-qty" aria-label="quantity">×{detail.qty}</span>
+                        {/* PR249 — qty is read-only here; edit it via Edit PO. PR299 — plain, no bubble.
+                            PR304 — out-of-stock pill sits to the LEFT of the qty. */}
+                        <span className="td-qtyline">
+                          {detail.out_of_stock && <span className="oos-pill">Out of stock</span>}
+                          <span className="td-qty" aria-label="quantity">×{detail.qty}</span>
+                        </span>
                         <span className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} combined /></span>
                       </div>
                     </div>
@@ -651,30 +637,32 @@ export default function ToBuyBoard({
                   </div>
 
                   {/* PR283 — Source (mandatory): who we're buying from. Links above = buying directly;
-                      a source captures the supplier/agent (or a Taobao-direct reminder). Required at Done. */}
-                  <div className="po-field" style={{ marginTop: 12 }}>
-                    <label>Source</label>
-                    <select value={buySource} onChange={(e) => changeSource(e.target.value)} disabled={busy}>
-                      <option value="">— pick a source —</option>
-                      {suppliers.map((s) => (
-                        <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
-                      ))}
-                    </select>
+                      a source captures the supplier/agent (or a Taobao-direct reminder). Required at Done.
+                      PR304 — an "Out of stock" checkbox sits to the right; ticking it flags the item
+                      (red pill) instead of moving it to a separate list. */}
+                  <div className="td-source-row" style={{ marginTop: 12 }}>
+                    <div className="po-field td-source-grow">
+                      <label>Source</label>
+                      <select value={buySource} onChange={(e) => changeSource(e.target.value)} disabled={busy}>
+                        <option value="">— pick a source —</option>
+                        {suppliers.map((s) => (
+                          <option key={s.supplier_id} value={s.supplier_id}>{s.flag ? `${s.flag} ` : ''}{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <label className="td-oos-check">
+                      <input type="checkbox" checked={detail.out_of_stock} onChange={(e) => toggleOOS(e.target.checked)} disabled={busy} />
+                      <span>Out of stock</span>
+                    </label>
                   </div>
                 </div>
-                {/* Actions — the standard scrollable row: out of stock · done buying · delete PO (last). */}
-                {/* PR250 — order: Edit PO · Done buying · Mark out of stock · Delete PO. The rare
-                    cautionary "out of stock" moves off the prominent far-left and clusters with the
-                    negative actions on the right; Delete PO stays last (destructive-last). */}
+                {/* Actions — the standard scrollable row: Edit PO · Done buying · Delete PO (last). */}
                 <div className="sc-modal-foot td-actions">
-                  {/* PR254 — Edit PO on every tab: Manual/OOS edit the real PO; From Sales edits only
+                  {/* PR254 — Edit PO on every tab: Manual edits the real PO; From Sales edits only
                       its order priority + line note (SKU + qty mirror the sale and stay locked). */}
                   <button className="btn-secondary btn-ico" onClick={openEdit} disabled={busy}><PencilIcon />Edit PO</button>
 
                   <button className="btn-primary btn-ico" onClick={() => { const t = detail.target; const s = sel; const src = buySource ? Number(buySource) : null; setSel(null); if (s) removeRow(s); done(t, src); }} disabled={busy || !buySource} title={!buySource ? 'Pick a source first' : undefined}><BagIcon />Done buying</button>
-                  {detail.kind !== 'oos' && (
-                    <button className="btn-secondary danger btn-ico" onClick={() => { const t = detail.target; const s = sel; markOutOfStock(t, s); }} disabled={busy}><BanIcon />Mark as out of stock</button>
-                  )}
                   {detail.canDelete && detail.po_id != null && (
                     <button className="btn-danger btn-ico td-del" onClick={() => { const id = detail.po_id!; setSel(null); setConfirmDelId(id); }} disabled={busy}><TrashIcon />Delete PO</button>
                   )}
@@ -687,14 +675,15 @@ export default function ToBuyBoard({
 
       {/* "+ add item" overlay (Manual only) — dimmed-backdrop modal */}
       {adding && (
-        <div className="sc-modal-backdrop" onClick={closeAdd}>
+        <div className="sc-modal-backdrop" onClick={addClose.requestClose}>
+          {addClose.confirm}
           <div className="sc-modal addpo-modal" role="dialog" aria-modal="true" aria-label="Add item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <div>
                 <div className="sc-modal-title">Add item</div>
                 <div className="sc-modal-sub">Manually add PO items</div>
               </div>
-              <button className="sc-modal-x" onClick={closeAdd} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={addClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}

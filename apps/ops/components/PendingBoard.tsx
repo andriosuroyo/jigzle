@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
+import { useOverlayClose } from '@/components/useOverlayClose';
 import AppHeader from '@/components/AppHeader';
 import { getPending, sendReadyItems, deleteOrder, markOrderPaid, addOrderLine, updateOrderLine, deleteOrderLine, setLineNote } from '@/app/pending/actions';
 import DeleteOrderConfirm from '@/components/DeleteOrderConfirm';
@@ -276,6 +277,10 @@ export default function PendingBoard({
   // reset edit / delete-confirm state when the selected order changes.
   useEffect(() => { setLineEdit(null); setLeChanging(false); setConfirmDel(false); setCopied(false); }, [selId]);
 
+  // PR307 — per-line editor (add/edit) is a dirty form: Esc/backdrop/× route through the discard
+  // prompt (busy guard on backdrop/× preserved). No clean dirty flag → treat "open" as dirty.
+  const lineEditClose = useOverlayClose({ open: lineEdit != null, onClose: closeLineEdit, dirty: lineEdit != null });
+
   // PR147 — bodyview: the body shows EITHER the filter tabs + full-width queue OR the tapped order's
   // detail with a ← back button (the Purchasing-History pattern); breadcrumb + pipeline tabs stay put.
   const body = (
@@ -403,11 +408,11 @@ export default function PendingBoard({
 
               {/* PR224 — per-line editor overlay: change SKU / qty / price / note, or delete this one line. */}
               {lineEdit && sel && (
-                <div className="sc-modal-backdrop" onClick={leBusy ? undefined : closeLineEdit}>
+                <div className="sc-modal-backdrop" onClick={leBusy ? undefined : lineEditClose.requestClose}>
                   <div className="sc-modal" role="dialog" aria-modal="true" aria-label={lineEdit.mode === 'add' ? 'Add item' : 'Edit item'} onClick={(e) => e.stopPropagation()}>
                     <div className="sc-modal-head sc-modal-head-row">
                       <span className="sc-modal-title">{lineEdit.mode === 'add' ? 'Add item' : 'Edit item'}</span>
-                      <button className="sc-modal-x" onClick={closeLineEdit} aria-label="Close" disabled={leBusy}>×</button>
+                      <button className="sc-modal-x" onClick={lineEditClose.requestClose} aria-label="Close" disabled={leBusy}>×</button>
                     </div>
                     <div className="sc-modal-body">
                       {leErr && <div className="validation err" style={{ marginBottom: 10 }}>{leErr}</div>}
@@ -461,6 +466,7 @@ export default function PendingBoard({
                   </div>
                 </div>
               )}
+              {lineEditClose.confirm}
 
               {confirmDel && (
                 <DeleteOrderConfirm

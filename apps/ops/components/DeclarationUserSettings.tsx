@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { UserIcon } from '@/components/AddIcons';
 import { addDeclarationUser, deleteDeclarationUser, getDeclarationUsers, reorderDeclarationUsers, updateDeclarationUser } from '@/app/settings/actions';
 import type { DeclarationUser } from '@/app/settings/types';
+import { useOverlayClose } from '@/components/useOverlayClose';
 
 // pencil (Edit) — matches the detail-view edit glyph elsewhere.
 const PencilIcon = () => (<svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
@@ -32,6 +33,10 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
   }, []);
 
   const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
+
+  // PR307 — the edit overlay holds unsaved draft edits; close (Esc/backdrop/×) confirms discard when the
+  // draft diverges from the row it was opened on.
+  const editClose = useOverlayClose({ open: editing !== null, onClose: () => { if (!busy) setEditing(null); }, dirty: editing !== null && JSON.stringify(draft) !== JSON.stringify(toDraft(editing)) });
 
   function openEdit(r: DeclarationUser) {
     setNotice(null);
@@ -133,11 +138,11 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
 
       {/* PR280 — edit overlay: all five identity fields, each with its own header. */}
       {editing && (
-        <div className="sc-modal-backdrop" onClick={() => !busy && setEditing(null)}>
+        <div className="sc-modal-backdrop" onClick={editClose.requestClose}>
           <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Edit declaration user" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <span className="sc-modal-title">Edit declaration user</span>
-              <button className="sc-modal-x" onClick={() => setEditing(null)} disabled={busy} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={editClose.requestClose} disabled={busy} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               <div className="po-field">
@@ -166,6 +171,7 @@ export default function DeclarationUserSettings({ embedded = false }: { embedded
               <button className="btn-primary" onClick={saveEdit} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
+          {editClose.confirm}
         </div>
       )}
     </Wrap>

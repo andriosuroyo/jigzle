@@ -13,7 +13,7 @@ import OrderBoard from '@/components/OrderBoard';
 import ToBuyBoard from '@/components/ToBuyBoard';
 import PurchasingHistoryBoard from '@/components/PurchasingHistoryBoard';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier } from '@jigzle/db/types';
-import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ShipmentHistoryRow, SoldOutRow } from '@/app/purchasing/types';
+import type { OpenShipmentRow, PlannedItemRow, PreorderRow, ShipmentHistoryRow } from '@/app/purchasing/types';
 
 type PurchasingTab = 'tobuy' | 'forwarder' | 'ship' | 'history';
 // PR267 — tab labels renamed Buy / Forward / Ship (internal keys unchanged, so URLs/?tab= are stable).
@@ -28,7 +28,6 @@ export default function PurchasingShell({
   shipments,
   planned,
   preorders,
-  soldOut,
   shipmentHistory,
   localCouriers = [],
   shipmentCouriers = [],
@@ -40,7 +39,6 @@ export default function PurchasingShell({
   shipments: OpenShipmentRow[];
   planned: PlannedItemRow[];
   preorders: PreorderRow[];
-  soldOut: SoldOutRow[];
   shipmentHistory: ShipmentHistoryRow[];
   localCouriers?: string[]; // 0055 — To-forwarder's local-courier suggestions (Settings-managed)
   shipmentCouriers?: string[]; // 0056 — History's international courier pick-list (Settings-managed)
@@ -89,9 +87,9 @@ export default function PurchasingShell({
           the old `{tab === x && <Board/>}` a tab switch unmounted the board and re-mounted it from these
           stale page-load props, so a just-deleted item re-appeared until a full reload. Staying mounted
           preserves each board's own post-delete state across tab switches. */}
-      <div className="orders-panels">
+      <div className="orders-panels purch-panels">
         <div hidden={tab !== 'tobuy'}>
-          <ToBuyBoard planned={planned} preorders={preorders} soldOut={soldOut} suppliers={suppliers} />
+          <ToBuyBoard planned={planned} preorders={preorders} suppliers={suppliers} />
         </div>
         <div hidden={tab !== 'forwarder'}>
           <OrderBoard

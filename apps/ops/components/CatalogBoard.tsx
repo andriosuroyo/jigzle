@@ -39,6 +39,7 @@ import SkuImage from '@/components/SkuImage';
 import { BarcodeIcon } from '@/components/AddIcons';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 
 type FieldKind = 'text' | 'textarea' | 'number' | 'bool';
 // PR188 — `list` = a datalist of existing values for this column (a dropdown you can also type into).
@@ -290,6 +291,12 @@ export default function CatalogBoard({
     if (newCode.trim() || newName.trim() || newType) saveDraft<CatalogNewDraft>(CAT_DRAFT_NEW_KEY, { newCode, newName, newType });
     else clearDraft(CAT_DRAFT_NEW_KEY);
   }, [newOpen, newCode, newName, newType]);
+
+  // PR307 — shared overlay-close. The barcode manager auto-commits each action (verify/unlink/add) so
+  // Esc just closes it (busy-guarded, matching the backdrop). The "+ New SKU" create form routes
+  // Esc/backdrop/× through a discard confirm whenever it holds unsaved input.
+  useEscToClose(barcodeOpen, () => { if (!busy) setBarcodeOpen(false); });
+  const newSkuClose = useOverlayClose({ open: newOpen, onClose: closeNewSku, dirty: !!(newCode.trim() || newName.trim() || newType) });
 
   function resetMsg() {
     setError(null);
@@ -1219,11 +1226,11 @@ export default function CatalogBoard({
       {/* PR191 — "+ New SKU" overlay: minimal identity (code + name + product type), needs-review, then
           opens the new SKU's bodyview to complete the rest. */}
       {newOpen && (
-        <div className="sc-modal-backdrop" onClick={closeNewSku}>
+        <div className="sc-modal-backdrop" onClick={newSkuClose.requestClose}>
           <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="New SKU" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <span className="sc-modal-title">New SKU</span>
-              <button className="sc-modal-x" onClick={closeNewSku} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={newSkuClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
@@ -1253,6 +1260,7 @@ export default function CatalogBoard({
               </div>
             </div>
           </div>
+          {newSkuClose.confirm}
         </div>
       )}
     </div>

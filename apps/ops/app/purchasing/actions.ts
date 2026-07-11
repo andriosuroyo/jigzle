@@ -867,16 +867,20 @@ export async function getSkuStock(itemCode: string): Promise<SkuStockInfo> {
   return { item_code: code, available: e.available, on_the_way: e.on_the_way, with_forwarder: e.with_forwarder };
 }
 
-// ── To buy → Planned list (PO status 'Planned'), newest first, with live stock figures. ──
+// ── To buy → Manual list. PR304 — includes both 'Planned' and 'Sold out' MANUAL POs (customer_id NULL):
+// out-of-stock is now an inline flag, so a sold-out manual item stays in this list with a pill rather
+// than moving to a separate tab. (Sales-origin sold-out POs carry a customer_id → they belong to From
+// Sales, surfaced by getPreorders.) ──
 export async function getPlannedItems(): Promise<PlannedItemRow[]> {
   const supabase = createSupabaseServerClient();
   const { data } = await supabase
     .from('purchase_orders')
     .select('po_id,item_code,item_code_raw,qty,product_link,item_note,urgency,status,status_since,input_date,supplier_id')
-    .eq('status', 'Planned')
+    .in('status', ['Planned', 'Sold out'])
+    .is('customer_id', null)
     .order('po_id', { ascending: false })
     .limit(QUEUE_LIMIT);
-  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null; input_date: string | null; supplier_id: number | null }[];
+  const rows = (data ?? []) as { po_id: number; item_code: string | null; item_code_raw: string | null; qty: number; product_link: string | null; item_note: string | null; urgency: Urgency | null; status: string | null; input_date: string | null; supplier_id: number | null }[];
   if (!rows.length) return [];
 
   const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
@@ -903,6 +907,7 @@ export async function getPlannedItems(): Promise<PlannedItemRow[]> {
       available: p.available,
       on_the_way: p.on_the_way,
       with_forwarder: p.with_forwarder,
+      out_of_stock: r.status === 'Sold out',
     };
   });
 }
@@ -1222,16 +1227,21 @@ export async function getPreorders(): Promise<PreorderRow[]> {
     for (const c of data) customerById.set(c.customer_id, customerIdLabel(c.name, c.phone));
   }
 
-  // a preorder drops once an OPEN PO for the same SKU + customer covers it (decision #2). Key by
-  // `item_code|customer_id` (customer-less POs don't cover a customer's preorder).
+  // a preorder drops once an OPEN, being-BOUGHT PO for the same SKU + customer covers it (decision #2).
+  // PR304 — a 'Sold out' PO no longer drops the line: instead it FLAGS the preorder out-of-stock (and the
+  // line stays visible), so out-of-stock is an inline flag on From Sales. Key by `item_code|customer_id`.
   const coveredKeys = new Set<string>();
+  const soldOutPoByKey = new Map<string, number>();
   {
     const data = await inBatches(codes, (b) => supabase
-      .from('purchase_orders').select('item_code,customer_id,status')
+      .from('purchase_orders').select('po_id,item_code,customer_id,status')
       .in('item_code', b).not('customer_id', 'is', null).or('status.is.null,status.neq.Received')
-      .then((r) => (r.data ?? []) as { item_code: string | null; customer_id: number | null }[]));
+      .then((r) => (r.data ?? []) as { po_id: number; item_code: string | null; customer_id: number | null; status: string | null }[]));
     for (const p of data) {
-      if (p.item_code && p.customer_id != null) coveredKeys.add(`${p.item_code}|${p.customer_id}`);
+      if (!p.item_code || p.customer_id == null) continue;
+      const key = `${p.item_code}|${p.customer_id}`;
+      if (p.status === 'Sold out') soldOutPoByKey.set(key, p.po_id); // flag, don't cover
+      else coveredKeys.add(key); // being bought → drops off
     }
   }
 
@@ -1241,7 +1251,9 @@ export async function getPreorders(): Promise<PreorderRow[]> {
     if (!order || order.status === 'Cancelled' || order.status === 'Complete') continue;
     const available = availByCode.get(r.item_code) ?? 0;
     if (available > 0) continue; // in stock → not a preorder
-    if (order.customer_id != null && coveredKeys.has(`${r.item_code}|${order.customer_id}`)) continue; // already on order
+    const key = order.customer_id != null ? `${r.item_code}|${order.customer_id}` : null;
+    if (key && coveredKeys.has(key)) continue; // already being bought → drops off
+    const oosPoId = key ? soldOutPoByKey.get(key) ?? null : null;
     out.push({
       line_id: r.line_id,
       sales_id: r.sales_id,
@@ -1255,6 +1267,8 @@ export async function getPreorders(): Promise<PreorderRow[]> {
       urgency: order.urgency,
       line_note: r.line_note,
       product_link: r.item_link,
+      out_of_stock: oosPoId != null,
+      oos_po_id: oosPoId,
     });
   }
   // newest order first (nulls last), then sales_id for stability

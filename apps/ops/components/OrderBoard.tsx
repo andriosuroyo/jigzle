@@ -24,6 +24,7 @@ import type { CustomerHit, OpenShipmentRow, SkuHit, UpdatePOPatch } from '@/app/
 import SkuImage from '@/components/SkuImage';
 import { StoreIcon, TruckIcon, PackageIcon } from '@/components/AddIcons';
 import { isRealName } from '@/components/skuName';
+import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
@@ -276,6 +277,12 @@ export default function OrderBoard({
     // shipped from the forwarder and lives under its shipment in History → Active, so it drops out of the
     // To-ship work queue (and its count badge) instead of lingering as an already-shipped row.
     if (bucket === 'ship') rows = rows.filter((p) => !p.ship_id);
+    // PR305 — newest first by the date shown on the card (status_since), po_id as a stable tiebreak.
+    rows = [...rows].sort((a, b) => {
+      const da = a.status_since ?? '', db = b.status_since ?? '';
+      if (da !== db) return da < db ? 1 : -1;
+      return b.po_id - a.po_id;
+    });
     return rows;
   }, [queue, bucket]);
   useEffect(() => { onCountChange?.(shown.length); }, [shown, onCountChange]);
@@ -923,6 +930,15 @@ export default function OrderBoard({
   // full-width compact card list OR the tapped PO's detail (image header + auto-save form) with a
   // ← back button. The other buckets keep the two-pane layout below.
   const closeForwardDetail = () => { setMode(null); setEditPo(null); setConfirmDel(false); };
+
+  // PR307 — Esc / backdrop / × close for every overlay. A parent detail overlay excludes the case where
+  // its nested delete-confirm is open, so Esc closes the topmost. Edit modals guard unsaved edits: the
+  // Confirm detail auto-saves on blur (no guard); the Ship detail's edit mode + the batch/group modals do.
+  useEscToClose(bucket === 'forwarder' && mode === 'edit' && !!editPo && !confirmDel, closeForwardDetail);
+  const shipDetailClose = useOverlayClose({ open: bucket === 'ship' && mode === 'edit' && !!editPo && !confirmDel, onClose: () => { setMode(null); setEditPo(null); setConfirmDel(false); }, dirty: shipEditing });
+  useEscToClose(confirmDel, () => setConfirmDel(false));
+  const batchClose = useOverlayClose({ open: batchOpen, onClose: closeBatch, dirty: batchIds.size > 0 });
+  const groupClose = useOverlayClose({ open: mode === 'group', onClose: () => { if (!busy) setMode(null); }, dirty: selectedCount > 0 });
   const forwarderBody = (
     <div className="bodyview">
       {error && <div className="validation err">{error}</div>}
@@ -1052,14 +1068,15 @@ export default function OrderBoard({
         </>
       {/* PR286 — Ship item detail as an OVERLAY (was a bodyview); read-only until "Edit item". */}
       {shipDetailOpen && editPo && (
-        <div className="sc-modal-backdrop" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }}>
+        <div className="sc-modal-backdrop" onClick={shipDetailClose.requestClose}>
+          {shipDetailClose.confirm}
           <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Ship item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <div>
                 <span className="sc-modal-title">{editPo.item_code ?? editPo.item_code_raw ?? '—'}</span>
                 {isRealName(editPo.name, editPo.item_code ?? editPo.item_code_raw) && <div className="sc-modal-sub">{editPo.name} · ×{editPo.qty}</div>}
               </div>
-              <button className="sc-modal-x" onClick={() => { setMode(null); setEditPo(null); setConfirmDel(false); }} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={shipDetailClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {renderShipDetail()}
@@ -1369,14 +1386,15 @@ export default function OrderBoard({
   function renderBatchModal() {
     const picked = shownFiltered.filter((po) => batchIds.has(po.po_id));
     return (
-      <div className="sc-modal-backdrop" onClick={closeBatch}>
+      <div className="sc-modal-backdrop" onClick={batchClose.requestClose}>
+        {batchClose.confirm}
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Confirm items" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
             <div>
               <div className="sc-modal-title">Confirm item(s)</div>
               <div className="sc-modal-sub">Step {batchStep === 'pick' ? '1' : '2'} of 2</div>
             </div>
-            <button className="sc-modal-x" onClick={closeBatch} aria-label="Close">×</button>
+            <button className="sc-modal-x" onClick={batchClose.requestClose} aria-label="Close">×</button>
           </div>
 
           {batchStep === 'pick' ? (
@@ -1555,7 +1573,7 @@ export default function OrderBoard({
             Purchasing → Local couriers (0055; falls back to the legacy hard-wired list). */}
         <div className="po-field">
           <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-          <div className="po-inline2">
+          <div className="po-inline2 po-inline-courier">
             <input
               type="text"
               list="po-methods"
@@ -1805,13 +1823,13 @@ export default function OrderBoard({
       const v = Math.max(1, Math.min(po.qty, Math.floor(n) || 1));
       setGrpQty((prev) => ({ ...prev, [po.po_id]: v }));
     };
-    const close = () => { if (!busy) setMode(null); };
     return (
-      <div className="sc-modal-backdrop" onClick={close}>
+      <div className="sc-modal-backdrop" onClick={groupClose.requestClose}>
+        {groupClose.confirm}
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Create shipment" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
             <div className="sc-modal-title">{grpStep === 'pick' ? 'Create shipment · step 1 of 2' : 'Create shipment · step 2 of 2'}</div>
-            <button className="sc-modal-x" onClick={close} aria-label="Close">×</button>
+            <button className="sc-modal-x" onClick={groupClose.requestClose} aria-label="Close">×</button>
           </div>
           <div className="sc-modal-body">
             {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
@@ -1911,7 +1929,7 @@ export default function OrderBoard({
           <div className="sc-modal-foot">
             {grpStep === 'pick' ? (
               <>
-                <button className="btn-secondary" onClick={close} disabled={busy}>Cancel</button>
+                <button className="btn-secondary" onClick={() => { if (!busy) setMode(null); }} disabled={busy}>Cancel</button>
                 <button className="btn-primary" onClick={() => setGrpStep('details')} disabled={selectedCount === 0}>Next · {selectedCount} selected</button>
               </>
             ) : (

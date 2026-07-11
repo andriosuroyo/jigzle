@@ -17,6 +17,7 @@ import ForwarderSettings from '@/components/ForwarderSettings';
 import ExportCourierSettings from '@/components/ExportCourierSettings';
 import DeclarationUserSettings from '@/components/DeclarationUserSettings';
 import FlagSelect from '@/components/FlagSelect';
+import { useOverlayClose } from '@/components/useOverlayClose';
 import type { Supplier, Forwarder } from '@jigzle/db/types';
 import {
   addSetting,
@@ -537,6 +538,8 @@ function SettingRowEditor({
   // single-field lists drop the redundant per-row caption (the tab title already names the list);
   // multi-field lists with a fixed column header drop them too (the header carries the captions).
   const showCaptions = sec.cols.length > 1 && !sec.colHeader;
+  // PR307 — the icon picker holds a typed-but-unsaved emoji; close (Esc/backdrop/×) confirms discard then.
+  const iconClose = useOverlayClose({ open: iconOpen, onClose: () => setIconOpen(false), dirty: emoji !== (icon && !isIconUrl(icon) ? icon : '') });
 
   function onChange(key: string, value: string) {
     setDraft((prev) => {
@@ -645,11 +648,11 @@ function SettingRowEditor({
 
       {/* icon picker — emoji or uploaded image */}
       {iconOpen && (
-        <div className="sc-modal-backdrop" onClick={() => setIconOpen(false)}>
+        <div className="sc-modal-backdrop" onClick={iconClose.requestClose}>
           <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Set icon" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <span className="sc-modal-title">Icon</span>
-              <button className="sc-modal-x" onClick={() => setIconOpen(false)} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={iconClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               <div className="set-ico-preview">
@@ -679,6 +682,7 @@ function SettingRowEditor({
               {icon && <button className="btn-link danger set-ico-remove" onClick={removeIcon} disabled={busy || uploading}>Remove icon</button>}
             </div>
           </div>
+          {iconClose.confirm}
         </div>
       )}
     </div>

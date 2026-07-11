@@ -16,6 +16,7 @@ import { getSessions, openStockCheck } from '@/app/stock-check/actions';
 import { modeLabel } from '@/app/stock-check/types';
 import type { BrandOption, NewCountInput, SessionRow, StockCheckMode, StockCheckScope } from '@/app/stock-check/types';
 import SearchInput from '@/components/SearchInput';
+import { useOverlayClose } from '@/components/useOverlayClose';
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -183,6 +184,9 @@ function NewCountModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // PR307 — create form: Esc/backdrop route through the discard prompt (busy guard preserved on backdrop).
+  const close = useOverlayClose({ open: true, onClose: onCancel, dirty: true });
+
   const f = filter.trim().toLowerCase();
   const shown = f
     ? brands.filter((b) => b.prefix.toLowerCase().includes(f) || (b.name ?? '').toLowerCase().includes(f))
@@ -211,7 +215,8 @@ function NewCountModal({
   }
 
   return (
-    <div className="sc-modal-backdrop" onClick={busy ? undefined : onCancel}>
+    <>
+    <div className="sc-modal-backdrop" onClick={busy ? undefined : close.requestClose}>
       <div className="sc-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="sc-modal-head">
           <div className="sc-modal-title">New count</div>
@@ -271,5 +276,7 @@ function NewCountModal({
         </div>
       </div>
     </div>
+    {close.confirm}
+    </>
   );
 }

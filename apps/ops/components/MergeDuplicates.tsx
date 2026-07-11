@@ -15,6 +15,7 @@ import { customerLabel, fmtRpCompact, fmtNiceDate } from '@jigzle/lib';
 import { findCustomersForMerge, getDuplicateGroups, getMergeCandidatesByIds, mergeCustomers } from '@/app/customers/actions';
 import type { DuplicateGroup, DuplicateMember, MergeResult } from '@/app/customers/types';
 import SearchInput from '@/components/SearchInput';
+import { useOverlayClose } from '@/components/useOverlayClose';
 
 const fmtDay = (s: string | null): string => fmtNiceDate(s) || '—';
 const SEARCH_KEY = 'search';
@@ -43,6 +44,10 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery, initi
   // "keep as name" override per group; until edited we suggest the combined names (keeper + ticked)
   const [nameOf, setNameOf] = useState<Record<string, string>>({});
   const [nameDirty, setNameDirty] = useState<Set<string>>(new Set());
+
+  // PR307 — this merge tool holds in-progress keeper/merge selections and name overrides, so the
+  // backdrop and × route through a discard confirm. The footer "Done" stays a direct, clean exit.
+  const overlayClose = useOverlayClose({ open: true, onClose, dirty: true });
 
   // distinct names of keeper + ticked rows, joined — "Lina Wong / Ita". Falls back to the keeper alone.
   function suggestedName(group: DuplicateGroup, primaryId: number, selected: Set<number>): string {
@@ -257,14 +262,14 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery, initi
   }
 
   return (
-    <div className="sc-modal-backdrop" onClick={onClose}>
+    <div className="sc-modal-backdrop" onClick={overlayClose.requestClose}>
       <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Merge duplicate customers" onClick={(e) => e.stopPropagation()}>
         <div className="sc-modal-head sc-modal-head-row">
           <div>
             <div className="sc-modal-title">Merge duplicate customers</div>
             <div className="sc-modal-sub">Pick ONE record to keep; ticked rows are merged into it (phones, channels, addresses + all sales history) and deleted.</div>
           </div>
-          <button className="sc-modal-x" onClick={onClose} aria-label="Close">×</button>
+          <button className="sc-modal-x" onClick={overlayClose.requestClose} aria-label="Close">×</button>
         </div>
 
         <div className="sc-modal-body">
@@ -309,6 +314,7 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery, initi
           <button className="btn-secondary" onClick={onClose}>Done</button>
         </div>
       </div>
+      {overlayClose.confirm}
     </div>
   );
 }
