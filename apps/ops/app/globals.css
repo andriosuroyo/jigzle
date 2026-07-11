@@ -169,7 +169,7 @@ input, textarea, select, button { font-family: inherit; }
 /* PR250 — To-forwarder batch overlay */
 .batch-modal { max-width: 560px; }
 .batch-picklist { max-height: 48vh; overflow-y: auto; gap: 5px; }
-.batch-picklist > li .po-card { padding: 6px 8px; }
+.batch-picklist > li .po-card { padding: 6px 8px; background: var(--cream); }  /* PR315 — cream like the step-2 item cards (overrides the white .purch-panels card) */
 .batch-pickrow { cursor: pointer; padding: 2px 0; }
 .batch-pickcard { pointer-events: none; }
 /* .batch-field derives from the shared .field standard (defined once, near .le-field). */
@@ -183,7 +183,7 @@ input, textarea, select, button { font-family: inherit; }
 .chip.active { background: var(--orange-tint); border-color: var(--orange); color: var(--brown-dark); }
 .batch-group textarea.batch-field { min-height: 60px; resize: vertical; }
 .batch-items-head { margin-top: 4px; }
-.batch-items { display: flex; flex-direction: column; gap: 10px; }
+.batch-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }  /* PR315 — reset the default <ul> left padding (looked like reserved checkbox space) */
 /* PR291/PR294 — each item is its own card: a 54px image (flush to the card's left edge — no left
    padding) beside two lines. Line 1: SKU + name (left) / qty (right). Line 2: unit cost + item link
    side-by-side, together full width. The two lines are kept short so the block matches the image
@@ -258,8 +258,9 @@ input, textarea, select, button { font-family: inherit; }
 .po-field-cost { flex: 0 0 8.5rem; margin-right: 6px; }
 .po-field-cost .po-cost-row input { flex: 1; min-width: 0; }
 .po-field-cost .po-ro-locked { width: 100%; }
-/* PR297/PR303 — the courier field (edit) matches the Unit cost field width; tracking takes the rest. */
-.po-inline2.po-inline-courier > input:first-child { flex: 0 0 8.5rem; }
+/* PR297/PR303 — the courier field (edit) matches the Unit cost field width; tracking takes the rest.
+   PR315 — `:first-child` (not `input:first-child`) so it also narrows a courier <select> (Ship step 2). */
+.po-inline2.po-inline-courier > :first-child { flex: 0 0 8.5rem; }
 /* PR267 — "Send back to Ship" action in the History item overlay (separated from the fields above). */
 /* PR268 — a modal-foot button pinned to the LEFT (e.g. "Send back to Ship"), Cancel/Save grouped right. */
 .sc-foot-lead { margin-right: auto; }
@@ -751,7 +752,7 @@ button.po-pick-btn:active { background: var(--paper); }
 .grp-qty-one { min-width: 40px; text-align: center; font-size: 14px; font-weight: 700; color: var(--ink); }
 .po-newbtn { padding: 8px; }
 .po-row-wrap { display: flex; align-items: center; gap: 8px; }
-.po-row-wrap .po-check { flex-shrink: 0; width: 16px; height: 16px; }
+.po-row-wrap .po-check { flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--green); }  /* PR315 — green (not default blue) when ticked */
 .po-row-wrap .fq-row { flex: 1; min-width: 0; }
 .po-status { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 20px; margin-left: auto; white-space: nowrap; }
 .po-status.processing { background: var(--yellow-tint); color: #9C6F1C; }
