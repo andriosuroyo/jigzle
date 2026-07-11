@@ -671,28 +671,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   <button className="btn-secondary" onClick={loadFix} disabled={fixLoading || busy}>{fixLoading ? 'Refreshing…' : 'Refresh'}</button>
                 </div>
 
-                <div className="cust-stats" style={{ marginTop: 8 }}>
-                  <div className="cust-stat">
-                    <div className="cust-stat-label">Customers</div>
-                    <div className="cust-stat-value cust-stat-figure">{health.totalCustomers.toLocaleString('en-US')}</div>
-                    <div className="cust-stat-sub">total records</div>
-                  </div>
-                  <div className="cust-stat">
-                    <div className="cust-stat-label">Duplicates</div>
-                    <div className="cust-stat-value cust-stat-figure">{dupGroups?.length ?? 0}</div>
-                    <div className="cust-stat-sub">same-name groups</div>
-                  </div>
-                  <div className="cust-stat">
-                    <div className="cust-stat-label">Shared number</div>
-                    <div className="cust-stat-value cust-stat-figure">{health.sharedPhoneGroupCount}</div>
-                    <div className="cust-stat-sub">{health.overThreeCount} need a manual choice</div>
-                  </div>
-                  <div className="cust-stat">
-                    <div className="cust-stat-label">Shared address</div>
-                    <div className="cust-stat-value cust-stat-figure">{health.sharedAddressGroupCount}</div>
-                    <div className="cust-stat-sub">groups (no shared number)</div>
-                  </div>
-                </div>
+                {/* PR323 — the four summary tiles (Customers / Duplicates / Shared number / Shared address)
+                    are gone; every maintainable thing is now its own counter-bearing list below. */}
 
                 {health.missingCode > 0 && (
                   <div className="dh-maint">
@@ -869,7 +849,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   )}
                 </div>
                 {health.emptyStrays.length === 0 ? (
-                  <div className="validation ok">No empty records — every customer has a number, address, channel or order.</div>
+                  <div className="validation ok">No empty records — every customer has a number, address or order.</div>
                 ) : (
                   <div className="dh-stray-list hint">
                     {health.emptyStrays.map((s) => `${s.name || '(no name)'} #${s.id}`).join('  ·  ')}

@@ -497,10 +497,11 @@ export async function getDataHealth(): Promise<DataHealth> {
   }
   addressGroups.sort((a, b) => b.memberIds.length - a.memberIds.length);
 
-  // ── empty strays: no number, no address, no channels, and (verified) no orders/operational refs
+  // ── PR323: empty strays — no phone, no address, and (verified) no orders/operational refs. Per the
+  // user's rule ("remove records with no orders AND no phone AND 0 addresses") a leftover channel handle
+  // no longer keeps a record alive — a contactless, orderless record is purgeable even if it carries one.
   const candidates = rows.filter((r) => rowPhones(r).length === 0
-    && (addrCount.get(r.customer_id) ?? 0) === 0
-    && !(Array.isArray(r.channels) ? r.channels : []).some((c) => c && typeof c === 'object' && (c as { platform?: unknown }).platform));
+    && (addrCount.get(r.customer_id) ?? 0) === 0);
   const candIds = candidates.map((r) => r.customer_id);
   const referenced = new Set<number>();
   for (const table of ['orders', 'holds', 'outbound_shipments', 'purchase_orders', 'missing_pieces'] as const) {
