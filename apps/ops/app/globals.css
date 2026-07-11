@@ -189,7 +189,7 @@ input, textarea, select, button { font-family: inherit; }
    padding) beside two lines. Line 1: SKU + name (left) / qty (right). Line 2: unit cost + item link
    side-by-side, together full width. The two lines are kept short so the block matches the image
    height (its top/bottom align with the image's). */
-.batch-item { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 0; overflow: hidden; }
+.batch-item { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; overflow: hidden; }  /* PR319 — equal left/right padding: image inset matches the qty inset */
 .batch-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .batch-item-row { display: flex; align-items: center; gap: 8px; }
 .batch-item-head { gap: 8px; }
