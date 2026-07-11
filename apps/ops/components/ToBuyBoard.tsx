@@ -437,8 +437,13 @@ export default function ToBuyBoard({
 
   // PR307 — Esc / backdrop / × close. The item detail guards while in edit mode; the add-item overlay
   // guards when it has typed content; the delete confirm just closes.
+  // PR315 — only guard when the edit draft actually diverges from what was seeded (opening Edit PO then
+  // pressing Esc without touching anything shouldn't warn about unsaved changes).
+  const editDirty = editing && detail != null && (
+    eSku !== detail.code || eQty !== detail.qty || ePrio !== detail.urgency || eNote !== (detail.note ?? '')
+  );
   const addDirty = !!(skuQuery.trim() || picked || link.trim() || note.trim() || addUrgency || qty !== 1);
-  const detailClose = useOverlayClose({ open: !!sel, onClose: () => setSel(null), dirty: editing });
+  const detailClose = useOverlayClose({ open: !!sel, onClose: () => setSel(null), dirty: editDirty });
   const addClose = useOverlayClose({ open: adding, onClose: closeAdd, dirty: addDirty });
   useEscToClose(confirmDelId != null, () => setConfirmDelId(null));
 
