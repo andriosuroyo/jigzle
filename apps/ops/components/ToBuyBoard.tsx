@@ -713,6 +713,10 @@ export default function ToBuyBoard({
                   placeholder="search SKU by code / name / piece count / brand"
                 />
               </div>
+              {/* PR302 — live "Searching…" indicator while a query is in flight */}
+              {!picked && searching && (
+                <div className="hint td-searching" style={{ marginTop: 8 }}>Searching…</div>
+              )}
               {/* search results — PR158 rows: l1 = SKU code; l2 = name (left) + stock pills (right) */}
               {!picked && skuHits.length > 0 && (
                 <ul className="result-list" style={{ marginTop: 6 }}>
@@ -750,7 +754,7 @@ export default function ToBuyBoard({
                 </div>
               )}
               {isNewSku && (
-                <div className="validation ok" style={{ margin: '8px 0' }}>New code — kept as a placeholder; you’ll match it to a real SKU when it arrives at Inbound.</div>
+                <div className="validation warn" style={{ margin: '8px 0' }}>SKU code does not exist in the catalog</div>
               )}
 
               {/* item fields — always shown, qty defaults to 1. PR158: Qty + Product link share a line

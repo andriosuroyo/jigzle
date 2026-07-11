@@ -342,6 +342,8 @@ button.po-pick-btn:active { background: var(--paper); }
 .search-row input, .subform input, .subform textarea, .subform select, .pay-amount, select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: var(--cream); }
 .subform textarea { min-height: 56px; resize: vertical; }
 .hint { font-size: 12px; color: var(--muted); }
+/* PR302 — italic "Searching…" indicator under the Add-item search bar */
+.td-searching { font-style: italic; }
 
 .validation { padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .validation.err  { background: var(--red-tint); color: #993525; font-weight: 600; }
