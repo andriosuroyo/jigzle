@@ -237,12 +237,15 @@ input, textarea, select, button { font-family: inherit; }
 .po-cost-row { display: flex; align-items: center; gap: 8px; }
 .po-cost-row .po-cost-ccy { flex-shrink: 0; font-weight: 700; color: var(--muted); }
 .po-cost-row input { flex: 1; min-width: 0; }
-/* PR296/PR297 — Confirm & Ship detail: Unit cost sits left of Item link, sized just wide enough for
-   ~5 digits (applies to the edit input and the read-only locked value). */
-.po-field-cost { flex: 0 0 auto; }
-.po-field-cost .po-cost-row input, .po-field-cost .po-ro-locked { flex: 0 0 auto; width: 4.5rem; }
-/* PR297 — Ship detail edit: the courier field matches the Unit cost width; tracking takes the rest. */
-.po-inline2.po-inline-courier > input:first-child { flex: 0 0 4.5rem; }
+/* PR296/PR297/PR303 — Confirm & Ship detail: Unit cost sits left of Item link, narrow (just enough for
+   ~5 digits). The width is fixed on the FIELD container (not the input) so the shared full-width input
+   rule can't override it; the input/locked value just fills the field. A little extra right margin
+   separates it from the Item link beside it. */
+.po-field-cost { flex: 0 0 5.5rem; margin-right: 6px; }
+.po-field-cost .po-cost-row input { flex: 1; min-width: 0; }
+.po-field-cost .po-ro-locked { width: 100%; }
+/* PR297/PR303 — the courier field (edit) matches the Unit cost field width; tracking takes the rest. */
+.po-inline2.po-inline-courier > input:first-child { flex: 0 0 5.5rem; }
 /* PR267 — "Send back to Ship" action in the History item overlay (separated from the fields above). */
 /* PR268 — a modal-foot button pinned to the LEFT (e.g. "Send back to Ship"), Cancel/Save grouped right. */
 .sc-foot-lead { margin-right: auto; }

@@ -1555,7 +1555,7 @@ export default function OrderBoard({
             Purchasing → Local couriers (0055; falls back to the legacy hard-wired list). */}
         <div className="po-field">
           <label>Local courier &amp; tracking <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-          <div className="po-inline2">
+          <div className="po-inline2 po-inline-courier">
             <input
               type="text"
               list="po-methods"
