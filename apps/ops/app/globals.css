@@ -228,6 +228,9 @@ input, textarea, select, button { font-family: inherit; }
 .po-cost-row { display: flex; align-items: center; gap: 8px; }
 .po-cost-row .po-cost-ccy { flex-shrink: 0; font-weight: 700; color: var(--muted); }
 .po-cost-row input { flex: 1; min-width: 0; }
+/* PR296 — Confirm detail: Unit cost sits left of Item link, sized just wide enough for ~5 digits. */
+.po-field-cost { flex: 0 0 auto; }
+.po-field-cost .po-cost-row input { flex: 0 0 auto; width: 4.5rem; }
 /* PR267 — "Send back to Ship" action in the History item overlay (separated from the fields above). */
 /* PR268 — a modal-foot button pinned to the LEFT (e.g. "Send back to Ship"), Cancel/Save grouped right. */
 .sc-foot-lead { margin-right: auto; }

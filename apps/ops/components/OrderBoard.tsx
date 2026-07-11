@@ -34,6 +34,8 @@ const TrashIcon = () => (<svg width={16} height={16} viewBox="0 0 24 24" fill="n
 const PencilIcon = () => (<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></svg>);
 const CopyIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>);
 const CheckIcon = () => (<svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>);
+// PR296 — a floppy-disk "save" glyph for the Confirm detail's Save-changes button.
+const SaveIcon = () => (<svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>);
 
 const OPEN_STATUSES: POOpenStatus[] = ['Processing', 'On the way', 'With Forwarder'];
 const SUPPLIER_TYPES: SupplierType[] = ['Taobao account', 'agent', 'marketplace', 'other'];
@@ -443,18 +445,14 @@ export default function OrderBoard({
 
   // ── To forwarder: confirm a single item is with the forwarder → With Forwarder (moves to To ship).
   // Per-item (not bulk) because cost / tracking differ per item, so they're handled one card at a time. ──
-  async function confirmOne() {
+  // PR296 — the Confirm detail no longer advances an item to Ship (that's the "Confirm item(s)" batch
+  // flow now); its primary button just SAVES the field edits and closes. Fields already auto-save on
+  // blur, but a value still focused when Save is tapped may not have fired its blur yet.
+  async function saveForwarderChanges() {
     if (!editPo) return;
     resetMessages();
-    // PR256 — a supplier is the one thing To-forwarder must record before an item can move on.
-    if (!form.supplier_id) {
-      setError('Pick a source before Ready to Ship.');
-      return;
-    }
     setBusy(true);
     try {
-      // persist any field edits made in the detail view before advancing (fields auto-save on blur,
-      // but a value still focused when Confirm is tapped may not have fired its blur yet)
       await updatePO(editPo.po_id, {
         supplier_id: form.supplier_id ? Number(form.supplier_id) : undefined,
         product_link: form.product_link.trim() || null,
@@ -464,13 +462,11 @@ export default function OrderBoard({
         item_note: form.item_note.trim() || null,
         tracking_to_forwarder: form.tracking_to_forwarder.trim() || null,
       });
-      await setPOStatus(editPo.po_id, 'With Forwarder');
-      setSuccess(`PO #${editPo.po_id} confirmed → Ship.`);
       setMode(null);
       setEditPo(null);
       await refreshQueue();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to confirm.');
+      setError(e instanceof Error ? e.message : 'Failed to save.');
     } finally {
       setBusy(false);
     }
@@ -1503,32 +1499,31 @@ export default function OrderBoard({
           )}
         </div>
 
-        {/* 2 · Item link */}
-        <div className="po-field">
-          <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-          <input
-            type="text"
-            placeholder="https://…"
-            value={form.product_link}
-            onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
-            onBlur={(e) => autoSaveForwarder({ product_link: e.target.value.trim() || null })}
-          />
-        </div>
-
-        {/* 3 · Unit cost (optional) — the symbol filler still follows the supplier's country. */}
-        <div className="po-field">
-          <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-          <div className="po-cost-row">
-            {ccy && <span className="po-cost-ccy">{ccy.symbol}</span>}
+        {/* 2 · Unit cost (narrow, left) + Item link (grow, right) share one line (PR296). The cost is
+            plain text (inputMode decimal) so there's no number-spinner; its symbol follows the source. */}
+        <div className="po-field-row">
+          <div className="po-field po-field-cost">
+            <label>Unit cost <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+            <div className="po-cost-row">
+              {ccy && <span className="po-cost-ccy">{ccy.symbol}</span>}
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
+                value={form.item_cost}
+                onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
+                onBlur={(e) => autoSaveForwarder({ item_cost: numOrNull(e.target.value) })}
+              />
+            </div>
+          </div>
+          <div className="po-field grow">
+            <label>Item link <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
             <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="any"
-              placeholder="0"
-              value={form.item_cost}
-              onChange={(e) => setForm((f) => ({ ...f, item_cost: e.target.value }))}
-              onBlur={(e) => autoSaveForwarder({ item_cost: numOrNull(e.target.value) })}
+              type="text"
+              placeholder="https://…"
+              value={form.product_link}
+              onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))}
+              onBlur={(e) => autoSaveForwarder({ product_link: e.target.value.trim() || null })}
             />
           </div>
         </div>
@@ -1583,7 +1578,7 @@ export default function OrderBoard({
         {/* PR248 — action-bar standard: left-aligned, slides on mobile; primary then destructive.
             Delete opens a Sales-style modal confirm. Edits auto-save on blur. */}
         <div className="td-actions">
-          <button className="btn-primary btn-ico" onClick={confirmOne} disabled={busy}><TruckIcon />{busy ? '…' : 'Ready to Ship'}</button>
+          <button className="btn-primary btn-ico" onClick={saveForwarderChanges} disabled={busy}><SaveIcon />{busy ? '…' : 'Save changes'}</button>
           <button className="btn-danger btn-ico" onClick={() => setConfirmDel(true)} disabled={busy}><TrashIcon />Delete PO</button>
         </div>
         {confirmDel && (
