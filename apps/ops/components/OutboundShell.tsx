@@ -27,7 +27,7 @@ const ReportIcon = () => (
 );
 
 type OutboundTab = 'ready' | 'history';
-const TAB_LABELS: Record<OutboundTab, string> = { ready: 'Ready to ship', history: 'History' };
+const TAB_LABELS: Record<OutboundTab, string> = { ready: 'Dispatch', history: 'History' };
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export default function OutboundShell({
@@ -150,7 +150,7 @@ export default function OutboundShell({
             className={`orders-tab ${tab === 'ready' ? 'active' : ''}`}
             onClick={() => setTab('ready')}
           >
-            Ready to ship<span className="orders-tab-count">{readyCount}</span>
+            Dispatch<span className="orders-tab-count">{readyCount}</span>
           </button>
           <button
             role="tab"
