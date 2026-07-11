@@ -602,13 +602,14 @@ export default function ToBuyBoard({
                     </div>
                   </div>
                   <div className="le-field le-note">
-                    <label>Note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
-                    <input type="text" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="e.g. confirm colour" disabled={eBusy} autoComplete="off" />
+                    <label>Notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></label>
+                    <input type="text" value={eNote} onChange={(e) => setENote(e.target.value)} placeholder="e.g. buy one set" disabled={eBusy} autoComplete="off" />
                   </div>
                 </div>
-                <div className="sc-modal-foot le-foot">
-                  <button className="btn-primary" onClick={saveEdit} disabled={eBusy || !eSku.trim()}>{eBusy ? 'Saving…' : 'Save'}</button>
+                {/* PR300 — modal-footer standard: Cancel on the LEFT, primary (Save changes) on the RIGHT. */}
+                <div className="sc-modal-foot">
                   <button className="btn-secondary" onClick={cancelEdit} disabled={eBusy}>Cancel</button>
+                  <button className="btn-primary" onClick={saveEdit} disabled={eBusy || !eSku.trim()}>{eBusy ? 'Saving…' : 'Save changes'}</button>
                 </div>
               </>
             ) : (
@@ -616,19 +617,23 @@ export default function ToBuyBoard({
               <>
                 <div className="sc-modal-body">
                   {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
-                  <div className="td-head2">
+                  {/* PR299 — the summary (image · PO#/priority/note · qty · status) sits inside one item
+                      card. Priority and note always show a line ("No priority set" / "No notes" when
+                      unset); qty + status are plain (no pill bubble). */}
+                  <div className="td-head2 td-head-card">
                     <SkuImage status={imgMap[detail.item_code ?? '']?.status} displayUrl={imgMap[detail.item_code ?? '']?.displayUrl} name={detailHasName ? detail.name : detail.code} size={SKU_IMG.md} />
                     <div className="td-info">
                       <div className="td-ctx">{detail.context}</div>
-                      {detail.urgency && (
+                      {detail.urgency ? (
                         <div className={`td-prio td-prio-${detail.urgency}`}><span className="td-prio-dot" />{detail.urgency[0].toUpperCase() + detail.urgency.slice(1)} priority</div>
+                      ) : (
+                        <div className="td-ctx td-prio-none">No priority set</div>
                       )}
-                      {detail.note && <div className="td-ctx td-note">{detail.note}</div>}
+                      <div className="td-ctx td-note">{detail.note || 'No notes'}</div>
                     </div>
                     <div className="td-controls">
-                      {/* PR249 — qty is read-only here; edit it via Edit PO (removes the redundant
-                          second qty editor that sat beside the Edit button). */}
-                      <span className="qty-ro" aria-label="quantity">×{detail.qty}</span>
+                      {/* PR249 — qty is read-only here; edit it via Edit PO. PR299 — plain, no bubble. */}
+                      <span className="td-qty" aria-label="quantity">×{detail.qty}</span>
                       <span className="td-stock"><StockPills wf={detail.wf} otw={detail.otw} avail={detail.avail} combined /></span>
                     </div>
                   </div>
