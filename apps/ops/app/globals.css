@@ -704,6 +704,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .grp-qty .qty-step button { width: 26px; height: 28px; font-size: 16px; }
 .grp-qty .qty-step input { width: 40px; height: 28px; text-align: center; border: 1px solid var(--line); border-radius: 6px; margin: 0 2px; }
 .grp-qty-of { font-size: 12px; color: var(--muted); font-weight: 700; }
+/* PR292 — a single-qty item shows "1 / 1" (no stepper); the "1" matches the stepper input's width so
+   the "/ 1" lines up with the N/M items above it. */
+.grp-qty-one { min-width: 40px; text-align: center; font-size: 14px; font-weight: 700; color: var(--ink); }
 .po-newbtn { padding: 8px; }
 .po-row-wrap { display: flex; align-items: center; gap: 8px; }
 .po-row-wrap .po-check { flex-shrink: 0; width: 16px; height: 16px; }

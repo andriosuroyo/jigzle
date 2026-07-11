@@ -1819,37 +1819,6 @@ export default function OrderBoard({
               </>
             ) : (
             <>
-            <div className="batch-group">
-              <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
-              <ul className="po-cards po-cards-compact">
-                {selectedPOs.map((po) => (
-                  <li key={po.po_id}>
-                    <div className="po-card">
-                      <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
-                      <div className="po-card-main">
-                        <div className="po-card-l1"><span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span></div>
-                        <div className="po-card-l2">
-                          {isRealName(po.name, po.item_code ?? po.item_code_raw) && <span className="ff-name">{po.name}</span>}
-                          {po.qty > 1 ? (
-                            <span className="grp-qty">
-                              <span className="qty-step">
-                                <button type="button" aria-label="one fewer" onClick={() => setSend(po, sendQty(po) - 1)} disabled={sendQty(po) <= 1}>−</button>
-                                <input type="number" inputMode="numeric" min={1} max={po.qty} value={sendQty(po)} onChange={(e) => setSend(po, Number(e.target.value))} />
-                                <button type="button" aria-label="one more" onClick={() => setSend(po, sendQty(po) + 1)} disabled={sendQty(po) >= po.qty}>+</button>
-                              </span>
-                              <span className="grp-qty-of">/ {po.qty}</span>
-                            </span>
-                          ) : (
-                            <span className="po-card-qty">×1</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
             {/* PR285 — Shipment ID is now the single primary field: type it (autocomplete surfaces the
                 last-used, e.g. SUB 192, so you can bump to SUB 193). The shipment CODE (the leading
                 letters) is derived from what you type — no separate picker. */}
@@ -1884,6 +1853,37 @@ export default function OrderBoard({
                 </select>
                 <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
               </div>
+            </div>
+
+            {/* PR292 — the selected-item list sits LAST (like Confirm step 2). Qty is a right-aligned,
+                vertically-centred control; a single-qty item reads "1 / 1" for consistency with N/M. */}
+            <div className="batch-group">
+              <div className="fd-section-head">Selected POs · ship date {fmtNiceDate(grpDate)}</div>
+              <ul className="po-cards po-cards-compact">
+                {selectedPOs.map((po) => (
+                  <li key={po.po_id}>
+                    <div className="po-card grp-card">
+                      <SkuImage status={imgMap[po.item_code ?? '']?.status} displayUrl={imgMap[po.item_code ?? '']?.displayUrl} name={po.name} size={SKU_IMG.sm} />
+                      <div className="po-card-main">
+                        <div className="po-card-l1"><span className="ff-code">{po.item_code ?? po.item_code_raw ?? '—'}</span></div>
+                        {isRealName(po.name, po.item_code ?? po.item_code_raw) && <div className="po-card-l2"><span className="ff-name">{po.name}</span></div>}
+                      </div>
+                      {po.qty > 1 ? (
+                        <span className="grp-qty">
+                          <span className="qty-step">
+                            <button type="button" aria-label="one fewer" onClick={() => setSend(po, sendQty(po) - 1)} disabled={sendQty(po) <= 1}>−</button>
+                            <input type="number" inputMode="numeric" min={1} max={po.qty} value={sendQty(po)} onChange={(e) => setSend(po, Number(e.target.value))} />
+                            <button type="button" aria-label="one more" onClick={() => setSend(po, sendQty(po) + 1)} disabled={sendQty(po) >= po.qty}>+</button>
+                          </span>
+                          <span className="grp-qty-of">/ {po.qty}</span>
+                        </span>
+                      ) : (
+                        <span className="grp-qty grp-qty-single"><span className="grp-qty-one">1</span><span className="grp-qty-of">/ 1</span></span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
             </>
             )}
