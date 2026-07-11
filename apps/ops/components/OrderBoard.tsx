@@ -1890,11 +1890,14 @@ export default function OrderBoard({
               {/* PR274/PR285 — Consolidator → Shipper leg: courier (dropdown, shared local list) + tracking. */}
               <div className="fd-section-head">Consolidator courier &amp; tracking</div>
               <div className="po-inline2 po-inline-courier">
-                <select className="field" value={grpConsolCourier} onChange={(e) => setGrpConsolCourier(e.target.value)}>
-                  <option value="">— courier —</option>
-                  {(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m}>{m}</option>)}
-                  {grpConsolCourier && !(localCouriers.length ? localCouriers : METHODS).includes(grpConsolCourier) && <option value={grpConsolCourier}>{grpConsolCourier}</option>}
-                </select>
+                <DropSearch
+                  value={grpConsolCourier || null}
+                  onChange={(v) => setGrpConsolCourier(v)}
+                  options={(() => { const list = localCouriers.length ? localCouriers : METHODS; return [...list, ...(grpConsolCourier && !list.includes(grpConsolCourier) ? [grpConsolCourier] : [])].map((m) => ({ value: m, label: m })); })()}
+                  placeholder="— courier —"
+                  clearable
+                  ariaLabel="Consolidator courier"
+                />
                 <input className="field" type="text" placeholder="consolidator tracking" value={grpConsolTracking} onChange={(e) => setGrpConsolTracking(e.target.value)} />
               </div>
             </div>

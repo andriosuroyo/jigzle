@@ -1,10 +1,12 @@
 'use client';
 
-// PR322 — "dropsearch": a reusable dropdown that opens to an auto-focused search box + filtered list,
-// so you can type immediately (like the Country picker). The search field only appears when the list is
-// longer than `searchThreshold` (default 8) — short 2–4 option lists render as a plain dropdown. Keyboard:
-// ↑/↓ move, Enter selects, Esc closes; when there's no search box, a typed letter jumps to a match.
-// Values are strings (callers stringify ids / numbers). Visuals reuse the .ds-* styles in globals.css.
+// PR322 — "dropsearch": the ONE dropdown primitive. Opens to an auto-focused search box + filtered list,
+// so you can type immediately (like the old Country picker). The search field appears when the list is
+// longer than `searchThreshold` (default 8) OR `allowCreate` is on; short lists render as a plain dropdown.
+// Keyboard: ↑/↓ move, Enter selects, Esc closes; without a search box a typed letter jumps to a match.
+// Options carry an optional icon (any node). `clearable` adds a "— none —" row; `allowCreate` offers an
+// "Add …" row for a value not in the list. Values are strings (callers stringify ids). CountrySelect /
+// SearchSelect / IconSelect are thin wrappers over this, so every dropdown looks + behaves identically.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -17,6 +19,8 @@ export default function DropSearch({
   placeholder = '— pick —',
   disabled = false,
   searchThreshold = 8,
+  clearable = false,
+  allowCreate = false,
   ariaLabel,
   className,
 }: {
@@ -26,23 +30,29 @@ export default function DropSearch({
   placeholder?: string;
   disabled?: boolean;
   searchThreshold?: number;
+  clearable?: boolean;
+  allowCreate?: boolean;
   ariaLabel?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const [hi, setHi] = useState(0); // highlighted index into `filtered`
+  const [hi, setHi] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  const showSearch = options.length > searchThreshold;
-  const selected = useMemo(() => options.find((o) => o.value === value) ?? null, [options, value]);
+  // a leading "— none —" row when clearable, so the value can be unset from the list itself.
+  const allOpts = useMemo(() => (clearable ? [{ value: '', label: '— none —' }, ...options] : options), [clearable, options]);
+  const showSearch = allOpts.length > searchThreshold || allowCreate;
+  const selected = useMemo(() => (value ? allOpts.find((o) => o.value === value) ?? null : null), [allOpts, value]);
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? options.filter((o) => o.label.toLowerCase().includes(s)) : options;
-  }, [q, options]);
+    return s ? allOpts.filter((o) => o.label.toLowerCase().includes(s)) : allOpts;
+  }, [q, allOpts]);
+  const qTrim = q.trim();
+  const canCreate = allowCreate && qTrim.length > 0 && !allOpts.some((o) => o.label.toLowerCase() === qTrim.toLowerCase());
+  const navCount = filtered.length + (canCreate ? 1 : 0);
 
-  // close on outside click
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
@@ -50,21 +60,18 @@ export default function DropSearch({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [open]);
 
-  // when opening, reset the query and highlight the current selection
   function openMenu() {
     if (disabled) return;
     setQ('');
-    const idx = Math.max(0, options.findIndex((o) => o.value === value));
-    setHi(idx);
+    setHi(Math.max(0, allOpts.findIndex((o) => o.value === value)));
     setOpen(true);
   }
   function choose(o: DropOption) { onChange(o.value); setOpen(false); }
+  function create() { onChange(qTrim); setOpen(false); }
 
-  // keep the highlighted row in view
   useEffect(() => {
     if (!open || !listRef.current) return;
-    const el = listRef.current.children[hi] as HTMLElement | undefined;
-    el?.scrollIntoView({ block: 'nearest' });
+    (listRef.current.children[hi] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' });
   }, [hi, open]);
 
   function onKey(e: React.KeyboardEvent) {
@@ -73,10 +80,14 @@ export default function DropSearch({
       return;
     }
     if (e.key === 'Escape') { e.preventDefault(); setOpen(false); return; }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(filtered.length - 1, h + 1)); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(navCount - 1, h + 1)); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); return; }
-    if (e.key === 'Enter') { e.preventDefault(); const o = filtered[hi]; if (o) choose(o); return; }
-    // type-ahead when there's no search box
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hi < filtered.length) { const o = filtered[hi]; if (o) choose(o); }
+      else if (canCreate) create();
+      return;
+    }
     if (!showSearch && e.key.length === 1 && /\S/.test(e.key)) {
       const c = e.key.toLowerCase();
       const at = filtered.findIndex((o, i) => i > hi && o.label.toLowerCase().startsWith(c));
@@ -118,12 +129,12 @@ export default function DropSearch({
           )}
           <ul className="ds-list" role="listbox" aria-label={ariaLabel} ref={listRef}>
             {filtered.map((o, i) => (
-              <li key={o.value}>
+              <li key={o.value || '__none__'}>
                 <button
                   type="button"
                   role="option"
                   aria-selected={o.value === value}
-                  className={`ds-opt ${o.value === value ? 'active' : ''} ${i === hi ? 'hi' : ''}`}
+                  className={`ds-opt ${o.value === value ? 'active' : ''} ${i === hi ? 'hi' : ''} ${o.value === '' ? 'ds-none' : ''}`}
                   onMouseEnter={() => setHi(i)}
                   onClick={() => choose(o)}
                 >
@@ -132,7 +143,19 @@ export default function DropSearch({
                 </button>
               </li>
             ))}
-            {filtered.length === 0 && <li className="ds-empty">No match</li>}
+            {canCreate && (
+              <li>
+                <button
+                  type="button"
+                  className={`ds-opt ds-create ${filtered.length === hi ? 'hi' : ''}`}
+                  onMouseEnter={() => setHi(filtered.length)}
+                  onClick={create}
+                >
+                  Add “{qTrim}”
+                </button>
+              </li>
+            )}
+            {filtered.length === 0 && !canCreate && <li className="ds-empty">No match</li>}
           </ul>
         </div>
       )}

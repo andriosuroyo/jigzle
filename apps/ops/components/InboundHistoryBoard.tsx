@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getReceiveHistory, deleteInboundShipment, moveShipId } from '@/app/inbound/actions';
 import { setShipmentCourier } from '@/app/purchasing/actions';
+import DropSearch from '@/components/DropSearch';
 import type { InboundHistoryRow } from '@/app/inbound/types';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
@@ -345,11 +346,14 @@ export default function InboundHistoryBoard({
                 <div className="rcv-map-field">
                   <span className="fd-section-head">Shipment courier &amp; tracking</span>
                   <div className="po-inline2 po-inline-courier">
-                    <select className="field" value={editCourier} onChange={(e) => setEditCourier(e.target.value)}>
-                      <option value="">— Pick courier —</option>
-                      {shipmentCouriers.map((c) => <option key={c} value={c}>{c}</option>)}
-                      {editCourier && !shipmentCouriers.includes(editCourier) && <option value={editCourier}>{editCourier}</option>}
-                    </select>
+                    <DropSearch
+                      value={editCourier || null}
+                      onChange={(v) => setEditCourier(v)}
+                      options={[...shipmentCouriers, ...(editCourier && !shipmentCouriers.includes(editCourier) ? [editCourier] : [])].map((c) => ({ value: c, label: c }))}
+                      placeholder="— Pick courier —"
+                      clearable
+                      ariaLabel="Shipment courier"
+                    />
                     <input
                       className="field"
                       type="text"
