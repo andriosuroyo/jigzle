@@ -1857,14 +1857,6 @@ input.batch-field, select.batch-field {
 .orders-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 80; background: var(--brown-dark); color: white; font-size: 13px; font-weight: 600; padding: 10px 16px; border-radius: 10px; box-shadow: 0 4px 16px rgba(74,51,32,0.25); animation: orders-toast-in 160ms ease-out; }
 @keyframes orders-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
-/* "+ New order" overlay — the existing create-order form, layered over the window. */
-.orders-overlay { position: fixed; inset: 0; z-index: 70; background: var(--cream); display: flex; flex-direction: column; overflow: hidden; }
-.orders-overlay-bar { display: flex; align-items: center; gap: 12px; flex-shrink: 0; background: var(--brown); color: white; padding: 12px 18px; padding-top: calc(12px + env(safe-area-inset-top)); }
-.orders-overlay-title { flex: 1; font-size: 15px; font-weight: 700; }
-.orders-overlay-close { background: rgba(255,255,255,0.15); border: none; color: white; width: 34px; height: 34px; border-radius: 8px; font-size: 22px; line-height: 1; cursor: pointer; flex-shrink: 0; }
-.orders-overlay-close:active { background: rgba(255,255,255,0.25); }
-.orders-overlay-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-
 /* ── PR144 — the one search bar (SearchInput): magnifier + pill input + built-in clear ×, the
    address-autofill type-ahead's look, used by every list search across the system. ── */
 .search-input { position: relative; display: flex; align-items: center; flex: 1; min-width: 0; }
@@ -1977,7 +1969,6 @@ input.batch-field, select.batch-field {
 .rail-line-amt { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--ink); }
 
 /* Monthly report month-picker. */
-.report-body { max-width: 480px; margin: 0 auto; padding: 16px; }
 .month-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .month-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: 15px; font-weight: 700; color: var(--ink); cursor: pointer; }
 .month-btn:active { background: var(--paper); }

@@ -209,6 +209,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const [addrDraft, setAddrDraft] = useState<AddrDraft>(draftFrom(null));
   // dup detection: terms that the street field repeats from the structured fields (shown as a confirm)
   const [dupWarn, setDupWarn] = useState<string[] | null>(null);
+  // PR321 — region-repeat detection: value(s) shared across ≥2 of the four region fields (shown as a confirm)
+  const [regionWarn, setRegionWarn] = useState<string[] | null>(null);
 
   // PR307 — the address add/edit form holds unsaved edits, so Esc/backdrop/× route through a discard
   // confirm whenever it's open (no clean dirty flag — the whole overlay is the edit).
@@ -327,6 +329,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     setAddrEdit({ address });
     setAddrDraft(draftFrom(address));
     setDupWarn(null);
+    setRegionWarn(null);
     setNotice(null);
   }
 
@@ -339,12 +342,31 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
       .filter((v) => v.length >= 3 && street.includes(v.toLowerCase()));
   }
 
+  // PR321 — value(s) that appear in ≥2 of the four region fields (exact, case/space-normalized). E.g.
+  // Province/City/Subdistrict/Ward all "Kuningan" → ["Kuningan"]. "Kuningan" vs "Kuningan Barat" → none.
+  function regionDupes(d: AddrDraft): string[] {
+    const seen = new Map<string, string>();
+    const dupes = new Set<string>();
+    for (const raw of [d.kelurahan, d.kecamatan, d.kota, d.provinsi]) {
+      const v = raw.trim();
+      if (!v) continue;
+      const norm = v.toLowerCase().replace(/\s+/g, ' ');
+      if (seen.has(norm)) dupes.add(seen.get(norm)!); else seen.set(norm, v);
+    }
+    return [...dupes];
+  }
+
   async function saveAddr() {
     if (!detail || !addrEdit) return;
-    // first, warn if the street field repeats a structured field — confirm before saving
-    if (!dupWarn) {
+    // first, warn if the street repeats a structured field OR ≥2 region fields match — confirm before saving
+    if (dupWarn == null && regionWarn == null) {
       const dupes = streetDupes(addrDraft);
-      if (dupes.length) { setDupWarn(dupes); return; }
+      const rdupes = regionDupes(addrDraft);
+      if (dupes.length || rdupes.length) {
+        if (dupes.length) setDupWarn(dupes);
+        if (rdupes.length) setRegionWarn(rdupes);
+        return;
+      }
     }
     setBusy(true);
     setNotice(null);
@@ -387,7 +409,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const showBody = selectedId != null;
   const fixCount = health
     ? (dupGroups?.length ?? 0) + health.sharedPhoneGroupCount + health.sharedAddressGroupCount
-      + health.noAddressCount + health.blankNameCount + health.oddPhoneCount + health.emptyStrayCount
+      + health.noAddressCount + health.blankNameCount + health.oddPhoneCount + health.emptyStrayCount + health.repeatRegionCount
+      + health.postcodeMismatchCount + health.missingPostcodeCount
     : 0;
 
   // a compact clickable directory row (used by the Fix single-customer scans)
@@ -789,6 +812,48 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   </>
                 )}
 
+                {/* PR321 — repeated region fields (mis-filled address, e.g. Kuningan×3) */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Repeated region fields {health.repeatRegionCount ? `(${health.repeatRegionCount})` : ''}</div>
+                {health.repeatRegionCount === 0 ? (
+                  <div className="validation ok">No address repeats a value across Province / City / Subdistrict / Ward.</div>
+                ) : (
+                  <>
+                    <div className="hint" style={{ marginBottom: 6 }}>Two or more of Province / City / Subdistrict / Ward hold the exact same value (e.g. “Kuningan” three times) — usually a mis-picked autofill. Open each to correct the four fields.</div>
+                    <ul className="fq-list">{health.repeatRegion.map((c) => flaggedRow(c))}</ul>
+                    {health.repeatRegionCount > health.repeatRegion.length && (
+                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.repeatRegion.length} of {health.repeatRegionCount}.</div>
+                    )}
+                  </>
+                )}
+
+                {/* PR321 — postcode ↔ province mismatch (crosscheck against the bundled dataset) */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Postcode ≠ province {health.postcodeMismatchCount ? `(${health.postcodeMismatchCount})` : ''}</div>
+                {health.postcodeMismatchCount === 0 ? (
+                  <div className="validation ok">No address has a postcode whose province contradicts the dataset.</div>
+                ) : (
+                  <>
+                    <div className="hint" style={{ marginBottom: 6 }}>The stated province doesn’t match the province the dataset lists for that postcode (Jakarta ⇄ Jawa Barat are treated as one). Either the postcode or the province is wrong — open each to check.</div>
+                    <ul className="fq-list">{health.postcodeMismatch.map((c) => flaggedRow(c))}</ul>
+                    {health.postcodeMismatchCount > health.postcodeMismatch.length && (
+                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.postcodeMismatch.length} of {health.postcodeMismatchCount}.</div>
+                    )}
+                  </>
+                )}
+
+                {/* PR321 — Indonesia address with no postcode (flag; we deliberately don't assume one) */}
+                <div className="fd-section-head" style={{ marginTop: 20 }}>Missing postcode {health.missingPostcodeCount ? `(${health.missingPostcodeCount})` : ''}</div>
+                {health.missingPostcodeCount === 0 ? (
+                  <div className="validation ok">Every filled Indonesia address has a postcode.</div>
+                ) : (
+                  <>
+                    <div className="hint" style={{ marginBottom: 6 }}>A filled address with no postcode. Dissect it manually and add the correct postcode — we don’t assume one (a guessed postcode can misroute the parcel).</div>
+                    <ul className="fq-list">{health.missingPostcode.map((c) => flaggedRow(c))}</ul>
+                    {health.missingPostcodeCount > health.missingPostcode.length && (
+                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.missingPostcode.length} of {health.missingPostcodeCount}.</div>
+                    )}
+                  </>
+                )}
+
                 {/* empty strays */}
                 <div className="po-tobuy-head" style={{ marginTop: 20 }}>
                   <div className="fd-section-head" style={{ marginBottom: 0 }}>Empty records {health.emptyStrays.length ? `(${health.emptyStrays.length})` : ''}</div>
@@ -851,29 +916,29 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     <label>Autofill <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(province / city / kecamatan / kelurahan / postcode)</em></label>
                     <PostcodeAutofill
                       disabled={busy}
-                      onPick={(h) => setAddrDraft((d) => ({ ...d, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal }))}
+                      onPick={(h) => { setAddrDraft((d) => ({ ...d, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })); if (regionWarn) setRegionWarn(null); }}
                     />
                   </div>
                 )}
                 <div className="po-inline">
                   <div className="po-field">
                     <label>Province</label>
-                    <input type="text" value={addrDraft.provinsi} onChange={(e) => setAddrDraft({ ...addrDraft, provinsi: e.target.value })} />
+                    <input type="text" value={addrDraft.provinsi} onChange={(e) => { setAddrDraft({ ...addrDraft, provinsi: e.target.value }); if (regionWarn) setRegionWarn(null); }} />
                   </div>
                   <div className="po-field">
                     <label>City / district</label>
-                    <input type="text" value={addrDraft.kota} onChange={(e) => setAddrDraft({ ...addrDraft, kota: e.target.value })} />
+                    <input type="text" value={addrDraft.kota} onChange={(e) => { setAddrDraft({ ...addrDraft, kota: e.target.value }); if (regionWarn) setRegionWarn(null); }} />
                   </div>
                 </div>
                 {isIndonesia(addrDraft.negara) && (
                   <div className="po-inline">
                     <div className="po-field">
                       <label>Subdistrict (kecamatan)</label>
-                      <input type="text" value={addrDraft.kecamatan} onChange={(e) => setAddrDraft({ ...addrDraft, kecamatan: e.target.value })} />
+                      <input type="text" value={addrDraft.kecamatan} onChange={(e) => { setAddrDraft({ ...addrDraft, kecamatan: e.target.value }); if (regionWarn) setRegionWarn(null); }} />
                     </div>
                     <div className="po-field">
                       <label>Ward (kelurahan)</label>
-                      <input type="text" value={addrDraft.kelurahan} onChange={(e) => setAddrDraft({ ...addrDraft, kelurahan: e.target.value })} />
+                      <input type="text" value={addrDraft.kelurahan} onChange={(e) => { setAddrDraft({ ...addrDraft, kelurahan: e.target.value }); if (regionWarn) setRegionWarn(null); }} />
                     </div>
                   </div>
                 )}
@@ -886,7 +951,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   <textarea value={addrDraft.street} onChange={(e) => { setAddrDraft({ ...addrDraft, street: e.target.value }); if (dupWarn) setDupWarn(null); }} />
                 </div>
                 <div className="po-field">
-                  <label>Delivery note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(courier instructions / sender — not printed in the address)</em></label>
+                  <label>Delivery note <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(courier instructions / sender — printed below the courier line as “Note: …”)</em></label>
                   <textarea value={addrDraft.delivery_note} onChange={(e) => setAddrDraft({ ...addrDraft, delivery_note: e.target.value })} />
                 </div>
 
@@ -895,12 +960,17 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     The address field repeats {dupWarn.map((d) => `“${d}”`).join(', ')}, already entered as separate field{dupWarn.length === 1 ? '' : 's'} above. Save anyway?
                   </div>
                 )}
+                {regionWarn && (
+                  <div className="validation warn">
+                    {regionWarn.map((d) => `“${d}”`).join(', ')} {regionWarn.length === 1 ? 'appears' : 'appear'} in two or more of Province / City / Subdistrict / Ward — likely a mis-fill. Save anyway?
+                  </div>
+                )}
 
                 <div className="fd-commit">
                   {addrEdit.address ? (
                     <button className="btn-link danger" onClick={() => removeAddr(addrEdit.address!.address_id)} disabled={busy}>Delete</button>
                   ) : <span />}
-                  <button className="btn-primary" onClick={saveAddr} disabled={busy}>{busy ? 'Saving…' : dupWarn ? 'Save anyway' : addrEdit.address ? 'Save' : 'Add'}</button>
+                  <button className="btn-primary" onClick={saveAddr} disabled={busy}>{busy ? 'Saving…' : (dupWarn || regionWarn) ? 'Save anyway' : addrEdit.address ? 'Save' : 'Add'}</button>
                 </div>
               </div>
             </div>

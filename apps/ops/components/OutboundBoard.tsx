@@ -26,6 +26,23 @@ const numOrNull = (s: string): number | null => {
   return s.trim() && isFinite(n) ? n : null;
 };
 
+// PR321 — collapse EXACT-duplicate region fields (Ward/Subdistrict/City/Province) so a repeated value is
+// printed once (e.g. Kuningan×3 → a single "Kuningan"). Match is case/space-normalized string equality, so
+// partial names like "Kuningan" vs "Kuningan Barat" are kept as distinct. Order-preserving (first wins).
+function dedupeRegion(parts: (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const v = (p ?? '').trim();
+    if (!v) continue;
+    const norm = v.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(norm)) continue;
+    seen.add(norm);
+    out.push(v);
+  }
+  return out;
+}
+
 // today's local date, 'YYYY-MM-DD' — the right side of the staff line (PR155)
 function todayLocal(): string {
   const d = new Date();
@@ -116,12 +133,11 @@ export default function OutboundBoard({
     if (!detail) return '';
     const recipient = detail.recipient_name || detail.customer_name;
     const phone = detail.contact_phone || detail.customer_phone;
+    // PR321 — the four region fields (ward → subdistrict → city → province) collapse exact repeats so a
+    // messy address like Kuningan/Kuningan/Kuningan prints "Kuningan" once; street/country/postcode stay.
     const addrLine = [
       detail.street,
-      detail.kelurahan,
-      detail.kecamatan,
-      detail.kota,
-      detail.provinsi,
+      ...dedupeRegion([detail.kelurahan, detail.kecamatan, detail.kota, detail.provinsi]),
       detail.negara,
       detail.kode_pos,
     ].filter((x) => x && String(x).trim()).join(', ');
@@ -132,8 +148,9 @@ export default function OutboundBoard({
     const courier = detail.courier_label || detail.planned_courier;
     const tracking = detail.courier_tracking ? '#' + detail.courier_tracking : null;
     const courierLine = [courier, tracking].filter(Boolean).join(': ');
-    // courier line, then the delivery note beneath it
-    const footer = [courierLine, detail.delivery_note].filter((x) => x && String(x).trim()).join('\n');
+    // PR321 — courier line, then the delivery note beneath it, prefixed with "Note: " so it reads clearly.
+    const noteRaw = detail.delivery_note && String(detail.delivery_note).trim() ? String(detail.delivery_note).trim() : null;
+    const footer = [courierLine, noteRaw ? `Note: ${noteRaw}` : null].filter((x) => x && String(x).trim()).join('\n');
     return footer ? `${head}\n\n${footer}` : head;
   }, [detail]);
 

@@ -23,7 +23,6 @@ export default async function OutboundPage({ searchParams }: { searchParams?: { 
       userEmail={user?.email || ''}
       initialQueue={queue}
       boxPresets={boxPresets}
-      shippedHistory={[]}
       staffOptions={staffOptions}
       initialOrderId={searchParams?.order ?? null}
     />

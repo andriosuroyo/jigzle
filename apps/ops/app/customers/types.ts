@@ -83,6 +83,17 @@ export interface DataHealth {
   blankNames: FlaggedCustomer[];
   oddPhoneCount: number;          // records carrying a raw number that doesn't normalize (likely a typo)
   oddPhones: FlaggedCustomer[];
+  // PR321 — an address where ≥2 of the four region fields (province/city/subdistrict/ward) are the EXACT
+  // same value (e.g. Kuningan×3) — a strong sign the region was mis-filled and needs manual cleanup.
+  repeatRegionCount: number;
+  repeatRegion: FlaggedCustomer[];
+  // PR321 — a stated postcode whose province contradicts the dataset for that postcode (DKI↔Jawa Barat
+  // merged, so Greater-Jakarta doesn't false-flag).
+  postcodeMismatchCount: number;
+  postcodeMismatch: FlaggedCustomer[];
+  // PR321 — a filled Indonesia address with NO postcode (flag for manual dissection; never auto-assumed).
+  missingPostcodeCount: number;
+  missingPostcode: FlaggedCustomer[];
 }
 
 // editable personal details (name + up to three whatsapp/phone numbers)
