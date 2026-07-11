@@ -1354,7 +1354,10 @@ export default function OrderBoard({
       <div className="sc-modal-backdrop" onClick={closeBatch}>
         <div className="sc-modal batch-modal" role="dialog" aria-modal="true" aria-label="Confirm items" onClick={(e) => e.stopPropagation()}>
           <div className="sc-modal-head sc-modal-head-row">
-            <div className="sc-modal-title">{batchStep === 'pick' ? 'Confirm item(s) · step 1 of 2' : 'Confirm item(s) · step 2 of 2'}</div>
+            <div>
+              <div className="sc-modal-title">Confirm item(s)</div>
+              <div className="sc-modal-sub">Step {batchStep === 'pick' ? '1' : '2'} of 2</div>
+            </div>
             <button className="sc-modal-x" onClick={closeBatch} aria-label="Close">×</button>
           </div>
 
@@ -1460,7 +1463,7 @@ export default function OrderBoard({
               </div>
               <div className="sc-modal-foot">
                 <button className="btn-secondary" onClick={() => setBatchStep('pick')}>← Back</button>
-                <button className="btn-primary btn-ico" onClick={submitBatch} disabled={batchBusy || batchIds.size === 0}><TruckIcon />{batchBusy ? 'Confirming…' : `Ready to Ship · ${batchIds.size}`}</button>
+                <button className="btn-primary btn-ico" onClick={submitBatch} disabled={batchBusy || batchIds.size === 0}><TruckIcon />{batchBusy ? 'Confirming…' : `Confirm ${batchIds.size} item${batchIds.size === 1 ? '' : 's'}`}</button>
               </div>
             </>
           )}

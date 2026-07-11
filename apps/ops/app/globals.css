@@ -161,17 +161,21 @@ input, textarea, select, button { font-family: inherit; }
 .batch-group textarea.batch-field { min-height: 60px; resize: vertical; }
 .batch-items-head { margin-top: 4px; }
 .batch-items { display: flex; flex-direction: column; gap: 10px; }
-/* PR291 — each item is its own card: a 54px image beside two lines. Line 1: SKU + name (left) / qty
-   (right). Line 2: unit cost + item link side-by-side, together full width. No extra left padding. */
-.batch-item { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
-.batch-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* PR291/PR294 — each item is its own card: a 54px image (flush to the card's left edge — no left
+   padding) beside two lines. Line 1: SKU + name (left) / qty (right). Line 2: unit cost + item link
+   side-by-side, together full width. The two lines are kept short so the block matches the image
+   height (its top/bottom align with the image's). */
+.batch-item { display: flex; align-items: center; gap: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px 0; overflow: hidden; }
+.batch-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .batch-item-row { display: flex; align-items: center; gap: 8px; }
 .batch-item-head { gap: 8px; }
 .batch-item-id { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; }
 .batch-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .batch-item-head .po-card-qty { flex-shrink: 0; }
-/* line 2 — cost + link span the full width together (cost sized to content, link takes the rest) */
-.batch-item-fields .batch-cost { flex: 0 0 100px; -moz-appearance: textfield; }
+/* line 2 — cost + link span the full width together (cost sized to content, link takes the rest); the
+   inputs are compact (short) so line1 + line2 ≈ the 54px image height. */
+.batch-item-fields .batch-cost, .batch-item-fields .batch-link { height: 30px; padding: 4px 9px; font-size: 13px; }
+.batch-item-fields .batch-cost { flex: 0 0 92px; -moz-appearance: textfield; }
 .batch-item-fields .batch-cost::-webkit-outer-spin-button, .batch-item-fields .batch-cost::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .batch-item-fields .batch-link { flex: 1; min-width: 0; }
 .po-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
