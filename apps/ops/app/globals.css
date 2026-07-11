@@ -1745,6 +1745,10 @@ img.sku-img { background: #e8e8e8; }
 input.batch-field, select.batch-field {
   height: 34px; padding-top: 4px; padding-bottom: 4px;
 }
+/* PR308 — STANDARD placeholder ("filler") look, app-wide: italic + a lighter/thinner weight so hints
+   read as clearly secondary to typed values. Size is left at the input's own font-size (16px on the
+   standard field) — that's what governs iOS focus-zoom, not the placeholder, so hints stay zoom-safe. */
+::placeholder { font-style: italic; font-weight: 300; opacity: 1; color: var(--muted); }
 /* PR250 — a catalogue SKU's code can't be recoded here: locked look (greyed fill, muted text, not-allowed). */
 .le-field input.le-locked { background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1; }
 /* PR254 — the Qty stepper in the Edit PO row keeps its natural width; without this the full-width
