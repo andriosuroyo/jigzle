@@ -13,6 +13,7 @@ import { addForwarder, deleteForwarder, reorderForwarders, updateForwarder, rena
 import { uploadSettingIcon } from '@/app/settings/actions';
 import type { Forwarder } from '@jigzle/db/types';
 import FlagSelect from '@/components/FlagSelect';
+import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 
 // a stored logo is an uploaded image when it's a URL/path; otherwise it's a short emoji/text.
 const isLogoUrl = (s: string | null | undefined): boolean => !!s && /^(https?:\/\/|\/)/.test(s);
@@ -22,6 +23,8 @@ function LogoCell({ value, onChange, disabled = false }: { value: string | null;
   const [open, setOpen] = useState(false);
   const [emoji, setEmoji] = useState(value && !isLogoUrl(value) ? value : '');
   const [uploading, setUploading] = useState(false);
+  // PR307 — closing the logo picker with a typed-but-unsaved emoji routes through the discard confirm.
+  const logoClose = useOverlayClose({ open, onClose: () => setOpen(false), dirty: emoji !== (value && !isLogoUrl(value) ? value : '') });
   async function pick(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -46,9 +49,9 @@ function LogoCell({ value, onChange, disabled = false }: { value: string | null;
         ) : <span className="set-ico-add">+</span>}
       </button>
       {open && (
-        <div className="sc-modal-backdrop" onClick={() => setOpen(false)}>
+        <div className="sc-modal-backdrop" onClick={logoClose.requestClose}>
           <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Set logo" onClick={(e) => e.stopPropagation()}>
-            <div className="sc-modal-head sc-modal-head-row"><span className="sc-modal-title">Logo</span><button className="sc-modal-x" onClick={() => setOpen(false)} aria-label="Close">×</button></div>
+            <div className="sc-modal-head sc-modal-head-row"><span className="sc-modal-title">Logo</span><button className="sc-modal-x" onClick={logoClose.requestClose} aria-label="Close">×</button></div>
             <div className="sc-modal-body">
               <div className="po-field">
                 <label>Emoji</label>
@@ -64,6 +67,7 @@ function LogoCell({ value, onChange, disabled = false }: { value: string | null;
               </div>
             </div>
           </div>
+          {logoClose.confirm}
         </div>
       )}
     </div>
@@ -82,6 +86,11 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
 
   const fail = (e: unknown) => setNotice({ tone: 'err', text: e instanceof Error ? e.message : 'Something went wrong.' });
   const note = (tone: 'ok' | 'err' | 'warn', text: string) => setNotice({ tone, text });
+
+  // PR307 — shared overlay-close: the rename form has an editable prefix (discard confirm when changed);
+  // the delete confirm is stakes-free, so Esc just closes it.
+  const renameClose = useOverlayClose({ open: renaming !== null, onClose: () => { if (!busy) setRenaming(null); }, dirty: renaming !== null && renaming.to !== renaming.from });
+  useEscToClose(deleting !== null, () => { if (!busy) setDeleting(null); });
 
   async function save(prefix: string, patch: Partial<Pick<Forwarder, 'name' | 'flag' | 'country' | 'logo'>>) {
     setBusy(true); setNotice(null);
@@ -226,9 +235,9 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
 
       {/* PR276 — prefix rename confirm: rewrites every owned ship_id (SUB 192 → SBY 192). */}
       {renaming && (
-        <div className="sc-modal-backdrop" onClick={() => !busy && setRenaming(null)}>
+        <div className="sc-modal-backdrop" onClick={renameClose.requestClose}>
           <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Rename prefix" onClick={(e) => e.stopPropagation()}>
-            <div className="sc-modal-head sc-modal-head-row"><span className="sc-modal-title">Rename {renaming.from}</span><button className="sc-modal-x" onClick={() => setRenaming(null)} disabled={busy} aria-label="Close">×</button></div>
+            <div className="sc-modal-head sc-modal-head-row"><span className="sc-modal-title">Rename {renaming.from}</span><button className="sc-modal-x" onClick={renameClose.requestClose} disabled={busy} aria-label="Close">×</button></div>
             <div className="sc-modal-body">
               <div className="po-field">
                 <label>New prefix</label>
@@ -243,6 +252,7 @@ export default function ForwarderSettings({ initial, embedded = false }: { initi
               <button className="btn-primary" onClick={commitRename} disabled={busy || !renaming.to.trim() || renaming.to.trim().toUpperCase() === renaming.from}>{busy ? 'Renaming…' : 'Rename'}</button>
             </div>
           </div>
+          {renameClose.confirm}
         </div>
       )}
 

@@ -38,6 +38,7 @@ import { getActiveStaff, setActiveStaff } from '@/components/staffStore';
 import { saveDraft, loadDraft, clearDraft, listDraftKeys } from '@/components/draftStore';
 import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
+import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 import { fmtNiceDate } from '@jigzle/lib';
 
 // PR243 — copy/check glyphs for the header id chips (mirrors Sales → Pending/History).
@@ -268,6 +269,16 @@ export default function InboundBoard({
     return [...set];
   }, [detail, received, skuHits, picker]);
   const imgMap = useSkuImages(imgCodes);
+
+  // PR307 — shared overlay-close. The Manual-add overlay is a dirty create-form (typed search / new-SKU
+  // stub / barcode) → its close routes through a discard confirm; the per-line editor (renderLineEditor)
+  // applies live with no separate save, so it's Esc-only.
+  const manualClose = useOverlayClose({
+    open: manualAdd && !!detail,
+    onClose: () => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); setMapBarcode(''); },
+    dirty: !!(skuQuery.trim() || mapBarcode.trim() || (stub && (stub.item_code || stub.original || stub.name || stub.barcode))),
+  });
+  useEscToClose(lineEditCode !== null, () => setLineEditCode(null));
 
   // PR259 — persist the in-progress count as it changes (skipped while a session is hydrating). A
   // non-empty draft is saved under the session's key; emptying it (or committing) clears the draft.
@@ -984,7 +995,7 @@ export default function InboundBoard({
           search finds nothing, offer to add the SKU manually (a needs-review stub), mirroring
           Purchasing → manual. Stays open so several SKUs can be added in a row. */}
       {manualAdd && detail && (
-        <div className="sc-modal-backdrop" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); setMapBarcode(''); }}>
+        <div className="sc-modal-backdrop" onClick={manualClose.requestClose}>
           <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Manual add" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head">
               <div className="sc-modal-title">{mappingRaw ? 'Map a SKU' : 'Manual add'}</div>
@@ -1085,9 +1096,10 @@ export default function InboundBoard({
               )}
             </div>
             <div className="sc-modal-foot">
-              <button className="btn-secondary" onClick={() => { setManualAdd(false); clearSearch(); setStub(null); setMappingRaw(null); setMapBarcode(''); }}>Close</button>
+              <button className="btn-secondary" onClick={manualClose.requestClose}>Close</button>
             </div>
           </div>
+          {manualClose.confirm}
         </div>
       )}
 

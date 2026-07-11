@@ -12,6 +12,7 @@ import type { ShipmentHistoryRow, ShipmentItemRow, ShipmentBox } from '@/app/pur
 import type { Supplier } from '@jigzle/db/types';
 import SkuImage from '@/components/SkuImage';
 import { isRealName } from '@/components/skuName';
+import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
@@ -111,6 +112,7 @@ export default function PurchasingHistoryBoard({
   const [boxDraft, setBoxDraft] = useState<BoxDraft[]>([]);
   const [boxErr, setBoxErr] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false); // PR261 — Done saves boxes + note together
+  const [editDirty, setEditDirty] = useState(false); // PR307 — box/note edits are unsaved until "Done"
 
   // PR293 — per-item detail overlay is now READ-ONLY: History items are finalised, so the overlay
   // shows the captured To-forwarder data locked (no edit, no Send back to Ship — a short line is
@@ -229,7 +231,7 @@ export default function PurchasingHistoryBoard({
     const okBoxes = await saveBoxes();
     const okNote = await saveNote();
     setSavingEdit(false);
-    if (okBoxes && okNote) setEditingShip(false);
+    if (okBoxes && okNote) { setEditDirty(false); setEditingShip(false); }
   }
 
   // PR254 — enter edit mode (seed the note draft from the current value); other drafts seeded on select.
@@ -237,6 +239,7 @@ export default function PurchasingHistoryBoard({
     if (!openShip) return;
     setNoteDraft(openShip.note ?? '');
     setBoxErr(null); setCourierErr(null);
+    setEditDirty(false);
     setEditingShip(true);
   }
 
@@ -288,6 +291,12 @@ export default function PurchasingHistoryBoard({
   // ── shipment detail (PR255): a white detail card (Sales-style .bv-detail), DISPLAY-ONLY. Editing the
   // shipment's courier / boxes / note happens in the "Edit shipment" overlay; tapping an item opens its
   // per-PO detail overlay (the To-forwarder data — courier, tracking, marketplace id, cost, note). ──
+  // PR307 — Esc / backdrop / × close. The edit-shipment overlay guards box + note (unsaved until Done);
+  // the read-only item detail and the delete confirm just close.
+  const editShipClose = useOverlayClose({ open: editingShip, onClose: () => setEditingShip(false), dirty: editDirty });
+  useEscToClose(!!selItem, () => setSelItem(null));
+  useEscToClose(confirmDelShip, () => { if (!deletingShip) setConfirmDelShip(false); });
+
   if (openShip) {
     const courierLine = [openShip.courier, openShip.tracking].filter(Boolean).join(' ');
     // PR274 — consolidator leg: courier + tracking (mirrors the shipper leg's "courier tracking").
@@ -385,11 +394,12 @@ export default function PurchasingHistoryBoard({
 
         {/* Edit shipment overlay — courier / boxes / note (each saves on its own control; Done closes) */}
         {editingShip && (
-          <div className="sc-modal-backdrop" onClick={() => setEditingShip(false)}>
+          <div className="sc-modal-backdrop" onClick={editShipClose.requestClose}>
+            {editShipClose.confirm}
             <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Edit shipment" onClick={(e) => e.stopPropagation()}>
               <div className="sc-modal-head sc-modal-head-row">
                 <span className="sc-modal-title">Edit {openShip.ship_id}</span>
-                <button className="sc-modal-x" onClick={() => setEditingShip(false)} aria-label="Close">×</button>
+                <button className="sc-modal-x" onClick={editShipClose.requestClose} aria-label="Close">×</button>
               </div>
               <div className="sc-modal-body">
                 <div className="po-field">
@@ -422,7 +432,7 @@ export default function PurchasingHistoryBoard({
                   {boxErr && <div className="validation err">{boxErr}</div>}
                   {(() => {
                     const b = boxDraft[0] ?? emptyBoxDraft();
-                    const upd = (patch: Partial<BoxDraft>) => setBoxDraft((prev) => [{ ...(prev[0] ?? emptyBoxDraft()), ...patch }]);
+                    const upd = (patch: Partial<BoxDraft>) => { setEditDirty(true); setBoxDraft((prev) => [{ ...(prev[0] ?? emptyBoxDraft()), ...patch }]); };
                     return (
                       <div className="sb-card">
                         <div className="sb-card-r1">
@@ -437,7 +447,7 @@ export default function PurchasingHistoryBoard({
                 </div>
                 <div className="po-field">
                   <div className="fd-section-head">Shipment notes <em style={{ fontStyle: 'normal', opacity: 0.7 }}>(optional)</em></div>
-                  <textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} placeholder="Notes for this shipment ID" rows={3} disabled={savingNote} />
+                  <textarea value={noteDraft} onChange={(e) => { setEditDirty(true); setNoteDraft(e.target.value); }} placeholder="Notes for this shipment ID" rows={3} disabled={savingNote} />
                 </div>
               </div>
               <div className="sc-modal-foot">

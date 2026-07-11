@@ -8,7 +8,7 @@
 // extraction, not a literal merge). No behavior change — same markup, same Back/Confirm wiring.
 // (cancelLabel is a prop so each window keeps its exact Back wording — "…counting" vs "…scanning".)
 
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 
 export default function ConfirmModal({
   title,
@@ -35,6 +35,14 @@ export default function ConfirmModal({
   onCancel: () => void;
   children: ReactNode;
 }) {
+  // PR307 — Esc triggers Cancel (backdrop already does), respecting the busy guard. Inlined (not via the
+  // shared hook) to avoid a ConfirmModal ↔ useOverlayClose import cycle, since the hook renders a ConfirmModal.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) { e.stopPropagation(); onCancel(); } };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [busy, onCancel]);
+
   return (
     <div className="sc-modal-backdrop" onClick={busy ? undefined : onCancel}>
       <div className="sc-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>

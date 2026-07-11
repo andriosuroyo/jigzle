@@ -43,6 +43,7 @@ import StockPills from '@/components/StockPills';
 import TrashButton from '@/components/TrashButton';
 import SearchInput from '@/components/SearchInput';
 import { PackageIcon } from '@/components/AddIcons';
+import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 import { isRealName } from '@/components/skuName';
 import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
 import { fmtNiceDate } from '@jigzle/lib';
@@ -434,6 +435,13 @@ export default function ToBuyBoard({
     { key: 'sales', label: 'From Sales' },
   ];
 
+  // PR307 — Esc / backdrop / × close. The item detail guards while in edit mode; the add-item overlay
+  // guards when it has typed content; the delete confirm just closes.
+  const addDirty = !!(skuQuery.trim() || picked || link.trim() || note.trim() || addUrgency || qty !== 1);
+  const detailClose = useOverlayClose({ open: !!sel, onClose: () => setSel(null), dirty: editing });
+  const addClose = useOverlayClose({ open: adding, onClose: closeAdd, dirty: addDirty });
+  useEscToClose(confirmDelId != null, () => setConfirmDelId(null));
+
   return (
     <div className="purch-tobuy">
       {error && <div className="validation err">{error}</div>}
@@ -531,14 +539,15 @@ export default function ToBuyBoard({
           priority, qty-to-buy stepper and the three stock statuses. The catalogue "where to buy" links are
           listed inline below (no separate Buy step). Actions: Out of stock / Done / Delete. */}
       {detail && (
-        <div className="sc-modal-backdrop" onClick={() => setSel(null)}>
+        <div className="sc-modal-backdrop" onClick={detailClose.requestClose}>
+          {detailClose.confirm}
           <div className="sc-modal tobuy-detail" role="dialog" aria-modal="true" aria-label="Item actions" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head td-head-block">
               <div className="td-head-titles">
                 <span className="sc-modal-title">{detail.code || '—'}</span>
                 {detailHasName && <div className="ff-name td-name">{detail.name}</div>}
               </div>
-              <button className="sc-modal-x" onClick={() => { if (!eBusy) setSel(null); }} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={() => { if (!eBusy) detailClose.requestClose(); }} aria-label="Close">×</button>
             </div>
 
             {editing ? (
@@ -666,14 +675,15 @@ export default function ToBuyBoard({
 
       {/* "+ add item" overlay (Manual only) — dimmed-backdrop modal */}
       {adding && (
-        <div className="sc-modal-backdrop" onClick={closeAdd}>
+        <div className="sc-modal-backdrop" onClick={addClose.requestClose}>
+          {addClose.confirm}
           <div className="sc-modal addpo-modal" role="dialog" aria-modal="true" aria-label="Add item" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <div>
                 <div className="sc-modal-title">Add item</div>
                 <div className="sc-modal-sub">Manually add PO items</div>
               </div>
-              <button className="sc-modal-x" onClick={closeAdd} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={addClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}

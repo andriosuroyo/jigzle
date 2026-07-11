@@ -36,6 +36,7 @@ import {
 import type { AddressInput, ChannelEntry, CustomerDetail, CustomerListRow, CustomerPatch, DataHealth, DuplicateGroup } from '@/app/customers/types';
 import type { CustomerAddress } from '@jigzle/db/types';
 import SearchInput from '@/components/SearchInput';
+import { useOverlayClose } from '@/components/useOverlayClose';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -208,6 +209,10 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const [addrDraft, setAddrDraft] = useState<AddrDraft>(draftFrom(null));
   // dup detection: terms that the street field repeats from the structured fields (shown as a confirm)
   const [dupWarn, setDupWarn] = useState<string[] | null>(null);
+
+  // PR307 — the address add/edit form holds unsaved edits, so Esc/backdrop/× route through a discard
+  // confirm whenever it's open (no clean dirty flag — the whole overlay is the edit).
+  const addrClose = useOverlayClose({ open: !!addrEdit, onClose: () => setAddrEdit(null), dirty: !!addrEdit });
 
   // buckets: customers grouped by first letter, each name-sorted; counts per letter
   const buckets = useMemo(() => {
@@ -817,11 +822,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
 
       {/* address overlay (add / edit / delete) */}
       {addrEdit && (
-        <div className="sc-modal-backdrop" onClick={() => setAddrEdit(null)}>
+        <div className="sc-modal-backdrop" onClick={addrClose.requestClose}>
           <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Address" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <span className="sc-modal-title">{addrEdit.address ? 'Edit address' : 'Add address'}</span>
-              <button className="sc-modal-x" onClick={() => setAddrEdit(null)} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={addrClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               <div className="po-form">
@@ -900,6 +905,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               </div>
             </div>
           </div>
+          {addrClose.confirm}
         </div>
       )}
 

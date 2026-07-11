@@ -14,6 +14,7 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { addressLine } from '@/components/addressLine';
+import { useOverlayClose } from '@/components/useOverlayClose';
 
 // PR227 — a note-only editor per item (square pencil, like Pending but note-only: no SKU/qty/delete).
 type FulfillLine = FulfillDetail['lines'][number];
@@ -244,6 +245,13 @@ export default function FulfillBoard({
     }
   }
 
+  // PR307 — shared overlay-close for the note editor (unsaved note edits route through a discard confirm).
+  const noteClose = useOverlayClose({
+    open: !!noteEdit,
+    onClose: closeNote,
+    dirty: noteDraft.trim() !== (noteEdit?.line_note ?? ''),
+  });
+
   const canSend = !!detail && detail.lines.length > 0 && addressId != null && courierId != null && (!isIntl || exportCourierId != null) && !committing;
 
   // PR147 — bodyview: the body shows EITHER the full-width To-send queue OR the tapped order's detail
@@ -403,11 +411,11 @@ export default function FulfillBoard({
 
               {/* PR227 — note-only per-item editor (no SKU / qty / delete on a cut order). */}
               {noteEdit && (
-                <div className="sc-modal-backdrop" onClick={noteBusy ? undefined : closeNote}>
+                <div className="sc-modal-backdrop" onClick={noteBusy ? undefined : noteClose.requestClose}>
                   <div className="sc-modal" role="dialog" aria-modal="true" aria-label="Edit note" onClick={(e) => e.stopPropagation()}>
                     <div className="sc-modal-head sc-modal-head-row">
                       <span className="sc-modal-title">Item note</span>
-                      <button className="sc-modal-x" onClick={closeNote} aria-label="Close" disabled={noteBusy}>×</button>
+                      <button className="sc-modal-x" onClick={noteClose.requestClose} aria-label="Close" disabled={noteBusy}>×</button>
                     </div>
                     <div className="sc-modal-body">
                       {noteErr && <div className="validation err" style={{ marginBottom: 10 }}>{noteErr}</div>}
@@ -428,6 +436,7 @@ export default function FulfillBoard({
                       <button className="btn-primary" onClick={saveNote} disabled={noteBusy}>{noteBusy ? 'Saving…' : 'Save'}</button>
                     </div>
                   </div>
+                  {noteClose.confirm}
                 </div>
               )}
             </>

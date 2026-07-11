@@ -13,6 +13,7 @@ import { compute, fmtNum, fmtRp, type FxMap } from '@jigzle/lib';
 import type { Currency, ShippingMethod, SavedCalculation, UserPrefs } from '@jigzle/db/types';
 import { deleteCalculation, refreshFx, saveCalculation, savePrefs } from '@/app/calculator/actions';
 import SearchInput from '@/components/SearchInput';
+import { useEscToClose } from '@/components/useOverlayClose';
 
 type View = 'calculator' | 'history' | 'rates';
 const VIEW_LABEL: Record<View, string> = { calculator: 'Calculator', history: 'History', rates: 'Rates' };
@@ -79,6 +80,8 @@ export default function CalculatorBoard({
 
   const [detailId, setDetailId] = useState<string | null>(null);
   const detailCalc = detailId ? calculations.find((c) => c.id === detailId) ?? null : null;
+  // PR307 — read-only detail modal: Esc closes (backdrop/× already do).
+  useEscToClose(detailId != null, () => setDetailId(null));
   const [histSearch, setHistSearch] = useState('');
   const [fxStatus, setFxStatus] = useState<{ kind: 'idle' | 'fetching' | 'err'; text: string }>({ kind: 'idle', text: '' });
 

@@ -11,6 +11,7 @@ import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import { useOverlayClose } from '@/components/useOverlayClose';
 import { fmtNiceDate } from '@jigzle/lib';
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
@@ -156,6 +157,14 @@ export default function InboundHistoryBoard({
     }
   }
 
+  // PR307 — shared overlay-close for the edit-ship-id form (unsaved edits route through a discard
+  // confirm; the existing busy guard is preserved by gating onClose on editBusy).
+  const editIdClose = useOverlayClose({
+    open: editing && !!sel,
+    onClose: () => { if (!editBusy) setEditing(false); },
+    dirty: editShipId.trim() !== (sel?.ship_id ?? '') || editClose,
+  });
+
   useEffect(() => { onCountChange?.(rows.length); }, [rows, onCountChange]);
   // reset the delete confirm + edit overlay whenever the selection changes
   useEffect(() => { setConfirmDelete(false); setEditing(false); }, [selKey]);
@@ -284,7 +293,7 @@ export default function InboundHistoryBoard({
 
       {/* Edit ship id — relocates the receipt(s) to a new ship id and re-runs PO allocation (0053). */}
       {editing && sel && (
-        <div className="sc-modal-backdrop" onClick={() => !editBusy && setEditing(false)}>
+        <div className="sc-modal-backdrop" onClick={editIdClose.requestClose}>
           <div className="sc-modal rcv-manual-modal" role="dialog" aria-modal="true" aria-label="Edit ship id" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head">
               <div className="sc-modal-title">Edit ship id</div>
@@ -309,10 +318,11 @@ export default function InboundHistoryBoard({
               {editErr && <div className="validation err" style={{ marginTop: 10 }}>{editErr}</div>}
             </div>
             <div className="sc-modal-foot">
-              <button className="btn-secondary" onClick={() => setEditing(false)} disabled={editBusy}>Cancel</button>
+              <button className="btn-secondary" onClick={editIdClose.requestClose} disabled={editBusy}>Cancel</button>
               <button className="btn-primary" onClick={saveEdit} disabled={editBusy}>{editBusy ? 'Moving…' : 'Save'}</button>
             </div>
           </div>
+          {editIdClose.confirm}
         </div>
       )}
     </div>

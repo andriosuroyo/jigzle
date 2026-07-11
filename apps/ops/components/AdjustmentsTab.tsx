@@ -20,6 +20,7 @@ import TrashButton from '@/components/TrashButton';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import { isRealName } from '@/components/skuName';
 import { PlusCircleIcon } from '@/components/AddIcons';
+import { useOverlayClose } from '@/components/useOverlayClose';
 import { fmtNiceDate } from '@jigzle/lib';
 
 function fmt(n: number): string {
@@ -135,6 +136,11 @@ export default function AdjustmentsTab() {
   const editing = sel != null && editId === sel.adjustment_id;
   const closeDetail = () => { setSelId(null); setEditId(null); setConfirmDel(false); };
 
+  // PR307 — shared overlay-close: the detail overlay routes Esc/backdrop/× through a discard prompt
+  // only while editing (unsaved delta/note); the new-adjustment overlay is a create form (always dirty).
+  const detailClose = useOverlayClose({ open: sel != null, onClose: closeDetail, dirty: editing });
+  const newClose = useOverlayClose({ open: showNew, onClose: () => setShowNew(false), dirty: showNew });
+
   return (
     <div className="sc-adj">
       <div className="sc-adj-bar">
@@ -165,11 +171,11 @@ export default function AdjustmentsTab() {
 
       {/* PR175 — the whole new-adjustment flow (search SKU → set delta/note → save) lives in an overlay */}
       {showNew && (
-        <div className="sc-modal-backdrop" onClick={() => setShowNew(false)}>
+        <div className="sc-modal-backdrop" onClick={newClose.requestClose}>
           <div className="sc-modal adj-modal" role="dialog" aria-modal="true" aria-label="New manual adjustment" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <span className="sc-modal-title">Manual adjustment</span>
-              <button className="sc-modal-x" onClick={() => setShowNew(false)} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={newClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
@@ -178,6 +184,7 @@ export default function AdjustmentsTab() {
           </div>
         </div>
       )}
+      {newClose.confirm}
 
       {!showNew && error && <div className="validation err" style={{ marginTop: 12 }}>{error}</div>}
 
@@ -206,11 +213,11 @@ export default function AdjustmentsTab() {
 
       {/* PR174 — the adjustment detail as an OVERLAY (few fields; no full bodyview) */}
       {sel && (
-        <div className="sc-modal-backdrop" onClick={closeDetail}>
+        <div className="sc-modal-backdrop" onClick={detailClose.requestClose}>
           <div className="sc-modal adj-modal" role="dialog" aria-modal="true" aria-label="Adjustment" onClick={(e) => e.stopPropagation()}>
             <div className="sc-modal-head sc-modal-head-row">
               <span className="sc-modal-title">{sel.item_code}</span>
-              <button className="sc-modal-x" onClick={closeDetail} aria-label="Close">×</button>
+              <button className="sc-modal-x" onClick={detailClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
               {error && <div className="validation err" style={{ marginBottom: 10 }}>{error}</div>}
@@ -261,6 +268,7 @@ export default function AdjustmentsTab() {
           </div>
         </div>
       )}
+      {detailClose.confirm}
     </div>
   );
 }
