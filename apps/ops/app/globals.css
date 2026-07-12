@@ -609,7 +609,8 @@ button.po-pick-btn:active { background: var(--paper); }
 .sku-add .btn-secondary { flex-shrink: 0; height: 30px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; }
 /* SA-1: "Confirm address later" checkbox row in the Address panel */
 .addr-later { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin-bottom: 8px; cursor: pointer; }
-.addr-later input { width: 16px; height: 16px; }
+/* PR343 — the box turns green when ticked (accent-color only paints the checked fill) */
+.addr-later input { width: 16px; height: 16px; accent-color: var(--green); }
 /* short-stock caution chip — shared by Fulfill (kept; Sales' own low-stock TEXT was removed) */
 .low-warn { font-size: 11px; color: #9C6F1C; background: var(--yellow-tint); padding: 4px 8px; border-radius: 6px; }
 
@@ -1820,7 +1821,7 @@ img.sku-img { background: #e8e8e8; }
    this; context-specific tweaks (width, min-height, locked look) layer on top. */
 .field,
 .le-field input,
-.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field select, .po-field textarea,
+.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field input[type=tel], .po-field select, .po-field textarea,
 .rcv-le-field input,
 .rcv-map-field input,
 .batch-field {
@@ -1831,7 +1832,7 @@ img.sku-img { background: #e8e8e8; }
    zoom on focus — the reduced vertical padding gets us to 34px without shrinking the text. */
 .field,
 .le-field input,
-.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field select,
+.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field input[type=tel], .po-field select,
 .rcv-le-field input,
 .rcv-map-field input,
 input.batch-field, select.batch-field {
