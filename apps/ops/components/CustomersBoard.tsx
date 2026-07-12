@@ -61,7 +61,7 @@ type Tab = 'search' | 'fix';
 
 // PR325 — the Fix tab's ten maintenance lists, each its own sub-tab (Buy-board style: an underline tab
 // strip with a live count pill). `count` reads the true total from the health scan (not the capped list).
-type FixList = 'dupes' | 'phone' | 'address' | 'noaddr' | 'blank' | 'oddphone' | 'region' | 'mismatch' | 'nopost' | 'empty';
+type FixList = 'dupes' | 'phone' | 'address' | 'noaddr' | 'blank' | 'oddphone' | 'mismatch' | 'nopost' | 'empty';
 const FIX_LISTS: { key: FixList; label: string; count: (h: DataHealth, dupCount: number) => number }[] = [
   { key: 'dupes', label: 'Duplicates', count: (_h, d) => d },
   { key: 'phone', label: 'Sharing a number', count: (h) => h.sharedPhoneGroupCount },
@@ -69,7 +69,6 @@ const FIX_LISTS: { key: FixList; label: string; count: (h: DataHealth, dupCount:
   { key: 'noaddr', label: 'No address', count: (h) => h.noAddressCount },
   { key: 'blank', label: 'Blank name', count: (h) => h.blankNameCount },
   { key: 'oddphone', label: 'Odd phone', count: (h) => h.oddPhoneCount },
-  { key: 'region', label: 'Repeated region', count: (h) => h.repeatRegionCount },
   { key: 'mismatch', label: 'Postcode ≠ province', count: (h) => h.postcodeMismatchCount },
   { key: 'nopost', label: 'Missing postcode', count: (h) => h.missingPostcodeCount },
   { key: 'empty', label: 'Empty records', count: (h) => h.emptyStrayCount },
@@ -256,8 +255,6 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   // address overlay
   const [addrEdit, setAddrEdit] = useState<{ address: CustomerAddress | null } | null>(null);
   const [addrDraft, setAddrDraft] = useState<AddrDraft>(draftFrom(null));
-  // dup detection: terms that the street field repeats from the structured fields (shown as a confirm)
-  const [dupWarn, setDupWarn] = useState<string[] | null>(null);
   // PR326 — the original-address STUB now sits below Delivery note and starts shown; this collapses it.
   const [stubOpen, setStubOpen] = useState(true);
   // PR333 — the Indonesia postcode dataset, lazy-loaded while the address overlay is open, for the live
@@ -409,30 +406,17 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   function openAddr(address: CustomerAddress | null) {
     setAddrEdit({ address });
     setAddrDraft(draftFrom(address));
-    setDupWarn(null);
     setStubOpen(true);
     setNotice(null);
-  }
-
-  // terms the street field repeats from the structured fields (so they aren't entered twice)
-  function streetDupes(d: AddrDraft): string[] {
-    const street = d.street.toLowerCase();
-    if (!street.trim()) return [];
-    return [d.kelurahan, d.kecamatan, d.kota, d.provinsi, d.negara]
-      .map((v) => v.trim())
-      .filter((v) => v.length >= 3 && street.includes(v.toLowerCase()));
   }
 
   async function saveAddr() {
     if (!detail || !addrEdit) return;
     // PR331 — collapse any exact repeat of the level above (Subdistrict == City, etc.) before saving, so
-    // it's normalized silently (the server re-applies the same collapse as a backstop). Then, if the
-    // street field repeats a structured field, still confirm once before saving.
+    // it's normalized silently (the server re-applies the same collapse as a backstop). PR337 — we do NOT
+    // flag/strip words in the Address field that match a region name: they're often part of the identity
+    // (e.g. "SD Kristen Satya Wacana Salatiga"), and removing them can misroute the parcel.
     const draft = collapseRegionDuplicates(addrDraft);
-    if (dupWarn == null) {
-      const dupes = streetDupes(draft);
-      if (dupes.length) { setDupWarn(dupes); setAddrDraft(draft); return; }
-    }
     setBusy(true);
     setNotice(null);
     const input: AddressInput = { ...draft };
@@ -490,7 +474,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const channelIconOf = (platform: string): string | null => channelOptions.find((c) => c.label === platform)?.icon ?? null;
   const fixCount = health
     ? (dupGroups?.length ?? 0) + health.sharedPhoneGroupCount + health.sharedAddressGroupCount
-      + health.noAddressCount + health.blankNameCount + health.oddPhoneCount + health.emptyStrayCount + health.repeatRegionCount
+      + health.noAddressCount + health.blankNameCount + health.oddPhoneCount + health.emptyStrayCount
       + health.postcodeMismatchCount + health.missingPostcodeCount
     : 0;
 
@@ -956,21 +940,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 )}
                 </>)}
 
-                {/* PR321 — repeated region fields (mis-filled address, e.g. Kuningan×3) */}
-                {fixList === 'region' && (<>
-                <div className="fd-section-head cust-fix-head">Repeated region fields</div>
-                {health.repeatRegionCount === 0 ? (
-                  <div className="validation ok">No address repeats a value across Province / City / Subdistrict / Ward.</div>
-                ) : (
-                  <>
-                    <div className="hint" style={{ marginBottom: 6 }}>A value repeats across non-adjacent levels (e.g. Ward the same as City, skipping the Subdistrict) — a likely mis-fill. Adjacent same-names (Kota Jambi in Jambi, kecamatan Karanganyar in kabupaten Karanganyar) are legitimate and aren’t listed. Open each to correct the four fields.</div>
-                    <ul className="fq-list">{health.repeatRegion.map((c) => flaggedRow(c))}</ul>
-                    {health.repeatRegionCount > health.repeatRegion.length && (
-                      <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.repeatRegion.length} of {health.repeatRegionCount}.</div>
-                    )}
-                  </>
-                )}
-                </>)}
+                {/* PR337 — the "Repeated region fields" list is removed: every exact region repeat is now
+                    auto-handled (detail levels auto-collapse; City==Province kept), so it was always empty. */}
 
                 {/* PR321 — postcode ↔ province mismatch (crosscheck against the bundled dataset) */}
                 {fixList === 'mismatch' && (<>
@@ -1113,7 +1084,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                 </div>
                 <div className="po-field">
                   <label>Address <em className="po-sub">(street, alley/gang, no. — not the city/province above)</em></label>
-                  <textarea value={addrDraft.street} onChange={(e) => { setAddrDraft({ ...addrDraft, street: e.target.value }); if (dupWarn) setDupWarn(null); }} />
+                  <textarea value={addrDraft.street} onChange={(e) => setAddrDraft({ ...addrDraft, street: e.target.value })} />
                 </div>
                 <div className="po-field">
                   <label>Delivery note <em className="po-sub">(courier instructions / sender — printed below the courier line as “Note: …”)</em></label>
@@ -1145,17 +1116,11 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   </div>
                 )}
 
-                {dupWarn && (
-                  <div className="validation warn">
-                    The address field repeats {dupWarn.map((d) => `“${d}”`).join(', ')}, already entered as separate field{dupWarn.length === 1 ? '' : 's'} above. Save anyway?
-                  </div>
-                )}
-
                 <div className="fd-commit">
                   {addrEdit.address ? (
                     <button className="btn-link danger" onClick={() => removeAddr(addrEdit.address!.address_id)} disabled={busy}>Delete</button>
                   ) : <span />}
-                  <button className="btn-primary" onClick={saveAddr} disabled={busy}>{busy ? 'Saving…' : dupWarn ? 'Save anyway' : addrEdit.address ? 'Save' : 'Add'}</button>
+                  <button className="btn-primary" onClick={saveAddr} disabled={busy}>{busy ? 'Saving…' : addrEdit.address ? 'Save' : 'Add'}</button>
                 </div>
               </div>
             </div>
