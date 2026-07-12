@@ -21,7 +21,7 @@ import PostcodeAutofill from '@/components/PostcodeAutofill';
 import IconSelect, { type IconOption } from '@/components/IconSelect';
 import MergeDuplicates from '@/components/MergeDuplicates';
 import type { ChannelOption } from '@/app/settings/types';
-import { customerLabel, fmtRpCompact, fmtNiceDate, type Tier } from '@jigzle/lib';
+import { customerLabel, fmtRpCompact, fmtNiceDate, formatPhoneDisplay, type Tier } from '@jigzle/lib';
 import { addressLine } from '@/components/addressLine';
 import {
   addCustomerAddress,
@@ -467,7 +467,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
           <span className="fq-headline">{customerLabel(c.name, c.phone)}</span>
           <span className="hint">#{c.id}</span>
         </div>
-        <div className="fq-row-bot"><span>{sub ?? (c.phone || 'no number')}</span></div>
+        <div className="fq-row-bot"><span>{sub ?? (c.phone ? formatPhoneDisplay(c.phone) : 'no number')}</span></div>
       </button>
     </li>
   );
@@ -621,7 +621,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                         {phoneList.map((p, i) => (
                           <div className="cust-col" key={i}>
                             <div className="cust-col-label">Number {i + 1}</div>
-                            <div className="cust-col-value">{p}</div>
+                            <div className="cust-col-value">{formatPhoneDisplay(p)}</div>
                           </div>
                         ))}
                       </div>
@@ -656,7 +656,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                           <div className="cust-addr-main">
                             <div className="cust-addr-name">{a.recipient_name || addressLine(a)}</div>
                             <div className="cust-addr-line hint">{a.raw_address || [a.street, a.kota].filter(Boolean).join(', ') || '—'}</div>
-                            <div className="cust-addr-phone hint">{a.contact_phone || detail.phone_raw || detail.phone || '—'}</div>
+                            <div className="cust-addr-phone hint">{formatPhoneDisplay(a.contact_phone || detail.phone_raw || detail.phone) || '—'}</div>
                           </div>
                           <div className="cust-addr-actions">
                             <button className="cust-addr-ico" onClick={() => copyAddr(a)} disabled={busy} aria-label="Copy address" title="Copy address"><CopyIcon /></button>
@@ -744,7 +744,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                         <span className="fq-headline">{customerLabel(c.name, c.phone)}</span>
                         {tier && <span className={`tier tier-${tier.toLowerCase()}`}>{tier}</span>}
                       </div>
-                      <div className="fq-row-bot"><span>{c.phone || '—'}</span></div>
+                      <div className="fq-row-bot"><span>{c.phone ? formatPhoneDisplay(c.phone) : '—'}</span></div>
                     </button>
                   </li>
                 );
@@ -835,7 +835,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                           ))}
                           {g.numberCount > 3 && <span className="dup-tag dup-tag-stray">{g.numberCount} numbers</span>}
                         </div>
-                        <div className="dh-group-sub hint">shares {g.sharedPhones.join(', ')}</div>
+                        <div className="dh-group-sub hint">shares {g.sharedPhones.map(formatPhoneDisplay).join(', ')}</div>
                       </div>
                       <button className="btn-secondary" onClick={() => setMergeIds(g.memberIds)}>Review &amp; merge</button>
                     </li>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { customerLabel, fmtRp, fmtRpCompact } from '@jigzle/lib';
+import { customerLabel, fmtRp, fmtRpCompact, formatPhoneDisplay } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
@@ -547,7 +547,7 @@ export default function OrderEntry({
                               {c.tier && <span className={`tier tier-${c.tier.toLowerCase()}`} style={{ marginLeft: 6 }}>{c.tier}</span>}
                             </span>
                             <span className="ri-meta">
-                              {c.phone || '—'}
+                              {c.phone ? formatPhoneDisplay(c.phone) : '—'}
                               {c.lifetime_spend > 0 ? ` · ${fmtRpCompact(c.lifetime_spend)}` : ''}
                             </span>
                           </button>
@@ -613,7 +613,7 @@ export default function OrderEntry({
                               <li key={c.id}>
                                 <button className="result-item" onClick={() => { selectCustomer(c); closeNewCust(); }}>
                                   <span className="ri-name">{customerLabel(c.name, c.phone)}</span>
-                                  <span className="ri-meta">{c.phone || '—'}</span>
+                                  <span className="ri-meta">{c.phone ? formatPhoneDisplay(c.phone) : '—'}</span>
                                 </button>
                               </li>
                             ))}
@@ -631,7 +631,7 @@ export default function OrderEntry({
                 <div className="selected-customer">
                   <div className="sc-main">
                     <b>{customerLabel(customer.name, customer.phone)}</b>
-                    <span>{customer.phone || '—'}</span>
+                    <span>{customer.phone ? formatPhoneDisplay(customer.phone) : '—'}</span>
                   </div>
                   <div className="loyalty-chip">
                     {customer.tier ? <span className={`tier tier-${customer.tier.toLowerCase()}`}>{customer.tier}</span> : <span className="tier tier-none">No tier</span>}

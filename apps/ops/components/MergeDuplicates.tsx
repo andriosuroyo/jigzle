@@ -11,7 +11,7 @@
 // rows — so a record that still carries its own orders is flagged and needs a second confirm.
 
 import { useEffect, useMemo, useState } from 'react';
-import { customerLabel, fmtRpCompact, fmtNiceDate } from '@jigzle/lib';
+import { customerLabel, fmtRpCompact, fmtNiceDate, formatPhoneDisplay } from '@jigzle/lib';
 import { findCustomersForMerge, getDuplicateGroups, getMergeCandidatesByIds, mergeCustomers } from '@/app/customers/actions';
 import type { DuplicateGroup, DuplicateMember, MergeResult } from '@/app/customers/types';
 import SearchInput from '@/components/SearchInput';
@@ -216,7 +216,7 @@ export default function MergeDuplicates({ onClose, onMerged, initialQuery, initi
                       : <span className="dup-tag dup-tag-real">{m.order_count} order{m.order_count === 1 ? '' : 's'}</span>}
                   </div>
                   <div className="dup-meta hint">
-                    {m.phones.length ? m.phones.join(' · ') : 'no phone'}
+                    {m.phones.length ? m.phones.map(formatPhoneDisplay).join(' · ') : 'no phone'}
                     {` · ${m.address_count} address${m.address_count === 1 ? '' : 'es'}`}
                     {m.last_purchase ? ` · last ${fmtDay(m.last_purchase)}` : ''}
                     {m.lifetime_spend > 0 ? ` · ${fmtRpCompact(m.lifetime_spend)}` : ''}

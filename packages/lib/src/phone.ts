@@ -6,6 +6,23 @@
 // already-international (e.g. 44…) kept as-is. Returns null when there is no usable
 // number (empty, no digits, or length outside 9–15).
 
+// PR341 — DISPLAY-ONLY phone formatter (never mutates stored digits). Groups a recognised Indonesian
+// mobile so the 4 front digits (operator prefix, Indonesian convention) and the 4 back digits (resembles
+// the customer-ID last4) stay whole, the middle absorbing the length difference:
+//   12 → 0812-3456-7890 · 11 → 0812-345-6789 · 10 → 0812-34-5678 · 62-form → +62-812-3456-7890.
+// ONLY numbers we can confidently classify as Indonesian mobile (0 8… or 62 8…) are grouped; anything
+// else (other countries, landlines, junk) is returned verbatim, so we never mis-format what we're unsure of.
+export function formatPhoneDisplay(raw: string | null | undefined): string {
+  const s = (raw ?? '').trim();
+  if (!s) return '';
+  const digits = s.replace(/\D/g, '');
+  // keep 4 front + 4 back whole; middle absorbs the rest (too short to split → leave as-is)
+  const group = (n0: string): string => (n0.length <= 8 ? n0 : `${n0.slice(0, 4)}-${n0.slice(4, -4)}-${n0.slice(-4)}`);
+  if (/^62/.test(digits) && digits[2] === '8') return `+62-${group('0' + digits.slice(2)).replace(/^0/, '')}`;
+  if (digits[0] === '0' && digits[1] === '8') return group(digits);
+  return s; // not confidently an Indonesian mobile → show exactly as given
+}
+
 export function normalizePhone(raw: string | null | undefined): string | null {
   if (raw == null) return null;
   const s = String(raw).trim();
