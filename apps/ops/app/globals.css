@@ -573,6 +573,16 @@ button.po-pick-btn:active { background: var(--paper); }
 .exc-addr textarea { resize: vertical; font-family: inherit; }
 .subform-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* PR344 — search-alias settings rows (term → alias) + add form */
+.alias-row { justify-content: space-between; }
+.alias-pair { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+.alias-term, .alias-alias { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 13px; font-weight: 600; background: white; border: 1px solid var(--line); }
+.alias-arrow { color: var(--muted); font-size: 13px; }
+.alias-add-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+.alias-add-grid .po-field { flex: 1 1 160px; min-width: 140px; }
+.alias-both { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
+.alias-both input { width: auto; accent-color: var(--green); }
+
 /* ── Selected customer ── */
 .selected-customer { display: flex; flex-direction: column; gap: 8px; }
 .sc-main { display: flex; align-items: baseline; gap: 10px; }

@@ -23,3 +23,6 @@ export const WarehouseIcon = () => (<svg {...P}><path d="M22 8.35V20a1 1 0 0 1-1
 export const PlaneIcon = () => (<svg {...P}><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg>);
 // a plus-in-circle for generic "add a row" buttons (Settings sections)
 export const PlusCircleIcon = () => (<svg {...P}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>);
+
+// a tag — for the search-alias "add" button (PR344)
+export const TagIcon = () => (<svg {...P}><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>);
