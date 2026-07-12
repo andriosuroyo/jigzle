@@ -14,6 +14,7 @@ import type {
   CourierService,
   DeclarationUser,
   ExportCourier,
+  SearchAlias,
   InboundLabel,
   LocalCourier,
   PaymentMethod,
@@ -450,4 +451,53 @@ export async function deleteDeclarationUser(id: number): Promise<void> {
 export async function reorderDeclarationUsers(ids: number[]): Promise<void> {
   const supabase = createSupabaseServerClient();
   await Promise.all(ids.map((id, i) => supabase.from('settings_declaration_users').update({ sort_order: i }).eq('id', id)));
+}
+
+// ── 0087/0088 (PR344): search aliases — searching a `term` also matches items containing `alias`, so you
+// can find by character/series/franchise without knowing the SKU's exact wording. Read by the search_skus
+// RPC; curated in Settings → Catalog → Search aliases. Stored lowercase (the RPC matches case-insensitively;
+// keeping the store lowercase makes the list tidy and the (term, alias) PK dedupe reliably). All reads/writes
+// go through RLS (is_allowed_user()); getSearchAliases degrades to [] until 0087 is applied. ──
+export async function getSearchAliases(): Promise<SearchAlias[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('search_aliases')
+    .select('term,alias')
+    .order('term', { ascending: true })
+    .order('alias', { ascending: true });
+  if (error) return []; // table not yet created → degrade
+  return (data ?? []) as SearchAlias[];
+}
+
+// add a term→alias pair (+ optionally its reverse). Returns every row actually inserted (skips any that
+// already existed) so the caller can append them. Returns { error } for expected failures, never throws.
+export async function addSearchAlias(
+  term: string,
+  alias: string,
+  bothWays: boolean
+): Promise<{ rows: SearchAlias[]; error: string | null }> {
+  const t = term.trim().toLowerCase();
+  const a = alias.trim().toLowerCase();
+  if (!t || !a) return { rows: [], error: 'Both a search term and an alias are required.' };
+  if (t === a) return { rows: [], error: 'The term and its alias must be different.' };
+
+  const wanted: SearchAlias[] = bothWays
+    ? [{ term: t, alias: a }, { term: a, alias: t }]
+    : [{ term: t, alias: a }];
+
+  const supabase = createSupabaseServerClient();
+  // ignoreDuplicates so re-adding an existing pair is a no-op rather than an error; select returns only
+  // the rows that were newly inserted.
+  const { data, error } = await supabase
+    .from('search_aliases')
+    .upsert(wanted, { onConflict: 'term,alias', ignoreDuplicates: true })
+    .select('term,alias');
+  if (error) return { rows: [], error: error.message };
+  return { rows: (data ?? []) as SearchAlias[], error: null };
+}
+
+export async function deleteSearchAlias(term: string, alias: string): Promise<{ error: string | null }> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('search_aliases').delete().eq('term', term).eq('alias', alias);
+  return { error: error ? error.message : null };
 }

@@ -128,6 +128,14 @@ export interface DeclarationUser {
   sort_order: number;
 }
 
+// 0087 (PR343/PR344): a search alias — searching `term` also matches items containing `alias` (character
+// / series / franchise names, e.g. "peanuts" → "snoopy"). Keyed by (term, alias); no id/sort — the editor
+// is add/remove only. Consumed inside the search_skus RPC, curated in Settings → Catalog → Search aliases.
+export interface SearchAlias {
+  term: string;
+  alias: string;
+}
+
 // 0059 (PR193): the Catalog classification pick-lists (Product / Sub / Piece type). Same label-only
 // shape as ChannelOption; read by the Catalog item editor's type comboboxes (unioned with the
 // catalogue's distinct values).
