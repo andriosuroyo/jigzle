@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { customerLabel, fmtRp, fmtRpCompact } from '@jigzle/lib';
+import { customerLabel, fmtRp, fmtRpCompact, formatPhoneDisplay } from '@jigzle/lib';
 import type { CustomerAddress } from '@jigzle/db/types';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
@@ -30,6 +30,8 @@ import PostcodeAutofill from '@/components/PostcodeAutofill';
 import SearchInput from '@/components/SearchInput';
 import StockStats from '@/components/StockStats';
 import { loadPostal, type PostalData } from '@/lib/idPostal';
+import { collapseRegionDuplicates, normalizeProvince } from '@/app/customers/types';
+import { locationWarning, previewRawAddress } from '@/components/addressForm';
 import { tidyAddress, validateAddress, type TidyResult } from '@/lib/tidyAddress';
 
 // PR73: buy-priority options — low / mid / high → green / yellow / red. Shared visual language with the
@@ -127,6 +129,17 @@ export default function OrderEntry({
   const [ncChannel, setNcChannel] = useState('');    // channel platform (— pick —), from channelOptions
   const [ncHandle, setNcHandle] = useState('');      // channel handle (username / number)
   const [savingCust, setSavingCust] = useState(false);
+  // PR339 — the New-customer overlay: a form step, or a "Customer ID already exists" step listing the
+  // existing record(s) (pick one, or ← back to enter a different ID). `ncError` is scoped to the overlay.
+  const [ncStep, setNcStep] = useState<'form' | 'conflict'>('form');
+  const [ncConflicts, setNcConflicts] = useState<CustomerHit[]>([]);
+  const [ncError, setNcError] = useState<string | null>(null);
+
+  function openNewCust() { setNcStep('form'); setNcError(null); setShowNewCust(true); }
+  function closeNewCust() {
+    setShowNewCust(false); setNcStep('form'); setNcConflicts([]); setNcError(null);
+    setNcName(''); setNcPhone(''); setNcCountry('ID'); setNcChannel(''); setNcHandle('');
+  }
 
   // channel platform options for the new-customer picker (icon + label), from Settings → Customer → Channel
   const channelSelectOptions = channelOptions.map((c) => ({ value: c.label, label: c.label, icon: c.icon }));
@@ -315,9 +328,10 @@ export default function OrderEntry({
   }
 
   async function handleCreateCustomer() {
-    if (!ncName.trim() && !ncPhone.trim()) { setError('New customer needs a name or phone.'); return; }
+    // PR339 — Customer ID is required; phone is optional (many marketplaces don't share a number).
+    if (!ncName.trim()) { setNcError('Customer ID is required.'); return; }
     setSavingCust(true);
-    setError(null);
+    setNcError(null);
     try {
       // PR159 — combine the picked country's dial code with the local number (leading 0s dropped),
       // e.g. ID (+62) + "081260002889" → "6281260002889". Empty local number → no phone.
@@ -325,7 +339,14 @@ export default function OrderEntry({
       const fullPhone = local ? `${dialOf(ncCountry)}${local}` : '';
       const channels = ncChannel ? [{ platform: ncChannel, handle: ncHandle.trim() }] : [];
       // step 1 creates the customer only — the address is added in step 2 (below).
-      const { customer: cust } = await createCustomer({ name: ncName, phone: fullPhone, channel: ncChannel, channels });
+      const res = await createCustomer({ name: ncName, phone: fullPhone, channel: ncChannel, channels });
+      // PR339 — the composed Customer ID already exists → show the existing record(s) to pick or go back.
+      if ('conflict' in res) {
+        setNcConflicts(res.conflict.map((c) => ({ id: c.customer_id, name: c.name, phone: c.phone, tier: null, lifetime_spend: 0 })));
+        setNcStep('conflict');
+        return;
+      }
+      const cust = res.customer;
       const [loy, addrs] = await Promise.all([
         getLoyalty(cust.customer_id),
         getCustomerAddresses(cust.customer_id),
@@ -335,10 +356,9 @@ export default function OrderEntry({
       setAddresses(addrs);
       setAddressId(addrs[0]?.address_id ?? null);
       setConfirmLater(false);
-      setShowNewCust(false);
-      setNcName(''); setNcPhone(''); setNcCountry('ID'); setNcChannel(''); setNcHandle('');
+      closeNewCust();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create customer.');
+      setNcError(e instanceof Error ? e.message : 'Failed to create customer.');
     } finally {
       setSavingCust(false);
     }
@@ -527,7 +547,7 @@ export default function OrderEntry({
                               {c.tier && <span className={`tier tier-${c.tier.toLowerCase()}`} style={{ marginLeft: 6 }}>{c.tier}</span>}
                             </span>
                             <span className="ri-meta">
-                              {c.phone || '—'}
+                              {c.phone ? formatPhoneDisplay(c.phone) : '—'}
                               {c.lifetime_spend > 0 ? ` · ${fmtRpCompact(c.lifetime_spend)}` : ''}
                             </span>
                           </button>
@@ -535,45 +555,83 @@ export default function OrderEntry({
                       ))}
                     </ul>
                   )}
-                  {!showNewCust && (
-                    <button className="btn-brown btn-ico" style={{ justifyContent: 'center' }} onClick={() => setShowNewCust(true)}><UserIcon />New customer</button>
-                  )}
-                  {showNewCust && (
-                    <div className="subform">
-                      <input type="text" placeholder="Customer ID" value={ncName} onChange={(e) => setNcName(e.target.value)} />
-                      {/* PR159: phone = country (flag + dial code) + local number, side by side. */}
-                      <div className="nc-row">
-                        <PhoneCountrySelect value={ncCountry} onChange={setNcCountry} disabled={savingCust} />
-                        <input className="nc-phone" type="tel" inputMode="numeric" placeholder="081260002889" value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} />
-                      </div>
-                      {/* PR159: channel = platform picker + handle, side by side (mirrors Customer › Channels). */}
-                      <div className="nc-row">
-                        <IconSelect
-                          className="nc-channel-platform"
-                          value={ncChannel || null}
-                          options={channelSelectOptions}
-                          placeholder="— channel —"
-                          ariaLabel="Channel platform"
-                          disabled={savingCust}
-                          onChange={setNcChannel}
-                        />
-                        <input className="nc-channel-handle" type="text" placeholder="username / number" value={ncHandle} onChange={(e) => setNcHandle(e.target.value)} disabled={savingCust} />
-                      </div>
-                      <div className="subform-actions">
-                        <button className="btn-secondary" onClick={() => setShowNewCust(false)} disabled={savingCust}>Cancel</button>
-                        <button className="btn-primary" onClick={handleCreateCustomer} disabled={savingCust}>
-                          {savingCust ? 'Saving…' : 'Create customer'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <button className="btn-brown btn-ico" style={{ justifyContent: 'center' }} onClick={openNewCust}><UserIcon />New customer</button>
                 </>
+              )}
+
+              {/* PR339 — New customer as an overlay (matches the rest of the system); Customer ID required,
+                  phone optional, and a duplicate Customer ID surfaces the existing record(s). */}
+              {showNewCust && (
+                <div className="sc-modal-backdrop" onClick={closeNewCust}>
+                  <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="New customer" onClick={(e) => e.stopPropagation()}>
+                    <div className="sc-modal-head sc-modal-head-row">
+                      <span className="sc-modal-title">{ncStep === 'conflict' ? 'Customer ID already exists' : 'New customer'}</span>
+                      <button className="sc-modal-x" onClick={closeNewCust} aria-label="Close">×</button>
+                    </div>
+                    <div className="sc-modal-body">
+                      {ncStep === 'form' ? (
+                        <div className="po-form">
+                          <div className="po-field">
+                            <label>Customer ID<span className="req" aria-hidden="true">*</span></label>
+                            <input type="text" placeholder="e.g. Elin AQ" value={ncName} autoFocus onChange={(e) => setNcName(e.target.value)} disabled={savingCust} />
+                          </div>
+                          <div className="po-field">
+                            <label>WhatsApp / phone number</label>
+                            <div className="nc-row">
+                              <PhoneCountrySelect value={ncCountry} onChange={setNcCountry} disabled={savingCust} />
+                              <input className="nc-phone" type="tel" inputMode="numeric" placeholder="081260002889" value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} disabled={savingCust} />
+                            </div>
+                          </div>
+                          <div className="po-field">
+                            <label>Channel</label>
+                            <div className="nc-row">
+                              <IconSelect
+                                className="nc-channel-platform"
+                                value={ncChannel || null}
+                                options={channelSelectOptions}
+                                placeholder="— channel —"
+                                ariaLabel="Channel platform"
+                                disabled={savingCust}
+                                onChange={setNcChannel}
+                              />
+                              <input className="nc-channel-handle" type="text" placeholder="username / number" value={ncHandle} onChange={(e) => setNcHandle(e.target.value)} disabled={savingCust} />
+                            </div>
+                          </div>
+                          {ncError && <div className="validation err">{ncError}</div>}
+                          <div className="fd-commit">
+                            <button className="btn-secondary" onClick={closeNewCust} disabled={savingCust}>Cancel</button>
+                            <button className="btn-primary" onClick={handleCreateCustomer} disabled={savingCust || !ncName.trim()}>
+                              {savingCust ? 'Saving…' : 'Create customer'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="hint" style={{ marginBottom: 8 }}>A customer with this ID already exists. Pick it to use for this order, or go back to enter a different Customer ID.</div>
+                          <ul className="result-list">
+                            {ncConflicts.map((c) => (
+                              <li key={c.id}>
+                                <button className="result-item" onClick={() => { selectCustomer(c); closeNewCust(); }}>
+                                  <span className="ri-name">{customerLabel(c.name, c.phone)}</span>
+                                  <span className="ri-meta">{c.phone ? formatPhoneDisplay(c.phone) : '—'}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="fd-commit">
+                            <button className="btn-link bv-back" onClick={() => { setNcStep('form'); setNcError(null); }}>← back</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
               {customer && (
                 <div className="selected-customer">
                   <div className="sc-main">
                     <b>{customerLabel(customer.name, customer.phone)}</b>
-                    <span>{customer.phone || '—'}</span>
+                    <span>{customer.phone ? formatPhoneDisplay(customer.phone) : '—'}</span>
                   </div>
                   <div className="loyalty-chip">
                     {customer.tier ? <span className={`tier tier-${customer.tier.toLowerCase()}`}>{customer.tier}</span> : <span className="tier tier-none">No tier</span>}
@@ -629,60 +687,87 @@ export default function OrderEntry({
             </div>
           </section>
 
-          {/* Tidy-address confirm overlay — the parsed fields, editable, before saving. */}
-          {tidy && (
-            <div className="ta-overlay" role="dialog" aria-modal="true" aria-label="Confirm tidied address">
-              <div className="ta-modal">
-                <div className="ta-head">
-                  <b>Confirm address</b>
-                  <button className="ta-x" onClick={() => setTidy(null)} aria-label="Close">×</button>
+          {/* PR340 — Confirm-address overlay, matching Customer › detail › Add address (cream location box,
+              small-caps label subtext, live Preview + postcode check) minus the "Original address" part. */}
+          {tidy && (() => {
+            const locWarn = locationWarning(tidy, postal);
+            return (
+            <div className="sc-modal-backdrop" onClick={() => setTidy(null)}>
+              <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Confirm address" onClick={(e) => e.stopPropagation()}>
+                <div className="sc-modal-head sc-modal-head-row">
+                  <span className="sc-modal-title">Confirm address</span>
+                  <button className="sc-modal-x" onClick={() => setTidy(null)} aria-label="Close">×</button>
                 </div>
-                <div className="ta-body">
-                  <div className="ta-tier">Auto-tidied ({tidy.tier.toLowerCase()}) — check the fields, edit if needed.</div>
-                  {(() => {
-                    const warns = [...tidyInfo, ...(postal ? validateAddress(tidy, postal) : [])];
-                    return warns.length > 0 ? (
-                      <div className="ta-warn">
-                        {warns.map((wm, i) => <div key={i}>⚠ {wm}</div>)}
-                      </div>
-                    ) : null;
-                  })()}
-                  <div className="ta-grid">
-                    <label>Recipient name<input type="text" value={tidy.recipient_name ?? ''} onChange={(e) => setTidy({ ...tidy, recipient_name: e.target.value })} /></label>
-                    <label>Contact phone<input type="text" inputMode="tel" value={tidy.contact_phone ?? ''} onChange={(e) => setTidy({ ...tidy, contact_phone: e.target.value })} /></label>
-                  </div>
-                  {/* PR194: pick a real country (structured) so an international ship-to sets negara
-                      correctly and drives the export-courier flow at Fulfill. The Indonesia-only geo
-                      fields (autofill / kecamatan / kelurahan) hide when the country isn't Indonesia. */}
-                  <div className="ta-autofill">
-                    <label>Country</label>
-                    <CountrySelect value={tidy.negara || null} onChange={(country) => setTidy({ ...tidy, negara: country })} disabled={savingAddr} />
-                  </div>
-                  {isIndonesia(tidy.negara) && (
-                    <div className="ta-autofill">
-                      <label>Autofill <em>(province / city / kecamatan / kelurahan / postcode)</em></label>
-                      <PostcodeAutofill
-                        onPick={(h) => setTidy({ ...tidy, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })}
-                      />
-                    </div>
+                <div className="sc-modal-body">
+                  {tidyInfo.length > 0 && (
+                    <div className="validation warn" style={{ marginBottom: 10 }}>{tidyInfo.map((wm, i) => <div key={i}>{wm}</div>)}</div>
                   )}
-                  <div className="ta-grid">
-                    <label>Province{isIndonesia(tidy.negara) ? '' : ' / region'}<input type="text" value={tidy.provinsi ?? ''} onChange={(e) => setTidy({ ...tidy, provinsi: e.target.value })} /></label>
-                    <label>City / district<input type="text" value={tidy.kota ?? ''} onChange={(e) => setTidy({ ...tidy, kota: e.target.value })} /></label>
-                    {isIndonesia(tidy.negara) && <label>Subdistrict (kecamatan)<input type="text" value={tidy.kecamatan ?? ''} onChange={(e) => setTidy({ ...tidy, kecamatan: e.target.value })} /></label>}
-                    {isIndonesia(tidy.negara) && <label>Ward (kelurahan)<input type="text" value={tidy.kelurahan ?? ''} onChange={(e) => setTidy({ ...tidy, kelurahan: e.target.value })} /></label>}
-                    <label>Postcode<input type="text" inputMode="numeric" value={tidy.kode_pos ?? ''} onChange={(e) => setTidy({ ...tidy, kode_pos: e.target.value })} /></label>
+                  <div className="po-form">
+                    <div className="po-inline">
+                      <div className="po-field"><label>Recipient name</label><input type="text" value={tidy.recipient_name ?? ''} onChange={(e) => setTidy({ ...tidy, recipient_name: e.target.value })} /></div>
+                      <div className="po-field"><label>Contact phone</label><input type="text" inputMode="tel" value={tidy.contact_phone ?? ''} onChange={(e) => setTidy({ ...tidy, contact_phone: e.target.value })} /></div>
+                    </div>
+                    <div className="po-field">
+                      <label>Country</label>
+                      <CountrySelect value={tidy.negara || null} onChange={(country) => setTidy({ ...tidy, negara: country })} disabled={savingAddr} />
+                    </div>
+                    <div className="cust-loc-box">
+                      {isIndonesia(tidy.negara) && (
+                        <div className="po-field">
+                          <label>Autofill <em className="po-sub">(province / city / kecamatan / kelurahan / postcode)</em></label>
+                          <PostcodeAutofill
+                            disabled={savingAddr}
+                            onPick={(h) => setTidy((d) => (d ? { ...d, ...collapseRegionDuplicates({ provinsi: normalizeProvince(h.province), kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban }), kode_pos: h.postal } : d))}
+                          />
+                        </div>
+                      )}
+                      <div className="po-inline">
+                        <div className="po-field"><label>Province{isIndonesia(tidy.negara) ? '' : ' / region'}</label><input type="text" value={tidy.provinsi ?? ''} onChange={(e) => setTidy({ ...tidy, provinsi: e.target.value })} /></div>
+                        <div className="po-field"><label>City / district</label><input type="text" value={tidy.kota ?? ''} onChange={(e) => setTidy({ ...tidy, kota: e.target.value })} /></div>
+                      </div>
+                      {isIndonesia(tidy.negara) && (
+                        <div className="po-inline">
+                          <div className="po-field"><label>Subdistrict (kecamatan)</label><input type="text" value={tidy.kecamatan ?? ''} onChange={(e) => setTidy({ ...tidy, kecamatan: e.target.value })} /></div>
+                          <div className="po-field"><label>Ward (kelurahan)</label><input type="text" value={tidy.kelurahan ?? ''} onChange={(e) => setTidy({ ...tidy, kelurahan: e.target.value })} /></div>
+                        </div>
+                      )}
+                      <div className="po-field"><label>Postcode</label><input type="text" inputMode="numeric" value={tidy.kode_pos ?? ''} onChange={(e) => setTidy({ ...tidy, kode_pos: e.target.value })} /></div>
+                      {locWarn && (
+                        <div className={`cust-loc-warn ${locWarn.tone === 'red' ? 'is-red' : 'is-yellow'}`}>
+                          <span>{locWarn.text}</span>
+                          {locWarn.suggest?.map((pc) => (
+                            <button key={pc} type="button" className="cust-loc-suggest" onClick={() => setTidy((d) => (d ? { ...d, kode_pos: pc } : d))}>{pc}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="po-field">
+                      <label>Address <em className="po-sub">(street, alley/gang, no. — not the city/province above)</em></label>
+                      <textarea value={tidy.street ?? ''} onChange={(e) => setTidy({ ...tidy, street: e.target.value })} />
+                    </div>
+                    <div className="po-field">
+                      <label>Delivery note <em className="po-sub">(courier instructions / sender — printed below the courier line as “Note: …”)</em></label>
+                      <input type="text" value={tidy.delivery_note ?? ''} onChange={(e) => setTidy({ ...tidy, delivery_note: e.target.value })} />
+                    </div>
+                    <div className="cust-addr-stub cust-addr-preview">
+                      <div className="cust-addr-stub-label">Preview address</div>
+                      <div className="cust-addr-stub-text">{[
+                        (tidy.recipient_name ?? '').trim(),
+                        previewRawAddress(tidy) || '—',
+                        (tidy.contact_phone ?? '').trim(),
+                        (tidy.delivery_note ?? '').trim() ? `Note: ${(tidy.delivery_note ?? '').trim()}` : '',
+                      ].filter(Boolean).join('\n')}</div>
+                    </div>
+                    <div className="fd-commit">
+                      <button className="btn-secondary" onClick={() => setTidy(null)} disabled={savingAddr}>Back</button>
+                      <button className="btn-primary" onClick={handleConfirmAddress} disabled={savingAddr}>{savingAddr ? 'Saving…' : 'Save address'}</button>
+                    </div>
                   </div>
-                  <label className="ta-full">Address <em>(street, alley/gang, no.)</em><textarea value={tidy.street ?? ''} onChange={(e) => setTidy({ ...tidy, street: e.target.value })} /></label>
-                  <label className="ta-full">Delivery note <em>(printed below the courier line)</em><textarea value={tidy.delivery_note ?? ''} onChange={(e) => setTidy({ ...tidy, delivery_note: e.target.value })} /></label>
-                </div>
-                <div className="ta-actions">
-                  <button className="btn-secondary" onClick={() => setTidy(null)} disabled={savingAddr}>Back</button>
-                  <button className="btn-primary" onClick={handleConfirmAddress} disabled={savingAddr}>{savingAddr ? 'Saving…' : 'Save address'}</button>
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Panel 3 — Items */}
           <section className={`panel ${!customer ? 'panel-locked' : ''}`}>

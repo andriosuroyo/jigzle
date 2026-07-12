@@ -3,6 +3,7 @@
 // Vercel rejects a 'use server' module that exports anything but async functions, incl. interfaces).
 
 import type { Tier, NextTier } from '@jigzle/lib';
+import type { Customer } from '@jigzle/db/types';
 
 // ── Panel 1: customer search (normalized phone + name, case-insensitive contains) ──
 export interface CustomerHit {
@@ -28,6 +29,13 @@ export interface NewCustomerInput {
   // PR159 — optional contact channels ({ platform, handle }), same shape the Customer detail stores.
   channels?: { platform: string; handle: string }[];
 }
+
+// PR339 — createCustomer either returns the created/reused customer, OR reports a Customer-ID conflict
+// (an existing customer already carries this exact composed name) so the UI can show it and let the
+// operator pick it or go back and enter a different ID.
+export type CreateCustomerResult =
+  | { customer: Customer; existed: boolean }
+  | { conflict: Customer[] };
 
 // Structured address (PR115): the tidy-overlay produces these; createAddress composes raw_address
 // from them (consistent with the customer-detail address model). All optional but for street/blob.

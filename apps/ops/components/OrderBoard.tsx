@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppHeader from '@/components/AppHeader';
-import { customerLabel, fmtNiceDate } from '@jigzle/lib';
+import { customerLabel, fmtNiceDate, formatPhoneDisplay } from '@jigzle/lib';
 import type { Forwarder, OpenPORow, POOpenStatus, Supplier, SupplierType } from '@jigzle/db/types';
 import {
   addForwarder,
@@ -1756,7 +1756,7 @@ export default function OrderBoard({
                     <li key={h.customer_id}>
                       <button className="result-item" onClick={() => pickCustomer(h)}>
                         <span className="ri-name">{customerLabel(h.name, h.phone)}</span>
-                        <span className="ri-meta">{h.phone || '—'}</span>
+                        <span className="ri-meta">{h.phone ? formatPhoneDisplay(h.phone) : '—'}</span>
                       </button>
                     </li>
                   ))}
