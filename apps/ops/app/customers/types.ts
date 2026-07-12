@@ -106,18 +106,20 @@ export function normalizeProvince(p: string | null | undefined): string {
   return /^(dki jakarta|daerah khusus ibukota jakarta)$/i.test(v) ? 'Jawa Barat' : v;
 }
 
-// PR331/PR334 — Indonesian admin levels nest Province ⊃ City ⊃ Subdistrict ⊃ Ward, and a seat often shares
-// its parent's name (kabupaten Karanganyar has a kecamatan Karanganyar; kecamatan Pondok Aren has a
-// kelurahan Pondok Aren). When the FINER field exactly equals the level above AND the finer one is safely
-// droppable, blank it — the coarser name still conveys it, routing unaffected. This covers Ward==Subdistrict
-// and Subdistrict==City. City==Province (e.g. Kota Jambi in Provinsi Jambi) is deliberately NOT collapsed:
-// the City/Kabupaten is the primary routing field, so dropping it would be lossy — it's left as-is (and the
-// Fix scan no longer flags it). Applied on autofill + on save. Compares/returns already-trimmed strings.
+// PR331/PR334/PR336 — Indonesian admin levels nest Province ⊃ City ⊃ Subdistrict ⊃ Ward, and a seat often
+// shares its parent's name (kabupaten Karanganyar has a kecamatan Karanganyar; Kota Metro has a kelurahan
+// Metro; kecamatan Pondok Aren has a kelurahan Pondok Aren). The two DETAIL levels — Subdistrict and Ward —
+// carry no new information when they merely repeat a COARSER field, so they're dropped (the anchor name
+// still conveys it, routing unaffected). Ward drops when it equals Subdistrict, City, OR Province (adjacent
+// or not — e.g. Ward Metro == City Metro); Subdistrict drops when it equals City or Province. City==Province
+// (Kota Jambi in Provinsi Jambi) is deliberately KEPT — City/Kabupaten is the primary routing field, so
+// dropping it would be lossy. Applied on autofill + on save. Compares/returns already-trimmed strings.
 export function collapseRegionDuplicates<T extends { provinsi: string; kota: string; kecamatan: string; kelurahan: string }>(f: T): T {
-  const eq = (a: string, b: string) => a.trim() !== '' && a.trim().toLowerCase() === b.trim().toLowerCase();
+  const n = (s: string) => s.trim().toLowerCase();
   const out = { ...f };
-  if (eq(out.kelurahan, out.kecamatan)) out.kelurahan = '';
-  if (eq(out.kecamatan, out.kota)) out.kecamatan = '';
+  const prov = n(out.provinsi), kota = n(out.kota), kec = n(out.kecamatan), kel = n(out.kelurahan);
+  if (kec && (kec === kota || kec === prov)) out.kecamatan = '';
+  if (kel && (kel === kec || kel === kota || kel === prov)) out.kelurahan = '';
   return out;
 }
 
