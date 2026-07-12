@@ -1031,40 +1031,44 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   <label>Country</label>
                   <CountrySelect value={addrDraft.negara || null} onChange={(country) => setAddrDraft((d) => ({ ...d, negara: country }))} disabled={busy} />
                 </div>
-                {isIndonesia(addrDraft.negara) && (
-                  <div className="po-field">
-                    <label>Autofill <em className="po-sub">(province / city / kecamatan / kelurahan / postcode)</em></label>
-                    <PostcodeAutofill
-                      disabled={busy}
-                      onPick={(h) => { setAddrDraft((d) => ({ ...d, ...collapseRegionDuplicates({ provinsi: normalizeProvince(h.province), kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban }), kode_pos: h.postal })); }}
-                    />
-                  </div>
-                )}
-                <div className="po-inline">
-                  <div className="po-field">
-                    <label>Province</label>
-                    <input type="text" value={addrDraft.provinsi} onChange={(e) => setAddrDraft({ ...addrDraft, provinsi: e.target.value })} />
-                  </div>
-                  <div className="po-field">
-                    <label>City / district</label>
-                    <input type="text" value={addrDraft.kota} onChange={(e) => setAddrDraft({ ...addrDraft, kota: e.target.value })} />
-                  </div>
-                </div>
-                {isIndonesia(addrDraft.negara) && (
+                {/* PR332 — the administrative-location fields grouped in one cream card (like Edit-shipment's
+                    "Box dimensions"). Autofill + Province / City / Subdistrict / Ward / Postcode live here. */}
+                <div className="cust-loc-box">
+                  {isIndonesia(addrDraft.negara) && (
+                    <div className="po-field">
+                      <label>Autofill <em className="po-sub">(province / city / kecamatan / kelurahan / postcode)</em></label>
+                      <PostcodeAutofill
+                        disabled={busy}
+                        onPick={(h) => { setAddrDraft((d) => ({ ...d, ...collapseRegionDuplicates({ provinsi: normalizeProvince(h.province), kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban }), kode_pos: h.postal })); }}
+                      />
+                    </div>
+                  )}
                   <div className="po-inline">
                     <div className="po-field">
-                      <label>Subdistrict (kecamatan)</label>
-                      <input type="text" value={addrDraft.kecamatan} onChange={(e) => setAddrDraft({ ...addrDraft, kecamatan: e.target.value })} />
+                      <label>Province</label>
+                      <input type="text" value={addrDraft.provinsi} onChange={(e) => setAddrDraft({ ...addrDraft, provinsi: e.target.value })} />
                     </div>
                     <div className="po-field">
-                      <label>Ward (kelurahan)</label>
-                      <input type="text" value={addrDraft.kelurahan} onChange={(e) => setAddrDraft({ ...addrDraft, kelurahan: e.target.value })} />
+                      <label>City / district</label>
+                      <input type="text" value={addrDraft.kota} onChange={(e) => setAddrDraft({ ...addrDraft, kota: e.target.value })} />
                     </div>
                   </div>
-                )}
-                <div className="po-field">
-                  <label>Postcode</label>
-                  <input type="text" inputMode="numeric" value={addrDraft.kode_pos} onChange={(e) => setAddrDraft({ ...addrDraft, kode_pos: e.target.value })} />
+                  {isIndonesia(addrDraft.negara) && (
+                    <div className="po-inline">
+                      <div className="po-field">
+                        <label>Subdistrict (kecamatan)</label>
+                        <input type="text" value={addrDraft.kecamatan} onChange={(e) => setAddrDraft({ ...addrDraft, kecamatan: e.target.value })} />
+                      </div>
+                      <div className="po-field">
+                        <label>Ward (kelurahan)</label>
+                        <input type="text" value={addrDraft.kelurahan} onChange={(e) => setAddrDraft({ ...addrDraft, kelurahan: e.target.value })} />
+                      </div>
+                    </div>
+                  )}
+                  <div className="po-field">
+                    <label>Postcode</label>
+                    <input type="text" inputMode="numeric" value={addrDraft.kode_pos} onChange={(e) => setAddrDraft({ ...addrDraft, kode_pos: e.target.value })} />
+                  </div>
                 </div>
                 <div className="po-field">
                   <label>Address <em className="po-sub">(street, alley/gang, no. — not the city/province above)</em></label>
