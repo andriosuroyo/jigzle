@@ -23,7 +23,7 @@ import type {
   FlaggedCustomer,
   MergeResult,
 } from './types';
-import { normalizeProvince } from './types';
+import { collapseRegionDuplicates, normalizeProvince } from './types';
 
 // ── PR321: postcode ↔ province crosscheck data ──
 // Normalize a province for comparison. The DKI Jakarta / Jawa Barat / Banten trio (Greater Jakarta) is
@@ -191,10 +191,18 @@ export async function updateCustomer(customerId: number, patch: CustomerPatch): 
 // ── addresses: add / edit / delete (overlay) ──
 function addrFields(input: AddressInput): Record<string, unknown> {
   const street = input.street?.trim() || null;
-  const kelurahan = input.kelurahan?.trim() || null;
-  const kecamatan = input.kecamatan?.trim() || null;
-  const kota = input.kota?.trim() || null;
-  const provinsi = normalizeProvince(input.provinsi) || null; // PR330 — DKI Jakarta → Jawa Barat on save
+  // PR330 province normalize (DKI → Jawa Barat) then PR331 collapse of an exact repeat of the level above
+  // (e.g. Subdistrict == City → blank Subdistrict). Backstop on every save regardless of entry path.
+  const region = collapseRegionDuplicates({
+    provinsi: normalizeProvince(input.provinsi),
+    kota: input.kota?.trim() || '',
+    kecamatan: input.kecamatan?.trim() || '',
+    kelurahan: input.kelurahan?.trim() || '',
+  });
+  const kelurahan = region.kelurahan || null;
+  const kecamatan = region.kecamatan || null;
+  const kota = region.kota || null;
+  const provinsi = region.provinsi || null;
   const negara = input.negara?.trim() || null;
   const kode_pos = input.kode_pos?.trim() || null;
   const delivery_note = input.delivery_note?.trim() || null;

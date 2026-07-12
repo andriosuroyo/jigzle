@@ -106,6 +106,20 @@ export function normalizeProvince(p: string | null | undefined): string {
   return /^(dki jakarta|daerah khusus ibukota jakarta)$/i.test(v) ? 'Jawa Barat' : v;
 }
 
+// PR331 — Indonesian admin levels nest Province ⊃ City ⊃ Subdistrict ⊃ Ward, and a seat often shares its
+// parent's name (e.g. kabupaten Karanganyar has a kecamatan Karanganyar; kecamatan Pondok Aren has a
+// kelurahan Pondok Aren). When a field EXACTLY equals the level directly above it, the finer one is a
+// redundant repeat — blank it (the single higher-level name still conveys it, and routing is unaffected).
+// Applied on autofill + on save so these never re-appear. Compares/returns already-trimmed strings.
+export function collapseRegionDuplicates<T extends { provinsi: string; kota: string; kecamatan: string; kelurahan: string }>(f: T): T {
+  const eq = (a: string, b: string) => a.trim() !== '' && a.trim().toLowerCase() === b.trim().toLowerCase();
+  const out = { ...f };
+  if (eq(out.kelurahan, out.kecamatan)) out.kelurahan = '';
+  if (eq(out.kecamatan, out.kota)) out.kecamatan = '';
+  if (eq(out.kota, out.provinsi)) out.kota = '';
+  return out;
+}
+
 // editable personal details (name + up to three whatsapp/phone numbers)
 export interface CustomerPatch {
   name?: string | null;

@@ -34,7 +34,7 @@ import {
   updateCustomerAddress,
 } from '@/app/customers/actions';
 import type { AddressInput, ChannelEntry, CustomerDetail, CustomerListRow, CustomerPatch, DataHealth, DuplicateGroup } from '@/app/customers/types';
-import { normalizeProvince } from '@/app/customers/types';
+import { collapseRegionDuplicates, normalizeProvince } from '@/app/customers/types';
 import type { CustomerAddress } from '@jigzle/db/types';
 import SearchInput from '@/components/SearchInput';
 import { useOverlayClose } from '@/components/useOverlayClose';
@@ -257,8 +257,6 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const [addrDraft, setAddrDraft] = useState<AddrDraft>(draftFrom(null));
   // dup detection: terms that the street field repeats from the structured fields (shown as a confirm)
   const [dupWarn, setDupWarn] = useState<string[] | null>(null);
-  // PR321 — region-repeat detection: value(s) shared across ≥2 of the four region fields (shown as a confirm)
-  const [regionWarn, setRegionWarn] = useState<string[] | null>(null);
   // PR326 — the original-address STUB now sits below Delivery note and starts shown; this collapses it.
   const [stubOpen, setStubOpen] = useState(true);
 
@@ -381,29 +379,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     setAddrEdit({ address });
     setAddrDraft(draftFrom(address));
     setDupWarn(null);
-    setRegionWarn(null);
     setStubOpen(true);
     setNotice(null);
-  }
-
-  // PR326 — resolve a region repeat by clearing the LOWER-level copy (walk province→city→kecamatan→
-  // kelurahan, keep the first occurrence of each value, blank the finer duplicates). E.g. kecamatan +
-  // kelurahan both "Pagedangan" → ward cleared; triple "Kuningan" → keep City only. It's fine for an
-  // address to lack a subdistrict/ward, and once the repeat is gone it drops off the Fix list.
-  function clearRegionDupes() {
-    const order: ('provinsi' | 'kota' | 'kecamatan' | 'kelurahan')[] = ['provinsi', 'kota', 'kecamatan', 'kelurahan'];
-    const seen = new Set<string>();
-    setAddrDraft((d) => {
-      const next = { ...d };
-      for (const f of order) {
-        const v = next[f].trim();
-        if (!v) continue;
-        const norm = v.toLowerCase().replace(/\s+/g, ' ');
-        if (seen.has(norm)) next[f] = ''; else seen.add(norm);
-      }
-      return next;
-    });
-    setRegionWarn(null);
   }
 
   // terms the street field repeats from the structured fields (so they aren't entered twice)
@@ -415,35 +392,19 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
       .filter((v) => v.length >= 3 && street.includes(v.toLowerCase()));
   }
 
-  // PR321 — value(s) that appear in ≥2 of the four region fields (exact, case/space-normalized). E.g.
-  // Province/City/Subdistrict/Ward all "Kuningan" → ["Kuningan"]. "Kuningan" vs "Kuningan Barat" → none.
-  function regionDupes(d: AddrDraft): string[] {
-    const seen = new Map<string, string>();
-    const dupes = new Set<string>();
-    for (const raw of [d.kelurahan, d.kecamatan, d.kota, d.provinsi]) {
-      const v = raw.trim();
-      if (!v) continue;
-      const norm = v.toLowerCase().replace(/\s+/g, ' ');
-      if (seen.has(norm)) dupes.add(seen.get(norm)!); else seen.set(norm, v);
-    }
-    return [...dupes];
-  }
-
   async function saveAddr() {
     if (!detail || !addrEdit) return;
-    // first, warn if the street repeats a structured field OR ≥2 region fields match — confirm before saving
-    if (dupWarn == null && regionWarn == null) {
-      const dupes = streetDupes(addrDraft);
-      const rdupes = regionDupes(addrDraft);
-      if (dupes.length || rdupes.length) {
-        if (dupes.length) setDupWarn(dupes);
-        if (rdupes.length) setRegionWarn(rdupes);
-        return;
-      }
+    // PR331 — collapse any exact repeat of the level above (Subdistrict == City, etc.) before saving, so
+    // it's normalized silently (the server re-applies the same collapse as a backstop). Then, if the
+    // street field repeats a structured field, still confirm once before saving.
+    const draft = collapseRegionDuplicates(addrDraft);
+    if (dupWarn == null) {
+      const dupes = streetDupes(draft);
+      if (dupes.length) { setDupWarn(dupes); setAddrDraft(draft); return; }
     }
     setBusy(true);
     setNotice(null);
-    const input: AddressInput = { ...addrDraft };
+    const input: AddressInput = { ...draft };
     try {
       if (addrEdit.address) {
         const updated = await updateCustomerAddress(addrEdit.address.address_id, input);
@@ -1075,29 +1036,29 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     <label>Autofill <em className="po-sub">(province / city / kecamatan / kelurahan / postcode)</em></label>
                     <PostcodeAutofill
                       disabled={busy}
-                      onPick={(h) => { setAddrDraft((d) => ({ ...d, provinsi: normalizeProvince(h.province), kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })); if (regionWarn) setRegionWarn(null); }}
+                      onPick={(h) => { setAddrDraft((d) => ({ ...d, ...collapseRegionDuplicates({ provinsi: normalizeProvince(h.province), kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban }), kode_pos: h.postal })); }}
                     />
                   </div>
                 )}
                 <div className="po-inline">
                   <div className="po-field">
                     <label>Province</label>
-                    <input type="text" value={addrDraft.provinsi} onChange={(e) => { setAddrDraft({ ...addrDraft, provinsi: e.target.value }); if (regionWarn) setRegionWarn(null); }} />
+                    <input type="text" value={addrDraft.provinsi} onChange={(e) => setAddrDraft({ ...addrDraft, provinsi: e.target.value })} />
                   </div>
                   <div className="po-field">
                     <label>City / district</label>
-                    <input type="text" value={addrDraft.kota} onChange={(e) => { setAddrDraft({ ...addrDraft, kota: e.target.value }); if (regionWarn) setRegionWarn(null); }} />
+                    <input type="text" value={addrDraft.kota} onChange={(e) => setAddrDraft({ ...addrDraft, kota: e.target.value })} />
                   </div>
                 </div>
                 {isIndonesia(addrDraft.negara) && (
                   <div className="po-inline">
                     <div className="po-field">
                       <label>Subdistrict (kecamatan)</label>
-                      <input type="text" value={addrDraft.kecamatan} onChange={(e) => { setAddrDraft({ ...addrDraft, kecamatan: e.target.value }); if (regionWarn) setRegionWarn(null); }} />
+                      <input type="text" value={addrDraft.kecamatan} onChange={(e) => setAddrDraft({ ...addrDraft, kecamatan: e.target.value })} />
                     </div>
                     <div className="po-field">
                       <label>Ward (kelurahan)</label>
-                      <input type="text" value={addrDraft.kelurahan} onChange={(e) => { setAddrDraft({ ...addrDraft, kelurahan: e.target.value }); if (regionWarn) setRegionWarn(null); }} />
+                      <input type="text" value={addrDraft.kelurahan} onChange={(e) => setAddrDraft({ ...addrDraft, kelurahan: e.target.value })} />
                     </div>
                   </div>
                 )}
@@ -1144,20 +1105,12 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     The address field repeats {dupWarn.map((d) => `“${d}”`).join(', ')}, already entered as separate field{dupWarn.length === 1 ? '' : 's'} above. Save anyway?
                   </div>
                 )}
-                {regionWarn && (
-                  <div className="validation warn">
-                    {regionWarn.map((d) => `“${d}”`).join(', ')} {regionWarn.length === 1 ? 'appears' : 'appear'} in two or more of Province / City / Subdistrict / Ward — likely a mis-fill. Clear the lower-level copy (a subdistrict/ward can be blank), or save as-is.
-                    <div className="dh-confirm" style={{ marginTop: 8 }}>
-                      <button type="button" className="btn-secondary" onClick={clearRegionDupes} disabled={busy}>Clear duplicate field{regionWarn.length === 1 ? '' : 's'}</button>
-                    </div>
-                  </div>
-                )}
 
                 <div className="fd-commit">
                   {addrEdit.address ? (
                     <button className="btn-link danger" onClick={() => removeAddr(addrEdit.address!.address_id)} disabled={busy}>Delete</button>
                   ) : <span />}
-                  <button className="btn-primary" onClick={saveAddr} disabled={busy}>{busy ? 'Saving…' : (dupWarn || regionWarn) ? 'Save anyway' : addrEdit.address ? 'Save' : 'Add'}</button>
+                  <button className="btn-primary" onClick={saveAddr} disabled={busy}>{busy ? 'Saving…' : dupWarn ? 'Save anyway' : addrEdit.address ? 'Save' : 'Add'}</button>
                 </div>
               </div>
             </div>
