@@ -1,15 +1,24 @@
--- 0089 — PR345: reinstall public.search_skus(p_q) with the strict all-tokens-AND intact.
+-- 0089 — PR345: reinstall public.search_skus(p_q) with the strict all-tokens-AND actually enforcing.
 -- After 0087/0088, production had fuzzy (#1) + aliases (#3) + original-name (#5) working, but the
--- "every token must match somewhere" gate (the NOT EXISTS clause) was not enforcing — e.g.
--- `search_skus('snoopy 5000')` returned Snoopy items with no 5000 anywhere, and `snoopy zzqxnotreal`
--- returned 20 instead of 0. This file replaces the function body with the correct one (structurally the
--- proven 0027 gate, plus the fuzzy/original/brand/alias branches). Table/policies/seed already exist
--- (0087/0088); this touches ONLY the function, so it's the minimal, unmistakable fix to run.
+-- "every token must match somewhere" gate was silently NOT filtering: `search_skus('snoopy 5000')`
+-- returned Snoopy items with no 5000 anywhere, and `snoopy zzqxnotreal` returned 20 instead of 0.
 --
--- Idempotent: drop-if-exists + create + repeatable revoke/grant. SECURITY INVOKER keeps caller RLS.
--- Verify after applying (all must hold):
---   select count(*) from search_skus('snoopy zzqxnotreal');  -- 0  (strict AND)
---   select count(*) from search_skus('snoopy 5000');         -- only genuine 5000-piece Snoopy (few/none)
+-- ROOT CAUSE — NULL three-valued logic. The per-token predicate is `not (branch1 or branch2 or …)`.
+-- Several branches compare against NULLable columns: b.name (NULL when the LEFT JOIN finds no brand),
+-- c.piece_count_n::text (NULL when piece count is unset), c.original_name, c.translate_name. When a
+-- garbage token matches none of them and at least one such column is NULL, the OR chain is
+-- `false or … or NULL` = NULL (not FALSE). Then `not(NULL)` = NULL, so `where not(...)` does NOT select
+-- that token, the NOT EXISTS stays TRUE, and the row is wrongly KEPT. (0027 had the same latent hole via
+-- NULL translate_name/piece_count; the extra NULLable columns here made it fire on almost every row.)
+--
+-- FIX — make every NULLable branch NULL-safe with coalesce(col,'') so each token's match is strictly
+-- TRUE/FALSE. item_code is the PK (never NULL) so it needs no wrap. Now a nonsense token evaluates FALSE
+-- everywhere → not(FALSE)=TRUE → EXISTS → row excluded. AND is restored; fuzzy/alias/original unchanged.
+--
+-- Idempotent: drop-if-exists + create + repeatable revoke/grant. SECURITY INVOKER keeps caller RLS. Ends
+-- with a self-check that RAISES (rolling back) if strict-AND still isn't enforcing, so a bad state can't
+-- silently look "applied". Verify after applying:
+--   select count(*) from search_skus('snoopy zzqxnotreal');  -- 0
 --   select * from search_skus('snopy') limit 5;              -- Snoopy via fuzzy (#1)
 --   select * from search_skus('peanuts 1000') limit 5;       -- Snoopy 1000pc via alias (#3)
 
@@ -36,30 +45,31 @@ language sql stable security invoker set search_path = public as $$
     left join brands b on b.prefix = c.brand_prefix,
          toks
     where toks.n > 0
-      -- seed on the first token (index entry point) — mirrors the literal + fuzzy branches below.
+      -- seed on the first token (index entry point) — mirrors the per-token branches, NULL-safe.
       and (c.item_code ilike '%' || toks.arr[1] || '%'
-        or c.translate_name ilike '%' || toks.arr[1] || '%'
-        or toks.arr[1] <% c.translate_name
-        or c.original_name ilike '%' || toks.arr[1] || '%'
-        or b.name ilike '%' || toks.arr[1] || '%')
-      -- EVERY token must match SOMEWHERE — the row is kept iff no token fails all branches.
+        or coalesce(c.translate_name, '') ilike '%' || toks.arr[1] || '%'
+        or toks.arr[1] <% coalesce(c.translate_name, '')
+        or coalesce(c.original_name, '') ilike '%' || toks.arr[1] || '%'
+        or coalesce(b.name, '') ilike '%' || toks.arr[1] || '%')
+      -- EVERY token must match SOMEWHERE. Every NULLable branch is coalesced so the OR chain is strictly
+      -- TRUE/FALSE (never NULL) — otherwise a NULL would defeat the `not(...)` and leak the row.
       and not exists (
         select 1 from unnest(toks.arr) as t
         where not (
              c.item_code ilike '%' || t || '%'
-          or c.translate_name ilike '%' || t || '%'
-          or t <% c.translate_name                                -- (#1) fuzzy (indexed column on right)
-          or c.original_name ilike '%' || t || '%'                -- (#5) JP/CN original
-          or b.name ilike '%' || t || '%'
-          or c.brand_prefix ilike '%' || t || '%'
-          or c.piece_count_n::text = t
-          or exists (                                             -- (#3) alias expansions
+          or coalesce(c.translate_name, '') ilike '%' || t || '%'
+          or t <% coalesce(c.translate_name, '')                        -- (#1) fuzzy
+          or coalesce(c.original_name, '') ilike '%' || t || '%'        -- (#5) JP/CN original
+          or coalesce(b.name, '') ilike '%' || t || '%'
+          or coalesce(c.brand_prefix, '') ilike '%' || t || '%'
+          or coalesce(c.piece_count_n::text, '') = t
+          or exists (                                                   -- (#3) alias expansions
                select 1 from search_aliases a
                where lower(a.term) = lower(t)
                  and (c.item_code ilike '%' || a.alias || '%'
-                   or c.translate_name ilike '%' || a.alias || '%'
-                   or c.original_name ilike '%' || a.alias || '%'
-                   or b.name ilike '%' || a.alias || '%')
+                   or coalesce(c.translate_name, '') ilike '%' || a.alias || '%'
+                   or coalesce(c.original_name, '') ilike '%' || a.alias || '%'
+                   or coalesce(b.name, '') ilike '%' || a.alias || '%')
              )
         )
       )
@@ -76,8 +86,7 @@ $$;
 revoke all on function public.search_skus(text) from public, anon;
 grant execute on function public.search_skus(text) to authenticated, service_role;
 
--- self-check: fail loudly (rolls back) if the strict-AND gate still isn't enforcing, so a bad paste
--- can't silently look "applied". A nonsense second token must drop the row count to zero.
+-- self-check: fail loudly (rolls back) if the strict-AND gate still isn't enforcing.
 do $$
 begin
   if (select count(*) from public.search_skus('snoopy zzqxnotreal')) <> 0 then
