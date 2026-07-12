@@ -11,7 +11,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
-import { loadPostal, normProvince, postcodeProvinceLabels, suggestPostcodes, type PostalData } from '@/lib/idPostal';
+import { loadPostal, type PostalData } from '@/lib/idPostal';
+import { locationWarning, previewRawAddress } from '@/components/addressForm';
 import { MapPinIcon } from '@/components/AddIcons';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
@@ -92,13 +93,6 @@ const draftFrom = (a: CustomerAddress | null): AddrDraft => ({
 });
 const isIndonesia = (c: string) => c.trim().toLowerCase() === 'indonesia';
 
-// PR327 — the composed address string EXACTLY as addrFields() builds `raw_address` on save (and as
-// Outbound + every other consumer prints it verbatim): street, kelurahan, kecamatan, kota, provinsi,
-// negara, kode_pos joined by ", ". Kept in lockstep with the server composer.
-function previewRawAddress(d: AddrDraft): string {
-  return [d.street, d.kelurahan, d.kecamatan, d.kota, d.provinsi, d.negara, d.kode_pos]
-    .map((v) => v.trim()).filter(Boolean).join(', ');
-}
 
 // PR324 — inline pencil / trash icons for the detail action bar (Edit customer / Delete customer),
 // matching the shared `svg`/`btn-ico` convention used across the other boards.
@@ -274,23 +268,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   // PR333 — live location check shown under the Postcode field (non-blocking). RED: the postcode is known
   // to the dataset but its province contradicts the entered Province (Greater-Jakarta merged). YELLOW: an
   // Indonesia address with a filled region but no postcode — a heads-up with a suggested code (not filled).
-  const locWarn = useMemo((): { tone: 'red' | 'yellow'; text: string; suggest?: string[] } | null => {
-    if (!addrEdit || !postal || !isIndonesia(addrDraft.negara)) return null;
-    const pc = addrDraft.kode_pos.replace(/\D/g, '');
-    if (pc) {
-      const labels = postcodeProvinceLabels(postal, pc);
-      const prov = normProvince(addrDraft.provinsi);
-      if (labels.length && prov && !new Set(labels.map(normProvince)).has(prov)) {
-        return { tone: 'red', text: `Postcode ${pc} is in ${[...new Set(labels)].join(' / ')} — but Province says “${addrDraft.provinsi.trim()}”. Check the postcode or the province.` };
-      }
-      return null;
-    }
-    if (addrDraft.kelurahan.trim() || addrDraft.kecamatan.trim() || addrDraft.kota.trim()) {
-      const sugg = suggestPostcodes(postal, { kelurahan: addrDraft.kelurahan, kecamatan: addrDraft.kecamatan, kota: addrDraft.kota });
-      return { tone: 'yellow', text: sugg.length ? `No postcode set. Suggested from the dataset:` : 'No postcode set — add one (we don’t auto-fill it).', suggest: sugg };
-    }
-    return null;
-  }, [addrEdit, postal, addrDraft.negara, addrDraft.kode_pos, addrDraft.provinsi, addrDraft.kelurahan, addrDraft.kecamatan, addrDraft.kota]);
+  const locWarn = useMemo(() => (addrEdit ? locationWarning(addrDraft, postal) : null),
+    [addrEdit, postal, addrDraft.negara, addrDraft.kode_pos, addrDraft.provinsi, addrDraft.kelurahan, addrDraft.kecamatan, addrDraft.kota]);
 
   // buckets: customers grouped by first letter, each name-sorted; counts per letter
   const buckets = useMemo(() => {
