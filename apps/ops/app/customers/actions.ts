@@ -23,6 +23,7 @@ import type {
   FlaggedCustomer,
   MergeResult,
 } from './types';
+import { normalizeProvince } from './types';
 
 // ── PR321: postcode ↔ province crosscheck data ──
 // Normalize a province for comparison. The DKI Jakarta / Jawa Barat / Banten trio (Greater Jakarta) is
@@ -193,7 +194,7 @@ function addrFields(input: AddressInput): Record<string, unknown> {
   const kelurahan = input.kelurahan?.trim() || null;
   const kecamatan = input.kecamatan?.trim() || null;
   const kota = input.kota?.trim() || null;
-  const provinsi = input.provinsi?.trim() || null;
+  const provinsi = normalizeProvince(input.provinsi) || null; // PR330 — DKI Jakarta → Jawa Barat on save
   const negara = input.negara?.trim() || null;
   const kode_pos = input.kode_pos?.trim() || null;
   const delivery_note = input.delivery_note?.trim() || null;

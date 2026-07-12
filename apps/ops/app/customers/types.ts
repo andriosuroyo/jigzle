@@ -97,6 +97,15 @@ export interface DataHealth {
   missingPostcode: FlaggedCustomer[];
 }
 
+// PR330 — Greater Jakarta is stored as "Jawa Barat" (the business's routing convention). Any
+// "DKI Jakarta" / "Daerah Khusus Ibukota Jakarta" — e.g. what the postcode autofill hands back — is
+// rewritten on entry AND on save, so the one-time 0083 backfill doesn't become whack-a-mole. Returns the
+// trimmed province (callers apply their own `|| null`).
+export function normalizeProvince(p: string | null | undefined): string {
+  const v = (p ?? '').trim();
+  return /^(dki jakarta|daerah khusus ibukota jakarta)$/i.test(v) ? 'Jawa Barat' : v;
+}
+
 // editable personal details (name + up to three whatsapp/phone numbers)
 export interface CustomerPatch {
   name?: string | null;

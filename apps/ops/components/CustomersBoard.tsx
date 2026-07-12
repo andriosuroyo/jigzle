@@ -34,6 +34,7 @@ import {
   updateCustomerAddress,
 } from '@/app/customers/actions';
 import type { AddressInput, ChannelEntry, CustomerDetail, CustomerListRow, CustomerPatch, DataHealth, DuplicateGroup } from '@/app/customers/types';
+import { normalizeProvince } from '@/app/customers/types';
 import type { CustomerAddress } from '@jigzle/db/types';
 import SearchInput from '@/components/SearchInput';
 import { useOverlayClose } from '@/components/useOverlayClose';
@@ -1074,7 +1075,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     <label>Autofill <em className="po-sub">(province / city / kecamatan / kelurahan / postcode)</em></label>
                     <PostcodeAutofill
                       disabled={busy}
-                      onPick={(h) => { setAddrDraft((d) => ({ ...d, provinsi: h.province, kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })); if (regionWarn) setRegionWarn(null); }}
+                      onPick={(h) => { setAddrDraft((d) => ({ ...d, provinsi: normalizeProvince(h.province), kota: h.city, kecamatan: h.sub_district, kelurahan: h.urban, kode_pos: h.postal })); if (regionWarn) setRegionWarn(null); }}
                     />
                   </div>
                 )}
