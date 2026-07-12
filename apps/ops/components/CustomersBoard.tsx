@@ -9,8 +9,9 @@
 // scans, empty-record purge, and the "(last4)" name-code backfill. Spend / tier / dates load per
 // customer (getCustomerDetail); the Fix scans load lazily the first time the tab is opened.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
+import { loadPostal, normProvince, postcodeProvinceLabels, suggestPostcodes, type PostalData } from '@/lib/idPostal';
 import { MapPinIcon } from '@/components/AddIcons';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
@@ -259,10 +260,40 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const [dupWarn, setDupWarn] = useState<string[] | null>(null);
   // PR326 — the original-address STUB now sits below Delivery note and starts shown; this collapses it.
   const [stubOpen, setStubOpen] = useState(true);
+  // PR333 — the Indonesia postcode dataset, lazy-loaded while the address overlay is open, for the live
+  // postcode ↔ province mismatch check + missing-postcode suggestion under the Postcode field.
+  const [postal, setPostal] = useState<PostalData | null>(null);
 
   // PR307 — the address add/edit form holds unsaved edits, so Esc/backdrop/× route through a discard
   // confirm whenever it's open (no clean dirty flag — the whole overlay is the edit).
   const addrClose = useOverlayClose({ open: !!addrEdit, onClose: () => setAddrEdit(null), dirty: !!addrEdit });
+
+  // PR333 — lazy-load the postcode dataset once an Indonesia address overlay is open (cached module-wide,
+  // shared with the autofill's own load — no double fetch).
+  useEffect(() => {
+    if (addrEdit && isIndonesia(addrDraft.negara) && !postal) loadPostal().then(setPostal).catch(() => {});
+  }, [addrEdit, addrDraft.negara, postal]);
+
+  // PR333 — live location check shown under the Postcode field (non-blocking). RED: the postcode is known
+  // to the dataset but its province contradicts the entered Province (Greater-Jakarta merged). YELLOW: an
+  // Indonesia address with a filled region but no postcode — a heads-up with a suggested code (not filled).
+  const locWarn = useMemo((): { tone: 'red' | 'yellow'; text: string; suggest?: string[] } | null => {
+    if (!addrEdit || !postal || !isIndonesia(addrDraft.negara)) return null;
+    const pc = addrDraft.kode_pos.replace(/\D/g, '');
+    if (pc) {
+      const labels = postcodeProvinceLabels(postal, pc);
+      const prov = normProvince(addrDraft.provinsi);
+      if (labels.length && prov && !new Set(labels.map(normProvince)).has(prov)) {
+        return { tone: 'red', text: `Postcode ${pc} is in ${[...new Set(labels)].join(' / ')} — but Province says “${addrDraft.provinsi.trim()}”. Check the postcode or the province.` };
+      }
+      return null;
+    }
+    if (addrDraft.kelurahan.trim() || addrDraft.kecamatan.trim() || addrDraft.kota.trim()) {
+      const sugg = suggestPostcodes(postal, { kelurahan: addrDraft.kelurahan, kecamatan: addrDraft.kecamatan, kota: addrDraft.kota });
+      return { tone: 'yellow', text: sugg.length ? `No postcode set. Suggested from the dataset:` : 'No postcode set — add one (we don’t auto-fill it).', suggest: sugg };
+    }
+    return null;
+  }, [addrEdit, postal, addrDraft.negara, addrDraft.kode_pos, addrDraft.provinsi, addrDraft.kelurahan, addrDraft.kecamatan, addrDraft.kota]);
 
   // buckets: customers grouped by first letter, each name-sorted; counts per letter
   const buckets = useMemo(() => {
@@ -1069,6 +1100,14 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                     <label>Postcode</label>
                     <input type="text" inputMode="numeric" value={addrDraft.kode_pos} onChange={(e) => setAddrDraft({ ...addrDraft, kode_pos: e.target.value })} />
                   </div>
+                  {locWarn && (
+                    <div className={`cust-loc-warn ${locWarn.tone === 'red' ? 'is-red' : 'is-yellow'}`}>
+                      <span>{locWarn.text}</span>
+                      {locWarn.suggest?.map((pc) => (
+                        <button key={pc} type="button" className="cust-loc-suggest" onClick={() => setAddrDraft((d) => ({ ...d, kode_pos: pc }))}>{pc}</button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="po-field">
                   <label>Address <em className="po-sub">(street, alley/gang, no. — not the city/province above)</em></label>
