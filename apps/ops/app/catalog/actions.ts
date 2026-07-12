@@ -54,14 +54,30 @@ async function deriveBrandPrefix(supabase: Supabase, itemCode: string): Promise<
 }
 
 // ── All tab: search by SKU code / brand (name or prefix) / item name / piece count / barcode → list
-// rows. A numeric 1–5 digit token is a piece count; 6+ digits a barcode; everything else is a text
-// term matched against the item code, self code, both names, AND any brand whose NAME contains the
-// term (so "Tenyo" surfaces every TEN-… SKU). Multiple tokens AND together. ──
+// rows. PR346: routed through the search_catalogue RPC so it gains the SAME natural matching as the
+// Sales SKU search — fuzzy typos (#1) and character/series aliases (#3) on top of the existing
+// all-tokens-AND, word order, brand name/prefix, original name (#5) and barcode/piece-count. Falls back
+// to the PostgREST query-builder below until 0090 is applied (graceful degrade), so search never breaks. ──
+type RpcCatRow = { item_code: string; name: string; brand_prefix: string | null; needs_review: boolean | null };
+
 export async function searchCatalogue(q: string): Promise<CatalogueListRow[]> {
   const raw = sanitize(q);
   if (raw.length < 2) return [];
   const supabase = createSupabaseServerClient();
 
+  const { data, error } = await supabase.rpc('search_catalogue', { p_q: raw });
+  if (!error) {
+    return ((data ?? []) as RpcCatRow[]).map((r) => ({
+      item_code: r.item_code, name: r.name, brand_prefix: r.brand_prefix ?? null, needs_review: !!r.needs_review,
+    }));
+  }
+  return searchCatalogueFallback(supabase, raw); // RPC not applied yet → degrade to the query-builder
+}
+
+// Pre-0090 fallback: the original PostgREST query-builder (no fuzzy / alias). A numeric 1–5 digit token
+// is a piece count; 6+ digits a barcode; everything else a text term matched against item/self code,
+// both names, AND any brand whose NAME contains the term. Multiple tokens AND together.
+async function searchCatalogueFallback(supabase: Supabase, raw: string): Promise<CatalogueListRow[]> {
   const tokens = raw.split(/\s+/).filter(Boolean);
   const pieceTerms   = tokens.filter((t) => /^\d{1,5}$/.test(t)).map(Number);
   const barcodeTerms = tokens.filter((t) => /^\d{6,}$/.test(t));
