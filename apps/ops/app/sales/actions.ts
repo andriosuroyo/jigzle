@@ -7,7 +7,7 @@
 // the second, authoritative gate.
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import { normalizePhone, tierFor, toNextTier } from '@jigzle/lib';
+import { customerIdLabel, normalizePhone, tierFor, toNextTier } from '@jigzle/lib';
 import type { Customer, CustomerAddress } from '@jigzle/db/types';
 import type {
   CustomerHit,
@@ -17,6 +17,7 @@ import type {
   SkuHit,
   CreateOrderInput,
   SubmitResult,
+  CreateCustomerResult,
 } from './types';
 
 type Supabase = ReturnType<typeof createSupabaseServerClient>;
@@ -108,7 +109,7 @@ export async function getLoyalty(customerId: number): Promise<LoyaltyReadout> {
 // ── Panel 1: create-or-return customer (dedup on the normalized-phone unique index) ──
 export async function createCustomer(
   input: NewCustomerInput
-): Promise<{ customer: Customer; existed: boolean }> {
+): Promise<CreateCustomerResult> {
   const supabase = createSupabaseServerClient();
   const phone = normalizePhone(input.phone);
   const phone_raw = input.phone?.trim() || null;
@@ -118,8 +119,11 @@ export async function createCustomer(
   const channels = (input.channels ?? [])
     .map((ch) => ({ platform: (ch.platform || '').trim(), handle: (ch.handle || '').trim() }))
     .filter((ch) => ch.platform);
+  // PR339 — apply the "(last4)" Customer ID code at creation when a phone is present (the Fix backfill
+  // still handles a phone added later). Empty name → null (the form now requires a Customer ID).
+  const name = input.name?.trim() ? customerIdLabel(input.name, phone) : null;
 
-  // Dedup: an existing normalized phone resolves to that customer (never a duplicate).
+  // Dedup: an existing normalized phone resolves to that customer (same person, reused — never a dup).
   if (phone) {
     const { data: existing } = await supabase
       .from('customers')
@@ -129,9 +133,17 @@ export async function createCustomer(
     if (existing) return { customer: existing as Customer, existed: true };
   }
 
+  // PR339 — block a duplicate Customer ID (same composed name) and surface the existing record(s), so the
+  // operator can pick it or go back and enter a different ID.
+  if (name) {
+    const { data: sameName } = await supabase.from('customers').select('*').ilike('name', name);
+    const exact = (sameName ?? []).filter((c) => ((c as Customer).name ?? '').trim().toLowerCase() === name.toLowerCase());
+    if (exact.length) return { conflict: exact as Customer[] };
+  }
+
   const { data, error } = await supabase
     .from('customers')
-    .insert({ name: input.name?.trim() || null, phone, phone_raw, channel, channel_raw: channel, channels })
+    .insert({ name, phone, phone_raw, channel, channel_raw: channel, channels })
     .select('*')
     .single();
 

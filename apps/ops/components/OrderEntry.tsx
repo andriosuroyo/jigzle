@@ -127,6 +127,17 @@ export default function OrderEntry({
   const [ncChannel, setNcChannel] = useState('');    // channel platform (— pick —), from channelOptions
   const [ncHandle, setNcHandle] = useState('');      // channel handle (username / number)
   const [savingCust, setSavingCust] = useState(false);
+  // PR339 — the New-customer overlay: a form step, or a "Customer ID already exists" step listing the
+  // existing record(s) (pick one, or ← back to enter a different ID). `ncError` is scoped to the overlay.
+  const [ncStep, setNcStep] = useState<'form' | 'conflict'>('form');
+  const [ncConflicts, setNcConflicts] = useState<CustomerHit[]>([]);
+  const [ncError, setNcError] = useState<string | null>(null);
+
+  function openNewCust() { setNcStep('form'); setNcError(null); setShowNewCust(true); }
+  function closeNewCust() {
+    setShowNewCust(false); setNcStep('form'); setNcConflicts([]); setNcError(null);
+    setNcName(''); setNcPhone(''); setNcCountry('ID'); setNcChannel(''); setNcHandle('');
+  }
 
   // channel platform options for the new-customer picker (icon + label), from Settings → Customer → Channel
   const channelSelectOptions = channelOptions.map((c) => ({ value: c.label, label: c.label, icon: c.icon }));
@@ -315,9 +326,10 @@ export default function OrderEntry({
   }
 
   async function handleCreateCustomer() {
-    if (!ncName.trim() && !ncPhone.trim()) { setError('New customer needs a name or phone.'); return; }
+    // PR339 — Customer ID is required; phone is optional (many marketplaces don't share a number).
+    if (!ncName.trim()) { setNcError('Customer ID is required.'); return; }
     setSavingCust(true);
-    setError(null);
+    setNcError(null);
     try {
       // PR159 — combine the picked country's dial code with the local number (leading 0s dropped),
       // e.g. ID (+62) + "081260002889" → "6281260002889". Empty local number → no phone.
@@ -325,7 +337,14 @@ export default function OrderEntry({
       const fullPhone = local ? `${dialOf(ncCountry)}${local}` : '';
       const channels = ncChannel ? [{ platform: ncChannel, handle: ncHandle.trim() }] : [];
       // step 1 creates the customer only — the address is added in step 2 (below).
-      const { customer: cust } = await createCustomer({ name: ncName, phone: fullPhone, channel: ncChannel, channels });
+      const res = await createCustomer({ name: ncName, phone: fullPhone, channel: ncChannel, channels });
+      // PR339 — the composed Customer ID already exists → show the existing record(s) to pick or go back.
+      if ('conflict' in res) {
+        setNcConflicts(res.conflict.map((c) => ({ id: c.customer_id, name: c.name, phone: c.phone, tier: null, lifetime_spend: 0 })));
+        setNcStep('conflict');
+        return;
+      }
+      const cust = res.customer;
       const [loy, addrs] = await Promise.all([
         getLoyalty(cust.customer_id),
         getCustomerAddresses(cust.customer_id),
@@ -335,10 +354,9 @@ export default function OrderEntry({
       setAddresses(addrs);
       setAddressId(addrs[0]?.address_id ?? null);
       setConfirmLater(false);
-      setShowNewCust(false);
-      setNcName(''); setNcPhone(''); setNcCountry('ID'); setNcChannel(''); setNcHandle('');
+      closeNewCust();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create customer.');
+      setNcError(e instanceof Error ? e.message : 'Failed to create customer.');
     } finally {
       setSavingCust(false);
     }
@@ -535,39 +553,77 @@ export default function OrderEntry({
                       ))}
                     </ul>
                   )}
-                  {!showNewCust && (
-                    <button className="btn-brown btn-ico" style={{ justifyContent: 'center' }} onClick={() => setShowNewCust(true)}><UserIcon />New customer</button>
-                  )}
-                  {showNewCust && (
-                    <div className="subform">
-                      <input type="text" placeholder="Customer ID" value={ncName} onChange={(e) => setNcName(e.target.value)} />
-                      {/* PR159: phone = country (flag + dial code) + local number, side by side. */}
-                      <div className="nc-row">
-                        <PhoneCountrySelect value={ncCountry} onChange={setNcCountry} disabled={savingCust} />
-                        <input className="nc-phone" type="tel" inputMode="numeric" placeholder="081260002889" value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} />
-                      </div>
-                      {/* PR159: channel = platform picker + handle, side by side (mirrors Customer › Channels). */}
-                      <div className="nc-row">
-                        <IconSelect
-                          className="nc-channel-platform"
-                          value={ncChannel || null}
-                          options={channelSelectOptions}
-                          placeholder="— channel —"
-                          ariaLabel="Channel platform"
-                          disabled={savingCust}
-                          onChange={setNcChannel}
-                        />
-                        <input className="nc-channel-handle" type="text" placeholder="username / number" value={ncHandle} onChange={(e) => setNcHandle(e.target.value)} disabled={savingCust} />
-                      </div>
-                      <div className="subform-actions">
-                        <button className="btn-secondary" onClick={() => setShowNewCust(false)} disabled={savingCust}>Cancel</button>
-                        <button className="btn-primary" onClick={handleCreateCustomer} disabled={savingCust}>
-                          {savingCust ? 'Saving…' : 'Create customer'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <button className="btn-brown btn-ico" style={{ justifyContent: 'center' }} onClick={openNewCust}><UserIcon />New customer</button>
                 </>
+              )}
+
+              {/* PR339 — New customer as an overlay (matches the rest of the system); Customer ID required,
+                  phone optional, and a duplicate Customer ID surfaces the existing record(s). */}
+              {showNewCust && (
+                <div className="sc-modal-backdrop" onClick={closeNewCust}>
+                  <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="New customer" onClick={(e) => e.stopPropagation()}>
+                    <div className="sc-modal-head sc-modal-head-row">
+                      <span className="sc-modal-title">{ncStep === 'conflict' ? 'Customer ID already exists' : 'New customer'}</span>
+                      <button className="sc-modal-x" onClick={closeNewCust} aria-label="Close">×</button>
+                    </div>
+                    <div className="sc-modal-body">
+                      {ncStep === 'form' ? (
+                        <div className="po-form">
+                          <div className="po-field">
+                            <label>Customer ID<span className="req" aria-hidden="true">*</span></label>
+                            <input type="text" placeholder="e.g. Elin AQ" value={ncName} autoFocus onChange={(e) => setNcName(e.target.value)} disabled={savingCust} />
+                          </div>
+                          <div className="po-field">
+                            <label>WhatsApp / phone number</label>
+                            <div className="nc-row">
+                              <PhoneCountrySelect value={ncCountry} onChange={setNcCountry} disabled={savingCust} />
+                              <input className="nc-phone" type="tel" inputMode="numeric" placeholder="081260002889" value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} disabled={savingCust} />
+                            </div>
+                          </div>
+                          <div className="po-field">
+                            <label>Channel</label>
+                            <div className="nc-row">
+                              <IconSelect
+                                className="nc-channel-platform"
+                                value={ncChannel || null}
+                                options={channelSelectOptions}
+                                placeholder="— channel —"
+                                ariaLabel="Channel platform"
+                                disabled={savingCust}
+                                onChange={setNcChannel}
+                              />
+                              <input className="nc-channel-handle" type="text" placeholder="username / number" value={ncHandle} onChange={(e) => setNcHandle(e.target.value)} disabled={savingCust} />
+                            </div>
+                          </div>
+                          {ncError && <div className="validation err">{ncError}</div>}
+                          <div className="fd-commit">
+                            <button className="btn-secondary" onClick={closeNewCust} disabled={savingCust}>Cancel</button>
+                            <button className="btn-primary" onClick={handleCreateCustomer} disabled={savingCust || !ncName.trim()}>
+                              {savingCust ? 'Saving…' : 'Create customer'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="hint" style={{ marginBottom: 8 }}>A customer with this ID already exists. Pick it to use for this order, or go back to enter a different Customer ID.</div>
+                          <ul className="result-list">
+                            {ncConflicts.map((c) => (
+                              <li key={c.id}>
+                                <button className="result-item" onClick={() => { selectCustomer(c); closeNewCust(); }}>
+                                  <span className="ri-name">{customerLabel(c.name, c.phone)}</span>
+                                  <span className="ri-meta">{c.phone || '—'}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="fd-commit">
+                            <button className="btn-link bv-back" onClick={() => { setNcStep('form'); setNcError(null); }}>← back</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
               {customer && (
                 <div className="selected-customer">
