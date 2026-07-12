@@ -550,21 +550,18 @@ export async function getDataHealth(): Promise<DataHealth> {
     .filter((r) => hasOrders.has(r.customer_id))
     .map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
 
-  // ── PR321/PR334: repeated region fields — an address where a value repeats across NON-ADJACENT levels
-  // (e.g. Ward == City, skipping the Subdistrict), which is a genuine mis-fill. Adjacent same-names are
-  // legitimate admin nesting — a seat sharing its parent's name (Kota Jambi in Provinsi Jambi; kecamatan
-  // Karanganyar in kabupaten Karanganyar) — and are auto-collapsed or intentionally kept, so they are NOT
-  // flagged. Field order is coarse → fine [province, city, subdistrict, ward]; a value whose occupied
-  // indices form a contiguous run is legitimate, otherwise it's suspicious.
+  // ── PR321/PR334/PR336: repeated region fields. Apply the same collapse we do on save (the detail levels
+  // Subdistrict/Ward are dropped when they merely repeat a coarser anchor — all legitimate nesting like
+  // Kota Metro's kelurahan Metro), then flag only a repeat that SURVIVES and isn't the kept City==Province
+  // pair. In practice every exact repeat is now auto-handled, so this stays near-empty — it only surfaces a
+  // detail level that still duplicates a coarser field after collapse (a genuine, rare mis-fill).
   const repeatRegionIds = new Set<number>();
   for (const a of addrRows) {
-    const idxByVal = new Map<string, number[]>();
-    [a.provinsi, a.kota, a.kecamatan, a.kelurahan].forEach((v, i) => {
-      const norm = (v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-      if (norm) (idxByVal.get(norm) ?? idxByVal.set(norm, []).get(norm)!).push(i);
-    });
-    const suspicious = [...idxByVal.values()].some((idxs) => idxs.length >= 2 && idxs[idxs.length - 1] - idxs[0] !== idxs.length - 1);
-    if (suspicious) repeatRegionIds.add(a.customer_id);
+    const c = collapseRegionDuplicates({ provinsi: (a.provinsi ?? '').trim(), kota: (a.kota ?? '').trim(), kecamatan: (a.kecamatan ?? '').trim(), kelurahan: (a.kelurahan ?? '').trim() });
+    const norm = (v: string) => v.trim().toLowerCase().replace(/\s+/g, ' ');
+    const prov = norm(c.provinsi), kota = norm(c.kota), kec = norm(c.kecamatan), kel = norm(c.kelurahan);
+    const anomaly = (!!kec && (kec === kota || kec === prov)) || (!!kel && (kel === kec || kel === kota || kel === prov));
+    if (anomaly) repeatRegionIds.add(a.customer_id);
   }
   const repeatRegion: FlaggedCustomer[] = rows
     .filter((r) => repeatRegionIds.has(r.customer_id))

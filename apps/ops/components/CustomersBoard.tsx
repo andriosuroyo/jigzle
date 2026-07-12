@@ -530,7 +530,8 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
               <div className="fd-head">
                 <div className="fd-title">{customerLabel(detail.name, detail.phone)}</div>
                 <div className="fd-sub">
-                  #{detail.id}
+                  {/* PR335 — the numeric record id is the "Customer number" (distinct from any phone number) */}
+                  Customer no. {detail.id}
                   {detail.joined_date ? ` · joined ${fmtDay(detail.joined_date)}` : ''}
                 </div>
               </div>
@@ -540,14 +541,15 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                    Each control auto-saves on change/blur; "Done" returns to the read-only bodyview. ── */
                 <>
                   <section className="fd-section">
-                    <div className="fd-section-head">Personal details</div>
                     <div className="po-form">
                       <div className="po-field">
-                        <label>Name</label>
+                        {/* PR335 — this identifier is the "Customer ID" (name + (last4) code / shorthand),
+                            NOT the person's real name; the real recipient name lives per-address. */}
+                        <label>Customer ID</label>
                         <input
                           type="text"
                           value={nameDraft}
-                          placeholder="customer name"
+                          placeholder="e.g. Elin AQ (0068)"
                           onChange={(e) => setNameDraft(e.target.value)}
                           onBlur={() => { if (nameDraft.trim() !== (detail.name ?? '')) savePersonal({ name: nameDraft.trim() || null }); }}
                           disabled={busy}
