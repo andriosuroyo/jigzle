@@ -961,7 +961,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   <div className="validation ok">No address repeats a value across Province / City / Subdistrict / Ward.</div>
                 ) : (
                   <>
-                    <div className="hint" style={{ marginBottom: 6 }}>Two or more of Province / City / Subdistrict / Ward hold the exact same value (e.g. “Kuningan” three times) — usually a mis-picked autofill. Open each to correct the four fields.</div>
+                    <div className="hint" style={{ marginBottom: 6 }}>A value repeats across non-adjacent levels (e.g. Ward the same as City, skipping the Subdistrict) — a likely mis-fill. Adjacent same-names (Kota Jambi in Jambi, kecamatan Karanganyar in kabupaten Karanganyar) are legitimate and aren’t listed. Open each to correct the four fields.</div>
                     <ul className="fq-list">{health.repeatRegion.map((c) => flaggedRow(c))}</ul>
                     {health.repeatRegionCount > health.repeatRegion.length && (
                       <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.repeatRegion.length} of {health.repeatRegionCount}.</div>

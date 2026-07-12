@@ -106,17 +106,18 @@ export function normalizeProvince(p: string | null | undefined): string {
   return /^(dki jakarta|daerah khusus ibukota jakarta)$/i.test(v) ? 'Jawa Barat' : v;
 }
 
-// PR331 — Indonesian admin levels nest Province ⊃ City ⊃ Subdistrict ⊃ Ward, and a seat often shares its
-// parent's name (e.g. kabupaten Karanganyar has a kecamatan Karanganyar; kecamatan Pondok Aren has a
-// kelurahan Pondok Aren). When a field EXACTLY equals the level directly above it, the finer one is a
-// redundant repeat — blank it (the single higher-level name still conveys it, and routing is unaffected).
-// Applied on autofill + on save so these never re-appear. Compares/returns already-trimmed strings.
+// PR331/PR334 — Indonesian admin levels nest Province ⊃ City ⊃ Subdistrict ⊃ Ward, and a seat often shares
+// its parent's name (kabupaten Karanganyar has a kecamatan Karanganyar; kecamatan Pondok Aren has a
+// kelurahan Pondok Aren). When the FINER field exactly equals the level above AND the finer one is safely
+// droppable, blank it — the coarser name still conveys it, routing unaffected. This covers Ward==Subdistrict
+// and Subdistrict==City. City==Province (e.g. Kota Jambi in Provinsi Jambi) is deliberately NOT collapsed:
+// the City/Kabupaten is the primary routing field, so dropping it would be lossy — it's left as-is (and the
+// Fix scan no longer flags it). Applied on autofill + on save. Compares/returns already-trimmed strings.
 export function collapseRegionDuplicates<T extends { provinsi: string; kota: string; kecamatan: string; kelurahan: string }>(f: T): T {
   const eq = (a: string, b: string) => a.trim() !== '' && a.trim().toLowerCase() === b.trim().toLowerCase();
   const out = { ...f };
   if (eq(out.kelurahan, out.kecamatan)) out.kelurahan = '';
   if (eq(out.kecamatan, out.kota)) out.kecamatan = '';
-  if (eq(out.kota, out.provinsi)) out.kota = '';
   return out;
 }
 
