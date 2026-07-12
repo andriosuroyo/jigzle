@@ -540,7 +540,6 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                    Each control auto-saves on change/blur; "Done" returns to the read-only bodyview. ── */
                 <>
                   <section className="fd-section">
-                    <div className="fd-section-head">Personal details</div>
                     <div className="po-form">
                       <div className="po-field">
                         <label>Name</label>
