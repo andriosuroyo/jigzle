@@ -1125,14 +1125,16 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
                   ].filter(Boolean).join('\n')}</div>
                 </div>
 
-                {/* PR326/PR327 — the original imported address STUB; collapsible (starts shown) */}
-                {addrEdit.address && (addrEdit.address.source_blob || addrEdit.address.raw_address) && (
+                {/* PR326/PR327 — the original imported address STUB; collapsible (starts shown). PR329 —
+                    gated strictly on source_blob (the real old-database import blob): a brand-new address
+                    or one created in-app has no import original, so this section correctly stays hidden. */}
+                {addrEdit.address?.source_blob && (
                   <div className="cust-addr-stub">
                     <div className="cust-addr-stub-head">
                       <span className="cust-addr-stub-label">Original address — from old database</span>
                       <button type="button" className="btn-link cust-addr-stub-toggle" onClick={() => setStubOpen((v) => !v)}>{stubOpen ? 'Hide' : 'Show'}</button>
                     </div>
-                    {stubOpen && <div className="cust-addr-stub-text">{addrEdit.address.source_blob || addrEdit.address.raw_address}</div>}
+                    {stubOpen && <div className="cust-addr-stub-text">{addrEdit.address.source_blob}</div>}
                   </div>
                 )}
 
