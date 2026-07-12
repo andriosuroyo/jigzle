@@ -37,6 +37,63 @@ const hitOf = (d: PostalData, i: number): PostalHit => {
   return { urban: r[0], sub_district: r[1], city: r[2], province: d.provinces[r[3]] ?? '', postal: r[4] };
 };
 
+// PR333 — client-side province canonicalization; mirrors the server `normProv` used by the Fix-tab
+// crosscheck. Greater Jakarta (DKI / Jawa Barat / Banten) collapses to one bucket so the operator's
+// "Jawa Barat" convention doesn't false-flag against the dataset's Jakarta labelling.
+export function normProvince(s: string | null | undefined): string {
+  const v = (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!v) return '';
+  if (/jakarta|jawa barat|banten/.test(v)) return '@jabodetabek';
+  return v.replace(/^(provinsi|prov\.?|daerah istimewa|d\.?i\.?)\s+/, '');
+}
+
+// postcode → the distinct RAW province name(s) the dataset files it under (empty if the postcode is
+// unknown). Built once per loaded dataset and memoised on the object. Used for the live mismatch check.
+type PostalIndexed = PostalData & { _provByPostal?: Map<string, string[]> };
+export function postcodeProvinceLabels(d: PostalData, postcode: string): string[] {
+  const pc = (postcode ?? '').replace(/\D/g, '');
+  if (!pc) return [];
+  const dd = d as PostalIndexed;
+  if (!dd._provByPostal) {
+    const idx = new Map<string, Set<string>>();
+    for (const r of d.rows) {
+      const p = (r[4] ?? '').replace(/\D/g, '');
+      if (!p) continue;
+      const prov = d.provinces[r[3]] ?? '';
+      if (!prov) continue;
+      (idx.get(p) ?? idx.set(p, new Set()).get(p)!).add(prov);
+    }
+    dd._provByPostal = new Map([...idx].map(([k, v]) => [k, [...v]]));
+  }
+  return dd._provByPostal.get(pc) ?? [];
+}
+
+// PR333 — suggest postcode(s) for a region from the dataset: rows whose kelurahan (best) or kecamatan+city
+// match. Returns distinct postcodes, most-specific first (capped). Used for the "missing postcode" heads-up
+// — shown as a suggestion, never auto-filled.
+export function suggestPostcodes(d: PostalData, r: { kelurahan?: string; kecamatan?: string; kota?: string }): string[] {
+  const norm = (s: string | undefined) => (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const kel = norm(r.kelurahan), kec = norm(r.kecamatan), kota = norm(r.kota);
+  const out: string[] = []; const seen = new Set<string>();
+  const push = (pc: string) => { const p = (pc ?? '').replace(/\D/g, ''); if (p && !seen.has(p)) { seen.add(p); out.push(p); } };
+  if (kel) {
+    for (const row of d.rows) {
+      if (row[0].toLowerCase() !== kel) continue;
+      if (kec && row[1].toLowerCase() !== kec) continue;
+      if (kota && row[2].toLowerCase() !== kota) continue;
+      push(row[4]);
+    }
+  }
+  if (!out.length && kec) {
+    for (const row of d.rows) {
+      if (row[1].toLowerCase() !== kec) continue;
+      if (kota && row[2].toLowerCase() !== kota) continue;
+      push(row[4]);
+    }
+  }
+  return out.slice(0, 3);
+}
+
 // substring search over the kelurahan / kecamatan / city index. Rows whose kelurahan *starts with* the
 // query rank first (the common case: you type the ward name). Capped to `limit`.
 export function searchPostal(d: PostalData, query: string, limit = 40): PostalHit[] {
