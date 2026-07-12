@@ -550,17 +550,21 @@ export async function getDataHealth(): Promise<DataHealth> {
     .filter((r) => hasOrders.has(r.customer_id))
     .map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
 
-  // ── PR321: repeated region fields — an address where ≥2 of {ward, subdistrict, city, province} are the
-  // EXACT same value (Kuningan×3 style). Case/space-normalized equality, so "Kuningan" vs "Kuningan Barat"
-  // is NOT a repeat. Flags the customer once (a click opens the address editor to fix it manually).
+  // ── PR321/PR334: repeated region fields — an address where a value repeats across NON-ADJACENT levels
+  // (e.g. Ward == City, skipping the Subdistrict), which is a genuine mis-fill. Adjacent same-names are
+  // legitimate admin nesting — a seat sharing its parent's name (Kota Jambi in Provinsi Jambi; kecamatan
+  // Karanganyar in kabupaten Karanganyar) — and are auto-collapsed or intentionally kept, so they are NOT
+  // flagged. Field order is coarse → fine [province, city, subdistrict, ward]; a value whose occupied
+  // indices form a contiguous run is legitimate, otherwise it's suspicious.
   const repeatRegionIds = new Set<number>();
   for (const a of addrRows) {
-    const counts = new Map<string, number>();
-    for (const v of [a.kelurahan, a.kecamatan, a.kota, a.provinsi]) {
+    const idxByVal = new Map<string, number[]>();
+    [a.provinsi, a.kota, a.kecamatan, a.kelurahan].forEach((v, i) => {
       const norm = (v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-      if (norm) counts.set(norm, (counts.get(norm) ?? 0) + 1);
-    }
-    if ([...counts.values()].some((c) => c >= 2)) repeatRegionIds.add(a.customer_id);
+      if (norm) (idxByVal.get(norm) ?? idxByVal.set(norm, []).get(norm)!).push(i);
+    });
+    const suspicious = [...idxByVal.values()].some((idxs) => idxs.length >= 2 && idxs[idxs.length - 1] - idxs[0] !== idxs.length - 1);
+    if (suspicious) repeatRegionIds.add(a.customer_id);
   }
   const repeatRegion: FlaggedCustomer[] = rows
     .filter((r) => repeatRegionIds.has(r.customer_id))
