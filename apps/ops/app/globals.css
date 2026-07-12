@@ -1820,7 +1820,7 @@ img.sku-img { background: #e8e8e8; }
    this; context-specific tweaks (width, min-height, locked look) layer on top. */
 .field,
 .le-field input,
-.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field select, .po-field textarea,
+.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field input[type=tel], .po-field select, .po-field textarea,
 .rcv-le-field input,
 .rcv-map-field input,
 .batch-field {
@@ -1831,7 +1831,7 @@ img.sku-img { background: #e8e8e8; }
    zoom on focus — the reduced vertical padding gets us to 34px without shrinking the text. */
 .field,
 .le-field input,
-.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field select,
+.po-field input[type=text], .po-field input[type=number], .po-field input[type=date], .po-field input[type=tel], .po-field select,
 .rcv-le-field input,
 .rcv-map-field input,
 input.batch-field, select.batch-field {
