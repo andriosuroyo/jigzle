@@ -609,7 +609,8 @@ button.po-pick-btn:active { background: var(--paper); }
 .sku-add .btn-secondary { flex-shrink: 0; height: 30px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; }
 /* SA-1: "Confirm address later" checkbox row in the Address panel */
 .addr-later { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin-bottom: 8px; cursor: pointer; }
-.addr-later input { width: 16px; height: 16px; }
+/* PR343 — the box turns green when ticked (accent-color only paints the checked fill) */
+.addr-later input { width: 16px; height: 16px; accent-color: var(--green); }
 /* short-stock caution chip — shared by Fulfill (kept; Sales' own low-stock TEXT was removed) */
 .low-warn { font-size: 11px; color: #9C6F1C; background: var(--yellow-tint); padding: 4px 8px; border-radius: 6px; }
 

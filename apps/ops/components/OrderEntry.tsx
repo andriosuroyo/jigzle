@@ -378,6 +378,7 @@ export default function OrderEntry({
       setTidyInfo(result.warnings.filter((wm) => !chain.includes(wm)));
       setPostal(data);
       setTidy(result);
+      setShowNewAddr(false); // PR343 — hand off from the blob overlay to the Confirm-address overlay
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to read the address.');
     } finally {
@@ -669,23 +670,45 @@ export default function OrderEntry({
                       ))}
                     </ul>
                   )}
-                  {!showNewAddr ? (
-                    <button className="btn-brown btn-ico" style={{ justifyContent: 'center' }} onClick={() => setShowNewAddr(true)} disabled={!customer}><MapPinIcon />New address</button>
-                  ) : (
-                    <div className="subform">
-                      <input type="text" placeholder="Recipient name" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} />
-                      <input type="text" placeholder="Recipient phone number" value={naContact} onChange={(e) => setNaContact(e.target.value)} />
-                      <textarea placeholder="Recipient address" value={naAddr} onChange={(e) => setNaAddr(e.target.value)} />
-                      <div className="subform-actions">
-                        <button className="btn-secondary" onClick={() => setShowNewAddr(false)} disabled={tidying}>Cancel</button>
-                        <button className="btn-primary" onClick={handleTidyAddress} disabled={tidying}>{tidying ? 'Tidying…' : 'Add address'}</button>
-                      </div>
-                    </div>
-                  )}
+                  <button className="btn-brown btn-ico" style={{ justifyContent: 'center' }} onClick={() => setShowNewAddr(true)} disabled={!customer}><MapPinIcon />New address</button>
                 </>
               )}
             </div>
           </section>
+
+          {/* PR343 — New address as an overlay (matches New customer): paste the blob, we tidy it into the
+              Confirm-address overlay. */}
+          {showNewAddr && (
+            <div className="sc-modal-backdrop" onClick={() => setShowNewAddr(false)}>
+              <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="New address" onClick={(e) => e.stopPropagation()}>
+                <div className="sc-modal-head sc-modal-head-row">
+                  <span className="sc-modal-title">New address</span>
+                  <button className="sc-modal-x" onClick={() => setShowNewAddr(false)} aria-label="Close">×</button>
+                </div>
+                <div className="sc-modal-body">
+                  <div className="po-form">
+                    <div className="po-field">
+                      <label>Recipient name</label>
+                      <input type="text" value={naRecipient} onChange={(e) => setNaRecipient(e.target.value)} disabled={tidying} />
+                    </div>
+                    <div className="po-field">
+                      <label>Recipient phone number</label>
+                      <input type="tel" inputMode="numeric" value={naContact} onChange={(e) => setNaContact(e.target.value)} disabled={tidying} />
+                    </div>
+                    <div className="po-field">
+                      <label>Recipient address <em className="po-sub">(paste the full address — we’ll tidy it into fields next)</em></label>
+                      <textarea value={naAddr} placeholder="Paste the recipient's full address here" onChange={(e) => setNaAddr(e.target.value)} disabled={tidying} />
+                    </div>
+                    {error && <div className="validation err">{error}</div>}
+                    <div className="fd-commit">
+                      <button className="btn-secondary" onClick={() => setShowNewAddr(false)} disabled={tidying}>Cancel</button>
+                      <button className="btn-primary" onClick={handleTidyAddress} disabled={tidying || !naAddr.trim()}>{tidying ? 'Tidying…' : 'Add address'}</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* PR340 — Confirm-address overlay, matching Customer › detail › Add address (cream location box,
               small-caps label subtext, live Preview + postcode check) minus the "Original address" part. */}
@@ -759,7 +782,7 @@ export default function OrderEntry({
                       ].filter(Boolean).join('\n')}</div>
                     </div>
                     <div className="fd-commit">
-                      <button className="btn-secondary" onClick={() => setTidy(null)} disabled={savingAddr}>Back</button>
+                      <button className="btn-secondary" onClick={() => { setTidy(null); setShowNewAddr(true); }} disabled={savingAddr}>Back</button>
                       <button className="btn-primary" onClick={handleConfirmAddress} disabled={savingAddr}>{savingAddr ? 'Saving…' : 'Save address'}</button>
                     </div>
                   </div>
