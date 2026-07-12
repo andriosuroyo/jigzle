@@ -12,6 +12,9 @@ export interface CustomerListRow {
   id: number;
   name: string | null;
   phone: string | null;
+  // PR338 — a lowercased search blob of this customer's ADDRESS recipient names + contact-phone digits,
+  // so Search matches an address recipient / phone even when it differs from the customer-level ones.
+  addr?: string;
 }
 
 // the full detail panel for one customer
@@ -84,10 +87,6 @@ export interface DataHealth {
   blankNames: FlaggedCustomer[];
   oddPhoneCount: number;          // records carrying a raw number that doesn't normalize (likely a typo)
   oddPhones: FlaggedCustomer[];
-  // PR321 — an address where ≥2 of the four region fields (province/city/subdistrict/ward) are the EXACT
-  // same value (e.g. Kuningan×3) — a strong sign the region was mis-filled and needs manual cleanup.
-  repeatRegionCount: number;
-  repeatRegion: FlaggedCustomer[];
   // PR321 — a stated postcode whose province contradicts the dataset for that postcode (DKI↔Jawa Barat
   // merged, so Greater-Jakarta doesn't false-flag).
   postcodeMismatchCount: number;
