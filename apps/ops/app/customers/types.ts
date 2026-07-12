@@ -12,6 +12,9 @@ export interface CustomerListRow {
   id: number;
   name: string | null;
   phone: string | null;
+  // PR338 — a lowercased search blob of this customer's ADDRESS recipient names + contact-phone digits,
+  // so Search matches an address recipient / phone even when it differs from the customer-level ones.
+  addr?: string;
 }
 
 // the full detail panel for one customer

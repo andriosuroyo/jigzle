@@ -76,6 +76,27 @@ export async function getCustomers(): Promise<CustomerListRow[]> {
     }
     if (data.length < PAGE) break;
   }
+  // PR338 — attach each customer's address recipient names + contact-phone digits, so Search can find a
+  // customer by an address recipient / phone that differs from the customer-level name/number.
+  const addrByCust = new Map<number, { names: Set<string>; phones: Set<string> }>();
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('customer_addresses')
+      .select('customer_id,recipient_name,contact_phone')
+      .range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    for (const a of data as { customer_id: number; recipient_name: string | null; contact_phone: string | null }[]) {
+      const e = addrByCust.get(a.customer_id) ?? addrByCust.set(a.customer_id, { names: new Set(), phones: new Set() }).get(a.customer_id)!;
+      if (a.recipient_name?.trim()) e.names.add(a.recipient_name.trim());
+      const d = (a.contact_phone ?? '').replace(/\D/g, '');
+      if (d) e.phones.add(d);
+    }
+    if (data.length < PAGE) break;
+  }
+  for (const c of out) {
+    const e = addrByCust.get(c.id);
+    if (e && (e.names.size || e.phones.size)) c.addr = [...e.names, ...e.phones].join(' ').toLowerCase();
+  }
   return out;
 }
 

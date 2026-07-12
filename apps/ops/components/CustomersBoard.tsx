@@ -316,7 +316,9 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
       .filter((c) => {
         const byName = (c.name ?? '').toLowerCase().includes(s);
         const byPhone = digits.length >= 2 && (c.phone ?? '').includes(digits);
-        return byName || byPhone;
+        // PR338 — also match an address recipient name / phone (the blob holds both, lowercased)
+        const byAddr = !!c.addr && (c.addr.includes(s) || (digits.length >= 2 && c.addr.includes(digits)));
+        return byName || byPhone || byAddr;
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   }, [query, customers]);
@@ -727,7 +729,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
         {tab === 'search' && (
           <>
             <div className="cust-search-wrap">
-              <SearchInput value={query} onChange={setQuery} placeholder="Search name or phone…" />
+              <SearchInput value={query} onChange={setQuery} placeholder="Search name, phone, or recipient…" />
             </div>
 
             {/* A–Z tabs hide while searching (results span every letter) */}
