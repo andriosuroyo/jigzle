@@ -2,10 +2,11 @@
 
 // Shared pre-submit close-confirmation window (docs/016 §2B/§7 v0.4). The SAME window for Count-close
 // and Presence-close (and the future Receiving-close). It lists every change that WILL be written
-// (count deltas, added-missing) plus every in-scope SKU that needs a per-row decision — un-scanned
-// (Count) / un-ticked (Presence) — each set-to-0 or leave. Default is LEAVE (un-scanned/un-ticked is
-// never auto-zeroed); only an explicit "set 0" writes −expected. Back resumes counting; Confirm
-// writes the adjustments (still per-row editable/deletable afterward). Darkened backdrop, centered.
+// (count deltas, added-missing) plus every in-scope SKU that wasn't reached — un-scanned (Count) /
+// un-ticked (Presence). Defaults differ by mode (PR349): Presence un-ticked means "not found", so it
+// defaults to SET 0 (−expected) — no per-row step needed; the operator can still flip a row to "leave".
+// Count un-scanned defaults to LEAVE (a scan pass can be partial — never auto-zeroed). Back resumes
+// counting; Confirm writes the adjustments (still per-row editable/deletable afterward).
 
 import { useMemo, useState } from 'react';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -28,8 +29,11 @@ export default function CloseConfirm({
   onConfirm: (review: CloseReviewEntry[]) => void;
   onCancel: () => void;
 }) {
+  // Presence un-ticked = "not found" → default SET 0 (PR349); Count un-scanned → default LEAVE (a scan
+  // pass can be partial). Either way the operator can flip any row before confirming.
+  const defaultChoice: 'zeroed' | 'ignored' = data.mode === 'presence' ? 'zeroed' : 'ignored';
   const [choices, setChoices] = useState<Record<string, 'zeroed' | 'ignored'>>(() =>
-    Object.fromEntries(data.decisions.map((d) => [d.item_code, 'ignored' as const]))
+    Object.fromEntries(data.decisions.map((d) => [d.item_code, defaultChoice]))
   );
 
   const net = useMemo(() => {
@@ -42,7 +46,12 @@ export default function CloseConfirm({
 
   const zeroed = data.decisions.filter((d) => choices[d.item_code] === 'zeroed' && d.expected !== 0).length;
   const writeCount = data.countDeltas.length + data.added.length + zeroed;
-  const decisionLabel = data.mode === 'count' ? 'Not scanned' : 'Not ticked';
+  // Presence: "not found → set to 0" is the default, so name the section that way. Count keeps the
+  // neutral "set to 0 or leave" wording (un-scanned defaults to leave).
+  const decisionHead =
+    data.mode === 'count'
+      ? `Not scanned — set to 0 or leave (${data.decisions.length})`
+      : `Not ticked — not found, set to 0 (${data.decisions.length})`;
 
   function confirm() {
     onConfirm(data.decisions.map((d) => ({ item_code: d.item_code, action: choices[d.item_code] })));
@@ -92,7 +101,7 @@ export default function CloseConfirm({
 
           {data.decisions.length > 0 && (
             <div className="sc-sec">
-              <div className="sc-sec-title">{decisionLabel} — set to 0 or leave ({data.decisions.length})</div>
+              <div className="sc-sec-title">{decisionHead}</div>
               {data.decisions.map((d) => {
                 const choice = choices[d.item_code];
                 return (

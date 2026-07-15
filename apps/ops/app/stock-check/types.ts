@@ -128,7 +128,8 @@ export interface SkuHit {
 
 // ── close-confirm window data (shared component) ──
 // countDeltas: Count auto-deltas that WILL be written (informational).
-// decisions:   in-scope SKUs needing a per-row set-0 / leave choice (Count un-scanned / Presence un-ticked).
+// decisions:   un-reached in-scope SKUs (Count un-scanned / Presence un-ticked). Default is mode-driven
+//              (PR349): Presence un-ticked → set-0 ("not found"); Count un-scanned → leave. Per-row editable.
 // added:       added-missing SKUs (+qty, informational).
 export interface CloseConfirmData {
   mode: StockCheckMode;
