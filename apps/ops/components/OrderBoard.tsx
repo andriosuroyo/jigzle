@@ -29,6 +29,7 @@ import { useEscToClose, useOverlayClose } from '@/components/useOverlayClose';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
+import { openViaTaobaoApp } from '@/lib/deepLink';
 
 // PR248 — trash glyph for the "Delete PO" action button (Sales-style: btn-danger btn-ico + text).
 const TrashIcon = () => (<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>);
@@ -1233,7 +1234,7 @@ export default function OrderBoard({
               <div className="po-field grow">
                 <label>Item link</label>
                 <div className="po-ro-locked po-ro-locked-row">
-                  <span className="po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer">{editPo.product_link}</a> : '—'}</span>
+                  <span className="po-rov-link">{editPo.product_link ? <a href={editPo.product_link} target="_blank" rel="noreferrer" onClick={(e) => openViaTaobaoApp(e, editPo.product_link!)}>{editPo.product_link}</a> : '—'}</span>
                   {editPo.product_link && (
                     <button className="po-rocopy" onClick={() => copyVal(editPo.product_link!, 'link')} aria-label={copiedKey === 'link' ? 'Item link copied' : 'Copy item link'} title="Copy item link">
                       {copiedKey === 'link' ? <CheckIcon /> : <CopyIcon />}

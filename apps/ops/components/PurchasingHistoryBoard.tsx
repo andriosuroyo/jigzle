@@ -18,6 +18,7 @@ import { SKU_IMG } from '@/components/skuImageSizes';
 import SearchInput from '@/components/SearchInput';
 import DropSearch from '@/components/DropSearch';
 import { fmtNiceDate } from '@jigzle/lib';
+import { openViaTaobaoApp } from '@/lib/deepLink';
 
 // PR322 — courier dropsearch options: the shared list + the current value if it's not in it (kept so an
 // existing courier still shows even after it's removed from Settings), each as a {value,label} pair.
@@ -540,7 +541,7 @@ export default function PurchasingHistoryBoard({
                   <div className="po-field grow">
                     <label>Item link</label>
                     <div className="po-ro-locked po-ro-locked-row">
-                      <span className="po-rov-link">{selItem.product_link ? <a href={selItem.product_link} target="_blank" rel="noreferrer">{selItem.product_link}</a> : '—'}</span>
+                      <span className="po-rov-link">{selItem.product_link ? <a href={selItem.product_link} target="_blank" rel="noreferrer" onClick={(e) => openViaTaobaoApp(e, selItem.product_link!)}>{selItem.product_link}</a> : '—'}</span>
                     </div>
                   </div>
                 </div>

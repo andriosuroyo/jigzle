@@ -48,6 +48,7 @@ import DropSearch from '@/components/DropSearch';
 import { isRealName } from '@/components/skuName';
 import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
 import { fmtNiceDate } from '@jigzle/lib';
+import { openViaTaobaoApp } from '@/lib/deepLink';
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
 
@@ -79,7 +80,7 @@ function BuyLink({ url, primary }: { url: string; primary?: boolean }) {
   const host = hostOf(url);
   const fav = host ? `https://www.google.com/s2/favicons?domain=${host}&sz=64` : null;
   return (
-    <a className={`buy-link ${primary ? 'primary' : ''}`} href={url} target="_blank" rel="noreferrer">
+    <a className={`buy-link ${primary ? 'primary' : ''}`} href={url} target="_blank" rel="noreferrer" onClick={(e) => openViaTaobaoApp(e, url)}>
       {/* eslint-disable-next-line @next/next/no-img-element -- favicon from an external host, off the data path */}
       {fav && <img className="buy-fav" src={fav} alt="" width={18} height={18} referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
       <span className="buy-link-url">{url}</span>
