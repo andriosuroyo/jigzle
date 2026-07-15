@@ -8,7 +8,7 @@ ledger against the live DB, asserting the stock-math invariant holds, then clean
                   (view tracks it) and DELETE it (view reverts).
   Presence mode — open → leave a SKU un-ticked → close marking it 'zeroed' → assert a −expected
                   adjustment + physical 0; separately close everything 'ignored' → assert NO
-                  adjustment; and the validate-before-write guard (un-ticked + no decision → reject).
+                  adjustment; and (PR349) un-ticked with NO decision → AUTO-ZERO (not found).
   Checkbox Qty  — (PR18 §5 / 0024) open presence → record_count 'set' a SKU off its real number (a
                   ticked Checkbox row at a Qty) → close → assert the SAME (counted − expected)
                   adjustment Scan writes; and that ticking AT expected writes NOTHING.
@@ -164,21 +164,21 @@ try:
     check("presence-ignored: NO adjustment written", len(session_adjustments(scid3)) == 0)
     check("presence-ignored: A physical unchanged", view_row(A)["physical"] == expected_A, str(view_row(A)["physical"]))
 
-    # ── CASE 4: validate-before-write — un-ticked line with no decision → reject (zero residue) ──
-    print("\n-- CASE 4: presence close with an uncovered un-ticked SKU is rejected --")
+    # ── CASE 4: un-ticked with NO decision → AUTO-ZERO ("not found", PR349) ──
+    print("\n-- CASE 4: presence un-ticked with no decision auto-zeros --")
     scid4 = rpc("open_stock_check", {"p_mode": "presence", "p_scope": "brand", "p_brands": [BR], "p_counted_by": BY})
-    raised = False
-    try:
-        rpc("close_stock_check", {"p_stock_check_id": scid4, "p_review": []})
-    except urllib.error.HTTPError as e:
-        raised = "set-0/leave decision" in e.read().decode(errors="replace")
-    check("uncovered un-ticked close is rejected", raised)
-    still_open = rest("GET", f"stock_checks?stock_check_id=eq.{scid4}&select=status")
-    check("rejected close left zero residue (still open, no adjustments)",
-          bool(still_open) and still_open[0]["status"] == "open" and len(session_adjustments(scid4)) == 0)
-    # CASE 4 intentionally leaves scid4 OPEN — cancel it so its brand scope is free before CASE 5/6
-    # open another presence session on the same brand (else open_stock_check's overlap guard rejects).
-    rpc("cancel_stock_check", {"p_stock_check_id": scid4})
+    lines4 = get_all_lines(scid4)
+    expected_A4 = view_row(A)["physical"]
+    # mark everything EXCEPT A as 'ignored'; A carries NO review entry at all → it must auto-zero.
+    review4 = [{"item_code": l["item_code"], "action": "ignored"} for l in lines4 if l["item_code"] != A]
+    rpc("close_stock_check", {"p_stock_check_id": scid4, "p_review": review4})
+    adjs4 = session_adjustments(scid4)
+    check("auto-zero: exactly one adjustment", len(adjs4) == 1, str(adjs4))
+    check("auto-zero: adjustment is −expected on A",
+          bool(adjs4) and adjs4[0]["item_code"] == A and adjs4[0]["delta"] == -expected_A4, f'expected -{expected_A4}, got {adjs4[:1]}')
+    check("auto-zero: view physical → 0", view_row(A)["physical"] == 0, str(view_row(A)["physical"]))
+    rest("DELETE", f"adjustments?stock_check_id=eq.{scid4}", prefer="return=minimal")
+    check("auto-zero: delete reverts physical", view_row(A)["physical"] == expected_A4, str(view_row(A)["physical"]))
 
     # ── CASE 5: Checkbox Qty (PR18 §5) — tick A at qty ≠ expected → (counted − expected) adjustment ──
     print("\n-- CASE 5: presence Checkbox Qty (ticked at qty ≠ expected → counted−expected) --")
