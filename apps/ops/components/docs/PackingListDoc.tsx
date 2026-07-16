@@ -5,8 +5,8 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { ensureCjkFont, CJK } from './cjkFont';
 
-export type PackingBox = { desc: string; p: number; l: number; t: number; realWeight: number; tracking: string };
-export type PackingListDocProps = { markNo: string; boxes: PackingBox[]; divisor: number };
+export type PackingBox = { desc: string; p: number; l: number; t: number; realWeight: number };
+export type PackingListDocProps = { markNo: string; boxes: PackingBox[]; divisor: number; trackings: string[] };
 
 const B = '#000';
 const s = StyleSheet.create({
@@ -49,12 +49,13 @@ function HeadCell({ en, cn, style, last }: { en: string; cn: string; style: RSty
   );
 }
 
-export default function PackingListDoc({ markNo, boxes, divisor }: PackingListDocProps) {
+export default function PackingListDoc({ markNo, boxes, divisor, trackings }: PackingListDocProps) {
   ensureCjkFont();
   const vol = (b: PackingBox) => r2((Number(b.p) || 0) * (Number(b.l) || 0) * (Number(b.t) || 0) / divisor);
   const netWeight = r2(boxes.reduce((sum, b) => sum + vol(b), 0));
   const grossWeight = r2(boxes.reduce((sum, b) => sum + (Number(b.realWeight) || 0), 0));
-  const trackings = [...new Set(boxes.map((b) => b.tracking.trim()).filter(Boolean))].join('\n');
+  // PR354 — box trackings come from the tab's single comma-separated field; one line per number.
+  const trackingText = [...new Set(trackings.map((t) => t.trim()).filter(Boolean))].join('\n');
 
   return (
     <Document>
@@ -101,7 +102,7 @@ export default function PackingListDoc({ markNo, boxes, divisor }: PackingListDo
             <View style={s.fLine}><Text style={s.fLabel}>NUMBER OF PACKAGES 箱数:</Text><Text style={s.fVal}>{boxes.length}</Text><Text style={s.fUnit}>BOX</Text></View>
             <View style={s.fLine}><Text style={s.fLabel}>NET WEIGHT 净重:</Text><Text style={s.fVal}>{netWeight}</Text><Text style={s.fUnit}>KG</Text></View>
             <View style={s.fLine}><Text style={s.fLabel}>GROSS WEIGHT 毛重:</Text><Text style={s.fVal}>{grossWeight}</Text><Text style={s.fUnit}>KG</Text></View>
-            <View style={[s.fLine, { alignItems: 'flex-start' }]}><Text style={s.fLabel}>TRACKING NUMBER 运单号：</Text>{trackings ? <Text style={s.fVal}>{trackings}</Text> : null}</View>
+            <View style={[s.fLine, { alignItems: 'flex-start' }]}><Text style={s.fLabel}>TRACKING NUMBER 运单号：</Text>{trackingText ? <Text style={s.fVal}>{trackingText}</Text> : null}</View>
           </View>
           <View style={s.footRight}>
             <Text style={s.en}>SHIPPER`S SIGNATURE</Text>

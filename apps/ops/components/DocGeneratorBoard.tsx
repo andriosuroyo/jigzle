@@ -37,6 +37,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
   const [cnShipId, setCnShipId] = useState('');
   const [cnMark, setCnMark] = useState('');
   const [cnBoxes, setCnBoxes] = useState<CnBox[]>([emptyBox()]);
+  const [cnBoxTracking, setCnBoxTracking] = useState(''); // PR354 — comma-separated box trackings (Packing List)
   const [cnDivisor, setCnDivisor] = useState(6000);
 
   const isCn = tab === 'cn-packing' || tab === 'cn-invoice' || tab === 'cn-shipping';
@@ -71,6 +72,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
             shipId={cnShipId} setShipId={setCnShipId}
             mark={cnMark} setMark={setCnMark}
             boxes={cnBoxes} setBoxes={setCnBoxes}
+            boxTracking={cnBoxTracking} setBoxTracking={setCnBoxTracking}
             divisor={cnDivisor} setDivisor={setCnDivisor}
           />
         )}

@@ -46,13 +46,13 @@ export type CnShipmentRow = {
   status: string | null;
 };
 
-// One package on the CN Packing List. Dimensions in cm, real weight in kg, plus its China-domestic
-// box tracking (e.g. "ZTO 79011515924946"). Entered here for now (net-new — not yet stored).
+// One package on the CN Packing List. Dimensions in cm, real weight in kg. Entered here for now
+// (net-new — not yet stored). Box tracking is no longer per-box: it's a single comma-separated field
+// on the tab (PR354), rendered as one line per number on the packing list.
 export type CnBox = {
   desc: string; // per-package DESCRIPTION (品名); falls back to "JIGSAW PUZZLE" when blank (PR352)
   p: string; // length
   l: string; // width
   t: string; // height
   realWeight: string;
-  tracking: string;
 };
