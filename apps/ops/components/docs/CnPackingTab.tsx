@@ -100,7 +100,7 @@ export default function CnPackingTab({ shipments, shipId, setShipId, setMark, bo
   const cell = { ...inp, width: '100%' } as React.CSSProperties;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 480px) minmax(360px, 480px)', gap: 16, padding: 16, alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 440px) 1fr', gap: 16, padding: 16, alignItems: 'start', maxWidth: 1100, width: '100%', margin: '0 auto' }}>
       <div>
         <div style={box}>
           <label style={lbl}>Shipment (Purchasing ship-id)</label>
@@ -149,7 +149,7 @@ export default function CnPackingTab({ shipments, shipId, setShipId, setMark, bo
             {downloading ? 'Generating…' : 'Download PDF'}
           </button>
         </div>
-        <div style={{ height: 720, border: '1px solid #d8d8d6', borderRadius: 8, overflow: 'hidden', background: '#f4f4f2' }}>
+        <div style={{ height: 820, border: '1px solid #d8d8d6', borderRadius: 8, overflow: 'hidden', background: '#f4f4f2' }}>
           {ready ? (
             <PDFViewer width="100%" height="100%" showToolbar={false}>{docEl}</PDFViewer>
           ) : (
