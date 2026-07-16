@@ -150,7 +150,7 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
   const custName = custId != null ? customers.find((c) => c.id === custId)?.name : null;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 460px) 1fr', gap: 16, padding: 16, alignItems: 'start' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 440px) 1fr', gap: 16, padding: 16, alignItems: 'start', maxWidth: 1100, width: '100%', margin: '0 auto' }}>
       {/* ── form ── */}
       <div>
         {/* customer */}
@@ -259,7 +259,7 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
             {downloading ? 'Generating…' : 'Download PDF'}
           </button>
         </div>
-        <div style={{ height: 720, border: '1px solid #d8d8d6', borderRadius: 8, overflow: 'hidden', background: '#f4f4f2' }}>
+        <div style={{ height: 820, border: '1px solid #d8d8d6', borderRadius: 8, overflow: 'hidden', background: '#f4f4f2' }}>
           {items.length ? (
             <PDFViewer width="100%" height="100%" showToolbar={false} key={`${currency}`}>
               {docEl}
