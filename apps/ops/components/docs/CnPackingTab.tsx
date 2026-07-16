@@ -118,6 +118,7 @@ export default function CnPackingTab({ shipments, shipId, setShipId, setMark, bo
                 options={shipmentOpts}
                 placeholder="— pick a shipment —"
                 ariaLabel="Shipment ID"
+                className="cn-doc-ds"
               />
             </div>
             <div>

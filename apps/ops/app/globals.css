@@ -1419,6 +1419,9 @@ img.sku-img { background: #e8e8e8; }
 .ds.ds-flag .ds-label:empty { display: none; }
 /* PR322 — phone country-code picker keeps its snug fixed-width fit inside the number row. */
 .nc-row .phone-cc .ds-btn { padding: 9px 8px; gap: 4px; }
+/* PR355 — CN Doc Generator shipment picker: shrink the dropdown to the compact input height used by
+   CN Invoice's native <select> (and by the adjacent Box tracking input) so the fields line up. */
+.cn-doc-ds .ds-btn { height: auto; padding: 6px 8px; font-size: 13px; border-radius: 6px; }
 .flag-select { position: relative; }
 .flag-select-btn { width: 100%; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; padding: 0; }
 .flag-select-btn:disabled { opacity: 0.5; cursor: not-allowed; }
