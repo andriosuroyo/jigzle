@@ -218,12 +218,14 @@ export default function OrderBoard({
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchStep, setBatchStep] = useState<'pick' | 'fill'>('pick');
   const [batchIds, setBatchIds] = useState<Set<number>>(new Set());
-  const [batchSupplier, setBatchSupplier] = useState<number | ''>('');
   const [batchMethod, setBatchMethod] = useState('');
   const [batchTracking, setBatchTracking] = useState('');
   const [batchMarketplace, setBatchMarketplace] = useState(''); // PR256: one marketplace order id for the group
   const [batchNote, setBatchNote] = useState('');
   const [batchPer, setBatchPer] = useState<Record<number, { cost: string; link: string }>>({});
+  // PR351 — optional Shipment ID in Confirm step 2: when there's no consolidation, typing it here
+  // groups the items into that shipment immediately, bypassing the separate Ship step.
+  const [batchShipId, setBatchShipId] = useState('');
   const [batchBusy, setBatchBusy] = useState(false);
   // PR263 — Batch confirm / Create shipment ID are now in-list entry buttons (openBatch / openGroup
   // called directly); the old shell tab-row buttons + signal plumbing are gone.
@@ -509,12 +511,14 @@ export default function OrderBoard({
     setBatchOpen(true);
     setBatchStep('pick');
     setBatchIds(new Set());
-    setBatchSupplier('');
     setBatchMethod('');
     setBatchTracking('');
     setBatchMarketplace('');
     setBatchNote('');
+    setBatchShipId('');
     setBatchPer({});
+    // PR351 — recent ship_ids so the optional Shipment ID field can autocomplete (mirrors Create shipment).
+    getRecentShipIds().then(setShipIdOpts).catch(() => {});
   }
   function closeBatch() {
     setBatchOpen(false);
@@ -544,16 +548,25 @@ export default function OrderBoard({
     setBatchStep('fill');
   }
   // apply the shared fields + per-item cost/link to every picked PO, then advance them all → To ship.
+  // PR351 — if a Shipment ID was entered (the no-consolidation case), also group them straight into that
+  // shipment here, so they skip the separate Ship step entirely.
   async function submitBatch() {
     if (batchIds.size === 0) return;
     resetMessages();
+    const shipId = batchShipId.trim();
+    // the shipment CODE is the leading letters of the Shipment ID ("SUB 193" → "SUB"); validate up front.
+    const prefix = shipId ? (shipId.match(/^[A-Za-z]+/)?.[0] ?? '').toUpperCase() : '';
+    if (shipId && !prefix) {
+      setError('Enter a Shipment ID that starts with a code, e.g. "SUB 193".');
+      return;
+    }
     setBatchBusy(true);
     try {
       const ids = [...batchIds];
       for (const id of ids) {
         const per = batchPer[id] ?? { cost: '', link: '' };
         await updatePO(id, {
-          supplier_id: batchSupplier ? Number(batchSupplier) : undefined,
+          // PR351 — no supplier_id here: each PO keeps the Source it was given in Buy.
           method: batchMethod.trim() || null,
           tracking_to_forwarder: batchTracking.trim() || null,
           marketplace_order_id: batchMarketplace.trim() || null,
@@ -563,7 +576,24 @@ export default function OrderBoard({
         });
         await setPOStatus(id, 'With Forwarder');
       }
-      setSuccess(`${ids.length} item${ids.length === 1 ? '' : 's'} confirmed → Ship.`);
+      if (shipId) {
+        // group the just-confirmed items into the shipment now (bypass Ship). Mirrors submitGroup:
+        // ensure the code exists (FK on shipments.forwarder_prefix), then send the full qty of each.
+        const pickedPOs = shownFiltered.filter((po) => batchIds.has(po.po_id));
+        const known = forwarders.find((f) => f.prefix.toUpperCase() === prefix);
+        if (!known) { try { await addForwarder({ prefix }); } catch { /* non-fatal: may already exist */ } }
+        await groupIntoShipment({
+          ship_id: shipId,
+          items: pickedPOs.map((po) => ({ po_id: po.po_id, qty: po.qty })),
+          forwarder_prefix: prefix,
+          origin_country: (known?.country ?? '').trim() || null,
+          ship_date: todayStr(),
+        });
+        setSuccess(`${ids.length} item${ids.length === 1 ? '' : 's'} confirmed → ${shipId}.`);
+        try { setShipments(await getOpenShipments()); } catch { /* non-fatal */ }
+      } else {
+        setSuccess(`${ids.length} item${ids.length === 1 ? '' : 's'} confirmed → Ship.`);
+      }
       closeBatch();
       await refreshQueue();
     } catch (e) {
@@ -1441,16 +1471,8 @@ export default function OrderBoard({
             <>
               <div className="sc-modal-body">
                 {/* group fields — each its own subheader; applied to every picked item */}
-                <div className="batch-group">
-                  <div className="fd-section-head">Source</div>
-                  <DropSearch
-                    value={batchSupplier ? String(batchSupplier) : null}
-                    onChange={(v) => setBatchSupplier(v ? Number(v) : '')}
-                    options={supplierOpts}
-                    placeholder="— pick a supplier —"
-                    ariaLabel="Source"
-                  />
-                </div>
+                {/* PR351 — Source is set per-item during Buy (and locked in the single-item Confirm),
+                    so the batch step no longer re-asks for it; each PO keeps its own source. */}
                 <div className="batch-group">
                   <div className="fd-section-head">Local courier &amp; tracking</div>
                   <div className="po-inline2 po-inline-courier">
@@ -1504,6 +1526,31 @@ export default function OrderBoard({
                     );
                   })}
                 </ul>
+
+                {/* PR351 — optional Shipment ID (no-consolidation shortcut): styled exactly like Create
+                    shipment step 2, but sits BELOW the item list. Leave blank to send items to Ship as
+                    usual; type an id to group them into that shipment now and skip the Ship step. */}
+                <div className="batch-group">
+                  <div className="fd-section-head">Shipment ID</div>
+                  <div className="hint" style={{ marginBottom: 6 }}>Optional — set this only when there&rsquo;s no consolidation, to skip the Ship step.</div>
+                  <input className="field" type="text" list="batch-shipids" placeholder='e.g. "SUB 193"' value={batchShipId} onChange={(e) => setBatchShipId(e.target.value)} />
+                  <datalist id="batch-shipids">{shipIdOpts.map((s) => <option key={s} value={s} />)}</datalist>
+                  {shipments.length > 0 && (
+                    <div className="grp-shipid-picks">
+                      <span className="grp-shipid-lead">or add to an open shipment:</span>
+                      {shipments.map((s) => (
+                        <button
+                          key={s.ship_id}
+                          type="button"
+                          className={`chip ${batchShipId.trim() === s.ship_id ? 'active' : ''}`}
+                          onClick={() => setBatchShipId(s.ship_id)}
+                        >
+                          {s.ship_id}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="sc-modal-foot">
                 <button className="btn-secondary" onClick={() => setBatchStep('pick')}>← Back</button>

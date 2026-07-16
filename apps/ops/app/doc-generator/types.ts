@@ -49,6 +49,7 @@ export type CnShipmentRow = {
 // One package on the CN Packing List. Dimensions in cm, real weight in kg, plus its China-domestic
 // box tracking (e.g. "ZTO 79011515924946"). Entered here for now (net-new — not yet stored).
 export type CnBox = {
+  desc: string; // per-package DESCRIPTION (品名); falls back to "JIGSAW PUZZLE" when blank (PR352)
   p: string; // length
   l: string; // width
   t: string; // height
