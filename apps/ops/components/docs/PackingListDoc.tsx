@@ -5,7 +5,7 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { ensureCjkFont, CJK } from './cjkFont';
 
-export type PackingBox = { p: number; l: number; t: number; realWeight: number; tracking: string };
+export type PackingBox = { desc: string; p: number; l: number; t: number; realWeight: number; tracking: string };
 export type PackingListDocProps = { markNo: string; boxes: PackingBox[]; divisor: number };
 
 const B = '#000';
@@ -13,7 +13,6 @@ const s = StyleSheet.create({
   page: { paddingVertical: 28, paddingHorizontal: 34, fontFamily: CJK, fontSize: 9, color: '#000' },
   title: { textAlign: 'center', fontSize: 15, fontWeight: 700 },
   titleCn: { textAlign: 'center', fontSize: 15, letterSpacing: 6, marginBottom: 8 },
-  divisorNote: { textAlign: 'right', fontSize: 8, marginBottom: 2 },
 
   table: { borderWidth: 1, borderColor: B },
   hRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: B },
@@ -32,9 +31,10 @@ const s = StyleSheet.create({
   footRow: { flexDirection: 'row', borderWidth: 1, borderTopWidth: 0, borderColor: B },
   footLeft: { width: 250, borderRightWidth: 1, borderColor: B, padding: 6 },
   footRight: { flexGrow: 1, padding: 6 },
-  fLine: { flexDirection: 'row', marginBottom: 3 },
+  fLine: { flexDirection: 'row', marginBottom: 3, alignItems: 'flex-end' },
   fLabel: { fontSize: 8.5 },
   fVal: { fontSize: 9, marginLeft: 6 },
+  fUnit: { fontSize: 8.5, marginLeft: 6 }, // trailing unit (BOX / KG) to the right of each value
 });
 
 type RStyle = (typeof s)[keyof typeof s];
@@ -61,7 +61,6 @@ export default function PackingListDoc({ markNo, boxes, divisor }: PackingListDo
       <Page size="A4" style={s.page}>
         <Text style={s.title}>PACKING LIST</Text>
         <Text style={s.titleCn}>包 装 清 单</Text>
-        <Text style={s.divisorNote}>÷{divisor}</Text>
 
         <View style={s.table}>
           {/* header */}
@@ -77,8 +76,9 @@ export default function PackingListDoc({ markNo, boxes, divisor }: PackingListDo
           {/* rows */}
           {boxes.map((b, i) => (
             <View key={i} style={s.row} wrap={false}>
-              <View style={[s.cell, s.cMark]}><Text style={s.en}>{i === 0 ? markNo : ''}</Text></View>
-              <View style={[s.cell, s.cDesc]}><Text style={s.en}>JIGSAW PUZZLE</Text></View>
+              {/* PR352 — every carton carries the ship-id; additional cartons get a "(1)", "(2)"… suffix. */}
+              <View style={[s.cell, s.cMark]}><Text style={s.en}>{i === 0 ? markNo : `${markNo} (${i})`}</Text></View>
+              <View style={[s.cell, s.cDesc]}><Text style={s.en}>{b.desc.trim() || 'JIGSAW PUZZLE'}</Text></View>
               <View style={[s.cell, s.cDim]}><Text style={s.num}>{Number(b.p) || ''}</Text></View>
               <View style={[s.cell, s.cDim]}><Text style={s.num}>{Number(b.l) || ''}</Text></View>
               <View style={[s.cell, s.cDim]}><Text style={s.num}>{Number(b.t) || ''}</Text></View>
@@ -91,18 +91,17 @@ export default function PackingListDoc({ markNo, boxes, divisor }: PackingListDo
         {/* country of origin */}
         <View style={s.originBand}>
           <Text style={s.en}>COUNTRY OF ORIGIN: CHINA</Text>
-          <Text style={s.cn}>(起 始 地)</Text>
+          <Text style={s.cn}>（起　始　地）</Text>
         </View>
 
-        {/* packages / weights + signature */}
+        {/* packages / weights + signature. PR352 — the unit (BOX / KG) trails each value; the box
+            tracking prints on its own labelled line under gross weight. */}
         <View style={s.footRow}>
           <View style={s.footLeft}>
-            <View style={s.fLine}><Text style={s.fLabel}>NUMBER OF PACKAGES 箱数:</Text><Text style={s.fVal}>{boxes.length}</Text></View>
-            <Text style={s.fLabel}>BOX</Text>
-            <View style={s.fLine}><Text style={s.fLabel}>NET WEIGHT 净重:</Text><Text style={s.fVal}>{netWeight}</Text></View>
-            <View style={s.fLine}><Text style={s.fLabel}>GROSS WEIGHT 毛重:</Text><Text style={s.fVal}>{grossWeight}</Text></View>
-            <Text style={s.fLabel}>KG</Text>
-            {trackings ? <Text style={[s.en, { marginTop: 6 }]}>{trackings}</Text> : null}
+            <View style={s.fLine}><Text style={s.fLabel}>NUMBER OF PACKAGES 箱数:</Text><Text style={s.fVal}>{boxes.length}</Text><Text style={s.fUnit}>BOX</Text></View>
+            <View style={s.fLine}><Text style={s.fLabel}>NET WEIGHT 净重:</Text><Text style={s.fVal}>{netWeight}</Text><Text style={s.fUnit}>KG</Text></View>
+            <View style={s.fLine}><Text style={s.fLabel}>GROSS WEIGHT 毛重:</Text><Text style={s.fVal}>{grossWeight}</Text><Text style={s.fUnit}>KG</Text></View>
+            <View style={[s.fLine, { alignItems: 'flex-start' }]}><Text style={s.fLabel}>TRACKING NUMBER 运单号：</Text>{trackings ? <Text style={s.fVal}>{trackings}</Text> : null}</View>
           </View>
           <View style={s.footRight}>
             <Text style={s.en}>SHIPPER`S SIGNATURE</Text>
