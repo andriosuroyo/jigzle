@@ -218,7 +218,6 @@ export default function OrderBoard({
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchStep, setBatchStep] = useState<'pick' | 'fill'>('pick');
   const [batchIds, setBatchIds] = useState<Set<number>>(new Set());
-  const [batchSupplier, setBatchSupplier] = useState<number | ''>('');
   const [batchMethod, setBatchMethod] = useState('');
   const [batchTracking, setBatchTracking] = useState('');
   const [batchMarketplace, setBatchMarketplace] = useState(''); // PR256: one marketplace order id for the group
@@ -509,7 +508,6 @@ export default function OrderBoard({
     setBatchOpen(true);
     setBatchStep('pick');
     setBatchIds(new Set());
-    setBatchSupplier('');
     setBatchMethod('');
     setBatchTracking('');
     setBatchMarketplace('');
@@ -553,7 +551,7 @@ export default function OrderBoard({
       for (const id of ids) {
         const per = batchPer[id] ?? { cost: '', link: '' };
         await updatePO(id, {
-          supplier_id: batchSupplier ? Number(batchSupplier) : undefined,
+          // PR351 — no supplier_id here: each PO keeps the Source it was given in Buy.
           method: batchMethod.trim() || null,
           tracking_to_forwarder: batchTracking.trim() || null,
           marketplace_order_id: batchMarketplace.trim() || null,
@@ -1441,16 +1439,8 @@ export default function OrderBoard({
             <>
               <div className="sc-modal-body">
                 {/* group fields — each its own subheader; applied to every picked item */}
-                <div className="batch-group">
-                  <div className="fd-section-head">Source</div>
-                  <DropSearch
-                    value={batchSupplier ? String(batchSupplier) : null}
-                    onChange={(v) => setBatchSupplier(v ? Number(v) : '')}
-                    options={supplierOpts}
-                    placeholder="— pick a supplier —"
-                    ariaLabel="Source"
-                  />
-                </div>
+                {/* PR351 — Source is set per-item during Buy (and locked in the single-item Confirm),
+                    so the batch step no longer re-asks for it; each PO keeps its own source. */}
                 <div className="batch-group">
                   <div className="fd-section-head">Local courier &amp; tracking</div>
                   <div className="po-inline2 po-inline-courier">
