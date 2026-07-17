@@ -117,6 +117,42 @@ export async function getSettings(): Promise<SettingsData> {
   return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes };
 }
 
+// PR371 — usage counts for the Catalog classification pick-lists (Settings badges): how many SKUs use
+// each Product type / Piece type (by label) and each Sub type (by product_type + label pair). One
+// bounded-concurrency paged scan of the three columns; lazily loaded when the Catalog category opens.
+// Degrades to empty maps on any error (badges just don't show). Sub-type key = `${pt}${label}`.
+export async function getCatalogClassUsage(): Promise<{ product: Record<string, number>; sub: Record<string, number>; piece: Record<string, number> }> {
+  const supabase = createSupabaseServerClient();
+  const product: Record<string, number> = {};
+  const sub: Record<string, number> = {};
+  const piece: Record<string, number> = {};
+  try {
+    const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true });
+    const total = count ?? 0;
+    const PAGE = 1000;
+    const pages = Math.ceil(total / PAGE);
+    const CONC = 8;
+    for (let start = 0; start < pages; start += CONC) {
+      const batch = await Promise.all(
+        Array.from({ length: Math.min(CONC, pages - start) }, (_, k) => {
+          const from = (start + k) * PAGE;
+          return supabase.from('catalogue').select('product_type,sub_type,piece_type').order('item_code').range(from, from + PAGE - 1);
+        }),
+      );
+      for (const { data } of batch)
+        for (const r of (data ?? []) as { product_type: string | null; sub_type: string | null; piece_type: string | null }[]) {
+          const pt = (r.product_type ?? '').trim();
+          const st = (r.sub_type ?? '').trim();
+          const pc = (r.piece_type ?? '').trim();
+          if (pt) product[pt] = (product[pt] ?? 0) + 1;
+          if (st) { const key = pt + '|' + st; sub[key] = (sub[key] ?? 0) + 1; } // '|' never appears in a type label
+          if (pc) piece[pc] = (piece[pc] ?? 0) + 1;
+        }
+    }
+  } catch { /* degrade to whatever was counted */ }
+  return { product, sub, piece };
+}
+
 // 0056: Purchasing History's shipment-courier pick-list (degrades to [] until 0056 is applied).
 export async function getShipmentCouriers(): Promise<ShipmentCourier[]> {
   const supabase = createSupabaseServerClient();

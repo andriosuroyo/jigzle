@@ -6,7 +6,7 @@
 // IS the way to retire it (deleteSetting is a soft delete server-side, so it just drops out of every
 // picker). Single-field lists drop the redundant per-row field caption.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { PlusCircleIcon, TruckIcon, PlaneIcon } from '@/components/AddIcons';
@@ -24,6 +24,7 @@ import type { Supplier, Forwarder } from '@jigzle/db/types';
 import {
   addSetting,
   deleteSetting,
+  getCatalogClassUsage,
   reorderSetting,
   updateSetting,
   uploadSettingIcon,
@@ -255,6 +256,25 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
 
   const category = useMemo(() => CATEGORIES.find((c) => c.key === catKey) ?? null, [catKey]);
 
+  // PR371 — SKU usage counts for the Catalog classification lists (shown as a small badge per row).
+  // Lazily loaded the first time the Catalog category opens (one bounded-concurrency catalogue scan).
+  const [usage, setUsage] = useState<{ product: Record<string, number>; sub: Record<string, number>; piece: Record<string, number> } | null>(null);
+  const usageLoadedRef = useRef(false);
+  useEffect(() => {
+    if (catKey !== 'catalog' || usageLoadedRef.current) return;
+    usageLoadedRef.current = true;
+    getCatalogClassUsage().then(setUsage).catch(() => {});
+  }, [catKey]);
+  // per-row SKU count for a classification list row (sub types key on product_type + label).
+  const rowUsage = (kind: SettingsKind, row: SettingRow): number | undefined => {
+    if (!usage) return undefined;
+    const label = String(val(row, 'label') ?? '');
+    if (kind === 'cat_product_type') return usage.product[label];
+    if (kind === 'cat_piece_type') return usage.piece[label];
+    if (kind === 'cat_sub_type') return usage.sub[String(val(row, 'product_type') ?? '') + '|' + label];
+    return undefined;
+  };
+
   function setRows(kind: SettingsKind, updater: (rows: SettingRow[]) => SettingRow[]) {
     setLists((prev) => ({ ...prev, [kind]: updater(prev[kind]) }));
   }
@@ -428,6 +448,7 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
             sec={sec}
             row={row}
             options={colOptions}
+            count={rowUsage(sec.kind, row)}
             first={i === 0}
             last={i === rows.length - 1}
             busy={busy}
@@ -546,6 +567,7 @@ function SettingRowEditor({
   sec,
   row,
   options,
+  count,
   first,
   last,
   busy,
@@ -557,6 +579,7 @@ function SettingRowEditor({
   sec: SectionDef;
   row: SettingRow;
   options?: Record<string, string[]>; // PR368 — per-select-column option lists
+  count?: number; // PR371 — SKU usage count (Catalog classification lists)
   first: boolean;
   last: boolean;
   busy: boolean;
@@ -698,6 +721,9 @@ function SettingRowEditor({
           </div>
         ))}
       </div>
+
+      {/* PR371 — SKU usage badge (Catalog classification lists): how many SKUs use this value */}
+      {count !== undefined && <span className="set-usage" title={`${count.toLocaleString()} SKUs use this`}>{count.toLocaleString()}</span>}
 
       {/* three compact buttons to the right of the field: up, down, remove (red ×) */}
       <div className="set-row-ctl">
