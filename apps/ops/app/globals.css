@@ -22,6 +22,9 @@
 html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; background: var(--cream); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif; }
 body { min-height: 100vh; min-height: 100dvh; }
 input, textarea, select, button { font-family: inherit; }
+/* PR375 — one green for EVERY checkbox when ticked (was mixed: some green via per-element
+   accent-color, most left the browser-default blue). `accent-color` only paints the checked fill. */
+input[type="checkbox"] { accent-color: var(--green); }
 
 /* ── Login (copied screen) ── */
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(180deg, var(--cream) 0%, var(--paper) 100%); }

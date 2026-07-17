@@ -218,7 +218,10 @@ let OPTIONS_CACHE: Record<string, string[]> | null = null;
 // sub-types matching the selected product type. Session-cached like OPTIONS_CACHE.
 let SUBTYPES_CACHE: { label: string; product_type: string }[] | null = null;
 
-const MAX_IMAGE_URLS = 8;
+const MAX_IMAGE_URLS = 8; // storage/save still tolerates up to 8 (legacy rows) — see LINK_FIELDS
+// PR375 — the Links tab shows 6 slots each for images and sources. The save paths keep their higher
+// cap so any pre-existing 7th/8th entry on an older SKU is preserved, never silently truncated.
+const LINK_FIELDS = 6;
 // PR189 — turn a Google-Drive share link into a direct-render image URL. Handles /file/d/ID/…, ?id=ID,
 // /thumbnail?id=ID, /uc?…id=ID. Falls back to the raw string if no Drive file id is found. The file must
 // be shared "anyone with the link" to render.
@@ -970,7 +973,7 @@ export default function CatalogBoard({
                   {GROUPS[detailTab].title === 'Links' && (
                     <div className="cat-imgedit">
                       <div className="cat-grp-title">Images — Google Drive links (first is primary)</div>
-                      {Array.from({ length: MAX_IMAGE_URLS }).map((_, i) => (
+                      {Array.from({ length: LINK_FIELDS }).map((_, i) => (
                         <div className="cat-imgrow" key={i}>
                           <span className="cat-imgrow-thumb">
                             {driveDirect(imageUrls[i] ?? '')
@@ -988,11 +991,11 @@ export default function CatalogBoard({
                       ))}
                       <label className="cat-round" style={{ marginTop: 12 }}>
                         <input type="checkbox" checked={imgUnavailable} onChange={(e) => setImgUnavailable(e.target.checked)} />
-                        <span>No picture available — searched but none found (hides it from the Fix “missing image” list)</span>
+                        <span>No picture available — searched but none found</span>
                       </label>
 
                       <div className="cat-grp-title" style={{ marginTop: 18 }}>Sources — buy links (used by Purchasing → Buy)</div>
-                      {Array.from({ length: 8 }).map((_, i) => (
+                      {Array.from({ length: LINK_FIELDS }).map((_, i) => (
                         <div className="cat-srcrow" key={i}>
                           <span className="cat-srcrow-n">{i + 1}</span>
                           <input
