@@ -278,6 +278,34 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
   await supabase.from('catalogue').update({ est_weight: est }).eq('item_code', code);
 }
 
+// ── PR364: rename a SKU's item_code across the whole system (fix a mis-typed / mis-cased code) ──
+// Delegates to the rename_sku() DB function (0096), which re-keys the catalogue row (every FK child
+// cascades) + the non-FK item_code_raw copies in ONE atomic transaction. Error-as-data (awaited by a
+// button handler — never throw). Degrades with a clear message until the migration is applied.
+export async function renameSku(oldCode: string, newCode: string): Promise<{ error: string | null }> {
+  const supabase = createSupabaseServerClient();
+  const oc = oldCode?.trim();
+  const nc = newCode?.trim();
+  if (!oc || !nc) return { error: 'Both the current and new SKU codes are required.' };
+  if (oc === nc) return { error: null };
+
+  // friendly pre-check (the function guards atomically too — this just gives a nicer message).
+  const { data: clash } = await supabase.from('catalogue').select('item_code').eq('item_code', nc).maybeSingle();
+  if (clash) return { error: `“${nc}” already exists — pick a code that isn't already in use.` };
+  const { data: src } = await supabase.from('catalogue').select('item_code').eq('item_code', oc).maybeSingle();
+  if (!src) return { error: `“${oc}” was not found.` };
+
+  const { error } = await supabase.rpc('rename_sku', { p_old: oc, p_new: nc });
+  if (error) {
+    // 42883 = function does not exist → migration 0096 not applied yet (graceful degrade)
+    if (error.code === '42883' || /rename_sku.*does not exist|could not find the function/i.test(error.message)) {
+      return { error: 'SKU rename isn’t enabled yet — database migration 0096 still needs to be applied in Supabase.' };
+    }
+    return { error: error.message };
+  }
+  return { error: null };
+}
+
 // ── quick-add (PR18 §6): create a PARTIAL SKU from a Stock Check session ──
 // Minimal data now (name + product_type + optional barcode), needs_review=true so admin completes it
 // later. Inserts the catalogue row (original_name=name, derived brand_prefix) and links the optional
