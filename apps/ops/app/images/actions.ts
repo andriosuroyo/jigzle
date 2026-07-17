@@ -20,6 +20,16 @@ function publicUrl(displayPath: string | null): string | null {
   return `${base}/storage/v1/object/public/${BUCKET}/${displayPath}`;
 }
 
+// PR363 — turn a Google-Drive share link into a direct-render image URL (mirror of the client-side
+// driveDirect in CatalogBoard). Handles /file/d/ID/…, ?id=ID, /thumbnail?id=ID, /uc?…id=ID; falls back
+// to the raw string when no Drive file id is found. The file must be shared "anyone with the link".
+function driveDirect(url: string): string {
+  const u = (url || '').trim();
+  if (!u) return '';
+  const id = u.match(/\/d\/([-\w]{10,})/)?.[1] ?? u.match(/[?&]id=([-\w]{10,})/)?.[1];
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1000` : u;
+}
+
 export async function resolveSkuImages(itemCodes: string[]): Promise<SkuImageMap> {
   const codes = [...new Set((itemCodes ?? []).filter(Boolean))];
   if (!codes.length) return {};
@@ -34,6 +44,25 @@ export async function resolveSkuImages(itemCodes: string[]): Promise<SkuImageMap
   for (const r of data as { item_code: string; image_status: ImageStatus; display_path: string | null }[]) {
     map[r.item_code] = { status: r.image_status, displayUrl: publicUrl(r.display_path) };
   }
+
+  // PR363 — fall back to the manually-entered Google-Drive image_urls for any SKU without a resolved
+  // bucket image, so a picture added in the Catalog editor's Links tab shows up EVERYWHERE (lists,
+  // Sales, Inbound, …) after saving — not just on the editor hero. The bucket image (canonical, when
+  // present) always wins; this only fills the gap. Best-effort: a missing/failed read leaves the
+  // pipeline result untouched, so screens are never worse off than before.
+  const needFallback = codes.filter((c) => (map[c]?.status ?? 'pending') !== 'has_image' || !map[c]?.displayUrl);
+  if (needFallback.length) {
+    const { data: manual } = await supabase
+      .from('catalogue')
+      .select('item_code,image_urls')
+      .in('item_code', needFallback);
+    for (const r of (manual ?? []) as { item_code: string; image_urls: string[] | null }[]) {
+      const first = (r.image_urls ?? []).map((u) => (u ?? '').trim()).find(Boolean);
+      const url = first ? driveDirect(first) : '';
+      if (url) map[r.item_code] = { status: 'has_image', displayUrl: url };
+    }
+  }
+
   return map;
 }
 
