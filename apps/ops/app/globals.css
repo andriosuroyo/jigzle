@@ -958,6 +958,8 @@ img.sku-img { background: #e8e8e8; }
 .inv-code-cell { display: inline-flex; align-items: center; gap: 6px; }
 .cat-row { display: flex; align-items: center; gap: 8px; }
 .cat-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* PR365 — the SKU item card's second line: the SKU name, left-aligned, ellipsized (line 1 = code). */
+.cat-row-name { font-size: 12px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* PR182 — recent-searches log under the All-tab results */
 .cat-history { border-top: 1px solid var(--line); margin-top: 4px; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
@@ -1011,10 +1013,9 @@ img.sku-img { background: #e8e8e8; }
 .cat-theme-chip > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* PR185 — Catalog shell: Search | Browse | Fix, single-column with a full-width item bodyview */
-.cat-wrap { max-width: 900px; margin: 0 auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
-/* PR362 — the SKU editor bodyview widens to the breadcrumb's 1100px so its three-column layout lines
-   up left (breadcrumb) to right (refresh button). */
-.cat-wrap-detail { max-width: 1100px; }
+/* PR362/PR365 — the whole Catalog (Search / Browse / Fix lists AND the SKU editor bodyview) uses the
+   breadcrumb's 1100px width, so everything lines up left (breadcrumb) to right (refresh button). */
+.cat-wrap { max-width: 1100px; margin: 0 auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); }
 /* PR362 — desktop three columns: a fixed ~400px media column (picture + code + name) beside the
    tabs/fields column, whose inner .cat-grid halves render two-across. One column when it can't fit. */
 .cat-detail-grid { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 24px; align-items: start; }

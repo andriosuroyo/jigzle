@@ -684,8 +684,8 @@ export default function CatalogBoard({
               <div className="cat-row">
                 <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                 <div className="cat-row-main">
-                  <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
-                  <div className="fq-row-bot"><span>{r.brand_prefix || '—'}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{badge}</span></div>
+                  <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{badge}</span></div>
+                  <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
                 </div>
               </div>
             </button>
@@ -739,10 +739,10 @@ export default function CatalogBoard({
       <AppHeader active="catalog" userEmail={userEmail} />
       <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: crumbLabel }]} />
 
-      {/* ── item / collision bodyview (← back to the tab you came from). PR362 — the SKU editor uses the
-           wide (1100px) wrap so its three-column layout lines up with the breadcrumb + refresh button. ── */}
+      {/* ── item / collision bodyview (← back to the tab you came from). PR362/PR365 — .cat-wrap is the
+           shared 1100px wrap (lists + editor), so everything lines up with the breadcrumb + refresh. ── */}
       {showBody && (
-        <div className={`cat-wrap ${mode === 'sku' ? 'cat-wrap-detail' : ''}`}>
+        <div className="cat-wrap">
           <button className="btn-link bv-back" onClick={closeDetail}>← back</button>
           {error && <div className="validation err">{error}</div>}
           {success && <div className="validation ok">{success}</div>}
@@ -1130,11 +1130,11 @@ export default function CatalogBoard({
                           <div className="cat-row">
                             <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                             <div className="cat-row-main">
-                              <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
-                              <div className="fq-row-bot">
-                                <span>{r.brand_prefix || '—'}</span>
+                              <div className="fq-row-top">
+                                <span className="fq-id">{r.item_code}</span>
                                 {r.needs_review && <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>}
                               </div>
+                              <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
                             </div>
                           </div>
                         </button>
@@ -1183,11 +1183,11 @@ export default function CatalogBoard({
                           <div className="cat-row">
                             <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                             <div className="cat-row-main">
-                              <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
-                              <div className="fq-row-bot">
-                                <span>{r.brand_prefix || '—'}</span>
+                              <div className="fq-row-top">
+                                <span className="fq-id">{r.item_code}</span>
                                 <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>
                               </div>
+                              <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
                             </div>
                           </div>
                         </button>
@@ -1241,8 +1241,8 @@ export default function CatalogBoard({
                             <div className="cat-row">
                               <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                               <div className="cat-row-main">
-                                <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
-                                <div className="fq-row-bot"><span>{r.brand_prefix || '—'}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.field.replace('_type', '')}: {r.value}</span></div>
+                                <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.field.replace('_type', '')}: {r.value}</span></div>
+                                <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
                               </div>
                             </div>
                           </button>

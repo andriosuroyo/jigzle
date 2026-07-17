@@ -314,11 +314,11 @@ export default function CatalogBrowse({
                   <div className="cat-row">
                     <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                     <div className="cat-row-main">
-                      <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="fq-cust">{r.name}</span></div>
-                      <div className="fq-row-bot">
-                        <span>{[r.piece_count_n ? `${r.piece_count_n} pc` : null, r.product_type].filter(Boolean).join(' · ') || '—'}</span>
+                      <div className="fq-row-top">
+                        <span className="fq-id">{r.item_code}</span>
                         {r.needs_review && <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>}
                       </div>
+                      <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
                     </div>
                   </div>
                 </button>
