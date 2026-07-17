@@ -1,8 +1,9 @@
 'use client';
 
-// Invoice tab (IDR + USD share this component; currency differs). Left = form, right = live PDF
-// preview + download. Data is read from Jigzle (customer, addresses, order lines, thumbnails); unit
-// price, payment status/details and the invoice number are entered here. (PR202, Phase 1.)
+// Customer Invoice tab (PR361 — merges the old Invoice IDR + Invoice USD). Left = form, right = live PDF
+// preview + download. Data is read from Jigzle (customer, addresses, order lines, thumbnails); unit price
+// is always entered in IDR — when the currency picker is set to USD the PDF converts every amount via the
+// entered rate (Rp per $1). Payment status, downpayment and the invoice number are entered here too.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -18,7 +19,14 @@ const box: React.CSSProperties = { border: '1px solid #d8d8d6', borderRadius: 8,
 const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#555', display: 'block', marginBottom: 4 };
 const inp: React.CSSProperties = { width: '100%', padding: '6px 8px', border: '1px solid #cfcfcd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' };
 
-export default function InvoiceTab({ currency }: { currency: Currency }) {
+const PAY_STATUSES = ['Paid', 'Downpayment', 'Unpaid'] as const;
+type PayStatus = (typeof PAY_STATUSES)[number];
+
+const ORDERS_PER_PAGE = 10; // first 10 orders visible; "Load more" reveals the next 10 (PR361)
+
+export default function InvoiceTab() {
+  const [currency, setCurrency] = useState<Currency>('IDR');
+  const [usdRate, setUsdRate] = useState(''); // Rp per $1 — only used when currency is USD
   const prefix = currency === 'USD' ? 'INT' : 'IND';
 
   const [customers, setCustomers] = useState<InvoiceCustomerRow[]>([]);
@@ -32,9 +40,14 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
   const [email, setEmail] = useState('');
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [priceById, setPriceById] = useState<Record<number, string>>({});
+  const [priceById, setPriceById] = useState<Record<number, string>>({}); // always IDR input
 
-  const [status, setStatus] = useState('');
+  // items list: orders collapse individually + paginate 10 at a time (PR361)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [visibleOrders, setVisibleOrders] = useState(ORDERS_PER_PAGE);
+
+  const [status, setStatus] = useState<PayStatus>('Unpaid');
+  const [dpAmount, setDpAmount] = useState(''); // IDR input, shown only when status is Downpayment
   const [details, setDetails] = useState('');
   const [dateStr, setDateStr] = useState(todayDot());
   const [invNo, setInvNo] = useState('');
@@ -62,6 +75,8 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
         setEmail('');
         setSelectedIds([]);
         setPriceById({});
+        setExpanded({});
+        setVisibleOrders(ORDERS_PER_PAGE);
       })
       .finally(() => setLoading(false));
   }, [custId]);
@@ -73,6 +88,10 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
   const firstOrderId = selectedIds.length ? lineById.get(selectedIds[0])?.orderId ?? '' : '';
   const suggestedNo = `${prefix}/${yymmFromDot(dateStr)}/${firstOrderId || '___'}`;
   const effectiveNo = invNoTouched ? invNo : suggestedNo;
+
+  // Rp → display-currency conversion. IDR is a pass-through; USD divides by the entered rate (0 until set).
+  const rateNum = parseFloat(usdRate) || 0;
+  const toDisplay = (idr: number): number => (currency === 'USD' ? (rateNum > 0 ? idr / rateNum : 0) : idr);
 
   // prefetch thumbnails for selected lines (best-effort → blank cell on failure)
   useEffect(() => {
@@ -109,8 +128,10 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
 
   const items = selectedIds.map((id) => {
     const l = lineById.get(id)!;
-    return { imageDataUrl: imgCache[l.itemCode] ?? null, itemCode: l.itemCode, name: l.name, qty: l.qty, unitPrice: parseFloat(priceById[id] || '') || 0 };
+    return { imageDataUrl: imgCache[l.itemCode] ?? null, itemCode: l.itemCode, name: l.name, qty: l.qty, unitPrice: toDisplay(parseFloat(priceById[id] || '') || 0) };
   }).filter(Boolean);
+
+  const dpDisplay = status === 'Downpayment' ? toDisplay(parseFloat(dpAmount || '') || 0) : 0;
 
   const docEl = (
     <InvoiceDoc
@@ -122,6 +143,7 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
       items={items}
       paymentStatus={status}
       paymentDetails={details}
+      dpAmount={dpDisplay}
       logoDataUrl={logo}
     />
   );
@@ -148,6 +170,7 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
 
   const subtotal = items.reduce((s, it) => s + it.qty * it.unitPrice, 0);
   const custName = custId != null ? customers.find((c) => c.id === custId)?.name : null;
+  const usdNeedsRate = currency === 'USD' && rateNum <= 0;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 440px) 1fr', gap: 16, padding: 16, alignItems: 'start', maxWidth: 1100, width: '100%', margin: '0 auto' }}>
@@ -182,6 +205,36 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
 
         {data && (
           <>
+            {/* currency + invoice meta (Invoice # / Date sit above Send to — PR361) */}
+            <div style={box}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ width: 120 }}>
+                  <label style={lbl}>Currency</label>
+                  <select style={inp} value={currency} onChange={(e) => setCurrency(e.target.value as Currency)}>
+                    <option value="IDR">IDR (Rp)</option>
+                    <option value="USD">USD ($)</option>
+                  </select>
+                </div>
+                {currency === 'USD' && (
+                  <div style={{ flex: 1 }}>
+                    <label style={lbl}>USD rate (Rp per $1)</label>
+                    <input style={inp} value={usdRate} onChange={(e) => setUsdRate(e.target.value)} placeholder="e.g. 16250" inputMode="decimal" />
+                  </div>
+                )}
+              </div>
+              {usdNeedsRate && <div style={{ fontSize: 12, color: '#a00', marginTop: 6 }}>Enter a USD rate to convert the IDR prices.</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={lbl}>Invoice #</label>
+                  <input style={inp} value={effectiveNo} onChange={(e) => { setInvNo(e.target.value); setInvNoTouched(true); }} />
+                </div>
+                <div style={{ width: 130 }}>
+                  <label style={lbl}>Date</label>
+                  <input style={inp} value={dateStr} onChange={(e) => setDateStr(e.target.value)} placeholder="yyyy.mm.dd" />
+                </div>
+              </div>
+            </div>
+
             {/* addresses */}
             <div style={box}>
               <label style={lbl}>Send to</label>
@@ -199,52 +252,82 @@ export default function InvoiceTab({ currency }: { currency: Currency }) {
               <input style={inp} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="optional" />
             </div>
 
-            {/* items */}
+            {/* items — each order collapses; first 10 orders shown, "Load more" reveals the rest (PR361) */}
             <div style={box}>
-              <label style={lbl}>Items — tick to include, set unit price</label>
+              <label style={lbl}>Items — tick to include, set unit price (Rp)</label>
               {data.orders.length === 0 && <div style={{ fontSize: 12, color: '#999' }}>No orders for this customer.</div>}
-              {data.orders.map((o) => (
-                <div key={o.orderId} style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 11, color: '#888', fontWeight: 700, margin: '4px 0' }}>Order {o.orderId}{o.orderDate ? ` · ${o.orderDate}` : ''}</div>
-                  {o.lines.map((l) => {
-                    const on = selectedIds.includes(l.lineId);
-                    return (
-                      <div key={l.lineId} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
-                        <input type="checkbox" checked={on} onChange={() => toggleLine(l.lineId)} />
-                        <div style={{ flex: 1, fontSize: 12, minWidth: 0 }}>
-                          <span style={{ fontFamily: 'monospace' }}>{l.itemCode}</span> <span style={{ color: '#666' }}>{l.name}</span> <span style={{ color: '#999' }}>×{l.qty}</span>
-                        </div>
-                        <input
-                          style={{ ...inp, width: 96, padding: '3px 6px' }}
-                          placeholder={currency === 'USD' ? '$ unit' : 'Rp unit'}
-                          value={priceById[l.lineId] ?? ''}
-                          disabled={!on}
-                          onChange={(e) => setPriceById((p) => ({ ...p, [l.lineId]: e.target.value }))}
-                          inputMode="decimal"
-                        />
+              {data.orders.slice(0, visibleOrders).map((o) => {
+                const open = !!expanded[o.orderId];
+                const picked = o.lines.filter((l) => selectedIds.includes(l.lineId)).length;
+                return (
+                  <div key={o.orderId} style={{ marginBottom: 6, border: '1px solid #eee', borderRadius: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((p) => ({ ...p, [o.orderId]: !open }))}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 8px', background: '#fafafa', border: 'none', borderRadius: 6, cursor: 'pointer', textAlign: 'left' }}
+                    >
+                      <span style={{ fontSize: 11, color: '#888', width: 12 }}>{open ? '▾' : '▸'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#444' }}>{o.orderId}</div>
+                        <div style={{ fontSize: 10, color: '#999' }}>{o.orderDate || '—'} · {o.lines.length} item{o.lines.length === 1 ? '' : 's'}</div>
                       </div>
-                    );
-                  })}
-                </div>
-              ))}
+                      {picked > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: '#724F33', background: '#f2e9e1', borderRadius: 10, padding: '2px 7px' }}>{picked} picked</span>}
+                    </button>
+                    {open && (
+                      <div style={{ padding: '4px 8px 6px' }}>
+                        {o.lines.map((l) => {
+                          const on = selectedIds.includes(l.lineId);
+                          return (
+                            <div key={l.lineId} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0' }}>
+                              <input type="checkbox" checked={on} onChange={() => toggleLine(l.lineId)} />
+                              <div style={{ flex: 1, fontSize: 12, minWidth: 0 }}>
+                                <span style={{ fontFamily: 'monospace' }}>{l.itemCode}</span> <span style={{ color: '#666' }}>{l.name}</span> <span style={{ color: '#999' }}>×{l.qty}</span>
+                              </div>
+                              <input
+                                style={{ ...inp, width: 96, padding: '3px 6px' }}
+                                placeholder="Rp unit"
+                                value={priceById[l.lineId] ?? ''}
+                                disabled={!on}
+                                onChange={(e) => setPriceById((p) => ({ ...p, [l.lineId]: e.target.value }))}
+                                inputMode="decimal"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {data.orders.length > visibleOrders && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleOrders((n) => n + ORDERS_PER_PAGE)}
+                  style={{ ...inp, width: '100%', marginTop: 4, cursor: 'pointer', background: '#fafafa', fontWeight: 700, color: '#555' }}
+                >
+                  Load more ({data.orders.length - visibleOrders} more order{data.orders.length - visibleOrders === 1 ? '' : 's'})
+                </button>
+              )}
             </div>
 
             {/* payment + meta */}
             <div style={box}>
-              <label style={lbl}>Payment status</label>
-              <input style={inp} value={status} onChange={(e) => setStatus(e.target.value)} placeholder="e.g. PAID / UNPAID" />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={lbl}>Payment status</label>
+                  <select style={inp} value={status} onChange={(e) => setStatus(e.target.value as PayStatus)}>
+                    {PAY_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {status === 'Downpayment' && (
+                  <div style={{ flex: 1 }}>
+                    <label style={lbl}>DP amount (Rp)</label>
+                    <input style={inp} value={dpAmount} onChange={(e) => setDpAmount(e.target.value)} placeholder="e.g. 500000" inputMode="decimal" />
+                  </div>
+                )}
+              </div>
               <label style={{ ...lbl, marginTop: 10 }}>Payment details</label>
               <textarea style={{ ...inp, minHeight: 48, resize: 'vertical' }} value={details} onChange={(e) => setDetails(e.target.value)} placeholder="bank / transfer note" />
-              <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={lbl}>Invoice #</label>
-                  <input style={inp} value={effectiveNo} onChange={(e) => { setInvNo(e.target.value); setInvNoTouched(true); }} />
-                </div>
-                <div style={{ width: 130 }}>
-                  <label style={lbl}>Date</label>
-                  <input style={inp} value={dateStr} onChange={(e) => setDateStr(e.target.value)} placeholder="yyyy.mm.dd" />
-                </div>
-              </div>
             </div>
           </>
         )}

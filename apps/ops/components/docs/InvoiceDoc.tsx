@@ -17,6 +17,7 @@ export type InvoiceDocProps = {
   items: InvoiceItem[];
   paymentStatus: string;
   paymentDetails: string;
+  dpAmount?: number | null; // PR361 — when status is "Downpayment", the amount paid (display currency)
   logoDataUrl: string | null;
 };
 
@@ -66,9 +67,12 @@ const s = StyleSheet.create({
   fCol: { flexGrow: 1, flexShrink: 1, paddingRight: 12 },
   fLabel: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#444', marginBottom: 3 },
   fVal: { fontSize: 8.5, lineHeight: 1.4 },
-  subCol: { width: 150, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  subCol: { width: 165 },
+  subRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   subLabel: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#444' },
   subVal: { fontSize: 12, fontFamily: 'Helvetica-Bold' },
+  dpLabel: { fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#777' },
+  dpVal: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: '#777' },
 });
 
 function Party({ label, p }: { label: string; p: InvoiceParty }) {
@@ -85,8 +89,11 @@ function Party({ label, p }: { label: string; p: InvoiceParty }) {
   );
 }
 
-export default function InvoiceDoc({ currency, invoiceNumber, dateStr, sendTo, billTo, items, paymentStatus, paymentDetails, logoDataUrl }: InvoiceDocProps) {
+export default function InvoiceDoc({ currency, invoiceNumber, dateStr, sendTo, billTo, items, paymentStatus, paymentDetails, dpAmount, logoDataUrl }: InvoiceDocProps) {
   const subtotal = items.reduce((sum, it) => sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
+  const dp = Number(dpAmount) || 0;
+  const showDp = dp > 0;
+  const balance = subtotal - dp;
   return (
     <Document>
       <Page size="A4" style={s.page}>
@@ -147,7 +154,7 @@ export default function InvoiceDoc({ currency, invoiceNumber, dateStr, sendTo, b
         <View style={s.footer}>
           <View style={s.fCol}>
             <Text style={s.fLabel}>STATUS</Text>
-            <Text style={s.fVal}>{paymentStatus || '—'}</Text>
+            <Text style={s.fVal}>{paymentStatus ? paymentStatus.toUpperCase() : '—'}</Text>
             {paymentDetails ? (
               <>
                 <Text style={[s.fLabel, { marginTop: 6 }]}>PAYMENT DETAILS</Text>
@@ -156,8 +163,24 @@ export default function InvoiceDoc({ currency, invoiceNumber, dateStr, sendTo, b
             ) : null}
           </View>
           <View style={s.subCol}>
-            <Text style={s.subLabel}>SUBTOTAL</Text>
-            <Text style={s.subVal}>{fmtMoney(currency, subtotal)}</Text>
+            <View style={{ width: '100%' }}>
+              <View style={s.subRow}>
+                <Text style={s.subLabel}>SUBTOTAL</Text>
+                <Text style={s.subVal}>{fmtMoney(currency, subtotal)}</Text>
+              </View>
+              {showDp ? (
+                <>
+                  <View style={[s.subRow, { marginTop: 4 }]}>
+                    <Text style={s.dpLabel}>DP PAID</Text>
+                    <Text style={s.dpVal}>{fmtMoney(currency, dp)}</Text>
+                  </View>
+                  <View style={[s.subRow, { marginTop: 2 }]}>
+                    <Text style={s.subLabel}>BALANCE DUE</Text>
+                    <Text style={s.subVal}>{fmtMoney(currency, balance)}</Text>
+                  </View>
+                </>
+              ) : null}
+            </View>
           </View>
         </View>
       </Page>
