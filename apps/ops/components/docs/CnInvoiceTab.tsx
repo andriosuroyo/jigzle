@@ -8,10 +8,12 @@ import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { pdf } from '@react-pdf/renderer';
 import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
+import type { CnAddress } from '@/app/settings/types';
 import CnInvoiceDoc, { type CnInvoiceLine } from './CnInvoiceDoc';
 import { cnWeights, CN_SHIPPER_DEFAULT, CN_CONSIGNEE_DEFAULT } from './cnConstants';
 import { todayDot } from './pdfUtil';
 import { ensureCjkFont } from './cjkFont';
+import DropSearch from '@/components/DropSearch';
 
 const PDFViewer = dynamic(() => import('@react-pdf/renderer').then((m) => m.PDFViewer), { ssr: false });
 
@@ -23,6 +25,7 @@ type LineInput = { description: string; qty: string; unitPrice: string };
 
 export type CnInvoiceProps = {
   shipments: CnShipmentRow[];
+  addresses: CnAddress[];
   shipId: string;
   setShipId: (v: string) => void;
   mark: string;
@@ -30,7 +33,7 @@ export type CnInvoiceProps = {
   divisor: number;
 };
 
-export default function CnInvoiceTab({ shipments, shipId, setShipId, mark, boxes, divisor }: CnInvoiceProps) {
+export default function CnInvoiceTab({ shipments, addresses, shipId, setShipId, mark, boxes, divisor }: CnInvoiceProps) {
   ensureCjkFont();
   const { packages, netWeight, grossWeight } = cnWeights(boxes, divisor);
   const shipment = shipments.find((s) => s.shipId === shipId);
@@ -40,6 +43,8 @@ export default function CnInvoiceTab({ shipments, shipId, setShipId, mark, boxes
   const [hawbTouched, setHawbTouched] = useState(false);
   const [shipper, setShipper] = useState(CN_SHIPPER_DEFAULT);
   const [consignee, setConsignee] = useState(CN_CONSIGNEE_DEFAULT);
+  const [shipperSel, setShipperSel] = useState<string | null>(null);   // picked saved-address id (display)
+  const [consigneeSel, setConsigneeSel] = useState<string | null>(null);
   const [lines, setLines] = useState<LineInput[]>([{ description: 'PUZZLE', qty: '', unitPrice: '' }]);
   const [downloading, setDownloading] = useState(false);
 
@@ -47,6 +52,20 @@ export default function CnInvoiceTab({ shipments, shipId, setShipId, mark, boxes
   useEffect(() => {
     if (!hawbTouched) setHawb(shipment?.tracking || '');
   }, [shipment, hawbTouched]);
+
+  // PR356 — active shipments only, sorted A→Z (numeric-aware), matching CN Packing List's picker.
+  const shipmentOpts = useMemo(() => shipments
+    .filter((s) => s.status !== 'completed' || s.shipId === shipId)
+    .slice()
+    .sort((a, b) => a.shipId.localeCompare(b.shipId, undefined, { numeric: true }))
+    .map((s) => ({ value: s.shipId, label: `${s.shipId}${s.tracking ? ` · ${s.tracking}` : ''}` })), [shipments, shipId]);
+
+  // PR356 — one Settings list feeds both the shipper and consignee pickers; selecting fills the textarea.
+  const addressOpts = useMemo(() => addresses.filter((a) => a.is_active).map((a) => ({ value: String(a.id), label: a.label })), [addresses]);
+  function pickAddr(id: string, setText: (v: string) => void, setSel: (v: string | null) => void) {
+    const a = addresses.find((x) => String(x.id) === id);
+    if (a) { setText(a.address); setSel(id); }
+  }
 
   const docLines: CnInvoiceLine[] = useMemo(
     () => lines.filter((l) => l.description || l.qty || l.unitPrice)
@@ -75,22 +94,27 @@ export default function CnInvoiceTab({ shipments, shipId, setShipId, mark, boxes
       <div>
         <div style={box}>
           <label style={lbl}>Shipment (ship-id)</label>
-          <select style={inp} value={shipId} onChange={(e) => setShipId(e.target.value)}>
-            <option value="">— pick a shipment —</option>
-            {shipments.map((s) => <option key={s.shipId} value={s.shipId}>{s.shipId}{s.tracking ? ` · ${s.tracking}` : ''}</option>)}
-          </select>
+          <DropSearch
+            className="cn-doc-ds"
+            value={shipId || null}
+            onChange={(v) => setShipId(v)}
+            options={shipmentOpts}
+            placeholder="— pick a shipment —"
+            ariaLabel="Shipment"
+          />
           <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
             <div style={{ width: 140 }}><label style={lbl}>Date</label><input style={inp} value={dateStr} onChange={(e) => setDateStr(e.target.value)} placeholder="yyyy.mm.dd" /></div>
             <div style={{ flex: 1 }}><label style={lbl}>HAWB no</label><input style={inp} value={hawb} onChange={(e) => { setHawb(e.target.value); setHawbTouched(true); }} placeholder="import tracking" /></div>
           </div>
-          <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>Packages/net/gross come from the CN Packing List tab: <b>{packages}</b> pkg · net <b>{netWeight}</b> · gross <b>{grossWeight}</b> kg.</div>
         </div>
 
         <div style={box}>
           <label style={lbl}>Shipper address (托运人)</label>
-          <textarea style={{ ...inp, minHeight: 60, resize: 'vertical' }} value={shipper} onChange={(e) => setShipper(e.target.value)} />
+          <DropSearch className="cn-doc-ds" value={shipperSel} onChange={(v) => pickAddr(v, setShipper, setShipperSel)} options={addressOpts} placeholder="— pick a saved address —" ariaLabel="Shipper saved address" />
+          <textarea style={{ ...inp, minHeight: 60, resize: 'vertical', marginTop: 6 }} value={shipper} onChange={(e) => { setShipper(e.target.value); setShipperSel(null); }} />
           <label style={{ ...lbl, marginTop: 10 }}>Consignee address (收件人)</label>
-          <textarea style={{ ...inp, minHeight: 60, resize: 'vertical' }} value={consignee} onChange={(e) => setConsignee(e.target.value)} />
+          <DropSearch className="cn-doc-ds" value={consigneeSel} onChange={(v) => pickAddr(v, setConsignee, setConsigneeSel)} options={addressOpts} placeholder="— pick a saved address —" ariaLabel="Consignee saved address" />
+          <textarea style={{ ...inp, minHeight: 60, resize: 'vertical', marginTop: 6 }} value={consignee} onChange={(e) => { setConsignee(e.target.value); setConsigneeSel(null); }} />
         </div>
 
         <div style={box}>

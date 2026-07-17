@@ -20,6 +20,20 @@ export type CnInvoiceDocProps = {
 
 const B = '#000';
 const r2 = (n: number) => Math.round(n * 100) / 100;
+// PR356 — keep a long, space-less Chinese address inside its half-width cell instead of overflowing
+// into the neighbouring one (the shipper block was bleeding into the consignee's).
+const CJK_PER_LINE = 26; // CJK chars that fit one address cell line at 8.5pt
+function cjkWrap(str: string): string {
+  // react-pdf appends a hyphen at any mid-word soft break, so for a space-less CJK block we
+  // insert REAL newlines to keep it inside its cell. Latin lines have spaces and wrap on their
+  // own, so they are left untouched.
+  return str.split('\n').map((seg) => {
+    if (/\s/.test(seg) || seg.length <= CJK_PER_LINE) return seg;
+    const rows: string[] = [];
+    for (let i = 0; i < seg.length; i += CJK_PER_LINE) rows.push(seg.slice(i, i + CJK_PER_LINE));
+    return rows.join('\n');
+  }).join('\n');
+}
 const s = StyleSheet.create({
   page: { paddingVertical: 26, paddingHorizontal: 34, fontFamily: CJK, fontSize: 9, color: '#000' },
   title: { textAlign: 'center', fontSize: 15, fontWeight: 700 },
@@ -51,7 +65,8 @@ const s = StyleSheet.create({
   footRow: { flexDirection: 'row', borderWidth: 1, borderTopWidth: 0, borderColor: B },
   footLeft: { width: 250, borderRightWidth: 1, borderColor: B, padding: 6 },
   footRight: { flexGrow: 1, padding: 6 },
-  fLine: { flexDirection: 'row', marginBottom: 3 },
+  fLine: { flexDirection: 'row', marginBottom: 3, alignItems: 'flex-end' },
+  fUnit: { fontSize: 8.5, marginLeft: 6 },
 });
 
 export default function CnInvoiceDoc({ markNo, dateStr, hawb, shipper, consignee, lines, packages, netWeight, grossWeight }: CnInvoiceDocProps) {
@@ -79,11 +94,11 @@ export default function CnInvoiceDoc({ markNo, dateStr, hawb, shipper, consignee
         <View style={s.addrRow}>
           <View style={[s.addrCell, s.addrBorder]}>
             <Text style={s.lab}>SHIPPER`S NAME & ADDRESS:</Text><Text style={s.cn}>托运人名称、地址</Text>
-            <Text style={s.addrText}>{shipper}</Text>
+            <Text style={s.addrText}>{cjkWrap(shipper)}</Text>
           </View>
           <View style={s.addrCell}>
             <Text style={s.lab}>CONSIGNEE`S NAME & ADDRESS:</Text><Text style={s.cn}>收件人名称，地址</Text>
-            <Text style={s.addrText}>{consignee}</Text>
+            <Text style={s.addrText}>{cjkWrap(consignee)}</Text>
           </View>
         </View>
 
@@ -105,26 +120,27 @@ export default function CnInvoiceDoc({ markNo, dateStr, hawb, shipper, consignee
               <View style={[s.cellLast, s.cAmt]}><Text style={s.num}>{(Number(l.qty) || 0) * (Number(l.unitPrice) || 0) ? r2((Number(l.qty) || 0) * (Number(l.unitPrice) || 0)) : ''}</Text></View>
             </View>
           ))}
-          <View style={[s.row, { minHeight: 40, borderBottomWidth: 0 }]}>
+          {/* an empty filler row so the items table keeps a little height with a single line */}
+          <View style={[s.row, { minHeight: 30, borderBottomWidth: 0 }]}>
             <View style={[s.cell, s.cMark]} />
-            <View style={[s.cell, s.cDesc]}><Text style={[s.lab, { alignSelf: 'center', marginTop: 12 }]}>NO COMMERCIAL VALUE, FOR CUSTOM USE ONLY</Text></View>
+            <View style={[s.cell, s.cDesc]} />
             <View style={[s.cell, s.cQty]} />
             <View style={[s.cell, s.cUnit]} />
             <View style={[s.cellLast, s.cAmt]} />
           </View>
         </View>
 
+        {/* PR356 — the customs note sits on its own band directly ABOVE the total line */}
+        <View style={s.noteBand}><Text style={s.lab}>NO COMMERCIAL VALUE, FOR CUSTOM USE ONLY</Text></View>
         <View style={s.totalBand}><Text style={s.val}>TOTAL: USD 总计: {total}</Text></View>
-        <View style={s.noteBand}><Text style={s.lab}>COUNTRY OF ORIGIN: CHINA</Text><Text style={s.cn}>(起 始 地)</Text></View>
+        <View style={s.noteBand}><Text style={s.lab}>COUNTRY OF ORIGIN: CHINA</Text><Text style={s.cn}>（起　始　地）</Text></View>
 
         {/* packages / weights (shared with packing list) + signature */}
         <View style={s.footRow}>
           <View style={s.footLeft}>
-            <View style={s.fLine}><Text style={s.lab}>NUMBER OF PACKAGES 箱数:</Text><Text style={[s.val, { marginLeft: 6 }]}>{packages}</Text></View>
-            <Text style={s.lab}>BOX</Text>
-            <View style={s.fLine}><Text style={s.lab}>NET WEIGHT 净重:</Text><Text style={[s.val, { marginLeft: 6 }]}>{netWeight}</Text></View>
-            <View style={s.fLine}><Text style={s.lab}>GROSS WEIGHT 毛重:</Text><Text style={[s.val, { marginLeft: 6 }]}>{grossWeight}</Text></View>
-            <Text style={s.lab}>KG</Text>
+            <View style={s.fLine}><Text style={s.lab}>NUMBER OF PACKAGES 箱数:</Text><Text style={[s.val, { marginLeft: 6 }]}>{packages}</Text><Text style={s.fUnit}>BOX</Text></View>
+            <View style={s.fLine}><Text style={s.lab}>NET WEIGHT 净重:</Text><Text style={[s.val, { marginLeft: 6 }]}>{netWeight}</Text><Text style={s.fUnit}>KG</Text></View>
+            <View style={s.fLine}><Text style={s.lab}>GROSS WEIGHT 毛重:</Text><Text style={[s.val, { marginLeft: 6 }]}>{grossWeight}</Text><Text style={s.fUnit}>KG</Text></View>
           </View>
           <View style={s.footRight}>
             <Text style={s.lab}>SHIPPER`S SIGNATURE</Text>

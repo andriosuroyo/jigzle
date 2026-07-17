@@ -11,6 +11,7 @@ import type {
   CatalogClassOption,
   ChannelOption,
   CommonNote,
+  CnAddress,
   CourierService,
   DeclarationUser,
   ExportCourier,
@@ -402,6 +403,55 @@ export async function deleteExportCourier(id: number): Promise<void> {
 export async function reorderExportCouriers(ids: number[]): Promise<void> {
   const supabase = createSupabaseServerClient();
   await Promise.all(ids.map((id, i) => supabase.from('settings_export_couriers').update({ sort_order: i }).eq('id', id)));
+}
+
+// ── 0095 (PR356): CN document addresses — one Settings list shared by the CN Invoice shipper AND
+// consignee selectors. GLOBAL rows only (user_id null); getCnAddresses degrades to [] until applied. ──
+const CN_ADDR_COLS = 'id,label,address,is_active,sort_order';
+
+export async function getCnAddresses(): Promise<CnAddress[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('settings_cn_addresses')
+    .select(CN_ADDR_COLS)
+    .is('user_id', null)
+    .order('sort_order', { ascending: true })
+    .order('label', { ascending: true });
+  if (error) return []; // table not yet created → degrade
+  return (data ?? []) as CnAddress[];
+}
+
+export async function addCnAddress(input: { label: string; address?: string }): Promise<CnAddress> {
+  const supabase = createSupabaseServerClient();
+  const label = input.label.trim();
+  if (!label) throw new Error('A label is required.');
+  const { data: maxRow } = await supabase.from('settings_cn_addresses').select('sort_order').is('user_id', null).order('sort_order', { ascending: false }).limit(1).maybeSingle();
+  const sort_order = ((maxRow?.sort_order as number | null) ?? -1) + 1;
+  const { data, error } = await supabase
+    .from('settings_cn_addresses')
+    .insert({ user_id: null, label, address: input.address ?? '', sort_order })
+    .select(CN_ADDR_COLS)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as CnAddress;
+}
+
+export async function updateCnAddress(id: number, patch: Partial<Pick<CnAddress, 'label' | 'address' | 'is_active'>>): Promise<CnAddress> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.from('settings_cn_addresses').update(patch).eq('id', id).select(CN_ADDR_COLS).single();
+  if (error) throw new Error(error.message);
+  return data as CnAddress;
+}
+
+export async function deleteCnAddress(id: number): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('settings_cn_addresses').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function reorderCnAddresses(ids: number[]): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  await Promise.all(ids.map((id, i) => supabase.from('settings_cn_addresses').update({ sort_order: i }).eq('id', id)));
 }
 
 // ── 0068 (PR205): declaration users — the SP Declare (Surat Pernyataan) identity pick-list. GLOBAL
