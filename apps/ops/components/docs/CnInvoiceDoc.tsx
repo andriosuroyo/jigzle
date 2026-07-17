@@ -120,8 +120,8 @@ export default function CnInvoiceDoc({ markNo, dateStr, hawb, shipper, consignee
               <View style={[s.cellLast, s.cAmt]}><Text style={s.num}>{(Number(l.qty) || 0) * (Number(l.unitPrice) || 0) ? r2((Number(l.qty) || 0) * (Number(l.unitPrice) || 0)) : ''}</Text></View>
             </View>
           ))}
-          {/* an empty filler row so the items table keeps a little height with a single line */}
-          <View style={[s.row, { minHeight: 30, borderBottomWidth: 0 }]}>
+          {/* PR356 — a tall empty filler row so the items table has the roomy look of the reference doc */}
+          <View style={[s.row, { minHeight: 170, borderBottomWidth: 0 }]}>
             <View style={[s.cell, s.cMark]} />
             <View style={[s.cell, s.cDesc]} />
             <View style={[s.cell, s.cQty]} />
