@@ -164,7 +164,52 @@ export async function getCatalogFacetData(): Promise<{ skus: BrowseSku[]; brands
 // scan of the relevant columns (no GROUP BY over PostgREST); the response is just the sorted distinct
 // value lists (small). The client caches it for the session. ──
 const OPTION_FIELDS = ['product_type', 'sub_type', 'piece_type', 'piece_size', 'material', 'effect', 'image_type', 'theme', 'location', 'artist'] as const;
+// PR373 — dropdown option lists (distinct field values across the catalogue). The fast path is the
+// `catalog_field_options` RPC (0101): it does the DISTINCT server-side and returns a few KB instead of
+// the whole 43k-row table. We still union the Settings-managed classification lists (below) so curated
+// values appear even when unused. Falls back to the old full client-side scan if the RPC is missing
+// (pre-0101) or errors, so the screen is never worse off than before.
 export async function getCatalogFieldOptions(): Promise<Record<string, string[]>> {
+  const supabase = createSupabaseServerClient();
+
+  const sets: Record<string, Set<string>> = {};
+  for (const f of OPTION_FIELDS) sets[f] = new Set();
+
+  const { data: rpc, error: rpcErr } = await supabase.rpc('catalog_field_options');
+  if (rpcErr || rpc == null) return getCatalogFieldOptionsScan(); // RPC absent (pre-0101) / errored → old path
+  const byField = (rpc ?? {}) as Record<string, unknown>;
+  for (const f of OPTION_FIELDS) {
+    const arr = byField[f];
+    if (Array.isArray(arr)) for (const v of arr) if (typeof v === 'string' && v.trim()) sets[f].add(v.trim());
+  }
+
+  await unionManagedLists(supabase, sets);
+
+  const out: Record<string, string[]> = {};
+  for (const f of OPTION_FIELDS) out[f] = [...sets[f]].sort((a, b) => a.localeCompare(b));
+  return out;
+}
+
+// PR193 — union the Settings-managed classification lists (0059) so curated values always appear even
+// if no SKU uses them yet, and typo-variants retired in Settings simply drop out of the SKU's distinct
+// values over time. Degrades silently if the tables aren't applied yet. Shared by the RPC + scan paths.
+async function unionManagedLists(supabase: Supabase, sets: Record<string, Set<string>>): Promise<void> {
+  const MANAGED: Record<string, string> = {
+    product_type: 'settings_catalog_product_types',
+    sub_type: 'settings_catalog_sub_types',
+    piece_type: 'settings_catalog_piece_types',
+  };
+  await Promise.all(
+    Object.entries(MANAGED).map(async ([field, table]) => {
+      const { data } = await supabase.from(table).select('label').is('user_id', null).eq('is_active', true);
+      for (const r of (data ?? []) as { label: string | null }[]) { const v = (r.label ?? '').trim(); if (v && sets[field]) sets[field].add(v); }
+    }),
+  );
+}
+
+// Fallback: the original full-catalogue paged scan (pre-PR373). Kept so the editor still populates its
+// dropdowns when the 0101 RPC hasn't been applied yet.
+async function getCatalogFieldOptionsScan(): Promise<Record<string, string[]>> {
   const supabase = createSupabaseServerClient();
   const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true });
   const total = count ?? 0;
@@ -185,20 +230,7 @@ export async function getCatalogFieldOptions(): Promise<Record<string, string[]>
         for (const f of OPTION_FIELDS) { const v = r[f]; if (typeof v === 'string' && v.trim()) sets[f].add(v.trim()); }
   }
 
-  // PR193 — union the Settings-managed classification lists (0059) so curated values always appear
-  // even if no SKU uses them yet, and typo-variants retired in Settings simply drop out of the SKU's
-  // distinct values over time. Degrades silently if the tables aren't applied yet.
-  const MANAGED: Record<string, string> = {
-    product_type: 'settings_catalog_product_types',
-    sub_type: 'settings_catalog_sub_types',
-    piece_type: 'settings_catalog_piece_types',
-  };
-  await Promise.all(
-    Object.entries(MANAGED).map(async ([field, table]) => {
-      const { data } = await supabase.from(table).select('label').is('user_id', null).eq('is_active', true);
-      for (const r of (data ?? []) as { label: string | null }[]) { const v = (r.label ?? '').trim(); if (v) sets[field].add(v); }
-    }),
-  );
+  await unionManagedLists(supabase, sets);
 
   const out: Record<string, string[]> = {};
   for (const f of OPTION_FIELDS) out[f] = [...sets[f]].sort((a, b) => a.localeCompare(b));

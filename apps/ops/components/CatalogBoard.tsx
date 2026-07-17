@@ -208,6 +208,7 @@ type Tab = 'search' | 'browse' | 'fix';
 // PR185 — the item bodyview groups every field into sub-tabs (GROUPS) + a Barcodes tab, styled like the
 // system's tab lists. Short labels for the sub-tab row.
 const GROUP_TABS = ['Identity', 'Specs', 'Links']; // PR369 — Classification + Dimensions merged into Specs
+const SPECS_TAB_INDEX = GROUP_TABS.indexOf('Specs'); // PR373 — the only detail tab whose fields need the option lists
 type RightMode = 'sku' | 'collision' | null;
 
 // PR188 — the field dropdowns' option lists (distinct existing values). Loaded once per session, lazily,
@@ -444,8 +445,9 @@ export default function CatalogBoard({
 
   async function openSku(code: string) {
     if (tab === 'search') recordSearch(search); // remember the query that led here
-    if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
-    if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
+    // PR373 — the Specs-tab dropdown options are NOT fetched here anymore; they load lazily the first
+    // time the Specs tab is opened (see the effect below), so just viewing an item's Identity tab no
+    // longer pays for the catalogue-wide distinct-values read.
     resetMsg();
     setMode('sku');
     setDetailTab(0);
@@ -790,6 +792,16 @@ export default function CatalogBoard({
     if (code) openSku(code);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // PR373 — lazy-load the Specs-tab dropdown options the first time the Specs tab is opened on an item.
+  // These lists (distinct product_type / material / effect / artist / … across the catalogue) were the
+  // single heavy read on detail open; deferring them keeps opening an item — and its default Identity
+  // view — fast. Module-cached (OPTIONS_CACHE / SUBTYPES_CACHE) so it's fetched at most once per session.
+  useEffect(() => {
+    if (mode !== 'sku' || detailTab !== SPECS_TAB_INDEX) return;
+    if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
+    if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
+  }, [mode, detailTab]);
 
   // PR370 — multipack render state (Specs tab): the Sets field + per-unit component rows appear only for
   // Multipack / Blind Box; ≥2 units auto-sums the piece count and replaces the single product size.
