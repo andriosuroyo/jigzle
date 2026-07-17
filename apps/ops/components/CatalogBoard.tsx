@@ -9,6 +9,7 @@ import {
   addBarcode,
   getBarcodeOwners,
   getCatalogFieldOptions,
+  getCatalogSubTypes,
   getNeedsReview,
   getUntranslated,
   getPuzzleNoPieces,
@@ -208,6 +209,9 @@ type RightMode = 'sku' | 'collision' | null;
 // PR188 — the field dropdowns' option lists (distinct existing values). Loaded once per session, lazily,
 // the first time an item is opened.
 let OPTIONS_CACHE: Record<string, string[]> | null = null;
+// PR368 — managed Sub types with their linked Product type (0097). The Sub type picker offers only the
+// sub-types matching the selected product type. Session-cached like OPTIONS_CACHE.
+let SUBTYPES_CACHE: { label: string; product_type: string }[] | null = null;
 
 const MAX_IMAGE_URLS = 8;
 // PR189 — turn a Google-Drive share link into a direct-render image URL. Handles /file/d/ID/…, ?id=ID,
@@ -247,6 +251,7 @@ export default function CatalogBoard({
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
   const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
+  const [catSubTypes, setCatSubTypes] = useState<{ label: string; product_type: string }[]>(SUBTYPES_CACHE ?? []); // PR368: sub type ↔ product type
   const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: manual Google-Drive image URLs
   const [imgUnavailable, setImgUnavailable] = useState(false); // PR212: "no picture available" (0071)
   const [sources, setSources] = useState<string[]>([]);       // PR217: Links → Sources (sku_sources)
@@ -408,6 +413,7 @@ export default function CatalogBoard({
   async function openSku(code: string) {
     if (tab === 'search') recordSearch(search); // remember the query that led here
     if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
+    if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
     resetMsg();
     setMode('sku');
     setDetailTab(0);
@@ -490,6 +496,7 @@ export default function CatalogBoard({
   // ── PR191: "+ New SKU" — item code + name + product type → a partial (needs-review) SKU, then open it ──
   function openNewSku() {
     if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
+    if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
     setError(null);
     // PR260 — restore a draft left by a reload; else start blank.
     const draft = loadDraft<CatalogNewDraft>(CAT_DRAFT_NEW_KEY);
@@ -924,7 +931,14 @@ export default function CatalogBoard({
                       const roundLocked = round && (k === 'size_l' || (k === 'size_t' && isJigsaw));
                       const label = round && k === 'size_p' ? 'Diameter (cm)' : fld.label;
                       const w = fld.kind === 'textarea' || fld.kind === 'bool' ? 'full' : fld.w ?? 'half';
-                      const opts = fld.list ? fieldOptions[fld.list] : undefined;
+                      // PR368 — Sub type is filtered to the sub-types linked to the SELECTED product type
+                      // (managed list, 0097). Falls back to distinct catalogue values only when no managed
+                      // sub-types exist yet (pre-migration), so the picker is never emptied unexpectedly.
+                      const opts = fld.key === 'sub_type'
+                        ? (catSubTypes.length
+                            ? catSubTypes.filter((s) => s.product_type === String(form['product_type'] ?? '').trim()).map((s) => s.label).sort((a, b) => a.localeCompare(b))
+                            : (fld.list ? fieldOptions[fld.list] : undefined))
+                        : (fld.list ? fieldOptions[fld.list] : undefined);
                       const listId = fld.list ? `dl-${fld.list}` : undefined;
                       return (
                         <div className={`po-field pf-${w}`} key={k} style={{ marginBottom: 0 }}>

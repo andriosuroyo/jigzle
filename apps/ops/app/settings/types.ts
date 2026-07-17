@@ -155,6 +155,7 @@ export interface CatalogClassOption {
   icon: string | null;
   is_active: boolean;
   sort_order: number;
+  product_type?: string | null; // PR368 — sub types only: the Product type this sub type belongs to (0097)
 }
 
 // what getSettings() returns — one ordered, active-only list per kind.

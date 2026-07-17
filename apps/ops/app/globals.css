@@ -268,6 +268,7 @@ input, textarea, select, button { font-family: inherit; }
 
 /* Settings → Suppliers: select matches the text inputs; flag column is narrow + centred */
 .set-f select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
+.set-f.set-f-ptype { flex: 0 0 190px; } /* PR368 — Sub type's Product type select (left of the label) */
 .set-f.sup-flag { flex: 0 0 58px; }
 .set-f.sup-flag input { text-align: center; }
 

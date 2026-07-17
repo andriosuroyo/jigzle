@@ -37,14 +37,17 @@ import type {
 } from '@/app/settings/types';
 
 // ── per-list column config ──
-type Col = { key: string; label: string; type: 'text' | 'number'; nullable?: boolean; grow?: boolean; cls?: string };
+// PR368 — `select` renders a dropdown whose options are another list's labels (optionsFrom), e.g. the
+// Sub types list picks a Product type from the cat_product_type list.
+type Col = { key: string; label: string; type: 'text' | 'number' | 'select'; optionsFrom?: SettingsKind; nullable?: boolean; grow?: boolean; cls?: string };
 
 type SectionDef = {
   kind: SettingsKind;
   title: string;
   sub: string;
   cols: Col[];
-  sortKey: string; // the field the A–Z button orders by
+  sortKey: string; // the field the default A–Z button orders by
+  sorts?: { label: string; keys: string[] }[]; // PR368 — replace the single A–Z button with these multi-key sorts
   autoLabel?: { from: string[]; target: string }; // courier: label follows "{courier} {speed}" while unset
   blank: SettingPayload; // payload for "+ add" (NOT NULL text cols seeded as '')
   rowClass?: string; // extra class on each .set-row (e.g. box presets pack all dims on one line)
@@ -162,11 +165,21 @@ const SECTIONS: SectionDef[] = [
     blank: { label: '' },
   },
   {
+    // PR368 — each sub type belongs to a Product type (0097). The Catalog editor's Sub type picker then
+    // shows only the sub-types for the selected product type; a sub-type with no product type is hidden.
     kind: 'cat_sub_type',
     title: 'Sub types',
-    sub: 'Sub-types shown in the Catalog item editor’s Sub type picker.',
-    cols: [{ key: 'label', label: 'Sub type', type: 'text', grow: true }],
+    sub: 'Sub-types shown in the Catalog item editor’s Sub type picker. Pick the Product type each belongs to — a sub-type with no product type is hidden from the picker.',
+    cols: [
+      { key: 'product_type', label: 'Product type', type: 'select', optionsFrom: 'cat_product_type', nullable: true, cls: 'set-f-ptype' },
+      { key: 'label', label: 'Sub type', type: 'text', grow: true },
+    ],
+    colHeader: true,
     sortKey: 'label',
+    sorts: [
+      { label: 'Sort by product type', keys: ['product_type', 'label'] },
+      { label: 'Sort by sub type', keys: ['label'] },
+    ],
     blank: { label: '' },
   },
   {
@@ -326,6 +339,20 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
     void persistOrder(kind, next);
   }
 
+  // PR368 — sort by several keys in order (e.g. product_type then label). Blank keys sort first, so
+  // sub-types still needing a product type cluster at the top when sorting by product type.
+  function sortByKeys(kind: SettingsKind, keys: string[]) {
+    const next = lists[kind].slice().sort((a, b) => {
+      for (const k of keys) {
+        const c = String(val(a, k) ?? '').localeCompare(String(val(b, k) ?? ''), undefined, { sensitivity: 'base' });
+        if (c !== 0) return c;
+      }
+      return 0;
+    });
+    setRows(kind, () => next);
+    void persistOrder(kind, next);
+  }
+
   async function add(kind: SettingsKind, blank: SettingPayload) {
     setBusy(true);
     setNotice(null);
@@ -374,6 +401,11 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
   // one generic list's editor (rows + "+ add" / Sort A–Z at the bottom)
   function renderKindList(sec: SectionDef) {
     const rows = lists[sec.kind];
+    // PR368 — options for any `select` column, drawn from another list's active labels (Sub type → Product type)
+    const colOptions: Record<string, string[]> = {};
+    for (const c of sec.cols) if (c.type === 'select' && c.optionsFrom) {
+      colOptions[c.key] = lists[c.optionsFrom].map((r) => String(val(r, 'label') ?? '')).filter(Boolean);
+    }
     return (
       <div className="set-list">
         {/* fixed column header (box presets; PR278 courier/consolidator lists) — shown once, not per row */}
@@ -395,6 +427,7 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
             key={row.id}
             sec={sec}
             row={row}
+            options={colOptions}
             first={i === 0}
             last={i === rows.length - 1}
             busy={busy}
@@ -408,7 +441,11 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
           {(() => { const AddIcon = sec.addIcon ?? PlusCircleIcon; return (
             <button className="btn-brown btn-ico" onClick={() => add(sec.kind, sec.blank)} disabled={busy}><AddIcon />{sec.addLabel ?? 'add'}</button>
           ); })()}
-          <button className="btn-secondary" onClick={() => sortAZ(sec.kind, sec.sortKey)} disabled={busy || rows.length < 2}>Sort A–Z</button>
+          {sec.sorts
+            ? sec.sorts.map((s) => (
+                <button key={s.label} className="btn-secondary" onClick={() => sortByKeys(sec.kind, s.keys)} disabled={busy || rows.length < 2}>{s.label}</button>
+              ))
+            : <button className="btn-secondary" onClick={() => sortAZ(sec.kind, sec.sortKey)} disabled={busy || rows.length < 2}>Sort A–Z</button>}
         </div>
       </div>
     );
@@ -508,6 +545,7 @@ const isIconUrl = (icon: string | null | undefined): boolean => !!icon && /^(htt
 function SettingRowEditor({
   sec,
   row,
+  options,
   first,
   last,
   busy,
@@ -518,6 +556,7 @@ function SettingRowEditor({
 }: {
   sec: SectionDef;
   row: SettingRow;
+  options?: Record<string, string[]>; // PR368 — per-select-column option lists
   first: boolean;
   last: boolean;
   busy: boolean;
@@ -634,16 +673,28 @@ function SettingRowEditor({
         {sec.cols.map((c) => (
           <div className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}${c.cls ? ' ' + c.cls : ''}`} key={c.key}>
             {showCaptions && <label>{c.label}</label>}
-            <input
-              type={c.type === 'number' ? 'number' : 'text'}
-              inputMode={c.type === 'number' ? 'decimal' : undefined}
-              step={c.type === 'number' ? 'any' : undefined}
-              value={draft[c.key] ?? ''}
-              placeholder={c.label}
-              onChange={(e) => onChange(c.key, e.target.value)}
-              onBlur={onBlur}
-              disabled={busy}
-            />
+            {c.type === 'select' ? (
+              // PR368 — a dropdown (e.g. the Sub type's Product type); commits immediately on change.
+              <select
+                value={draft[c.key] ?? ''}
+                onChange={(e) => { const v = e.target.value; setDraft((p) => ({ ...p, [c.key]: v })); onSave({ [c.key]: v || null }); }}
+                disabled={busy}
+              >
+                <option value="">— none —</option>
+                {(options?.[c.key] ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            ) : (
+              <input
+                type={c.type === 'number' ? 'number' : 'text'}
+                inputMode={c.type === 'number' ? 'decimal' : undefined}
+                step={c.type === 'number' ? 'any' : undefined}
+                value={draft[c.key] ?? ''}
+                placeholder={c.label}
+                onChange={(e) => onChange(c.key, e.target.value)}
+                onBlur={onBlur}
+                disabled={busy}
+              />
+            )}
           </div>
         ))}
       </div>
