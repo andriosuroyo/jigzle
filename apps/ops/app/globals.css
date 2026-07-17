@@ -1043,6 +1043,8 @@ img.sku-img { background: #e8e8e8; }
 .cat-hero-ph { display: flex; align-items: center; justify-content: center; }
 .cat-hero-code { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--brown); font-size: 15px; margin-top: 4px; }
 .cat-hero-name { font-size: 16px; font-weight: 700; color: var(--brown-dark); text-align: center; max-width: 400px; }
+/* PR367 — second summary line under the picture: normal text (material · effect · dims · image/source counts) */
+.cat-hero-sum { font-size: 13px; color: var(--muted); text-align: center; max-width: 400px; line-height: 1.4; }
 /* PR189 — hero thumbnail strip + Media-tab image URL editor */
 .cat-hero-strip { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 400px; }
 .cat-hero-thumb { width: 52px; height: 52px; padding: 0; border: 2px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--paper); cursor: pointer; }

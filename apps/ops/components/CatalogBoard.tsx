@@ -778,6 +778,30 @@ export default function CatalogBoard({
               {(() => {
                 const gallery = imageUrls.map((u) => u.trim()).filter(Boolean).map(driveDirect);
                 const idx = Math.min(heroIdx, Math.max(0, gallery.length - 1));
+
+                // PR367 — a live two-line "summary" under the picture, so the filled/missing fields are
+                // visible at a glance without opening each tab. Reads the current edit state (form +
+                // images + sources), not just the saved row, so it updates as you type.
+                const g = (k: string) => String(form[k] ?? '').trim();
+                const pieces = numOrNull(form['piece_count_n']);
+                const sSizeP = numOrNull(form['size_p']);
+                const sSizeL = round ? null : numOrNull(form['size_l']);
+                const sSizeT = round && /jigsaw/i.test(String(form['product_type'] ?? '')) ? null : numOrNull(form['size_t']);
+                // Piece size band is auto (from geometry + count); only show it when it's non-Standard.
+                const band = computePieceSize(sSizeP, sSizeL, pieces);
+                const sizeWord = ['Micro', 'Tiny', 'Small', 'Large', 'Jumbo'].includes(band) ? band : '';
+                const typeWord = g('sub_type') || g('product_type'); // sub type replaces product type when set
+                const pieceBits: string[] = [];
+                if (pieces != null) { pieceBits.push(String(pieces)); if (sizeWord) pieceBits.push(sizeWord); if (g('piece_type')) pieceBits.push(g('piece_type')); }
+                if (typeWord) pieceBits.push(typeWord);
+                const line1 = [detail.sku.item_code, g('translate_name'), pieceBits.join(' ')].filter(Boolean).join(' · ');
+
+                const dimVals = [sSizeP, sSizeL, sSizeT].filter((v): v is number => v != null);
+                const dimSeg = dimVals.length ? `${dimVals.join(' x ')} cm` : '';
+                const imgCount = imageUrls.map((u) => u.trim()).filter(Boolean).length;
+                const srcCount = sources.map((u) => u.trim()).filter(Boolean).length;
+                const line2 = [g('material'), g('effect'), dimSeg, `${imgCount} image${imgCount === 1 ? '' : 's'}`, `${srcCount} source${srcCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+
                 return (
                   <div className="cat-hero">
                     {gallery.length > 0 ? (
@@ -797,8 +821,8 @@ export default function CatalogBoard({
                         ))}
                       </div>
                     )}
-                    <div className="cat-hero-code">{detail.sku.item_code}</div>
-                    <div className="cat-hero-name">{detail.sku.translate_name || detail.sku.original_name || detail.sku.item_code}</div>
+                    <div className="cat-hero-name">{line1}</div>
+                    {line2 && <div className="cat-hero-sum">{line2}</div>}
                     {detail.sku.needs_review && (
                       <span className="po-status processing">
                         needs review{(() => { const m = missingForComplete(detail.sku); return m.length ? ` — missing ${m.join(', ')}` : ''; })()}
