@@ -73,7 +73,8 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
     ],
   },
   {
-    title: 'Classification',
+    // PR369 — Classification + Dimensions merged into one "Specs" tab.
+    title: 'Specs',
     fields: [
       { key: 'product_type', label: 'Product type', kind: 'text', select: true, list: 'product_type', w: 'half' },
       { key: 'sub_type', label: 'Sub type', kind: 'text', select: true, list: 'sub_type', w: 'half' },
@@ -84,11 +85,6 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       // PR366 — Theme removed: redundant with Tags. The `theme` column is left untouched (Browse still
       // facets on existing values); it's just no longer edited here.
       { key: 'artist', label: 'Artist', kind: 'text', select: true, list: 'artist' },
-    ],
-  },
-  {
-    title: 'Dimensions & weight',
-    fields: [
       { key: 'size_p', label: 'Product L (cm)', kind: 'number', w: 'third' },
       { key: 'size_l', label: 'Product W (cm)', kind: 'number', w: 'third' },
       { key: 'size_t', label: 'Product H (cm)', kind: 'number', w: 'third' },
@@ -203,7 +199,7 @@ type Tab = 'search' | 'browse' | 'fix';
 
 // PR185 — the item bodyview groups every field into sub-tabs (GROUPS) + a Barcodes tab, styled like the
 // system's tab lists. Short labels for the sub-tab row.
-const GROUP_TABS = ['Identity', 'Classification', 'Dimensions', 'Links'];
+const GROUP_TABS = ['Identity', 'Specs', 'Links']; // PR369 — Classification + Dimensions merged into Specs
 type RightMode = 'sku' | 'collision' | null;
 
 // PR188 — the field dropdowns' option lists (distinct existing values). Loaded once per session, lazily,
@@ -222,6 +218,30 @@ function driveDirect(url: string): string {
   if (!u) return '';
   const id = u.match(/\/d\/([-\w]{10,})/)?.[1] ?? u.match(/[?&]id=([-\w]{10,})/)?.[1];
   return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1000` : u;
+}
+
+// PR369 — small inline copy-to-clipboard button (SKU product name + each barcode). Shows a brief ✓.
+function CopyBtn({ text, label }: { text: string; label?: string }) {
+  const [done, setDone] = useState(false);
+  if (!text) return null;
+  return (
+    <button
+      type="button"
+      className="copy-btn"
+      title={`Copy${label ? ' ' + label : ''}`}
+      aria-label={`Copy${label ? ' ' + label : ''}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1200); }).catch(() => {});
+      }}
+    >
+      {done ? (
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+      ) : (
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+      )}
+    </button>
+  );
 }
 
 export default function CatalogBoard({
@@ -802,6 +822,9 @@ export default function CatalogBoard({
                 if (pieces != null) { pieceBits.push(String(pieces)); if (sizeWord) pieceBits.push(sizeWord); if (g('piece_type')) pieceBits.push(g('piece_type')); }
                 if (typeWord) pieceBits.push(typeWord);
                 const line1 = [detail.sku.item_code, g('translate_name'), pieceBits.join(' ')].filter(Boolean).join(' · ');
+                // PR369 — the copyable marketplace "SKU product name": the descriptive name WITHOUT the
+                // internal SKU code (translated name + piece descriptor), space-joined.
+                const productName = [g('translate_name'), pieceBits.join(' ')].filter(Boolean).join(' ') || detail.sku.item_code;
 
                 const dimVals = [sSizeP, sSizeL, sSizeT].filter((v): v is number => v != null);
                 const dimSeg = dimVals.length ? `${dimVals.join(' x ')} cm` : '';
@@ -828,7 +851,7 @@ export default function CatalogBoard({
                         ))}
                       </div>
                     )}
-                    <div className="cat-hero-name">{line1}</div>
+                    <div className="cat-hero-name">{line1}<CopyBtn text={productName} label="product name" /></div>
                     {line2 && <div className="cat-hero-sum">{line2}</div>}
                     {detail.sku.needs_review && (
                       <span className="po-status processing">
@@ -915,7 +938,7 @@ export default function CatalogBoard({
                   {/* PR216 — Dimensions leads with the Round/diameter toggle: on → Product L is the
                       diameter, Width is emptied+disabled; Height too, but only for a jigsaw puzzle (a
                       3D round item such as a spherical lamp keeps its height). */}
-                  {GROUPS[detailTab].title === 'Dimensions & weight' && (
+                  {GROUPS[detailTab].title === 'Specs' && (
                     <label className="cat-round">
                       <input type="checkbox" checked={round} onChange={(e) => setRound(e.target.checked)} />
                       <span>Round / uses a diameter (Ø) — enter it as Product L. Width is emptied; height too for a jigsaw puzzle.</span>
@@ -993,7 +1016,7 @@ export default function CatalogBoard({
                         <label>Barcodes{detail.barcodes.length ? ` (${detail.barcodes.length})` : ''}</label>
                         <div className="cat-bc-cell-row">
                           {detail.barcodes.map((b) => (
-                            <span key={b.barcode} className="cat-bc-chip">{b.barcode}{b.shared && <em>shared</em>}</span>
+                            <span key={b.barcode} className="cat-bc-chip">{b.barcode}{b.shared && <em>shared</em>}<CopyBtn text={b.barcode} label="barcode" /></span>
                           ))}
                           <button className="btn-brown btn-ico cat-bc-add-float" onClick={() => { resetMsg(); setNewBarcode(''); setBarcodeOpen(true); }}><BarcodeIcon />Add barcode</button>
                         </div>
@@ -1003,7 +1026,7 @@ export default function CatalogBoard({
 
                   {/* PR216 — Dimensions' auto-derived read-only fields: Image type + Piece size (from the
                       geometry + piece count) and Volume weight (Box L×W×H ÷ 5, grams). */}
-                  {GROUPS[detailTab].title === 'Dimensions & weight' && (() => {
+                  {GROUPS[detailTab].title === 'Specs' && (() => {
                     const sizeP = numOrNull(form['size_p']);
                     const sizeL = round ? null : numOrNull(form['size_l']);
                     const it = computeImageType(round, sizeP, sizeL);
