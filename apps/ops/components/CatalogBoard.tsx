@@ -704,9 +704,10 @@ export default function CatalogBoard({
       <AppHeader active="catalog" userEmail={userEmail} />
       <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Catalog', href: '/catalog' }, { label: crumbLabel }]} />
 
-      {/* ── item / collision bodyview (full width; ← back to the tab you came from) ── */}
+      {/* ── item / collision bodyview (← back to the tab you came from). PR362 — the SKU editor uses the
+           wide (1100px) wrap so its three-column layout lines up with the breadcrumb + refresh button. ── */}
       {showBody && (
-        <div className="cat-wrap">
+        <div className={`cat-wrap ${mode === 'sku' ? 'cat-wrap-detail' : ''}`}>
           <button className="btn-link bv-back" onClick={closeDetail}>← back</button>
           {error && <div className="validation err">{error}</div>}
           {success && <div className="validation ok">{success}</div>}
@@ -729,6 +730,11 @@ export default function CatalogBoard({
                   }}>discard</button>
                 </div>
               )}
+              {/* PR362 — desktop three-column layout: a left media column (picture + code + name) beside
+                  the tabs/fields, which fill the remaining width (halves render two-across). Collapses to
+                  one column on narrow screens. */}
+              <div className="cat-detail-grid">
+                <div className="cat-col-media">
               {/* PR188/PR189 — big square hero (height-capped so panoramas don't blow up), then SKU + name.
                   Manual Google-Drive URLs drive the hero + thumbnail strip; otherwise the pipeline image. */}
               {(() => {
@@ -763,7 +769,9 @@ export default function CatalogBoard({
                   </div>
                 );
               })()}
+                </div>{/* /cat-col-media */}
 
+                <div className="cat-col-fields">
               {/* PR185 — the many fields grouped into sub-tabs (styled like the system tab lists).
                   PR218 — Barcodes are no longer a sub-tab; they live at the bottom of Identity. */}
               <div className="sc-tabs cat-subtabs">
@@ -920,6 +928,8 @@ export default function CatalogBoard({
               <div className="fd-commit">
                 <button className="btn-primary" onClick={saveSku} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
               </div>
+                </div>{/* /cat-col-fields */}
+              </div>{/* /cat-detail-grid */}
 
               {/* PR218 — manage-barcodes overlay: attached list (verify / unlink) + add field that
                   warns if the barcode is already registered to another SKU (shared model). */}
