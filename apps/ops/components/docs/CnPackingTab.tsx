@@ -5,10 +5,9 @@
 // volumetric divisor (5000/6000). Net weight = Σ volume weights, gross = Σ real weights, packages =
 // row count. Shared shipment/box state lives in the board so the other CN docs can reuse it.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { pdf } from '@react-pdf/renderer';
-import { getShipmentBoxes } from '@/app/purchasing/actions';
 import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
 import PackingListDoc, { type PackingBox } from './PackingListDoc';
 import { ensureCjkFont } from './cjkFont';
@@ -39,24 +38,8 @@ export type CnPackingProps = {
 export default function CnPackingTab({ shipments, shipId, setShipId, setMark, boxes, setBoxes, boxTracking, setBoxTracking, divisor, setDivisor }: CnPackingProps) {
   ensureCjkFont();
   const [downloading, setDownloading] = useState(false);
-
-  // Pre-fill packages from the shipment's saved boxes (captured in Purchasing → History). Fetch once
-  // per ship-id; only replace when saved boxes exist, so manual entry is never wiped.
-  const prefilledFor = useRef<string>('');
-  useEffect(() => {
-    const sid = shipId.trim();
-    if (!sid || prefilledFor.current === sid) return;
-    prefilledFor.current = sid;
-    getShipmentBoxes(sid)
-      .then((rows) => {
-        if (rows.length) {
-          setBoxes(rows.map((b) => ({ desc: '', p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', realWeight: b.real_weight?.toString() ?? '' })));
-          // PR354 — seed the single box-tracking field from the saved per-box trackings (comma-joined).
-          setBoxTracking([...new Set(rows.map((b) => (b.tracking ?? '').trim()).filter(Boolean))].join(', '));
-        }
-      })
-      .catch(() => {});
-  }, [shipId, setBoxes, setBoxTracking]);
+  // NB: prefill of packages/box-tracking from the shipment's saved boxes now lives in DocGeneratorBoard
+  // (PR358), so it applies to every CN doc, not just this tab.
 
   const pkgBoxes: PackingBox[] = useMemo(
     () => boxes

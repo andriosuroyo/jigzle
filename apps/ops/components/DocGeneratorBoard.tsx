@@ -4,7 +4,7 @@
 // invoices; the China docs (Packing List / Invoice / Shipping) and SP Declare are stubbed pending
 // Phases 2–3. Each doc renders a live PDF preview with a one-click download (@react-pdf/renderer).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
@@ -14,6 +14,7 @@ import CnInvoiceTab from '@/components/docs/CnInvoiceTab';
 import CnShippingTab from '@/components/docs/CnShippingTab';
 import SpDeclareTab from '@/components/docs/SpDeclareTab';
 import { getShipments } from '@/app/doc-generator/actions';
+import { getShipmentBoxes } from '@/app/purchasing/actions';
 import { getCnAddresses } from '@/app/settings/actions';
 import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
 import type { CnAddress } from '@/app/settings/types';
@@ -51,6 +52,24 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
       getCnAddresses().then(setCnAddresses).catch(() => setCnAddresses([]));
     }
   }, [isCn, shipmentsLoaded]);
+
+  // PR358 — prefill packages + box tracking from the picked shipment's saved boxes (Purchasing → History)
+  // at the BOARD level, so every CN doc (Invoice/Shipping too, not just Packing List) gets the right
+  // packages/net/gross. Runs once per ship-id; manual edits made afterwards are preserved.
+  const prefilledFor = useRef('');
+  useEffect(() => {
+    const sid = cnShipId.trim();
+    if (!sid || prefilledFor.current === sid) return;
+    prefilledFor.current = sid;
+    getShipmentBoxes(sid)
+      .then((rows) => {
+        if (rows.length) {
+          setCnBoxes(rows.map((b) => ({ desc: '', p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', realWeight: b.real_weight?.toString() ?? '' })));
+          setCnBoxTracking([...new Set(rows.map((b) => (b.tracking ?? '').trim()).filter(Boolean))].join(', '));
+        }
+      })
+      .catch(() => {});
+  }, [cnShipId]);
 
   return (
     <div className="ops">
