@@ -46,6 +46,22 @@ export type CnShipmentRow = {
   status: string | null;
 };
 
+// PR359 — read-only "from Purchasing" reference for a picked shipment, shown beside the CN Packing List
+// / CN Invoice pickers so the operator can cross-check cost, packaging and tracking against Purchasing.
+export type CnShipmentRefBox = { p: number | null; l: number | null; t: number | null; w: number | null; tracking: string | null };
+export type CnShipmentRef = {
+  itemLines: number;          // PO lines in the shipment
+  totalUnits: number;         // Σ qty
+  totalCost: number | null;   // Σ item_cost × qty (null if no costs recorded)
+  currencySymbol: string;     // '元' / '¥' / '$' … from the supplier country ('' if unknown)
+  boxes: CnShipmentRefBox[];
+  consolidatorCourier: string | null;
+  consolidatorTracking: string | null;
+  shipmentCourier: string | null;
+  shipmentTracking: string | null;
+  shipDate: string | null;
+};
+
 // One package on the CN Packing List. Dimensions in cm, real weight in kg. Entered here for now
 // (net-new — not yet stored). Box tracking is no longer per-box: it's a single comma-separated field
 // on the tab (PR354), rendered as one line per number on the packing list.

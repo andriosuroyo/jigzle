@@ -8,7 +8,61 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import { resolveSkuImages } from '@/app/images/actions';
 import { getCustomers } from '@/app/customers/actions';
-import type { CnShipmentRow, InvoiceAddress, InvoiceCustomerData, InvoiceCustomerRow, InvoiceLine, InvoiceOrder } from './types';
+import type { CnShipmentRef, CnShipmentRow, InvoiceAddress, InvoiceCustomerData, InvoiceCustomerRow, InvoiceLine, InvoiceOrder } from './types';
+
+// PR359 — supplier country → currency symbol (yuan 元, yen ¥, …) for the shipment reference panel.
+const CN_CCY_SYMBOL: Record<string, string> = {
+  china: '元', japan: '¥', taiwan: 'NT$', 'hong kong': 'HK$', korea: '₩', 'south korea': '₩',
+  singapore: 'S$', thailand: '฿', malaysia: 'RM', indonesia: 'Rp', 'united states': '$', usa: '$', 'united kingdom': '£',
+};
+
+// Read-only cross-check for a picked shipment: total item cost, packaging (box dims/weights) and the
+// three tracking legs — all pulled from Purchasing. Degrades field-by-field (missing table/column →
+// that part stays null/empty) so the panel never breaks the doc screen.
+export async function getCnShipmentRef(shipId: string): Promise<CnShipmentRef | null> {
+  const sid = shipId.trim();
+  if (!sid) return null;
+  const supabase = createSupabaseServerClient();
+
+  // items → total cost + units, and the currency symbol from the first line's supplier country
+  const { data: poData } = await supabase.from('purchase_orders').select('qty,item_cost,supplier_id').eq('ship_id', sid);
+  const pos = (poData ?? []) as { qty: number; item_cost: number | null; supplier_id: number | null }[];
+  let totalCost: number | null = null;
+  let totalUnits = 0;
+  for (const p of pos) {
+    const q = Number(p.qty) || 0;
+    totalUnits += q;
+    if (p.item_cost != null) totalCost = (totalCost ?? 0) + p.item_cost * q;
+  }
+  let currencySymbol = '';
+  const supId = pos.find((p) => p.supplier_id != null)?.supplier_id;
+  if (supId != null) {
+    const { data: sup } = await supabase.from('suppliers').select('country').eq('supplier_id', supId).maybeSingle();
+    currencySymbol = CN_CCY_SYMBOL[((sup?.country as string | null) ?? '').trim().toLowerCase()] ?? '';
+  }
+
+  // packaging (dims/weight/box tracking)
+  const { data: boxData } = await supabase.from('shipment_boxes').select('dim_p,dim_l,dim_t,real_weight,tracking').eq('ship_id', sid).order('sort_order', { ascending: true });
+  const boxes = ((boxData ?? []) as { dim_p: number | null; dim_l: number | null; dim_t: number | null; real_weight: number | null; tracking: string | null }[])
+    .map((b) => ({ p: b.dim_p ?? null, l: b.dim_l ?? null, t: b.dim_t ?? null, w: b.real_weight ?? null, tracking: b.tracking ?? null }));
+
+  // shipment header — the consolidator + shipment tracking legs (degrades to nulls if columns absent)
+  const { data: sh } = await supabase.from('shipments').select('courier,tracking,consolidator_courier,consolidator_tracking,ship_date').eq('ship_id', sid).maybeSingle();
+  const s = (sh ?? {}) as { courier?: string | null; tracking?: string | null; consolidator_courier?: string | null; consolidator_tracking?: string | null; ship_date?: string | null };
+
+  return {
+    itemLines: pos.length,
+    totalUnits,
+    totalCost,
+    currencySymbol,
+    boxes,
+    consolidatorCourier: s.consolidator_courier ?? null,
+    consolidatorTracking: s.consolidator_tracking ?? null,
+    shipmentCourier: s.courier ?? null,
+    shipmentTracking: s.tracking ?? null,
+    shipDate: s.ship_date ?? null,
+  };
+}
 
 // Lightweight customer picker list (id / name / phone), reusing the directory's paged loader.
 export async function getInvoiceCustomers(): Promise<InvoiceCustomerRow[]> {
