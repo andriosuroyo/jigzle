@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUrlTab } from '@/components/useUrlTab';
 import AppHeader from '@/components/AppHeader';
 import Breadcrumbs from '@/components/Breadcrumbs';
-import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
+import type { CatalogueRow, CatalogueComponent, CollisionRow } from '@jigzle/db/types';
 import {
   addBarcode,
   getBarcodeOwners,
@@ -49,7 +49,12 @@ type FieldKind = 'text' | 'textarea' | 'number' | 'bool';
 // PR191 — `select` = render a searchable combobox (SearchSelect) over the catalogue-wide distinct values
 // instead of a datalist, so operators PICK an existing value rather than retype a typo-variant (Theme /
 // Artist / the classification types). `w` = grid width (third → three across, for L/W/H). Defaults half.
-type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind; list?: string; select?: boolean; w?: 'full' | 'half' | 'third' };
+type FieldDef = { key: keyof CatalogueRow; label: string; kind: FieldKind; list?: string; select?: boolean; fixed?: readonly string[]; w?: 'full' | 'half' | 'third' };
+
+// PR370 — piece type is now a fixed CATEGORY (the count moved to set_count + components). Multipack must
+// have ≥2 units; Blind Box may be 1. "Pieces" is the plain single-puzzle box.
+const PIECE_TYPES = ['Pieces', 'Multipack', 'Blind Box'] as const;
+const isMultiType = (pt: string) => pt === 'Multipack' || pt === 'Blind Box';
 
 // every catalogue column is editable EXCEPT item_code (identity) and created_at/updated_at (system).
 // PR191 reshaped the groups: self_code dropped; release_date moved under Description; piece_count
@@ -78,8 +83,9 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
     fields: [
       { key: 'product_type', label: 'Product type', kind: 'text', select: true, list: 'product_type', w: 'half' },
       { key: 'sub_type', label: 'Sub type', kind: 'text', select: true, list: 'sub_type', w: 'half' },
+      { key: 'piece_type', label: 'Piece type', kind: 'text', fixed: PIECE_TYPES, w: 'half' },
+      { key: 'set_count', label: 'Sets (units in box)', kind: 'number', w: 'half' }, // PR370 — shown only for Multipack/Blind Box
       { key: 'piece_count_n', label: 'Piece count', kind: 'number', w: 'half' },
-      { key: 'piece_type', label: 'Piece type', kind: 'text', select: true, list: 'piece_type', w: 'half' },
       { key: 'material', label: 'Material', kind: 'text', select: true, list: 'material', w: 'half' },
       { key: 'effect', label: 'Effect', kind: 'text', select: true, list: 'effect', w: 'half' },
       // PR366 — Theme removed: redundant with Tags. The `theme` column is left untouched (Browse still
@@ -155,7 +161,7 @@ function initForm(sku: CatalogueRow): FormState {
 const CAT_DRAFT_SKU_PREFIX = 'jz:catalog:draft:sku:';
 const CAT_DRAFT_NEW_KEY = 'jz:catalog:draft:new';
 const catDraftKey = (code: string) => CAT_DRAFT_SKU_PREFIX + code;
-type CatalogDraft = { form: FormState; imageUrls: string[]; sources: string[]; round: boolean; imgUnavailable: boolean };
+type CatalogDraft = { form: FormState; imageUrls: string[]; sources: string[]; round: boolean; imgUnavailable: boolean; components: CatalogueComponent[] };
 type CatalogNewDraft = { newCode: string; newName: string; newType: string | null };
 // the server baseline for an open SKU — a draft is only saved when the edit state diverges from this
 // (so merely viewing a SKU never writes a draft).
@@ -166,6 +172,7 @@ function catServerSnapshot(sku: CatalogueRow, origSources: string[]): string {
     sources: origSources,
     round: sku.image_type === 'Round',
     imgUnavailable: !!sku.image_unavailable,
+    components: sku.components ?? [],
   });
 }
 
@@ -276,6 +283,7 @@ export default function CatalogBoard({
   const [imgUnavailable, setImgUnavailable] = useState(false); // PR212: "no picture available" (0071)
   const [sources, setSources] = useState<string[]>([]);       // PR217: Links → Sources (sku_sources)
   const [origSources, setOrigSources] = useState<string[]>([]); // loaded set, for change-detect on save
+  const [components, setComponents] = useState<CatalogueComponent[]>([]); // PR370: multipack/blind-box per-unit rows
   const [heroIdx, setHeroIdx] = useState(0); // PR189: which manual image the hero shows
 
   const [mode, setMode] = useState<RightMode>(null);
@@ -311,14 +319,14 @@ export default function CatalogBoard({
   useEffect(() => {
     if (mode !== 'sku' || !detail || catHydratingRef.current) return;
     const key = catDraftKey(detail.sku.item_code);
-    const current = JSON.stringify({ form, imageUrls, sources, round, imgUnavailable });
+    const current = JSON.stringify({ form, imageUrls, sources, round, imgUnavailable, components });
     if (current !== catServerSnapshot(detail.sku, origSources)) {
-      saveDraft<CatalogDraft>(key, { form, imageUrls, sources, round, imgUnavailable });
+      saveDraft<CatalogDraft>(key, { form, imageUrls, sources, round, imgUnavailable, components });
     } else {
       clearDraft(key);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, detail, form, imageUrls, sources, round, imgUnavailable, origSources]);
+  }, [mode, detail, form, imageUrls, sources, round, imgUnavailable, origSources, components]);
 
   // persist the "+ New SKU" overlay draft (deliberate close discards it; a reload preserves it)
   useEffect(() => {
@@ -450,7 +458,7 @@ export default function CatalogBoard({
       if (reqRef.current !== myReq) return;
       setDetail(d);
       if (d) {
-        setForm(initForm(d.sku)); setSkuCode(d.sku.item_code); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
+        setForm(initForm(d.sku)); setSkuCode(d.sku.item_code); setImageUrls(d.sku.image_urls ?? []); setComponents(d.sku.components ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
         // PR260 — seed sources, then overlay any saved draft on top of the server state before ungating.
         const applyDraft = (srv: string[]) => {
           if (reqRef.current !== myReq) return;
@@ -460,6 +468,7 @@ export default function CatalogBoard({
             if (draft.form) setForm(draft.form);
             if (draft.imageUrls) setImageUrls(draft.imageUrls);
             if (draft.sources) setSources(draft.sources);
+            if (Array.isArray(draft.components)) setComponents(draft.components);
             if (typeof draft.round === 'boolean') setRound(draft.round);
             if (typeof draft.imgUnavailable === 'boolean') setImgUnavailable(draft.imgUnavailable);
             setCatRestored(true);
@@ -489,7 +498,7 @@ export default function CatalogBoard({
     if (reqRef.current !== myReq) return;
     setDetail(d);
     if (d) {
-      setForm(initForm(d.sku)); setSkuCode(d.sku.item_code); setImageUrls(d.sku.image_urls ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
+      setForm(initForm(d.sku)); setSkuCode(d.sku.item_code); setImageUrls(d.sku.image_urls ?? []); setComponents(d.sku.components ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
       const done = (s: string[]) => { if (reqRef.current === myReq) { setSources(s); setOrigSources(s); catHydratingRef.current = false; } };
       getSkuSources(code).then(done).catch(() => done([]));
     } else if (reqRef.current === myReq) {
@@ -620,6 +629,25 @@ export default function CatalogBoard({
       }
       // PR212 — "no picture available" flag (outside `form`); include only when changed.
       if (!!imgUnavailable !== !!detail.sku.image_unavailable) patch.image_unavailable = imgUnavailable;
+
+      // PR370 — Multipack / Blind Box. piece_type is now a category; the count lives in set_count + the
+      // per-unit `components`. For a real multi-unit set (≥2), piece_count_n = Σ component pieces (auto).
+      // A plain "Pieces" box carries neither set_count nor components.
+      const ptype = String(form['piece_type'] ?? '').trim();
+      const setCnt = Math.max(0, parseInt(String(form['set_count'] ?? ''), 10) || 0);
+      const usesComp = isMultiType(ptype) && setCnt >= 2;
+      const cleanComp: CatalogueComponent[] = usesComp
+        ? components.slice(0, setCnt).map((c) => ({ pieces: numOrNull(c?.pieces), p: numOrNull(c?.p), l: numOrNull(c?.l), t: numOrNull(c?.t) }))
+        : [];
+      if (JSON.stringify(cleanComp) !== JSON.stringify(detail.sku.components ?? [])) patch.components = cleanComp.length ? cleanComp : null;
+      if (!isMultiType(ptype)) {
+        delete patch.set_count; // never persist a set count for a plain "Pieces" box (buildPatch may have staged a stale one)
+        if ((detail.sku.set_count ?? null) !== null) patch.set_count = null; // clear an existing one
+      }
+      if (usesComp) {
+        const sum = cleanComp.reduce((s, c) => s + (c.pieces ?? 0), 0);
+        if ((detail.sku.piece_count_n ?? null) !== sum) patch.piece_count_n = sum;
+      }
       await updateSku(targetCode, patch as Partial<CatalogueRow>);
 
       // PR217 — Sources (sku_sources) persist separately from the catalogue row; only when changed.
@@ -759,6 +787,13 @@ export default function CatalogBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // PR370 — multipack render state (Specs tab): the Sets field + per-unit component rows appear only for
+  // Multipack / Blind Box; ≥2 units auto-sums the piece count and replaces the single product size.
+  const pieceTypeVal = String(form['piece_type'] ?? '').trim();
+  const setCountVal = Math.max(0, parseInt(String(form['set_count'] ?? ''), 10) || 0);
+  const usesComponents = isMultiType(pieceTypeVal) && setCountVal >= 2;
+  const componentsSum = Array.from({ length: usesComponents ? setCountVal : 0 }).reduce<number>((s, _, i) => s + (numOrNull(components[i]?.pieces) ?? 0), 0);
+
   const showBody = mode !== null;
   const crumbLabel = showBody
     ? (mode === 'collision' ? (collision?.barcode ?? 'Barcode') : (detail?.sku.item_code ?? 'Item'))
@@ -789,7 +824,7 @@ export default function CatalogBoard({
                   <button className="btn-link" onClick={() => {
                     if (!detail) return;
                     clearDraft(catDraftKey(detail.sku.item_code));
-                    setForm(initForm(detail.sku)); setSkuCode(detail.sku.item_code); setImageUrls(detail.sku.image_urls ?? []); setSources(origSources);
+                    setForm(initForm(detail.sku)); setSkuCode(detail.sku.item_code); setImageUrls(detail.sku.image_urls ?? []); setSources(origSources); setComponents(detail.sku.components ?? []);
                     setRound(detail.sku.image_type === 'Round'); setImgUnavailable(!!detail.sku.image_unavailable);
                     setCatRestored(false);
                   }}>discard</button>
@@ -814,20 +849,38 @@ export default function CatalogBoard({
                 const sSizeP = numOrNull(form['size_p']);
                 const sSizeL = round ? null : numOrNull(form['size_l']);
                 const sSizeT = round && /jigsaw/i.test(String(form['product_type'] ?? '')) ? null : numOrNull(form['size_t']);
-                // Piece size band is auto (from geometry + count); only show it when it's non-Standard.
-                const band = computePieceSize(sSizeP, sSizeL, pieces);
+                // PR370 — Multipack / Blind Box: piece_type is a category; total pieces = Σ component units.
+                const ptype = g('piece_type');
+                const setCnt = Math.max(0, parseInt(g('set_count'), 10) || 0);
+                const usesComp = isMultiType(ptype) && setCnt >= 2;
+                const total = usesComp
+                  ? components.slice(0, setCnt).reduce((s, c) => s + (numOrNull(c?.pieces) ?? 0), 0)
+                  : pieces;
+                // Piece size band is auto (single product only); only show it when it's non-Standard.
+                const band = usesComp ? '' : computePieceSize(sSizeP, sSizeL, pieces);
                 const sizeWord = ['Micro', 'Tiny', 'Small', 'Large', 'Jumbo'].includes(band) ? band : '';
                 const typeWord = g('sub_type') || g('product_type'); // sub type replaces product type when set
+                // Name: "<total> [band] Pieces [Multipack|Blind Box] <typeWord>" — the set count stays out
+                // of the name (it lives in the marketplace description); PR370.
                 const pieceBits: string[] = [];
-                if (pieces != null) { pieceBits.push(String(pieces)); if (sizeWord) pieceBits.push(sizeWord); if (g('piece_type')) pieceBits.push(g('piece_type')); }
+                if (total) { pieceBits.push(String(total)); if (sizeWord) pieceBits.push(sizeWord); pieceBits.push('Pieces'); if (isMultiType(ptype)) pieceBits.push(ptype); }
                 if (typeWord) pieceBits.push(typeWord);
                 const line1 = [detail.sku.item_code, g('translate_name'), pieceBits.join(' ')].filter(Boolean).join(' · ');
                 // PR369 — the copyable marketplace "SKU product name": the descriptive name WITHOUT the
                 // internal SKU code (translated name + piece descriptor), space-joined.
                 const productName = [g('translate_name'), pieceBits.join(' ')].filter(Boolean).join(' ') || detail.sku.item_code;
 
-                const dimVals = [sSizeP, sSizeL, sSizeT].filter((v): v is number => v != null);
-                const dimSeg = dimVals.length ? `${dimVals.join(' x ')} cm` : '';
+                // Dims: for a multipack, the per-unit face sizes (38×26 + 52×38); otherwise the product L×W×H.
+                let dimSeg = '';
+                if (usesComp) {
+                  const parts = components.slice(0, setCnt)
+                    .map((c) => [numOrNull(c?.p), numOrNull(c?.l)].filter((v): v is number => v != null).join('×'))
+                    .filter(Boolean);
+                  dimSeg = parts.length ? `${parts.join(' + ')} cm` : '';
+                } else {
+                  const dimVals = [sSizeP, sSizeL, sSizeT].filter((v): v is number => v != null);
+                  dimSeg = dimVals.length ? `${dimVals.join(' x ')} cm` : '';
+                }
                 const imgCount = imageUrls.map((u) => u.trim()).filter(Boolean).length;
                 const srcCount = sources.map((u) => u.trim()).filter(Boolean).length;
                 const line2 = [g('material'), g('effect'), dimSeg, `${imgCount} image${imgCount === 1 ? '' : 's'}`, `${srcCount} source${srcCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
@@ -946,13 +999,22 @@ export default function CatalogBoard({
                   )}
 
                   <div className="cat-grid">
-                    {GROUPS[detailTab].fields.map((fld) => {
+                    {GROUPS[detailTab].fields
+                      .filter((fld) => {
+                        // PR370 — Sets only for Multipack/Blind Box; the single product size is hidden when
+                        // per-unit component sizes are in play.
+                        if (fld.key === 'set_count') return isMultiType(pieceTypeVal);
+                        if (usesComponents && (fld.key === 'size_p' || fld.key === 'size_l' || fld.key === 'size_t')) return false;
+                        return true;
+                      })
+                      .map((fld) => {
                       const k = fld.key as string;
                       const isJigsaw = /jigsaw/i.test(String(form['product_type'] ?? ''));
+                      const pcAuto = usesComponents && k === 'piece_count_n'; // piece count = Σ components (read-only)
                       // Round/diameter: Product L is the diameter. Width is always emptied+disabled;
                       // Height too, but only for a jigsaw puzzle (a 3D round item keeps its height).
                       const roundLocked = round && (k === 'size_l' || (k === 'size_t' && isJigsaw));
-                      const label = round && k === 'size_p' ? 'Diameter (cm)' : fld.label;
+                      const label = round && k === 'size_p' ? 'Diameter (cm)' : pcAuto ? 'Piece count (auto Σ)' : fld.label;
                       const w = fld.kind === 'textarea' || fld.kind === 'bool' ? 'full' : fld.w ?? 'half';
                       // PR368 — Sub type is filtered to the sub-types linked to the SELECTED product type
                       // (managed list, 0097). Falls back to distinct catalogue values only when no managed
@@ -965,7 +1027,15 @@ export default function CatalogBoard({
                       const listId = fld.list ? `dl-${fld.list}` : undefined;
                       return (
                         <div className={`po-field pf-${w}`} key={k} style={{ marginBottom: 0 }}>
-                          {fld.select ? (
+                          {fld.fixed ? (
+                            <>
+                              <label>{label}</label>
+                              <select value={String(form[k] ?? '')} disabled={busy} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}>
+                                <option value="">—</option>
+                                {fld.fixed.map((o) => <option key={o} value={o}>{o}</option>)}
+                              </select>
+                            </>
+                          ) : fld.select ? (
                             <>
                               <label>{label}</label>
                               <SearchSelect
@@ -992,8 +1062,8 @@ export default function CatalogBoard({
                                   type={fld.kind === 'number' ? 'number' : 'text'}
                                   step={fld.kind === 'number' ? 'any' : undefined}
                                   list={listId}
-                                  value={roundLocked ? '' : String(form[k] ?? '')}
-                                  disabled={roundLocked}
+                                  value={pcAuto ? String(componentsSum) : roundLocked ? '' : String(form[k] ?? '')}
+                                  disabled={roundLocked || pcAuto}
                                   onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}
                                 />
                               )}
@@ -1023,6 +1093,36 @@ export default function CatalogBoard({
                       </div>
                     )}
                   </div>
+
+                  {/* PR370 — per-unit rows for a Multipack / Blind Box (≥2 units): each sub-puzzle's piece
+                      count + product L×W×H. The piece count above auto-sums these. */}
+                  {usesComponents && (
+                    <div className="cat-comp">
+                      <div className="cat-grp-title" style={{ marginTop: 14 }}>Units in the box ({setCountVal}) — pieces &amp; size each</div>
+                      {Array.from({ length: setCountVal }).map((_, i) => {
+                        const c = components[i] ?? { pieces: null, p: null, l: null, t: null };
+                        const setC = (patch: Partial<CatalogueComponent>) => setComponents((arr) => {
+                          const n = arr.slice(); while (n.length < setCountVal) n.push({ pieces: null, p: null, l: null, t: null });
+                          n[i] = { ...(n[i] ?? { pieces: null, p: null, l: null, t: null }), ...patch }; return n;
+                        });
+                        const num = (v: string): number | null => (v.trim() === '' ? null : Number(v));
+                        return (
+                          <div className="cat-comp-row" key={i}>
+                            <span className="cat-comp-n">{i + 1}</span>
+                            <input className="no-spin cat-comp-pc" type="number" step="any" inputMode="numeric" placeholder="pieces" value={c.pieces ?? ''} disabled={busy} onChange={(e) => setC({ pieces: num(e.target.value) })} />
+                            <span className="cat-comp-sep">·</span>
+                            <input type="number" step="any" placeholder="L" value={c.p ?? ''} disabled={busy} onChange={(e) => setC({ p: num(e.target.value) })} />
+                            <span className="cat-comp-x">×</span>
+                            <input type="number" step="any" placeholder="W" value={c.l ?? ''} disabled={busy} onChange={(e) => setC({ l: num(e.target.value) })} />
+                            <span className="cat-comp-x">×</span>
+                            <input type="number" step="any" placeholder="H" value={c.t ?? ''} disabled={busy} onChange={(e) => setC({ t: num(e.target.value) })} />
+                            <span className="cat-comp-unit">cm</span>
+                          </div>
+                        );
+                      })}
+                      <div className="hint" style={{ marginTop: 4 }}>Piece count auto-sums these units ({componentsSum}).</div>
+                    </div>
+                  )}
 
                   {/* PR216 — Dimensions' auto-derived read-only fields: Image type + Piece size (from the
                       geometry + piece count) and Volume weight (Box L×W×H ÷ 5, grams). */}

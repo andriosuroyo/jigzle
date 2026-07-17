@@ -926,6 +926,15 @@ button.po-pick-btn:active { background: var(--paper); }
 /* PR366 — hide the native number-input spinner on Piece count (no "easy-adjust" up/down arrows). */
 .no-spin::-webkit-outer-spin-button, .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .no-spin { -moz-appearance: textfield; appearance: textfield; }
+/* PR370 — Multipack / Blind Box per-unit rows (pieces · L × W × H) */
+.cat-comp { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.cat-comp-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cat-comp-n { width: 18px; text-align: center; color: var(--muted); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.cat-comp-row input { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
+.cat-comp-row input.cat-comp-pc { flex: 1 1 70px; }
+.cat-comp-row input:not(.cat-comp-pc) { flex: 1 1 46px; }
+.cat-comp-sep, .cat-comp-x { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.cat-comp-unit { color: var(--muted); font-size: 12px; flex-shrink: 0; }
 
 /* PR191 — SearchSelect: a searchable single-value combobox (Theme / Artist / classification types) */
 .ss { position: relative; }
