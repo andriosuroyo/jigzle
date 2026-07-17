@@ -14,7 +14,9 @@ import CnInvoiceTab from '@/components/docs/CnInvoiceTab';
 import CnShippingTab from '@/components/docs/CnShippingTab';
 import SpDeclareTab from '@/components/docs/SpDeclareTab';
 import { getShipments } from '@/app/doc-generator/actions';
+import { getCnAddresses } from '@/app/settings/actions';
 import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
+import type { CnAddress } from '@/app/settings/types';
 
 type Tab = 'invoice-idr' | 'invoice-usd' | 'cn-packing' | 'cn-invoice' | 'cn-shipping' | 'sp-declare';
 const TABS: { key: Tab; label: string }[] = [
@@ -33,10 +35,12 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
 
   // ── shared CN state (a picked shipment + its packages feed all three China docs) ──
   const [shipments, setShipments] = useState<CnShipmentRow[]>([]);
+  const [cnAddresses, setCnAddresses] = useState<CnAddress[]>([]); // PR356 — Settings-managed address list
   const [shipmentsLoaded, setShipmentsLoaded] = useState(false);
   const [cnShipId, setCnShipId] = useState('');
   const [cnMark, setCnMark] = useState('');
   const [cnBoxes, setCnBoxes] = useState<CnBox[]>([emptyBox()]);
+  const [cnBoxTracking, setCnBoxTracking] = useState(''); // PR354 — comma-separated box trackings (Packing List)
   const [cnDivisor, setCnDivisor] = useState(6000);
 
   const isCn = tab === 'cn-packing' || tab === 'cn-invoice' || tab === 'cn-shipping';
@@ -44,6 +48,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
     if (isCn && !shipmentsLoaded) {
       setShipmentsLoaded(true);
       getShipments().then(setShipments).catch(() => setShipments([]));
+      getCnAddresses().then(setCnAddresses).catch(() => setCnAddresses([]));
     }
   }, [isCn, shipmentsLoaded]);
 
@@ -71,11 +76,12 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
             shipId={cnShipId} setShipId={setCnShipId}
             mark={cnMark} setMark={setCnMark}
             boxes={cnBoxes} setBoxes={setCnBoxes}
+            boxTracking={cnBoxTracking} setBoxTracking={setCnBoxTracking}
             divisor={cnDivisor} setDivisor={setCnDivisor}
           />
         )}
         {tab === 'cn-invoice' && (
-          <CnInvoiceTab shipments={shipments} shipId={cnShipId} setShipId={setCnShipId} mark={cnMark} boxes={cnBoxes} divisor={cnDivisor} />
+          <CnInvoiceTab shipments={shipments} addresses={cnAddresses} shipId={cnShipId} setShipId={setCnShipId} mark={cnMark} boxes={cnBoxes} divisor={cnDivisor} />
         )}
         {tab === 'cn-shipping' && (
           <CnShippingTab shipments={shipments} shipId={cnShipId} setShipId={setCnShipId} boxes={cnBoxes} divisor={cnDivisor} />

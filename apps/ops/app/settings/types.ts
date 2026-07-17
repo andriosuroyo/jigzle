@@ -116,6 +116,16 @@ export interface ExportCourier {
   sort_order: number;
 }
 
+// 0095 (PR356): CN document addresses — a Settings-managed list shared by the CN Invoice shipper AND
+// consignee selectors (one list; a consignee may later be a shipper). label + full address block.
+export interface CnAddress {
+  id: number;
+  label: string;
+  address: string;
+  is_active: boolean;
+  sort_order: number;
+}
+
 // 0068 (PR205): SP Declare (Surat Pernyataan) declaration users — a person's identity that fills the
 // customs declaration (picked in Doc Generator → SP Declare). KTP/NPWP/phone/address vary per person.
 export interface DeclarationUser {

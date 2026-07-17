@@ -20,7 +20,7 @@ const box: React.CSSProperties = { border: '1px solid #d8d8d6', borderRadius: 8,
 const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#555', display: 'block', marginBottom: 4 };
 const inp: React.CSSProperties = { padding: '6px 8px', border: '1px solid #cfcfcd', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' };
 
-export const emptyBox = (): CnBox => ({ desc: '', p: '', l: '', t: '', realWeight: '', tracking: '' });
+export const emptyBox = (): CnBox => ({ desc: '', p: '', l: '', t: '', realWeight: '' });
 
 export type CnPackingProps = {
   shipments: CnShipmentRow[];
@@ -30,11 +30,13 @@ export type CnPackingProps = {
   setMark: (v: string) => void;
   boxes: CnBox[];
   setBoxes: (v: CnBox[]) => void;
+  boxTracking: string;
+  setBoxTracking: (v: string) => void;
   divisor: number;
   setDivisor: (v: number) => void;
 };
 
-export default function CnPackingTab({ shipments, shipId, setShipId, setMark, boxes, setBoxes, divisor, setDivisor }: CnPackingProps) {
+export default function CnPackingTab({ shipments, shipId, setShipId, setMark, boxes, setBoxes, boxTracking, setBoxTracking, divisor, setDivisor }: CnPackingProps) {
   ensureCjkFont();
   const [downloading, setDownloading] = useState(false);
 
@@ -48,18 +50,22 @@ export default function CnPackingTab({ shipments, shipId, setShipId, setMark, bo
     getShipmentBoxes(sid)
       .then((rows) => {
         if (rows.length) {
-          setBoxes(rows.map((b) => ({ desc: '', p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', realWeight: b.real_weight?.toString() ?? '', tracking: b.tracking ?? '' })));
+          setBoxes(rows.map((b) => ({ desc: '', p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', realWeight: b.real_weight?.toString() ?? '' })));
+          // PR354 — seed the single box-tracking field from the saved per-box trackings (comma-joined).
+          setBoxTracking([...new Set(rows.map((b) => (b.tracking ?? '').trim()).filter(Boolean))].join(', '));
         }
       })
       .catch(() => {});
-  }, [shipId, setBoxes]);
+  }, [shipId, setBoxes, setBoxTracking]);
 
   const pkgBoxes: PackingBox[] = useMemo(
     () => boxes
       .filter((b) => b.p || b.l || b.t || b.realWeight)
-      .map((b) => ({ desc: b.desc, p: Number(b.p) || 0, l: Number(b.l) || 0, t: Number(b.t) || 0, realWeight: Number(b.realWeight) || 0, tracking: b.tracking })),
+      .map((b) => ({ desc: b.desc, p: Number(b.p) || 0, l: Number(b.l) || 0, t: Number(b.t) || 0, realWeight: Number(b.realWeight) || 0 })),
     [boxes],
   );
+  // PR354 — split the comma-separated box-tracking field into one entry per line on the doc.
+  const trackingList = useMemo(() => boxTracking.split(',').map((t) => t.trim()).filter(Boolean), [boxTracking]);
   // PR352 — MARK&NO is always the shipment id now (the separate 麦头 field was removed); the doc adds a
   // "(1)/(2)…" suffix per extra carton. `mark` stays synced from the picker for the sibling CN Invoice.
   const markNo = shipId;
@@ -76,7 +82,7 @@ export default function CnPackingTab({ shipments, shipId, setShipId, setMark, bo
       .map((sh) => ({ value: sh.shipId, label: `${sh.shipId}${sh.tracking ? ` · ${sh.tracking}` : ''}` }));
   }, [shipments, shipId]);
 
-  const docEl = <PackingListDoc markNo={markNo} boxes={pkgBoxes} divisor={divisor} />;
+  const docEl = <PackingListDoc markNo={markNo} boxes={pkgBoxes} divisor={divisor} trackings={trackingList} />;
 
   function setBox(i: number, patch: Partial<CnBox>) {
     setBoxes(boxes.map((b, j) => (j === i ? { ...b, ...patch } : b)));
@@ -103,14 +109,23 @@ export default function CnPackingTab({ shipments, shipId, setShipId, setMark, bo
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 440px) 1fr', gap: 16, padding: 16, alignItems: 'start', maxWidth: 1100, width: '100%', margin: '0 auto' }}>
       <div>
         <div style={box}>
-          <label style={lbl}>Shipment (Purchasing ship-id)</label>
-          <DropSearch
-            value={shipId || null}
-            onChange={(v) => { setShipId(v); setMark(v); }}
-            options={shipmentOpts}
-            placeholder="— pick a shipment —"
-            ariaLabel="Shipment"
-          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' }}>
+            <div>
+              <label style={lbl}>Shipment ID</label>
+              <DropSearch
+                value={shipId || null}
+                onChange={(v) => { setShipId(v); setMark(v); }}
+                options={shipmentOpts}
+                placeholder="— pick a shipment —"
+                ariaLabel="Shipment ID"
+                className="cn-doc-ds"
+              />
+            </div>
+            <div>
+              <label style={lbl}>Box tracking</label>
+              <input style={{ ...inp, width: '100%' }} value={boxTracking} onChange={(e) => setBoxTracking(e.target.value)} placeholder="ZTO …, ZTO … (comma-separated)" />
+            </div>
+          </div>
           <div style={{ marginTop: 10 }}>
             <label style={lbl}>Volumetric divisor</label>
             {[6000, 5000].map((d) => (
@@ -123,17 +138,18 @@ export default function CnPackingTab({ shipments, shipId, setShipId, setMark, bo
 
         <div style={box}>
           <label style={lbl}>Packages — one row per box (cm / kg)</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1fr 1.4fr 24px', gap: 6, fontSize: 10, color: '#888', fontWeight: 700, marginBottom: 4 }}>
-            <div>DESCRIPTION</div><div>LENGTH</div><div>WIDTH</div><div>HEIGHT</div><div>REAL WT</div><div>BOX TRACKING</div><div />
+          <div style={{ display: 'grid', gridTemplateColumns: '20px 2.6fr 1fr 1fr 1fr 1fr 24px', gap: 6, fontSize: 10, color: '#888', fontWeight: 700, marginBottom: 4 }}>
+            <div /><div>DESCRIPTION</div><div>LENGTH</div><div>WIDTH</div><div>HEIGHT</div><div>REAL WT</div><div />
           </div>
           {boxes.map((b, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr 1fr 1.4fr 24px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '20px 2.6fr 1fr 1fr 1fr 1fr 24px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+              {/* PR354 — light-grey running box number, so it's clear how many packages have been added. */}
+              <div style={{ color: '#bbb', fontSize: 12, fontWeight: 700, textAlign: 'center' }}>{i + 1}</div>
               <input style={cell} value={b.desc} onChange={(e) => setBox(i, { desc: e.target.value })} placeholder="JIGSAW PUZZLE" />
               <input style={cell} inputMode="decimal" value={b.p} onChange={(e) => setBox(i, { p: e.target.value })} />
               <input style={cell} inputMode="decimal" value={b.l} onChange={(e) => setBox(i, { l: e.target.value })} />
               <input style={cell} inputMode="decimal" value={b.t} onChange={(e) => setBox(i, { t: e.target.value })} />
               <input style={cell} inputMode="decimal" value={b.realWeight} onChange={(e) => setBox(i, { realWeight: e.target.value })} />
-              <input style={cell} value={b.tracking} onChange={(e) => setBox(i, { tracking: e.target.value })} placeholder="ZTO …" />
               <button type="button" onClick={() => removeBox(i)} title="remove" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#a00', fontSize: 16 }}>×</button>
             </div>
           ))}
