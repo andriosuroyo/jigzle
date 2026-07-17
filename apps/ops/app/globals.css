@@ -914,7 +914,14 @@ button.po-pick-btn:active { background: var(--paper); }
 .cat-grid .pf-full { grid-column: 1 / -1; }
 .cat-grid .pf-half { grid-column: span 6; }
 .cat-grid .pf-third { grid-column: span 4; }
-@media (max-width: 560px) { .cat-grid .pf-half { grid-column: 1 / -1; } }
+.cat-grid .pf-twothird { grid-column: span 8; } /* PR366 — Barcodes cell beside the 1/3 Release date */
+@media (max-width: 560px) { .cat-grid .pf-half, .cat-grid .pf-twothird { grid-column: 1 / -1; } }
+
+/* PR366 — Barcodes grid cell (right of Release date): big, readable codes with the Add-barcode button
+   floated to their right; when none are linked the button sits under the header. */
+.cat-bc-cell-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 38px; }
+.cat-bc-cell .cat-bc-chip { font-size: 14px; padding: 6px 11px; }
+.cat-bc-add-float { margin-left: auto; }
 
 /* PR191 — SearchSelect: a searchable single-value combobox (Theme / Artist / classification types) */
 .ss { position: relative; }
