@@ -22,6 +22,9 @@
 html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; background: var(--cream); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, 'Inter', Roboto, 'Helvetica Neue', Arial, sans-serif; }
 body { min-height: 100vh; min-height: 100dvh; }
 input, textarea, select, button { font-family: inherit; }
+/* PR375 — one green for EVERY checkbox when ticked (was mixed: some green via per-element
+   accent-color, most left the browser-default blue). `accent-color` only paints the checked fill. */
+input[type="checkbox"] { accent-color: var(--green); }
 
 /* ── Login (copied screen) ── */
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: linear-gradient(180deg, var(--cream) 0%, var(--paper) 100%); }
@@ -956,6 +959,12 @@ button.po-pick-btn:active { background: var(--paper); }
 /* PR191 — Round-image toggle on the Dimensions tab */
 .cat-round { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: var(--ink); cursor: pointer; }
 .cat-round input { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* PR374 — Dimensions panel: the Round toggle + Product/Box L·W·H + real weight, encased on a tinted
+   card so the size group reads as separate from the classification fields above it. */
+.cat-dims { margin-top: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.cat-dims .cat-round { margin-bottom: 10px; }
+.cat-dims .cat-grid input { background: var(--paper); }
 
 /* PR191 — the two AUTOFILLED classification fields (read-only, derived from the geometry) */
 .cat-auto { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }

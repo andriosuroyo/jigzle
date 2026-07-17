@@ -208,6 +208,7 @@ type Tab = 'search' | 'browse' | 'fix';
 // PR185 — the item bodyview groups every field into sub-tabs (GROUPS) + a Barcodes tab, styled like the
 // system's tab lists. Short labels for the sub-tab row.
 const GROUP_TABS = ['Identity', 'Specs', 'Links']; // PR369 — Classification + Dimensions merged into Specs
+const SPECS_TAB_INDEX = GROUP_TABS.indexOf('Specs'); // PR373 — the only detail tab whose fields need the option lists
 type RightMode = 'sku' | 'collision' | null;
 
 // PR188 — the field dropdowns' option lists (distinct existing values). Loaded once per session, lazily,
@@ -217,7 +218,10 @@ let OPTIONS_CACHE: Record<string, string[]> | null = null;
 // sub-types matching the selected product type. Session-cached like OPTIONS_CACHE.
 let SUBTYPES_CACHE: { label: string; product_type: string }[] | null = null;
 
-const MAX_IMAGE_URLS = 8;
+const MAX_IMAGE_URLS = 8; // storage/save still tolerates up to 8 (legacy rows) — see LINK_FIELDS
+// PR375 — the Links tab shows 6 slots each for images and sources. The save paths keep their higher
+// cap so any pre-existing 7th/8th entry on an older SKU is preserved, never silently truncated.
+const LINK_FIELDS = 6;
 // PR189 — turn a Google-Drive share link into a direct-render image URL. Handles /file/d/ID/…, ?id=ID,
 // /thumbnail?id=ID, /uc?…id=ID. Falls back to the raw string if no Drive file id is found. The file must
 // be shared "anyone with the link" to render.
@@ -444,8 +448,9 @@ export default function CatalogBoard({
 
   async function openSku(code: string) {
     if (tab === 'search') recordSearch(search); // remember the query that led here
-    if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
-    if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
+    // PR373 — the Specs-tab dropdown options are NOT fetched here anymore; they load lazily the first
+    // time the Specs tab is opened (see the effect below), so just viewing an item's Identity tab no
+    // longer pays for the catalogue-wide distinct-values read.
     resetMsg();
     setMode('sku');
     setDetailTab(0);
@@ -791,6 +796,16 @@ export default function CatalogBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // PR373 — lazy-load the Specs-tab dropdown options the first time the Specs tab is opened on an item.
+  // These lists (distinct product_type / material / effect / artist / … across the catalogue) were the
+  // single heavy read on detail open; deferring them keeps opening an item — and its default Identity
+  // view — fast. Module-cached (OPTIONS_CACHE / SUBTYPES_CACHE) so it's fetched at most once per session.
+  useEffect(() => {
+    if (mode !== 'sku' || detailTab !== SPECS_TAB_INDEX) return;
+    if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
+    if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
+  }, [mode, detailTab]);
+
   // PR370 — multipack render state (Specs tab): the Sets field + per-unit component rows appear only for
   // Multipack / Blind Box; ≥2 units auto-sums the piece count and replaces the single product size.
   const pieceTypeVal = String(form['piece_type'] ?? '').trim();
@@ -868,11 +883,12 @@ export default function CatalogBoard({
                 // of the name (it lives in the marketplace description); PR370.
                 const pieceBits: string[] = [];
                 if (total) { pieceBits.push(String(total)); if (sizeWord) pieceBits.push(sizeWord); pieceBits.push('Pieces'); if (isMultiType(ptype)) pieceBits.push(ptype); }
+                // PR374 — Material now reads INSIDE the name, immediately before the product / sub type
+                // ("… 1000 Pieces Cork Jigsaw Puzzle"), instead of on the summary line below.
+                const mat = g('material');
+                if (mat) pieceBits.push(mat);
                 if (typeWord) pieceBits.push(typeWord);
                 const line1 = [detail.sku.item_code, g('translate_name'), pieceBits.join(' ')].filter(Boolean).join(' · ');
-                // PR369 — the copyable marketplace "SKU product name": the descriptive name WITHOUT the
-                // internal SKU code (translated name + piece descriptor), space-joined.
-                const productName = [g('translate_name'), pieceBits.join(' ')].filter(Boolean).join(' ') || detail.sku.item_code;
 
                 // Dims: for a multipack, the per-unit face sizes (38×26 + 52×38); otherwise the product L×W×H.
                 let dimSeg = '';
@@ -887,7 +903,7 @@ export default function CatalogBoard({
                 }
                 const imgCount = imageUrls.map((u) => u.trim()).filter(Boolean).length;
                 const srcCount = sources.map((u) => u.trim()).filter(Boolean).length;
-                const line2 = [g('material'), g('effect'), dimSeg, `${imgCount} image${imgCount === 1 ? '' : 's'}`, `${srcCount} source${srcCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+                const line2 = [g('effect'), dimSeg, `${imgCount} image${imgCount === 1 ? '' : 's'}`, `${srcCount} source${srcCount === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
 
                 return (
                   <div className="cat-hero">
@@ -908,7 +924,8 @@ export default function CatalogBoard({
                         ))}
                       </div>
                     )}
-                    <div className="cat-hero-name">{line1}<CopyBtn text={productName} label="product name" /></div>
+                    {/* PR374 — copy the FULL displayed name line (code · name · piece/material/type). */}
+                    <div className="cat-hero-name">{line1}<CopyBtn text={line1} label="product name" /></div>
                     {line2 && <div className="cat-hero-sum">{line2}</div>}
                     {detail.sku.needs_review && (
                       <span className="po-status processing">
@@ -956,7 +973,7 @@ export default function CatalogBoard({
                   {GROUPS[detailTab].title === 'Links' && (
                     <div className="cat-imgedit">
                       <div className="cat-grp-title">Images — Google Drive links (first is primary)</div>
-                      {Array.from({ length: MAX_IMAGE_URLS }).map((_, i) => (
+                      {Array.from({ length: LINK_FIELDS }).map((_, i) => (
                         <div className="cat-imgrow" key={i}>
                           <span className="cat-imgrow-thumb">
                             {driveDirect(imageUrls[i] ?? '')
@@ -974,11 +991,11 @@ export default function CatalogBoard({
                       ))}
                       <label className="cat-round" style={{ marginTop: 12 }}>
                         <input type="checkbox" checked={imgUnavailable} onChange={(e) => setImgUnavailable(e.target.checked)} />
-                        <span>No picture available — searched but none found (hides it from the Fix “missing image” list)</span>
+                        <span>No picture available — searched but none found</span>
                       </label>
 
                       <div className="cat-grp-title" style={{ marginTop: 18 }}>Sources — buy links (used by Purchasing → Buy)</div>
-                      {Array.from({ length: 8 }).map((_, i) => (
+                      {Array.from({ length: LINK_FIELDS }).map((_, i) => (
                         <div className="cat-srcrow" key={i}>
                           <span className="cat-srcrow-n">{i + 1}</span>
                           <input
@@ -992,26 +1009,10 @@ export default function CatalogBoard({
                     </div>
                   )}
 
-                  {/* PR216 — Dimensions leads with the Round/diameter toggle: on → Product L is the
-                      diameter, Width is emptied+disabled; Height too, but only for a jigsaw puzzle (a
-                      3D round item such as a spherical lamp keeps its height). */}
-                  {GROUPS[detailTab].title === 'Specs' && (
-                    <label className="cat-round">
-                      <input type="checkbox" checked={round} onChange={(e) => setRound(e.target.checked)} />
-                      <span>Round / uses a diameter (Ø) — enter it as Product L. Width is emptied; height too for a jigsaw puzzle.</span>
-                    </label>
-                  )}
-
-                  <div className="cat-grid">
-                    {GROUPS[detailTab].fields
-                      .filter((fld) => {
-                        // PR370 — Sets only for Multipack/Blind Box; the single product size is hidden when
-                        // per-unit component sizes are in play.
-                        if (fld.key === 'set_count') return isMultiType(pieceTypeVal);
-                        if (usesComponents && (fld.key === 'size_p' || fld.key === 'size_l' || fld.key === 'size_t')) return false;
-                        return true;
-                      })
-                      .map((fld) => {
+                  {(() => {
+                    // PR374 — one cell renderer, reused across the classification grid, the Dimensions
+                    // panel, and the Identity grid.
+                    const renderCell = (fld: FieldDef) => {
                       const k = fld.key as string;
                       const isJigsaw = /jigsaw/i.test(String(form['product_type'] ?? ''));
                       const pcAuto = usesComponents && k === 'piece_count_n'; // piece count = Σ components (read-only)
@@ -1080,23 +1081,57 @@ export default function CatalogBoard({
                           )}
                         </div>
                       );
-                    })}
+                    };
 
-                    {/* PR366 — Barcodes live in the grid, to the RIGHT of Release date (a larger 2/3 cell,
-                        so the codes read big). The Add-barcode button floats to the right of the codes;
-                        with none linked yet it sits just under the header. */}
-                    {GROUPS[detailTab].title === 'Identity & naming' && (
-                      <div className="po-field pf-twothird cat-bc-cell" style={{ marginBottom: 0 }}>
-                        <label>Barcodes{detail.barcodes.length ? ` (${detail.barcodes.length})` : ''}</label>
-                        <div className="cat-bc-cell-row">
-                          {detail.barcodes.map((b) => (
-                            <span key={b.barcode} className="cat-bc-chip">{b.barcode}{b.shared && <em>shared</em>}<CopyBtn text={b.barcode} label="barcode" /></span>
-                          ))}
-                          <button className="btn-brown btn-ico cat-bc-add-float" onClick={() => { resetMsg(); setNewBarcode(''); setBarcodeOpen(true); }}><BarcodeIcon />Add barcode</button>
-                        </div>
+                    const fields = GROUPS[detailTab].fields.filter((fld) => {
+                      // PR370 — Sets only for Multipack/Blind Box; the single product size is hidden when
+                      // per-unit component sizes are in play.
+                      if (fld.key === 'set_count') return isMultiType(pieceTypeVal);
+                      if (usesComponents && (fld.key === 'size_p' || fld.key === 'size_l' || fld.key === 'size_t')) return false;
+                      return true;
+                    });
+
+                    // PR374 — Specs: the size fields split off into a tinted "Dimensions" panel led by the
+                    // Round toggle, so Product L·W·H sit on one line and Box L·W·H on the next, clearly
+                    // separated from the classification fields above (which stay in the top grid).
+                    if (GROUPS[detailTab].title === 'Specs') {
+                      const DIM_KEYS = ['size_p', 'size_l', 'size_t', 'dim_p', 'dim_l', 'dim_t', 'real_weight'];
+                      const upper = fields.filter((f) => !DIM_KEYS.includes(f.key as string));
+                      const dims = fields.filter((f) => DIM_KEYS.includes(f.key as string));
+                      return (
+                        <>
+                          <div className="cat-grid">{upper.map(renderCell)}</div>
+                          <div className="cat-dims">
+                            <label className="cat-round">
+                              <input type="checkbox" checked={round} onChange={(e) => setRound(e.target.checked)} />
+                              <span>Product is round / uses a diameter (⌀)</span>
+                            </label>
+                            <div className="cat-grid">{dims.map(renderCell)}</div>
+                          </div>
+                        </>
+                      );
+                    }
+
+                    return (
+                      <div className="cat-grid">
+                        {fields.map(renderCell)}
+                        {/* PR366 — Barcodes live in the grid, to the RIGHT of Release date (a larger 2/3
+                            cell, so the codes read big). The Add-barcode button floats to the right of the
+                            codes; with none linked yet it sits just under the header. */}
+                        {GROUPS[detailTab].title === 'Identity & naming' && (
+                          <div className="po-field pf-twothird cat-bc-cell" style={{ marginBottom: 0 }}>
+                            <label>Barcodes{detail.barcodes.length ? ` (${detail.barcodes.length})` : ''}</label>
+                            <div className="cat-bc-cell-row">
+                              {detail.barcodes.map((b) => (
+                                <span key={b.barcode} className="cat-bc-chip">{b.barcode}{b.shared && <em>shared</em>}<CopyBtn text={b.barcode} label="barcode" /></span>
+                              ))}
+                              <button className="btn-brown btn-ico cat-bc-add-float" onClick={() => { resetMsg(); setNewBarcode(''); setBarcodeOpen(true); }}><BarcodeIcon />Add barcode</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
 
                   {/* PR370 — per-unit rows for a Multipack / Blind Box (≥2 units): each sub-puzzle's piece
                       count + product L×W×H. The piece count above auto-sums these. */}
@@ -1142,7 +1177,6 @@ export default function CatalogBoard({
                         <div className="cat-auto-row"><span className="cat-auto-label">Image type</span><span className="cat-auto-val">{it || '—'}</span><span className="cat-auto-tag">auto</span></div>
                         <div className="cat-auto-row"><span className="cat-auto-label">Piece size</span><span className="cat-auto-val">{ps || '—'}</span><span className="cat-auto-tag">auto</span></div>
                         <div className="cat-auto-row"><span className="cat-auto-label">Volume weight (g)</span><span className="cat-auto-val">{volW != null ? volW.toLocaleString('en-US') : '—'}</span><span className="cat-auto-tag">auto</span></div>
-                        <div className="hint" style={{ marginTop: 4 }}>Image type &amp; Piece size derive from the dimensions + piece count; Volume weight = Box L × W × H ÷ 5 (g).</div>
                       </div>
                     );
                   })()}
