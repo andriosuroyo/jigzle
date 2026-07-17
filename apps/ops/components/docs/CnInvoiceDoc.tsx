@@ -36,7 +36,8 @@ function cjkWrap(str: string): string {
 }
 const s = StyleSheet.create({
   page: { paddingVertical: 26, paddingHorizontal: 34, fontFamily: CJK, fontSize: 9, color: '#000' },
-  title: { textAlign: 'center', fontSize: 15, fontWeight: 700 },
+  // PR360 — Latin title in built-in Helvetica-Bold (not the CJK subset font) so pdf.js renders it right.
+  title: { textAlign: 'center', fontSize: 15, fontFamily: 'Helvetica-Bold' },
   titleCn: { textAlign: 'center', fontSize: 15, letterSpacing: 8, marginBottom: 6 },
 
   metaRow: { flexDirection: 'row', borderWidth: 1, borderColor: B },

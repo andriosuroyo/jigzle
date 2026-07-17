@@ -11,7 +11,10 @@ export type PackingListDocProps = { markNo: string; boxes: PackingBox[]; divisor
 const B = '#000';
 const s = StyleSheet.create({
   page: { paddingVertical: 28, paddingHorizontal: 34, fontFamily: CJK, fontSize: 9, color: '#000' },
-  title: { textAlign: 'center', fontSize: 15, fontWeight: 700 },
+  // PR360 — the Latin title uses the built-in Helvetica-Bold, not the CJK subset font: pdf.js mis-rendered
+  // the bold title in the large WQY subset ("PACKING LIST" → "KING LIST" in the preview). The download was
+  // fine, but a built-in standard font renders correctly everywhere.
+  title: { textAlign: 'center', fontSize: 15, fontFamily: 'Helvetica-Bold' },
   titleCn: { textAlign: 'center', fontSize: 15, letterSpacing: 6, marginBottom: 8 },
 
   table: { borderWidth: 1, borderColor: B },
