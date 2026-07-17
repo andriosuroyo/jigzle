@@ -80,7 +80,8 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       { key: 'piece_type', label: 'Piece type', kind: 'text', select: true, list: 'piece_type', w: 'half' },
       { key: 'material', label: 'Material', kind: 'text', select: true, list: 'material', w: 'half' },
       { key: 'effect', label: 'Effect', kind: 'text', select: true, list: 'effect', w: 'half' },
-      { key: 'theme', label: 'Theme', kind: 'text', select: true, list: 'theme' },
+      // PR366 — Theme removed: redundant with Tags. The `theme` column is left untouched (Browse still
+      // facets on existing values); it's just no longer edited here.
       { key: 'artist', label: 'Artist', kind: 'text', select: true, list: 'artist' },
     ],
   },
@@ -925,6 +926,8 @@ export default function CatalogBoard({
                                 <textarea value={String(form[k] ?? '')} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} />
                               ) : (
                                 <input
+                                  // PR366 — no spinner on Piece count (the "easy-adjust" up/down arrows)
+                                  className={k === 'piece_count_n' ? 'no-spin' : undefined}
                                   type={fld.kind === 'number' ? 'number' : 'text'}
                                   step={fld.kind === 'number' ? 'any' : undefined}
                                   list={listId}

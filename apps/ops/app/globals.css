@@ -922,6 +922,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .cat-bc-cell-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 38px; }
 .cat-bc-cell .cat-bc-chip { font-size: 14px; padding: 6px 11px; }
 .cat-bc-add-float { margin-left: auto; }
+/* PR366 — hide the native number-input spinner on Piece count (no "easy-adjust" up/down arrows). */
+.no-spin::-webkit-outer-spin-button, .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.no-spin { -moz-appearance: textfield; appearance: textfield; }
 
 /* PR191 — SearchSelect: a searchable single-value combobox (Theme / Artist / classification types) */
 .ss { position: relative; }
