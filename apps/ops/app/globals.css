@@ -1384,6 +1384,8 @@ img.sku-img { background: #e8e8e8; }
 .set-f > label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
 .set-f input { width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
 .set-row-ctl { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+/* PR371 — SKU usage count badge on the Catalog classification rows */
+.set-usage { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--cream); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; min-width: 26px; text-align: center; }
 .set-arrow { width: 30px; height: 30px; line-height: 1; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--muted); font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .set-arrow:disabled { opacity: 0.35; cursor: not-allowed; }
 .set-del { width: 30px; height: 30px; line-height: 1; border: 1px solid var(--red); border-radius: 6px; background: var(--red-tint); color: var(--red); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

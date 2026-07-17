@@ -15,6 +15,7 @@ import {
   getPuzzleNoPieces,
   getImplausibleDims,
   getOffListClassification,
+  getSubTypeMismatch,
   getCatalogDuplicates,
   getMissingWeight,
   acceptEstimatedWeight,
@@ -272,6 +273,8 @@ export default function CatalogBoard({
   const [dupes, setDupes] = useState<DupGroup[] | null>(null);
   // PR212 — missing-image list also loads separately (a moderate bucket scan)
   const [missingImg, setMissingImg] = useState<CatalogueListRow[] | null>(null);
+  // PR371 — sub type ↔ product type mismatch (a full-catalogue pair scan, loaded separately)
+  const [subMismatch, setSubMismatch] = useState<import('@/app/catalog/actions').SubMismatchRow[] | null>(null);
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogueListRow[]>([]);
@@ -417,6 +420,7 @@ export default function CatalogBoard({
       .catch(() => {});
     getCatalogDuplicates().then(setDupes).catch(() => setDupes([])); // separate: full-catalogue scan
     getMissingImage().then(setMissingImg).catch(() => setMissingImg([])); // separate: bucket scan
+    getSubTypeMismatch().then(setSubMismatch).catch(() => setSubMismatch([])); // PR371: full-catalogue pair scan
   }, [tab]);
 
   // PR211 — accept a SKU's estimated weight into its real weight, then drop it from the list.
@@ -1408,6 +1412,30 @@ export default function CatalogBoard({
                               <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                               <div className="cat-row-main">
                                 <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.field.replace('_type', '')}: {r.value}</span></div>
+                                <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
+                              </div>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                {/* PR371 — the (product type · sub type) PAIR isn't in the Settings list (a valid sub-type
+                    filed under the wrong product type). Add the pairing in Settings, or fix the SKU. */}
+                <section className="cat-fix-sec">
+                  <div className="cat-grp-title">Sub type ≠ product type ({subMismatch ? fixCount2(subMismatch.length) : '…'})</div>
+                  {!subMismatch ? <div className="hint">Scanning the catalogue…</div> : (
+                    <ul className="fq-list">
+                      {subMismatch.length === 0 && <li><div className="hint fq-empty">Every sub type matches its product type in the Settings list.</div></li>}
+                      {subMismatch.map((r) => (
+                        <li key={r.item_code}>
+                          <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
+                            <div className="cat-row">
+                              <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                              <div className="cat-row-main">
+                                <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.sub_type} ⁄ {r.product_type}</span></div>
                                 <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
                               </div>
                             </div>

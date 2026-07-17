@@ -609,6 +609,50 @@ export async function getOffListClassification(): Promise<OffListRow[]> {
   return out.slice(0, FIX_CAP);
 }
 
+// PR371 — Sub type ↔ Product type mismatch. A SKU whose (product_type, sub_type) PAIR isn't in the
+// managed Settings list (0097). The existing off-list check judges each field alone, so a valid sub-type
+// filed under the wrong product type slips through — this catches exactly that (and future drift). Paged
+// scan of rows that have a sub_type. Degrades to [] until 0097 is applied (no managed pairs to judge).
+export type SubMismatchRow = CatalogueListRow & { product_type: string; sub_type: string };
+export async function getSubTypeMismatch(): Promise<SubMismatchRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data: mgr, error: mErr } = await supabase
+    .from('settings_catalog_sub_types')
+    .select('label,product_type')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .not('product_type', 'is', null);
+  if (mErr) return [];
+  const ok = new Set<string>();
+  for (const r of (mgr ?? []) as { label: string | null; product_type: string | null }[]) {
+    if (r.label && r.product_type) ok.add(`${r.product_type.trim()}${r.label.trim()}`);
+  }
+  if (!ok.size) return [];
+
+  const out: SubMismatchRow[] = [];
+  const PAGE = 1000;
+  for (let from = 0; out.length < FIX_CAP; from += PAGE) {
+    const { data, error } = await supabase
+      .from('catalogue')
+      .select(`${LIST_COLS},product_type,sub_type`)
+      .not('sub_type', 'is', null)
+      .neq('sub_type', '')
+      .order('item_code')
+      .range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    for (const c of data as (CatNameRow & { product_type: string | null; sub_type: string | null })[]) {
+      const pt = (c.product_type ?? '').trim();
+      const st = (c.sub_type ?? '').trim();
+      if (st && !ok.has(`${pt}${st}`)) {
+        out.push({ item_code: c.item_code, name: nameOf(c), brand_prefix: c.brand_prefix ?? null, needs_review: !!c.needs_review, product_type: pt || '—', sub_type: st });
+        if (out.length >= FIX_CAP) break;
+      }
+    }
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
 // Missing image — a SKU with no resolvable bucket image (sku_image_resolved status ≠ has_image) that
 // isn't flagged "no picture available". Only ~4k SKUs lack an image, so this is a workable list. Runs
 // on its own (a moderate scan). Degrades to [] until 0071 (image_unavailable) is applied.
