@@ -19,10 +19,10 @@ import { getCnAddresses } from '@/app/settings/actions';
 import type { CnBox, CnShipmentRow, CnShipmentRef } from '@/app/doc-generator/types';
 import type { CnAddress } from '@/app/settings/types';
 
-type Tab = 'invoice-idr' | 'invoice-usd' | 'cn-packing' | 'cn-invoice' | 'cn-shipping' | 'sp-declare';
+// PR361 — the IDR + USD invoices are one "Customer Invoice" tab now; currency is picked inside it.
+type Tab = 'invoice' | 'cn-packing' | 'cn-invoice' | 'cn-shipping' | 'sp-declare';
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'invoice-idr', label: 'Invoice IDR' },
-  { key: 'invoice-usd', label: 'Invoice USD' },
+  { key: 'invoice', label: 'Customer Invoice' },
   { key: 'cn-packing', label: 'CN Packing List' },
   { key: 'cn-invoice', label: 'CN Invoice' },
   { key: 'cn-shipping', label: 'CN Shipping' },
@@ -31,7 +31,7 @@ const TABS: { key: Tab; label: string }[] = [
 
 export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) {
   // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
-  const [tab, setTab] = useUrlTab<Tab>('tab', 'invoice-idr', ['invoice-idr', 'invoice-usd', 'cn-packing', 'cn-invoice', 'cn-shipping', 'sp-declare']);
+  const [tab, setTab] = useUrlTab<Tab>('tab', 'invoice', ['invoice', 'cn-packing', 'cn-invoice', 'cn-shipping', 'sp-declare']);
   const label = TABS.find((t) => t.key === tab)!.label;
 
   // ── shared CN state (a picked shipment + its packages feed all three China docs) ──
@@ -92,8 +92,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
       </div>
 
       <div className="orders-panels">
-        {tab === 'invoice-idr' && <InvoiceTab currency="IDR" />}
-        {tab === 'invoice-usd' && <InvoiceTab currency="USD" />}
+        {tab === 'invoice' && <InvoiceTab />}
         {tab === 'cn-packing' && (
           <CnPackingTab
             shipments={shipments}
