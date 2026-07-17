@@ -156,6 +156,9 @@ export type Payment = {
   created_at: string;
 };
 
+// 0098 — one sub-puzzle in a multipack / blind box: its piece count + product dimensions (cm).
+export type CatalogueComponent = { pieces: number | null; p: number | null; l: number | null; t: number | null };
+
 export type Catalogue = {
   item_code: string;
   brand_prefix: string | null;
@@ -167,8 +170,10 @@ export type Catalogue = {
   sub_type: string | null;
   piece_count: string | null;
   piece_count_n: number | null;
-  piece_type: string | null;
+  piece_type: string | null;      // category only (Pieces / Multipack / Blind Box) since 0098
   piece_size: string | null;
+  set_count: number | null;       // 0098 — units in the box (1 = single; ≥2 = multipack / blind box)
+  components: CatalogueComponent[] | null; // 0098 — per-unit rows for varying sizes (multipack / blind box)
   size_p: number | null;
   size_l: number | null;
   size_t: number | null;

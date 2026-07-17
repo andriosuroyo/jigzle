@@ -268,6 +268,7 @@ input, textarea, select, button { font-family: inherit; }
 
 /* Settings → Suppliers: select matches the text inputs; flag column is narrow + centred */
 .set-f select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
+.set-f.set-f-ptype { flex: 0 0 190px; } /* PR368 — Sub type's Product type select (left of the label) */
 .set-f.sup-flag { flex: 0 0 58px; }
 .set-f.sup-flag input { text-align: center; }
 
@@ -925,6 +926,15 @@ button.po-pick-btn:active { background: var(--paper); }
 /* PR366 — hide the native number-input spinner on Piece count (no "easy-adjust" up/down arrows). */
 .no-spin::-webkit-outer-spin-button, .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .no-spin { -moz-appearance: textfield; appearance: textfield; }
+/* PR370 — Multipack / Blind Box per-unit rows (pieces · L × W × H) */
+.cat-comp { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.cat-comp-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cat-comp-n { width: 18px; text-align: center; color: var(--muted); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.cat-comp-row input { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); }
+.cat-comp-row input.cat-comp-pc { flex: 1 1 70px; }
+.cat-comp-row input:not(.cat-comp-pc) { flex: 1 1 46px; }
+.cat-comp-sep, .cat-comp-x { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.cat-comp-unit { color: var(--muted); font-size: 12px; flex-shrink: 0; }
 
 /* PR191 — SearchSelect: a searchable single-value combobox (Theme / Artist / classification types) */
 .ss { position: relative; }
@@ -1045,6 +1055,9 @@ img.sku-img { background: #e8e8e8; }
 .cat-hero-name { font-size: 16px; font-weight: 700; color: var(--brown-dark); text-align: center; max-width: 400px; }
 /* PR367 — second summary line under the picture: normal text (material · effect · dims · image/source counts) */
 .cat-hero-sum { font-size: 13px; color: var(--muted); text-align: center; max-width: 400px; line-height: 1.4; }
+/* PR369 — inline copy-to-clipboard button (SKU product name + barcodes) */
+.copy-btn { display: inline-flex; align-items: center; justify-content: center; margin-left: 6px; padding: 2px; border: none; background: transparent; color: var(--muted); cursor: pointer; border-radius: 4px; vertical-align: middle; }
+.copy-btn:hover { color: var(--brown); background: var(--cream); }
 /* PR189 — hero thumbnail strip + Media-tab image URL editor */
 .cat-hero-strip { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 400px; }
 .cat-hero-thumb { width: 52px; height: 52px; padding: 0; border: 2px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--paper); cursor: pointer; }

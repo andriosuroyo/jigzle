@@ -205,6 +205,22 @@ export async function getCatalogFieldOptions(): Promise<Record<string, string[]>
   return out;
 }
 
+// ── PR368: managed Sub types with their linked Product type (0097). The editor's Sub type picker
+// offers only sub-types that HAVE a product type, filtered to the SKU's selected product type. Degrades
+// to [] if the column/table isn't there yet (pre-0097) — the picker then falls back to distinct values. ──
+export async function getCatalogSubTypes(): Promise<{ label: string; product_type: string }[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('settings_catalog_sub_types')
+    .select('label,product_type')
+    .is('user_id', null)
+    .eq('is_active', true)
+    .not('product_type', 'is', null);
+  if (error) return [];
+  return ((data ?? []) as { label: string | null; product_type: string | null }[])
+    .filter((r): r is { label: string; product_type: string } => !!r.label && !!r.product_type);
+}
+
 // ── the edit pane: full SKU + its barcode links (with shared flags) ──
 export async function getSku(itemCode: string): Promise<SkuDetail | null> {
   const supabase = createSupabaseServerClient();

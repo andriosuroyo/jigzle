@@ -58,7 +58,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   local_courier: ['label', 'icon', 'flag', 'country', 'prefix', 'is_active'],
   ship_courier: ['label', 'icon', 'flag', 'country', 'prefix', 'is_active'],
   cat_product_type: ['label', 'icon', 'is_active'],
-  cat_sub_type: ['label', 'icon', 'is_active'],
+  cat_sub_type: ['label', 'icon', 'is_active', 'product_type'], // PR368 — sub type ↔ product type link (0097)
   cat_piece_type: ['label', 'icon', 'is_active'],
 };
 
