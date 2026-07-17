@@ -165,10 +165,10 @@ export async function getCatalogFacetData(): Promise<{ skus: BrowseSku[]; brands
 // value lists (small). The client caches it for the session. ──
 const OPTION_FIELDS = ['product_type', 'sub_type', 'piece_type', 'piece_size', 'material', 'effect', 'image_type', 'theme', 'location', 'artist'] as const;
 // PR373 — dropdown option lists (distinct field values across the catalogue). The fast path is the
-// `catalog_field_options` RPC (0101): it does the DISTINCT server-side and returns a few KB instead of
+// `catalog_field_options` RPC (0102): it does the DISTINCT server-side and returns a few KB instead of
 // the whole 43k-row table. We still union the Settings-managed classification lists (below) so curated
 // values appear even when unused. Falls back to the old full client-side scan if the RPC is missing
-// (pre-0101) or errors, so the screen is never worse off than before.
+// (pre-0102) or errors, so the screen is never worse off than before.
 export async function getCatalogFieldOptions(): Promise<Record<string, string[]>> {
   const supabase = createSupabaseServerClient();
 
@@ -176,7 +176,7 @@ export async function getCatalogFieldOptions(): Promise<Record<string, string[]>
   for (const f of OPTION_FIELDS) sets[f] = new Set();
 
   const { data: rpc, error: rpcErr } = await supabase.rpc('catalog_field_options');
-  if (rpcErr || rpc == null) return getCatalogFieldOptionsScan(); // RPC absent (pre-0101) / errored → old path
+  if (rpcErr || rpc == null) return getCatalogFieldOptionsScan(); // RPC absent (pre-0102) / errored → old path
   const byField = (rpc ?? {}) as Record<string, unknown>;
   for (const f of OPTION_FIELDS) {
     const arr = byField[f];
@@ -208,7 +208,7 @@ async function unionManagedLists(supabase: Supabase, sets: Record<string, Set<st
 }
 
 // Fallback: the original full-catalogue paged scan (pre-PR373). Kept so the editor still populates its
-// dropdowns when the 0101 RPC hasn't been applied yet.
+// dropdowns when the 0102 RPC hasn't been applied yet.
 async function getCatalogFieldOptionsScan(): Promise<Record<string, string[]>> {
   const supabase = createSupabaseServerClient();
   const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true });

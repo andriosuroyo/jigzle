@@ -1,4 +1,4 @@
--- 0101 — PR373: fast Catalog dropdown options.
+-- 0102 — PR373: fast Catalog dropdown options.
 -- Opening any SKU used to call getCatalogFieldOptions(), which downloaded the ENTIRE catalogue
 -- (~8.7 MB across ~44 paged requests, reading 10 columns from all ~43k rows) into the browser JUST to
 -- compute the Specs-tab dropdown distinct values. That full-table scan was the main reason the
