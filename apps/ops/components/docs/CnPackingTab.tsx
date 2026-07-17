@@ -8,8 +8,9 @@
 import { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { pdf } from '@react-pdf/renderer';
-import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
+import type { CnBox, CnShipmentRow, CnShipmentRef } from '@/app/doc-generator/types';
 import PackingListDoc, { type PackingBox } from './PackingListDoc';
+import CnShipmentRefPanel from './CnShipmentRefPanel';
 import { ensureCjkFont } from './cjkFont';
 import DropSearch from '@/components/DropSearch';
 
@@ -23,6 +24,7 @@ export const emptyBox = (): CnBox => ({ desc: '', p: '', l: '', t: '', realWeigh
 
 export type CnPackingProps = {
   shipments: CnShipmentRow[];
+  shipRef: CnShipmentRef | null;
   shipId: string;
   setShipId: (v: string) => void;
   mark: string;
@@ -35,7 +37,7 @@ export type CnPackingProps = {
   setDivisor: (v: number) => void;
 };
 
-export default function CnPackingTab({ shipments, shipId, setShipId, setMark, boxes, setBoxes, boxTracking, setBoxTracking, divisor, setDivisor }: CnPackingProps) {
+export default function CnPackingTab({ shipments, shipRef, shipId, setShipId, setMark, boxes, setBoxes, boxTracking, setBoxTracking, divisor, setDivisor }: CnPackingProps) {
   ensureCjkFont();
   const [downloading, setDownloading] = useState(false);
   // NB: prefill of packages/box-tracking from the shipment's saved boxes now lives in DocGeneratorBoard
@@ -117,6 +119,7 @@ export default function CnPackingTab({ shipments, shipId, setShipId, setMark, bo
               </label>
             ))}
           </div>
+          {shipId && <div style={{ marginTop: 12 }}><CnShipmentRefPanel data={shipRef} shipId={shipId} /></div>}
         </div>
 
         <div style={box}>

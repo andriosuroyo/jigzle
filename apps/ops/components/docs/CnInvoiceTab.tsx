@@ -7,9 +7,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { pdf } from '@react-pdf/renderer';
-import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
+import type { CnBox, CnShipmentRow, CnShipmentRef } from '@/app/doc-generator/types';
 import type { CnAddress } from '@/app/settings/types';
 import CnInvoiceDoc, { type CnInvoiceLine } from './CnInvoiceDoc';
+import CnShipmentRefPanel from './CnShipmentRefPanel';
 import { cnWeights, CN_SHIPPER_DEFAULT, CN_CONSIGNEE_DEFAULT } from './cnConstants';
 import { todayDot } from './pdfUtil';
 import { ensureCjkFont } from './cjkFont';
@@ -25,6 +26,7 @@ type LineInput = { description: string; qty: string; unitPrice: string };
 
 export type CnInvoiceProps = {
   shipments: CnShipmentRow[];
+  shipRef: CnShipmentRef | null;
   addresses: CnAddress[];
   shipId: string;
   setShipId: (v: string) => void;
@@ -33,7 +35,7 @@ export type CnInvoiceProps = {
   divisor: number;
 };
 
-export default function CnInvoiceTab({ shipments, addresses, shipId, setShipId, mark, boxes, divisor }: CnInvoiceProps) {
+export default function CnInvoiceTab({ shipments, shipRef, addresses, shipId, setShipId, mark, boxes, divisor }: CnInvoiceProps) {
   ensureCjkFont();
   const { packages, netWeight, grossWeight } = cnWeights(boxes, divisor);
   const shipment = shipments.find((s) => s.shipId === shipId);
@@ -102,13 +104,15 @@ export default function CnInvoiceTab({ shipments, addresses, shipId, setShipId, 
             placeholder="— pick a shipment —"
             ariaLabel="Shipment"
           />
-          <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-            <div style={{ width: 140 }}><label style={lbl}>Date</label><input style={inp} value={dateStr} onChange={(e) => setDateStr(e.target.value)} placeholder="yyyy.mm.dd" /></div>
-            <div style={{ flex: 1 }}><label style={lbl}>HAWB no</label><input style={inp} value={hawb} onChange={(e) => { setHawb(e.target.value); setHawbTouched(true); }} placeholder="import tracking" /></div>
-          </div>
+          {shipId && <div style={{ marginTop: 10 }}><CnShipmentRefPanel data={shipRef} shipId={shipId} /></div>}
         </div>
 
         <div style={box}>
+          {/* PR359 — Date + HAWB moved here, above the addresses */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 140 }}><label style={lbl}>Date</label><input style={inp} value={dateStr} onChange={(e) => setDateStr(e.target.value)} placeholder="yyyy.mm.dd" /></div>
+            <div style={{ flex: 1 }}><label style={lbl}>HAWB no</label><input style={inp} value={hawb} onChange={(e) => { setHawb(e.target.value); setHawbTouched(true); }} placeholder="import tracking" /></div>
+          </div>
           <label style={lbl}>Shipper address (托运人)</label>
           <DropSearch className="cn-doc-ds" value={shipperSel} onChange={(v) => pickAddr(v, setShipper, setShipperSel)} options={addressOpts} placeholder="— pick a saved address —" ariaLabel="Shipper saved address" />
           <textarea style={{ ...inp, minHeight: 60, resize: 'vertical', marginTop: 6 }} value={shipper} onChange={(e) => { setShipper(e.target.value); setShipperSel(null); }} />

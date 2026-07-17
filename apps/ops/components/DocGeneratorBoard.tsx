@@ -13,10 +13,10 @@ import CnPackingTab, { emptyBox } from '@/components/docs/CnPackingTab';
 import CnInvoiceTab from '@/components/docs/CnInvoiceTab';
 import CnShippingTab from '@/components/docs/CnShippingTab';
 import SpDeclareTab from '@/components/docs/SpDeclareTab';
-import { getShipments } from '@/app/doc-generator/actions';
+import { getShipments, getCnShipmentRef } from '@/app/doc-generator/actions';
 import { getShipmentBoxes } from '@/app/purchasing/actions';
 import { getCnAddresses } from '@/app/settings/actions';
-import type { CnBox, CnShipmentRow } from '@/app/doc-generator/types';
+import type { CnBox, CnShipmentRow, CnShipmentRef } from '@/app/doc-generator/types';
 import type { CnAddress } from '@/app/settings/types';
 
 type Tab = 'invoice-idr' | 'invoice-usd' | 'cn-packing' | 'cn-invoice' | 'cn-shipping' | 'sp-declare';
@@ -42,6 +42,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
   const [cnMark, setCnMark] = useState('');
   const [cnBoxes, setCnBoxes] = useState<CnBox[]>([emptyBox()]);
   const [cnBoxTracking, setCnBoxTracking] = useState(''); // PR354 — comma-separated box trackings (Packing List)
+  const [cnShipRef, setCnShipRef] = useState<CnShipmentRef | null>(null); // PR359 — Purchasing cross-check
   const [cnDivisor, setCnDivisor] = useState(6000);
 
   const isCn = tab === 'cn-packing' || tab === 'cn-invoice' || tab === 'cn-shipping';
@@ -59,7 +60,8 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
   const prefilledFor = useRef('');
   useEffect(() => {
     const sid = cnShipId.trim();
-    if (!sid || prefilledFor.current === sid) return;
+    if (!sid) { setCnShipRef(null); return; }
+    if (prefilledFor.current === sid) return;
     prefilledFor.current = sid;
     getShipmentBoxes(sid)
       .then((rows) => {
@@ -69,6 +71,9 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
         }
       })
       .catch(() => {});
+    // PR359 — the read-only Purchasing cross-check (cost / packaging / tracking) for this shipment.
+    setCnShipRef(null);
+    getCnShipmentRef(sid).then(setCnShipRef).catch(() => setCnShipRef(null));
   }, [cnShipId]);
 
   return (
@@ -92,6 +97,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
         {tab === 'cn-packing' && (
           <CnPackingTab
             shipments={shipments}
+            shipRef={cnShipRef}
             shipId={cnShipId} setShipId={setCnShipId}
             mark={cnMark} setMark={setCnMark}
             boxes={cnBoxes} setBoxes={setCnBoxes}
@@ -100,7 +106,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
           />
         )}
         {tab === 'cn-invoice' && (
-          <CnInvoiceTab shipments={shipments} addresses={cnAddresses} shipId={cnShipId} setShipId={setCnShipId} mark={cnMark} boxes={cnBoxes} divisor={cnDivisor} />
+          <CnInvoiceTab shipments={shipments} shipRef={cnShipRef} addresses={cnAddresses} shipId={cnShipId} setShipId={setCnShipId} mark={cnMark} boxes={cnBoxes} divisor={cnDivisor} />
         )}
         {tab === 'cn-shipping' && (
           <CnShippingTab shipments={shipments} shipId={cnShipId} setShipId={setCnShipId} boxes={cnBoxes} divisor={cnDivisor} />
