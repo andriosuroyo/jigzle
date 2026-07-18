@@ -171,6 +171,7 @@ export default function CatalogBrowse({
   const [themeOpen, setThemeOpen] = useState(false);
   const [themeMain, setThemeMain] = useState<string | null>(null);
   const [themeLeaf, setThemeLeaf] = useState<string | null>(null);
+  const [allSkus, setAllSkus] = useState(false); // PR382 — "All SKUs": the brand's SKUs, unfiltered
 
   // PR378 — the opened brand's SKUs, fetched on demand; a req counter drops stale responses.
   const [brandSkus, setBrandSkus] = useState<BrowseSku[]>([]);
@@ -220,10 +221,11 @@ export default function CatalogBrowse({
   }, [brands, region, country]);
 
   // dimension list — each row shows its distinct-option count (empty dims hidden)
+  // PR382 — "Unspecified" is dropped from every option list; those SKUs stay reachable via "All SKUs".
   const dimRows = useMemo(() => {
     return DIMS.map((d) => {
       const vals = new Set<string>();
-      for (const s of brandSkus) vals.add(d.valueOf(s));
+      for (const s of brandSkus) { const v = d.valueOf(s); if (v !== UNSPEC) vals.add(v); }
       return { dim: d, options: vals.size };
     }).filter((d) => d.options > 0);
   }, [brandSkus]);
@@ -233,7 +235,7 @@ export default function CatalogBrowse({
     if (!dim || dim === 'theme') return [];
     const d = DIMS.find((x) => x.key === dim)!;
     const m = new Map<string, number>();
-    for (const s of brandSkus) { const v = d.valueOf(s); m.set(v, (m.get(v) ?? 0) + 1); }
+    for (const s of brandSkus) { const v = d.valueOf(s); if (v !== UNSPEC) m.set(v, (m.get(v) ?? 0) + 1); }
     const opts = [...m.entries()].map(([value, count]) => ({ value, count }));
     if (d.bucket) {
       const rank = (v: string) => { const i = PIECE_BUCKETS.findIndex((b) => b.key === v); return i < 0 ? 99 : i; };
@@ -247,32 +249,33 @@ export default function CatalogBrowse({
   // theme: main themes (top segment), and the brand's themes under a main — both A–Z
   const mainThemes = useMemo(() => {
     const m = new Map<string, number>();
-    for (const s of brandSkus) { const seg = themeMainOf(s.theme); m.set(seg, (m.get(seg) ?? 0) + 1); }
-    return [...m.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => azUnspecLast(a.key, b.key));
+    for (const s of brandSkus) { const seg = themeMainOf(s.theme); if (seg !== UNSPEC) m.set(seg, (m.get(seg) ?? 0) + 1); }
+    return [...m.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => a.key.localeCompare(b.key));
   }, [brandSkus]);
   const subThemes = useMemo(() => {
     if (!themeMain) return [];
     const m = new Map<string, number>();
-    for (const s of brandSkus) { const t = normTheme(s.theme); if (themeMainOf(s.theme) === themeMain) m.set(t, (m.get(t) ?? 0) + 1); }
+    for (const s of brandSkus) { const t = normTheme(s.theme); if (t !== UNSPEC && themeMainOf(s.theme) === themeMain) m.set(t, (m.get(t) ?? 0) + 1); }
     return [...m.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value));
   }, [brandSkus, themeMain]);
 
   // the SKUs for the chosen leaf (a non-theme option, or a theme leaf)
   const results = useMemo(() => {
+    if (allSkus) return brandSkus;
     if (themeLeaf != null) return brandSkus.filter((s) => normTheme(s.theme) === themeLeaf);
     if (dim && dim !== 'theme' && option != null) {
       const d = DIMS.find((x) => x.key === dim)!;
       return brandSkus.filter((s) => d.valueOf(s) === option);
     }
     return [];
-  }, [brandSkus, dim, option, themeLeaf]);
+  }, [brandSkus, dim, option, themeLeaf, allSkus]);
 
   const imgCodes = useMemo(() => results.slice(0, 300).map((r) => r.item_code), [results]);
   const imgMap = useSkuImages(imgCodes);
 
   function pickBrand(prefix: string) {
     setBrand({ prefix, name: brandName.get(prefix) || prefix });
-    setDim(null); setOption(null); setThemeOpen(false); setThemeMain(null); setThemeLeaf(null);
+    setDim(null); setOption(null); setThemeOpen(false); setThemeMain(null); setThemeLeaf(null); setAllSkus(false);
     setBrandSkus([]); setSkusLoading(true);
     const myReq = ++brandReqRef.current;
     getBrandSkus(prefix)
@@ -286,17 +289,20 @@ export default function CatalogBrowse({
   // which step to render
   const step: 'region' | 'country' | 'brand' | 'dim' | 'option' | 'skus' =
     !region ? 'region' : !country ? 'country' : !brand ? 'brand'
+      : allSkus ? 'skus'
       : themeLeaf != null ? 'skus'
       : dim == null ? 'dim'
       : option == null ? 'option'
       : 'skus';
 
   // breadcrumb (each step jumps back, clearing everything deeper)
-  const crumbs: { label: string; onClick?: () => void }[] = [{ label: 'Regions', onClick: () => { setRegion(null); setCountry(null); setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); } }];
-  if (region) crumbs.push({ label: region, onClick: () => { setCountry(null); setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); } });
-  if (country) crumbs.push({ label: country, onClick: () => { setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); } });
-  if (brand) crumbs.push({ label: brand.name, onClick: () => { setDim(null); setOption(null); setThemeLeaf(null); } });
-  if (themeLeaf != null) {
+  const crumbs: { label: string; onClick?: () => void }[] = [{ label: 'Regions', onClick: () => { setRegion(null); setCountry(null); setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); setAllSkus(false); } }];
+  if (region) crumbs.push({ label: region, onClick: () => { setCountry(null); setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); setAllSkus(false); } });
+  if (country) crumbs.push({ label: country, onClick: () => { setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); setAllSkus(false); } });
+  if (brand) crumbs.push({ label: brand.name, onClick: () => { setDim(null); setOption(null); setThemeLeaf(null); setAllSkus(false); } });
+  if (allSkus) {
+    crumbs.push({ label: 'All SKUs' });
+  } else if (themeLeaf != null) {
     crumbs.push({ label: 'Theme', onClick: () => { setThemeLeaf(null); setThemeOpen(true); } });
     crumbs.push({ label: themeLeaf });
   } else if (dim && dim !== 'theme') {
@@ -391,6 +397,11 @@ export default function CatalogBrowse({
               </button></li>
             );
           })}
+          {/* PR382 — no further filtering: every SKU of the brand. */}
+          <li key="__all"><button className="cat-tree-row" onClick={() => setAllSkus(true)}>
+            <span className="cat-tree-ico" aria-hidden="true">📋</span>
+            <span className="cat-tree-label">All SKUs</span><span className="cat-tree-count">{brandSkus.length.toLocaleString()}</span><span className="cat-tree-chev">›</span>
+          </button></li>
         </ul>
         )
       )}
