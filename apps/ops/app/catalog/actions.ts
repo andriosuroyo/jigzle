@@ -129,8 +129,10 @@ async function searchCatalogueFallback(supabase: Supabase, raw: string): Promise
 export async function getCatalogFacetData(): Promise<{ brands: BrowseBrand[] }> {
   const supabase = createSupabaseServerClient();
 
-  const { data: br } = await supabase.from('brands').select('prefix,name,country').order('name');
-  const brandRows = ((br ?? []) as { prefix: string; name: string | null; country: string | null }[]);
+  // PR379 — pull logo_url too; retry without it if 0104 isn't applied yet (graceful degrade).
+  let brRes = await supabase.from('brands').select('prefix,name,country,logo_url').order('name');
+  if (brRes.error) brRes = await supabase.from('brands').select('prefix,name,country').order('name') as typeof brRes;
+  const brandRows = ((brRes.data ?? []) as { prefix: string; name: string | null; country: string | null; logo_url?: string | null }[]);
 
   const counts = new Map<string, number>();
   const { data: rpc, error: rpcErr } = await supabase.rpc('catalog_brand_counts');
@@ -155,6 +157,7 @@ export async function getCatalogFacetData(): Promise<{ brands: BrowseBrand[] }> 
 
   const brands: BrowseBrand[] = brandRows.map((b) => ({
     prefix: b.prefix, name: b.name || b.prefix, country: b.country, count: counts.get(b.prefix) ?? 0,
+    logo_url: b.logo_url ?? null,
   }));
   return { brands };
 }

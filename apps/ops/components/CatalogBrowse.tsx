@@ -17,6 +17,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import BrandAvatar from '@/components/BrandAvatar';
 import { getCatalogFacetData, getBrandSkus } from '@/app/catalog/actions';
 import type { BrowseBrand, BrowseSku } from '@/app/catalog/types';
 
@@ -42,21 +43,7 @@ const COUNTRY_FLAG: Record<string, string> = {
 };
 const countryFlag = (c: string): string => COUNTRY_FLAG[c] || '🏳️';
 
-// PR378 — brand "logo": a deterministic monogram avatar (initials + a stable colour from the prefix).
-// No asset upload needed; every brand gets a distinct mark. (A real logo image could layer on later via
-// a brands.logo_url without changing this fallback.)
-const MONO_COLORS = ['#7B9E89', '#C08457', '#6B8CAE', '#B0687A', '#9A7BAE', '#B79A3E', '#5FA0A0', '#A8735A'];
-function brandInitials(name: string): string {
-  const w = name.trim().split(/\s+/).filter(Boolean);
-  if (!w.length) return '?';
-  if (w.length === 1) return w[0].slice(0, 2).toUpperCase();
-  return (w[0][0] + w[1][0]).toUpperCase();
-}
-function brandColor(key: string): string {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return MONO_COLORS[h % MONO_COLORS.length];
-}
+// PR379 — the brand mark (logo image, else a monogram) lives in the shared <BrandAvatar>.
 
 const PIECE_BUCKETS: { key: string; lo: number; hi: number }[] = [
   { key: '< 100', lo: 0, hi: 100 },
@@ -169,7 +156,7 @@ export default function CatalogBrowse({
     if (!region || !country) return [];
     return brands
       .filter((b) => b.count > 0 && regionOf(b.country) === region && countryOf(b.country) === country)
-      .map((b) => ({ prefix: b.prefix, count: b.count, name: b.name }))
+      .map((b) => ({ prefix: b.prefix, count: b.count, name: b.name, logo_url: b.logo_url }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [brands, region, country]);
 
@@ -299,7 +286,7 @@ export default function CatalogBrowse({
         <ul className="cat-tree">
           {brandRows.map((b) => (
             <li key={b.prefix}><button className="cat-tree-row" onClick={() => pickBrand(b.prefix)}>
-              <span className="cat-mono" aria-hidden="true" style={{ background: brandColor(b.prefix) }}>{brandInitials(b.name)}</span>
+              <BrandAvatar name={b.name} prefix={b.prefix} logoUrl={b.logo_url} />
               <span className="cat-tree-label">{b.name} <span className="cat-tree-sub">{b.prefix}</span></span>
               <span className="cat-tree-count">{b.count.toLocaleString()}</span><span className="cat-tree-chev">›</span>
             </button></li>

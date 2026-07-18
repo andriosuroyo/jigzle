@@ -1029,6 +1029,13 @@ img.sku-img { background: #e8e8e8; }
 /* PR378 — leading visual on a geography/brand row: a region/country emoji, or a brand monogram avatar. */
 .cat-tree-ico { flex-shrink: 0; width: 26px; text-align: center; font-size: 21px; line-height: 1; }
 .cat-mono { flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; }
+/* PR379 — a real brand logo (when set) uses the same 30px slot, contained on a paper tile. */
+.cat-mono-img { object-fit: contain; background: var(--paper); border: 1px solid var(--line); }
+/* PR379 — Settings → Catalog → Brand logos: avatar · (name + URL input) · Save */
+.brand-logo-row { display: flex; align-items: center; gap: 10px; }
+.brand-logo-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.brand-logo-name { font-size: 13px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-logo-save { flex-shrink: 0; }
 .cat-facets { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
 .cat-facet-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 5px; }
 .cat-facet-opts { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -557,6 +557,31 @@ export async function getSearchAliases(): Promise<SearchAlias[]> {
 
 // add a term→alias pair (+ optionally its reverse). Returns every row actually inserted (skips any that
 // already existed) so the caller can append them. Returns { error } for expected failures, never throws.
+// PR379 — Settings → Catalog → Brand logos. A brand's optional logo_url (0104), shown in Browse in
+// place of the monogram. Global brands rows only; RLS (brands_all / is_allowed_user) gates the write.
+export type BrandLogoRow = { prefix: string; name: string; country: string | null; logo_url: string | null };
+
+export async function getBrandLogos(): Promise<BrandLogoRow[]> {
+  const supabase = createSupabaseServerClient();
+  // Degrades gracefully if 0104 isn't applied yet: retry without logo_url so the list still renders.
+  let res = await supabase.from('brands').select('prefix,name,country,logo_url').order('name');
+  if (res.error) res = await supabase.from('brands').select('prefix,name,country').order('name') as typeof res;
+  return ((res.data ?? []) as Partial<BrandLogoRow>[]).map((b) => ({
+    prefix: b.prefix as string, name: b.name || (b.prefix as string), country: b.country ?? null, logo_url: b.logo_url ?? null,
+  }));
+}
+
+export async function setBrandLogo(prefix: string, logoUrl: string): Promise<{ error: string | null }> {
+  const p = prefix?.trim();
+  if (!p) return { error: 'A brand is required.' };
+  const url = logoUrl.trim();
+  if (url && !/^https?:\/\//i.test(url)) return { error: 'Enter a full image URL (http:// or https://).' };
+  const supabase = createSupabaseServerClient();
+  const { error } = await supabase.from('brands').update({ logo_url: url || null }).eq('prefix', p);
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
 export async function addSearchAlias(
   term: string,
   alias: string,

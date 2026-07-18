@@ -83,6 +83,7 @@ export interface BrowseBrand {
   name: string;
   country: string | null;
   count: number;
+  logo_url: string | null; // PR379 — optional brand logo (falls back to a monogram in Browse)
 }
 
 // One SKU under a brand, carrying just the columns the facet panel needs (plus the list fields).
