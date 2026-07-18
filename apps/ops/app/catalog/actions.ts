@@ -165,7 +165,7 @@ export async function getCatalogFacetData(): Promise<{ brands: BrowseBrand[] }> 
 // PR378 — the SKUs for ONE brand, loaded on demand when a brand is opened in Browse (drives its
 // dimension facets + SKU leaves). A brand is at most a few thousand rows, so this is paged but small.
 const BROWSE_SKU_COLS =
-  'item_code,brand_prefix,translate_name,original_name,self_code,needs_review,product_type,piece_count_n,material,effect,theme,artist';
+  'item_code,brand_prefix,translate_name,original_name,self_code,needs_review,product_type,piece_count_n,material,effect,theme,series,artist';
 export async function getBrandSkus(brandPrefix: string): Promise<BrowseSku[]> {
   const prefix = brandPrefix?.trim();
   if (!prefix) return [];
@@ -177,13 +177,13 @@ export async function getBrandSkus(brandPrefix: string): Promise<BrowseSku[]> {
       .from('catalogue').select(BROWSE_SKU_COLS).eq('brand_prefix', prefix).order('item_code').range(from, from + PAGE - 1);
     const rows = (data ?? []) as (CatNameRow & {
       product_type: string | null; piece_count_n: number | null; material: string | null;
-      effect: string | null; theme: string | null; artist: string | null;
+      effect: string | null; theme: string | null; series: string | null; artist: string | null;
     })[];
     for (const r of rows)
       skus.push({
         item_code: r.item_code, name: nameOf(r), brand_prefix: r.brand_prefix ?? null, needs_review: !!r.needs_review,
         product_type: r.product_type ?? null, piece_count_n: r.piece_count_n ?? null, material: r.material ?? null,
-        effect: r.effect ?? null, theme: r.theme ?? null, artist: r.artist ?? null,
+        effect: r.effect ?? null, theme: r.theme ?? null, series: r.series ?? null, artist: r.artist ?? null,
       });
     if (rows.length < PAGE) break;
   }
@@ -193,7 +193,7 @@ export async function getBrandSkus(brandPrefix: string): Promise<BrowseSku[]> {
 // ── PR188: distinct existing values per field, for the item editor's dropdowns (datalists). One paged
 // scan of the relevant columns (no GROUP BY over PostgREST); the response is just the sorted distinct
 // value lists (small). The client caches it for the session. ──
-const OPTION_FIELDS = ['product_type', 'sub_type', 'piece_type', 'piece_size', 'material', 'effect', 'image_type', 'theme', 'location', 'artist'] as const;
+const OPTION_FIELDS = ['product_type', 'sub_type', 'piece_type', 'piece_size', 'material', 'effect', 'image_type', 'theme', 'series', 'location', 'artist'] as const;
 // PR373 — dropdown option lists (distinct field values across the catalogue). The fast path is the
 // `catalog_field_options` RPC (0102): it does the DISTINCT server-side and returns a few KB instead of
 // the whole 43k-row table. We still union the Settings-managed classification lists (below) so curated

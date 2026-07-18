@@ -97,5 +97,6 @@ export interface BrowseSku {
   material: string | null;
   effect: string | null;
   theme: string | null;
+  series: string | null;
   artist: string | null;
 }
