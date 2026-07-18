@@ -165,7 +165,7 @@ export async function getCatalogFacetData(): Promise<{ brands: BrowseBrand[] }> 
 // PR378 — the SKUs for ONE brand, loaded on demand when a brand is opened in Browse (drives its
 // dimension facets + SKU leaves). A brand is at most a few thousand rows, so this is paged but small.
 const BROWSE_SKU_COLS =
-  'item_code,brand_prefix,translate_name,original_name,self_code,needs_review,product_type,piece_count_n,material,effect,theme,artist';
+  'item_code,brand_prefix,translate_name,original_name,self_code,needs_review,product_type,piece_count_n,material,effect,theme,series,artist';
 export async function getBrandSkus(brandPrefix: string): Promise<BrowseSku[]> {
   const prefix = brandPrefix?.trim();
   if (!prefix) return [];
@@ -177,13 +177,13 @@ export async function getBrandSkus(brandPrefix: string): Promise<BrowseSku[]> {
       .from('catalogue').select(BROWSE_SKU_COLS).eq('brand_prefix', prefix).order('item_code').range(from, from + PAGE - 1);
     const rows = (data ?? []) as (CatNameRow & {
       product_type: string | null; piece_count_n: number | null; material: string | null;
-      effect: string | null; theme: string | null; artist: string | null;
+      effect: string | null; theme: string | null; series: string | null; artist: string | null;
     })[];
     for (const r of rows)
       skus.push({
         item_code: r.item_code, name: nameOf(r), brand_prefix: r.brand_prefix ?? null, needs_review: !!r.needs_review,
         product_type: r.product_type ?? null, piece_count_n: r.piece_count_n ?? null, material: r.material ?? null,
-        effect: r.effect ?? null, theme: r.theme ?? null, artist: r.artist ?? null,
+        effect: r.effect ?? null, theme: r.theme ?? null, series: r.series ?? null, artist: r.artist ?? null,
       });
     if (rows.length < PAGE) break;
   }

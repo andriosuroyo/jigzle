@@ -76,9 +76,11 @@ const normTheme = (theme: string | null): string => {
 };
 const themeMainOf = (theme: string | null): string => normTheme(theme).split(' / ')[0];
 
-type DimKey = 'type' | 'pieces' | 'material' | 'effect' | 'theme' | 'artist';
+type DimKey = 'type' | 'series' | 'pieces' | 'material' | 'effect' | 'theme' | 'artist';
 const DIMS: { key: DimKey; label: string; valueOf: (s: BrowseSku) => string; bucket?: boolean }[] = [
   { key: 'type', label: 'Type', valueOf: (s) => s.product_type || UNSPEC },
+  // PR386 — browse a brand's SKUs by the sub-series they belong to (e.g. "Where's That? Series").
+  { key: 'series', label: 'Series', valueOf: (s) => s.series || UNSPEC },
   { key: 'pieces', label: 'Pieces', valueOf: (s) => pieceBucket(s.piece_count_n), bucket: true },
   { key: 'material', label: 'Material', valueOf: (s) => canonMaterial(s.material) },
   { key: 'effect', label: 'Effect', valueOf: (s) => canonEffect(s.effect) },
@@ -90,7 +92,7 @@ const DIMS: { key: DimKey; label: string; valueOf: (s: BrowseSku) => string; buc
 // icon too: Artist options use the monogram avatar (initials + stable colour); the rest map by value
 // with a sensible fallback to the dimension's own icon.
 const DIM_ICON: Record<DimKey, string> = {
-  type: '🏷️', pieces: '🧩', material: '🧱', effect: '✨', theme: '🎨', artist: '🖌️',
+  type: '🏷️', series: '📚', pieces: '🧩', material: '🧱', effect: '✨', theme: '🎨', artist: '🖌️',
 };
 const TYPE_ICON: Record<string, string> = {
   'Jigsaw Puzzle': '🧩', '3D Puzzle': '🧊', 'Kids Puzzle': '🧸', "Children's Puzzle": '🧸',
@@ -137,6 +139,7 @@ function optionIcon(dimKey: DimKey, value: string): string {
   if (value === UNSPEC) return '❔';
   switch (dimKey) {
     case 'type': return TYPE_ICON[value] ?? DIM_ICON.type;
+    case 'series': return DIM_ICON.series;
     case 'pieces': return DIM_ICON.pieces;
     case 'material': return MATERIAL_ICON[value] ?? DIM_ICON.material;
     case 'effect': return effectIcon(value);
