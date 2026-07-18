@@ -1003,6 +1003,14 @@ img.sku-img { background: #e8e8e8; }
 .cat-history-q > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-history-x { flex-shrink: 0; width: 28px; height: 28px; background: none; border: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 8px; }
 .cat-history-x:active { background: var(--paper); }
+/* PR377 — idle Search view: recent searches + recent edits. Stacked on mobile (searches above, edits
+   below); two side-by-side columns on desktop. */
+.cat-idle { display: flex; flex-direction: column; }
+.cat-idle .cat-history { flex: 1; min-width: 0; }
+@media (min-width: 720px) { .cat-idle { flex-direction: row; align-items: flex-start; gap: 24px; } }
+/* a recent-edit row = mono SKU code (never shrinks) + the item name (muted, ellipsised). */
+.cat-edit-code { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--brown-dark); }
+.cat-edit-name { color: var(--muted); }
 
 /* PR183 — Browse: geography drill-down + faceted brand view */
 .cat-browse { padding: 8px 10px calc(12px + env(safe-area-inset-bottom)); }

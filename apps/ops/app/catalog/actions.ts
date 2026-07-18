@@ -484,6 +484,25 @@ export async function clearNeedsReview(itemCode: string): Promise<void> {
 }
 
 // ── needs-review tab: the D2 stub queue ──
+// PR377 — the most-recently-EDITED SKUs (updated_at desc), for the Search tab's "Recent edits" panel.
+// updated_at is stamped only on a real editor save (updateSku), so this reflects human edits — not the
+// bulk tag backfill, which wrote via PostgREST without touching updated_at.
+export async function getRecentEdits(): Promise<CatalogueListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('catalogue')
+    .select(LIST_COLS)
+    .not('updated_at', 'is', null)
+    .order('updated_at', { ascending: false })
+    .limit(8);
+  return ((data ?? []) as CatNameRow[]).map((c) => ({
+    item_code: c.item_code,
+    name: nameOf(c),
+    brand_prefix: c.brand_prefix ?? null,
+    needs_review: !!c.needs_review,
+  }));
+}
+
 export async function getNeedsReview(): Promise<CatalogueListRow[]> {
   const supabase = createSupabaseServerClient();
   // most-recently-entered first (PR18) — quick-added partials surface at the top of the queue.
