@@ -86,6 +86,65 @@ const DIMS: { key: DimKey; label: string; valueOf: (s: BrowseSku) => string; buc
   { key: 'artist', label: 'Artist', valueOf: (s) => s.artist || UNSPEC },
 ];
 
+// PR381 — icons. Each DIMENSION has one fixed icon (same for every brand). Each OPTION gets a suitable
+// icon too: Artist options use the monogram avatar (initials + stable colour); the rest map by value
+// with a sensible fallback to the dimension's own icon.
+const DIM_ICON: Record<DimKey, string> = {
+  type: '🏷️', pieces: '🧩', material: '🧱', effect: '✨', theme: '🎨', artist: '🖌️',
+};
+const TYPE_ICON: Record<string, string> = {
+  'Jigsaw Puzzle': '🧩', '3D Puzzle': '🧊', 'Kids Puzzle': '🧸', "Children's Puzzle": '🧸',
+  'Board Game': '🎲', 'Accessories': '🧰', 'Wood Craft': '🪵', 'Wooden Puzzle': '🪵',
+  'Metal Puzzle': '⚙️', 'Sticker': '🏷️', 'Stationery': '✏️', 'Model Kit': '🛠️',
+};
+const MATERIAL_ICON: Record<string, string> = {
+  'Wooden': '🪵', 'Wood': '🪵', 'Crystal': '💎', 'Cork': '🟫', 'Foam': '🧽', 'Paper': '📄',
+  'Plastic': '🧊', 'Acrylic': '🧊', 'Metal': '⚙️', 'Glass': '🔷', 'Ceramic': '🏺', 'Fabric': '🧵', 'Cardboard': '📦',
+};
+function effectIcon(v: string): string {
+  const l = v.toLowerCase();
+  if (l.includes('glow')) return '🌙';
+  if (l.includes('2.5d')) return '🔲';
+  if (l.includes('3d')) return '🧊';
+  if (l.includes('metal') || l.includes('foil')) return '✨';
+  if (l.includes('holo') || l.includes('rainbow')) return '🌈';
+  if (l.includes('lenticular')) return '🎞️';
+  if (l.includes('activity')) return '🎯';
+  if (l.includes('number')) return '🔢';
+  return DIM_ICON.effect;
+}
+function themeIcon(main: string): string {
+  const l = main.toLowerCase();
+  if (l.includes('animal')) return '🐾';
+  if (l.includes('charact')) return '🦸';
+  if (l.includes('anime') || l.includes('manga')) return '🌸';
+  if (l.includes('art')) return '🖼️';
+  if (l.includes('land') || l.includes('scen') || l.includes('city') || l.includes('travel')) return '🏞️';
+  if (l.includes('flower') || l.includes('floral')) return '🌷';
+  if (l.includes('nature') || l.includes('plant')) return '🌿';
+  if (l.includes('food') || l.includes('sweet')) return '🍰';
+  if (l.includes('movie') || l.includes('film')) return '🎬';
+  if (l.includes('space') || l.includes('galaxy')) return '🚀';
+  if (l.includes('map')) return '🗺️';
+  if (l.includes('vehicle') || l.includes('car') || l.includes('train')) return '🚗';
+  if (l.includes('holiday') || l.includes('christmas')) return '🎄';
+  if (l.includes('fantasy') || l.includes('dragon')) return '🐉';
+  if (l.includes('religio') || l.includes('buddh')) return '🛕';
+  return DIM_ICON.theme;
+}
+// An option's icon (non-Artist; Artist renders a monogram avatar instead).
+function optionIcon(dimKey: DimKey, value: string): string {
+  if (value === UNSPEC) return '❔';
+  switch (dimKey) {
+    case 'type': return TYPE_ICON[value] ?? DIM_ICON.type;
+    case 'pieces': return DIM_ICON.pieces;
+    case 'material': return MATERIAL_ICON[value] ?? DIM_ICON.material;
+    case 'effect': return effectIcon(value);
+    case 'theme': return themeIcon(themeMainOf(value));
+    case 'artist': return DIM_ICON.artist;
+  }
+}
+
 // session cache: the brand-count projection (a few KB) survives SPA navigation.
 let FACET_CACHE: { brands: BrowseBrand[] } | null = null;
 const LS_KEY = 'jz.catalog.browseBrands.v1'; // PR378 — stale-while-revalidate across page loads
@@ -303,17 +362,20 @@ export default function CatalogBrowse({
               return (
                 <Fragment key="theme">
                   <li><button className="cat-tree-row" onClick={() => setThemeOpen((o) => !o)}>
+                    <span className="cat-tree-ico" aria-hidden="true">{DIM_ICON.theme}</span>
                     <span className="cat-tree-label">Theme</span><span className="cat-tree-count">{mainThemes.length}</span>
                     <span className="cat-tree-chev">{themeOpen ? '▾' : '›'}</span>
                   </button></li>
                   {themeOpen && mainThemes.map((mt) => (
                     <Fragment key={mt.key}>
                       <li><button className="cat-tree-row cat-tree-nest1" onClick={() => setThemeMain((m) => (m === mt.key ? null : mt.key))}>
+                        <span className="cat-tree-ico" aria-hidden="true">{themeIcon(mt.key)}</span>
                         <span className="cat-tree-label">{mt.key}</span><span className="cat-tree-count">{mt.count}</span>
                         <span className="cat-tree-chev">{themeMain === mt.key ? '▾' : '›'}</span>
                       </button></li>
                       {themeMain === mt.key && subThemes.map((st) => (
                         <li key={st.value}><button className="cat-tree-row cat-tree-nest2" onClick={() => setThemeLeaf(st.value)}>
+                          <span className="cat-tree-ico" aria-hidden="true">{themeIcon(themeMainOf(st.value))}</span>
                           <span className="cat-tree-label">{st.value}</span><span className="cat-tree-count">{st.count}</span><span className="cat-tree-chev">›</span>
                         </button></li>
                       ))}
@@ -324,6 +386,7 @@ export default function CatalogBrowse({
             }
             return (
               <li key={d.key}><button className="cat-tree-row" onClick={() => setDim(d.key)}>
+                <span className="cat-tree-ico" aria-hidden="true">{DIM_ICON[d.key]}</span>
                 <span className="cat-tree-label">{d.label}</span><span className="cat-tree-count">{options}</span><span className="cat-tree-chev">›</span>
               </button></li>
             );
@@ -332,11 +395,15 @@ export default function CatalogBrowse({
         )
       )}
 
-      {/* Step 5: a dimension's options, as list rows with count pills */}
+      {/* Step 5: a dimension's options, as list rows with count pills. Artist options show a monogram
+          avatar (initials + stable colour); every other dimension shows a per-value icon (PR381). */}
       {step === 'option' && (
         <ul className="cat-tree">
           {optionRows.map((o) => (
             <li key={o.value}><button className="cat-tree-row" onClick={() => setOption(o.value)}>
+              {dim === 'artist' && o.value !== UNSPEC
+                ? <BrandAvatar name={o.value} prefix={o.value} />
+                : <span className="cat-tree-ico" aria-hidden="true">{optionIcon(dim!, o.value)}</span>}
               <span className="cat-tree-label">{o.value}</span><span className="cat-tree-count">{o.count.toLocaleString()}</span><span className="cat-tree-chev">›</span>
             </button></li>
           ))}
