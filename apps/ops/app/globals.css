@@ -1026,6 +1026,11 @@ img.sku-img { background: #e8e8e8; }
 .cat-tree-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--brown); margin-left: 4px; }
 .cat-tree-count { flex-shrink: 0; font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 700; color: var(--brown-dark); }
 .cat-tree-chev { flex-shrink: 0; color: var(--muted); font-size: 18px; line-height: 1; }
+/* PR383 — Browse SKU list: flow down the page (no 360px scroll window), white rows, and two row-major
+   columns on desktop (SKU N left, N+1 right, N+2 next row left). */
+.cat-sku-list { height: auto; max-height: none; overflow: visible; padding: 6px 0; gap: 8px; }
+.cat-sku-list .fq-row { background: white; }
+@media (min-width: 720px) { .cat-sku-list { display: grid; grid-template-columns: 1fr 1fr; align-content: start; } }
 /* PR378 — leading visual on a geography/brand row: a region/country emoji, or a brand monogram avatar. */
 .cat-tree-ico { flex-shrink: 0; width: 26px; text-align: center; font-size: 21px; line-height: 1; }
 .cat-mono { flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; }

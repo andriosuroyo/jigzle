@@ -270,7 +270,7 @@ export default function CatalogBrowse({
     return [];
   }, [brandSkus, dim, option, themeLeaf, allSkus]);
 
-  const imgCodes = useMemo(() => results.slice(0, 300).map((r) => r.item_code), [results]);
+  const imgCodes = useMemo(() => results.map((r) => r.item_code), [results]);
   const imgMap = useSkuImages(imgCodes);
 
   function pickBrand(prefix: string) {
@@ -425,9 +425,11 @@ export default function CatalogBrowse({
       {step === 'skus' && (
         <>
           <div className="cat-results-head"><span>{results.length.toLocaleString()} SKU{results.length === 1 ? '' : 's'}</span></div>
-          <ul className="fq-list">
+          {/* PR383 — no fixed scroll window / no 300 cap: every SKU flows down the page (like Sales /
+              Purchasing lists), white rows, two row-major columns on desktop. */}
+          <ul className="fq-list cat-sku-list">
             {results.length === 0 && <li><div className="hint fq-empty">No SKUs.</div></li>}
-            {results.slice(0, 300).map((r) => (
+            {results.map((r) => (
               <li key={r.item_code}>
                 <button className={`fq-row ${selectedCode === r.item_code ? 'active' : ''}`} onClick={() => onOpenSku(r.item_code)}>
                   <div className="cat-row">
@@ -443,7 +445,6 @@ export default function CatalogBrowse({
                 </button>
               </li>
             ))}
-            {results.length > 300 && <li><div className="hint fq-empty">Showing the first 300.</div></li>}
           </ul>
         </>
       )}

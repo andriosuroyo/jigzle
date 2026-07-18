@@ -30,19 +30,31 @@ function driveDirect(url: string): string {
   return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1000` : u;
 }
 
+// PR383 — chunk `.in(item_code, …)` lookups. A screen can now ask for an unbounded number of codes
+// (Catalog → Browse no longer caps its SKU list), and a single .in() with thousands of ids would blow
+// the PostgREST URL length; 200 per request stays well under it.
+const IN_CHUNK = 200;
+function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+
 export async function resolveSkuImages(itemCodes: string[]): Promise<SkuImageMap> {
   const codes = [...new Set((itemCodes ?? []).filter(Boolean))];
   if (!codes.length) return {};
   const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('sku_image_resolved')
-    .select('item_code,image_status,display_path')
-    .in('item_code', codes);
-  if (error || !data) return {}; // view missing (pre-0021) or transient error → no images, screens unaffected
 
   const map: SkuImageMap = {};
-  for (const r of data as { item_code: string; image_status: ImageStatus; display_path: string | null }[]) {
-    map[r.item_code] = { status: r.image_status, displayUrl: publicUrl(r.display_path) };
+  for (const part of chunk(codes, IN_CHUNK)) {
+    const { data, error } = await supabase
+      .from('sku_image_resolved')
+      .select('item_code,image_status,display_path')
+      .in('item_code', part);
+    if (error) return map; // view missing (pre-0021) or transient error → return what we have so far
+    for (const r of (data ?? []) as { item_code: string; image_status: ImageStatus; display_path: string | null }[]) {
+      map[r.item_code] = { status: r.image_status, displayUrl: publicUrl(r.display_path) };
+    }
   }
 
   // PR363 — fall back to the manually-entered Google-Drive image_urls for any SKU without a resolved
@@ -51,11 +63,11 @@ export async function resolveSkuImages(itemCodes: string[]): Promise<SkuImageMap
   // present) always wins; this only fills the gap. Best-effort: a missing/failed read leaves the
   // pipeline result untouched, so screens are never worse off than before.
   const needFallback = codes.filter((c) => (map[c]?.status ?? 'pending') !== 'has_image' || !map[c]?.displayUrl);
-  if (needFallback.length) {
+  for (const part of chunk(needFallback, IN_CHUNK)) {
     const { data: manual } = await supabase
       .from('catalogue')
       .select('item_code,image_urls')
-      .in('item_code', needFallback);
+      .in('item_code', part);
     for (const r of (manual ?? []) as { item_code: string; image_urls: string[] | null }[]) {
       const first = (r.image_urls ?? []).map((u) => (u ?? '').trim()).find(Boolean);
       const url = first ? driveDirect(first) : '';
