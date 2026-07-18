@@ -122,42 +122,69 @@ async function searchCatalogueFallback(supabase: Supabase, raw: string): Promise
 // module's convention) no RPC/migration, so it's a bounded-concurrency paged scan (stable order so
 // the page ranges partition cleanly). Returns the facet columns for every SKU + the brand list
 // (prefix → name/country) the client folds into Region → Country → Brand. ──
-export async function getCatalogFacetData(): Promise<{ skus: BrowseSku[]; brands: BrowseBrand[] }> {
+// PR378 — Browse geography tree. Returns every brand with its SKU count; region/country/brand rows are
+// all derived client-side from these ~260 rows (a few KB). The per-brand counts come from the
+// catalog_brand_counts RPC (0103); if it isn't applied yet we fall back to a lightweight one-column scan
+// (brand_prefix only) so the screen still works — never the old 12-column, whole-table download.
+export async function getCatalogFacetData(): Promise<{ brands: BrowseBrand[] }> {
   const supabase = createSupabaseServerClient();
 
   const { data: br } = await supabase.from('brands').select('prefix,name,country').order('name');
-  const brands = ((br ?? []) as { prefix: string; name: string | null; country: string | null }[]).map(
-    (b) => ({ prefix: b.prefix, name: b.name || b.prefix, country: b.country, count: 0 }),
-  );
+  const brandRows = ((br ?? []) as { prefix: string; name: string | null; country: string | null }[]);
 
-  const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true });
-  const total = count ?? 0;
-  const PAGE = 1000;
-  const pages = Math.ceil(total / PAGE);
-  const CONC = 8; // fire page ranges in bounded-concurrency batches (avoid a wide fan-out)
-  const COLS =
-    'item_code,brand_prefix,translate_name,original_name,self_code,needs_review,product_type,piece_count_n,material,effect,theme,artist';
-  const skus: BrowseSku[] = [];
-  for (let start = 0; start < pages; start += CONC) {
-    const batch = await Promise.all(
-      Array.from({ length: Math.min(CONC, pages - start) }, (_, k) => {
-        const from = (start + k) * PAGE;
-        return supabase.from('catalogue').select(COLS).order('item_code').range(from, from + PAGE - 1);
-      }),
-    );
-    for (const { data } of batch)
-      for (const r of (data ?? []) as (CatNameRow & {
-        product_type: string | null; piece_count_n: number | null; material: string | null;
-        effect: string | null; theme: string | null; artist: string | null;
-      })[])
-        skus.push({
-          item_code: r.item_code, name: nameOf(r), brand_prefix: r.brand_prefix ?? null, needs_review: !!r.needs_review,
-          product_type: r.product_type ?? null, piece_count_n: r.piece_count_n ?? null, material: r.material ?? null,
-          effect: r.effect ?? null, theme: r.theme ?? null, artist: r.artist ?? null,
-        });
+  const counts = new Map<string, number>();
+  const { data: rpc, error: rpcErr } = await supabase.rpc('catalog_brand_counts');
+  if (!rpcErr && Array.isArray(rpc)) {
+    for (const r of rpc as { brand_prefix: string; n: number }[]) counts.set(r.brand_prefix, Number(r.n) || 0);
+  } else {
+    // pre-0103 fallback: page brand_prefix only (1 column) and tally client-side.
+    const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true });
+    const PAGE = 1000, CONC = 8, pages = Math.ceil((count ?? 0) / PAGE);
+    for (let start = 0; start < pages; start += CONC) {
+      const batch = await Promise.all(
+        Array.from({ length: Math.min(CONC, pages - start) }, (_, k) => {
+          const from = (start + k) * PAGE;
+          return supabase.from('catalogue').select('brand_prefix').order('item_code').range(from, from + PAGE - 1);
+        }),
+      );
+      for (const { data } of batch)
+        for (const r of (data ?? []) as { brand_prefix: string | null }[])
+          if (r.brand_prefix) counts.set(r.brand_prefix, (counts.get(r.brand_prefix) ?? 0) + 1);
+    }
   }
 
-  return { skus, brands };
+  const brands: BrowseBrand[] = brandRows.map((b) => ({
+    prefix: b.prefix, name: b.name || b.prefix, country: b.country, count: counts.get(b.prefix) ?? 0,
+  }));
+  return { brands };
+}
+
+// PR378 — the SKUs for ONE brand, loaded on demand when a brand is opened in Browse (drives its
+// dimension facets + SKU leaves). A brand is at most a few thousand rows, so this is paged but small.
+const BROWSE_SKU_COLS =
+  'item_code,brand_prefix,translate_name,original_name,self_code,needs_review,product_type,piece_count_n,material,effect,theme,artist';
+export async function getBrandSkus(brandPrefix: string): Promise<BrowseSku[]> {
+  const prefix = brandPrefix?.trim();
+  if (!prefix) return [];
+  const supabase = createSupabaseServerClient();
+  const skus: BrowseSku[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase
+      .from('catalogue').select(BROWSE_SKU_COLS).eq('brand_prefix', prefix).order('item_code').range(from, from + PAGE - 1);
+    const rows = (data ?? []) as (CatNameRow & {
+      product_type: string | null; piece_count_n: number | null; material: string | null;
+      effect: string | null; theme: string | null; artist: string | null;
+    })[];
+    for (const r of rows)
+      skus.push({
+        item_code: r.item_code, name: nameOf(r), brand_prefix: r.brand_prefix ?? null, needs_review: !!r.needs_review,
+        product_type: r.product_type ?? null, piece_count_n: r.piece_count_n ?? null, material: r.material ?? null,
+        effect: r.effect ?? null, theme: r.theme ?? null, artist: r.artist ?? null,
+      });
+    if (rows.length < PAGE) break;
+  }
+  return skus;
 }
 
 // ── PR188: distinct existing values per field, for the item editor's dropdowns (datalists). One paged
@@ -484,6 +511,25 @@ export async function clearNeedsReview(itemCode: string): Promise<void> {
 }
 
 // ── needs-review tab: the D2 stub queue ──
+// PR377 — the most-recently-EDITED SKUs (updated_at desc), for the Search tab's "Recent edits" panel.
+// updated_at is stamped only on a real editor save (updateSku), so this reflects human edits — not the
+// bulk tag backfill, which wrote via PostgREST without touching updated_at.
+export async function getRecentEdits(): Promise<CatalogueListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data } = await supabase
+    .from('catalogue')
+    .select(LIST_COLS)
+    .not('updated_at', 'is', null)
+    .order('updated_at', { ascending: false })
+    .limit(8);
+  return ((data ?? []) as CatNameRow[]).map((c) => ({
+    item_code: c.item_code,
+    name: nameOf(c),
+    brand_prefix: c.brand_prefix ?? null,
+    needs_review: !!c.needs_review,
+  }));
+}
+
 export async function getNeedsReview(): Promise<CatalogueListRow[]> {
   const supabase = createSupabaseServerClient();
   // most-recently-entered first (PR18) — quick-added partials surface at the top of the queue.

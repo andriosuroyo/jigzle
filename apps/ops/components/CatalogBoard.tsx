@@ -11,6 +11,7 @@ import {
   getCatalogFieldOptions,
   getCatalogSubTypes,
   getNeedsReview,
+  getRecentEdits,
   getUntranslated,
   getPuzzleNoPieces,
   getImplausibleDims,
@@ -284,6 +285,7 @@ export default function CatalogBoard({
   const [results, setResults] = useState<CatalogueListRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
+  const [recentEdits, setRecentEdits] = useState<CatalogueListRow[]>([]); // PR377: last-edited SKUs (updated_at desc)
   const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
   const [catSubTypes, setCatSubTypes] = useState<{ label: string; product_type: string }[]>(SUBTYPES_CACHE ?? []); // PR368: sub type ↔ product type
   const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: manual Google-Drive image URLs
@@ -378,6 +380,13 @@ export default function CatalogBoard({
       if (raw) setHistory((JSON.parse(raw) as string[]).slice(0, HISTORY_MAX));
     } catch { /* ignore unavailable/corrupt storage */ }
   }, []);
+
+  // PR377 — "Recent edits" list. Refetched whenever we return to the list (mode → null, which also
+  // fires on mount), so a SKU just saved surfaces at the top when you come back to Search.
+  useEffect(() => {
+    if (mode !== null) return;
+    getRecentEdits().then(setRecentEdits).catch(() => setRecentEdits([]));
+  }, [mode]);
   function persistHistory(next: string[]) {
     setHistory(next);
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch { /* ignore */ }
@@ -899,7 +908,8 @@ export default function CatalogBoard({
                   dimSeg = parts.length ? `${parts.join(' + ')} cm` : '';
                 } else {
                   const dimVals = [sSizeP, sSizeL, sSizeT].filter((v): v is number => v != null);
-                  dimSeg = dimVals.length ? `${dimVals.join(' x ')} cm` : '';
+                  // PR376 — a round item shows a single diameter; prefix it with ∅ ("∅ 73.5 cm").
+                  dimSeg = dimVals.length ? `${round ? '∅ ' : ''}${dimVals.join(' x ')} cm` : '';
                 }
                 const imgCount = imageUrls.map((u) => u.trim()).filter(Boolean).length;
                 const srcCount = sources.map((u) => u.trim()).filter(Boolean).length;
@@ -1104,7 +1114,7 @@ export default function CatalogBoard({
                           <div className="cat-dims">
                             <label className="cat-round">
                               <input type="checkbox" checked={round} onChange={(e) => setRound(e.target.checked)} />
-                              <span>Product is round / uses a diameter (⌀)</span>
+                              <span>Product is round / uses a diameter (∅)</span>
                             </label>
                             <div className="cat-grid">{dims.map(renderCell)}</div>
                           </div>
@@ -1306,7 +1316,7 @@ export default function CatalogBoard({
               Fix{fixCount > 0 && <span className="orders-tab-count">{fixCount}</span>}
             </button>
           </nav>
-          {tab === 'search' && <button className="btn-brown cat-new-btn" onClick={openNewSku}>+ New item</button>}
+          {tab === 'search' && <button className="btn-brown cat-new-btn" onClick={openNewSku}>+ New SKU</button>}
         </div>
       )}
 
@@ -1345,23 +1355,47 @@ export default function CatalogBoard({
                       </li>
                     ))}
                   </ul>
-                ) : history.length > 0 ? (
-                  <div className="cat-history">
-                    <div className="cat-history-head">
-                      <span>Recent searches</span>
-                      <button type="button" className="btn-link" onClick={clearHistory}>Clear</button>
-                    </div>
-                    <ul className="cat-history-list">
-                      {history.map((h) => (
-                        <li key={h} className="cat-history-row">
-                          <button type="button" className="cat-history-q" onClick={() => setSearch(h)}>
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 8v4l3 2" /><circle cx="12" cy="12" r="9" /></svg>
-                            <span>{h}</span>
-                          </button>
-                          <button type="button" className="cat-history-x" aria-label={`Forget "${h}"`} onClick={() => removeSearch(h)}>×</button>
-                        </li>
-                      ))}
-                    </ul>
+                ) : history.length > 0 || recentEdits.length > 0 ? (
+                  // PR377 — idle Search view: recent searches + recent edits. Stacked on mobile
+                  // (searches above, edits below); side-by-side columns on desktop (.cat-idle).
+                  <div className="cat-idle">
+                    {history.length > 0 && (
+                      <div className="cat-history">
+                        <div className="cat-history-head">
+                          <span>Recent searches</span>
+                          <button type="button" className="btn-link" onClick={clearHistory}>Clear</button>
+                        </div>
+                        <ul className="cat-history-list">
+                          {history.map((h) => (
+                            <li key={h} className="cat-history-row">
+                              <button type="button" className="cat-history-q" onClick={() => setSearch(h)}>
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 8v4l3 2" /><circle cx="12" cy="12" r="9" /></svg>
+                                <span>{h}</span>
+                              </button>
+                              <button type="button" className="cat-history-x" aria-label={`Forget "${h}"`} onClick={() => removeSearch(h)}>×</button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {recentEdits.length > 0 && (
+                      <div className="cat-history">
+                        <div className="cat-history-head">
+                          <span>Recent edits</span>
+                        </div>
+                        <ul className="cat-history-list">
+                          {recentEdits.map((r) => (
+                            <li key={r.item_code} className="cat-history-row">
+                              <button type="button" className="cat-history-q" onClick={() => openSku(r.item_code)} disabled={busy}>
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                                <span className="cat-edit-code">{r.item_code}</span>
+                                <span className="cat-edit-name">{r.name}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="hint fq-empty">Search by SKU code, brand, item name, or piece count.</div>
