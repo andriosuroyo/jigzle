@@ -192,6 +192,7 @@ export type Catalogue = {
   release_year: number | null;
   release_month: number | null;
   theme: string | null;
+  series: string | null;             // 0106 — the sub-series a SKU belongs to (nullable; editable, searchable)
   location: string | null;
   image: string | null;
   has_image: boolean;

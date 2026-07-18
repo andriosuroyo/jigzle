@@ -193,7 +193,7 @@ export async function getBrandSkus(brandPrefix: string): Promise<BrowseSku[]> {
 // ── PR188: distinct existing values per field, for the item editor's dropdowns (datalists). One paged
 // scan of the relevant columns (no GROUP BY over PostgREST); the response is just the sorted distinct
 // value lists (small). The client caches it for the session. ──
-const OPTION_FIELDS = ['product_type', 'sub_type', 'piece_type', 'piece_size', 'material', 'effect', 'image_type', 'theme', 'location', 'artist'] as const;
+const OPTION_FIELDS = ['product_type', 'sub_type', 'piece_type', 'piece_size', 'material', 'effect', 'image_type', 'theme', 'series', 'location', 'artist'] as const;
 // PR373 — dropdown option lists (distinct field values across the catalogue). The fast path is the
 // `catalog_field_options` RPC (0102): it does the DISTINCT server-side and returns a few KB instead of
 // the whole 43k-row table. We still union the Settings-managed classification lists (below) so curated
