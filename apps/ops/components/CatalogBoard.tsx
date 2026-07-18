@@ -313,6 +313,7 @@ export default function CatalogBoard({
   const [sources, setSources] = useState<string[]>([]);       // PR217: Links → Sources (sku_sources)
   const [origSources, setOrigSources] = useState<string[]>([]); // loaded set, for change-detect on save
   const [components, setComponents] = useState<CatalogueComponent[]>([]); // PR370: multipack/blind-box per-unit rows
+  const [sameAll, setSameAll] = useState(false); // PR384: "all units same as #1" — edits to unit 1 fill the rest
   const [heroIdx, setHeroIdx] = useState(0); // PR189: which manual image the hero shows
 
   const [mode, setMode] = useState<RightMode>(null);
@@ -499,7 +500,7 @@ export default function CatalogBoard({
       if (reqRef.current !== myReq) return;
       setDetail(d);
       if (d) {
-        setForm(initForm(d.sku)); setSkuCode(d.sku.item_code); setImageUrls(d.sku.image_urls ?? []); setComponents(d.sku.components ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
+        setForm(initForm(d.sku)); setSkuCode(d.sku.item_code); setImageUrls(d.sku.image_urls ?? []); setComponents(d.sku.components ?? []); setSameAll(false); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
         // PR260 — seed sources, then overlay any saved draft on top of the server state before ungating.
         const applyDraft = (srv: string[]) => {
           if (reqRef.current !== myReq) return;
@@ -539,7 +540,7 @@ export default function CatalogBoard({
     if (reqRef.current !== myReq) return;
     setDetail(d);
     if (d) {
-      setForm(initForm(d.sku)); setSkuCode(d.sku.item_code); setImageUrls(d.sku.image_urls ?? []); setComponents(d.sku.components ?? []); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
+      setForm(initForm(d.sku)); setSkuCode(d.sku.item_code); setImageUrls(d.sku.image_urls ?? []); setComponents(d.sku.components ?? []); setSameAll(false); setRound(d.sku.image_type === 'Round'); setImgUnavailable(!!d.sku.image_unavailable);
       const done = (s: string[]) => { if (reqRef.current === myReq) { setSources(s); setOrigSources(s); catHydratingRef.current = false; } };
       getSkuSources(code).then(done).catch(() => done([]));
     } else if (reqRef.current === myReq) {
@@ -678,7 +679,13 @@ export default function CatalogBoard({
       const setCnt = Math.max(0, parseInt(String(form['set_count'] ?? ''), 10) || 0);
       const usesComp = isMultiType(ptype) && setCnt >= 2;
       const cleanComp: CatalogueComponent[] = usesComp
-        ? components.slice(0, setCnt).map((c) => ({ pieces: numOrNull(c?.pieces), p: numOrNull(c?.p), l: numOrNull(c?.l), t: numOrNull(c?.t) }))
+        ? components.slice(0, setCnt).map((c) => {
+            // PR384 — a round unit stores its diameter in p; width/height are dropped.
+            const out: CatalogueComponent = c?.round
+              ? { pieces: numOrNull(c?.pieces), p: numOrNull(c?.p), l: null, t: null, round: true }
+              : { pieces: numOrNull(c?.pieces), p: numOrNull(c?.p), l: numOrNull(c?.l), t: numOrNull(c?.t) };
+            return out;
+          })
         : [];
       if (JSON.stringify(cleanComp) !== JSON.stringify(detail.sku.components ?? [])) patch.components = cleanComp.length ? cleanComp : null;
       if (!isMultiType(ptype)) {
@@ -891,7 +898,7 @@ export default function CatalogBoard({
                   <button className="btn-link" onClick={() => {
                     if (!detail) return;
                     clearDraft(catDraftKey(detail.sku.item_code));
-                    setForm(initForm(detail.sku)); setSkuCode(detail.sku.item_code); setImageUrls(detail.sku.image_urls ?? []); setSources(origSources); setComponents(detail.sku.components ?? []);
+                    setForm(initForm(detail.sku)); setSkuCode(detail.sku.item_code); setImageUrls(detail.sku.image_urls ?? []); setSources(origSources); setComponents(detail.sku.components ?? []); setSameAll(false);
                     setRound(detail.sku.image_type === 'Round'); setImgUnavailable(!!detail.sku.image_unavailable);
                     setCatRestored(false);
                   }}>discard</button>
@@ -1135,7 +1142,7 @@ export default function CatalogBoard({
                     const fields = GROUPS[detailTab].fields.filter((fld) => {
                       // PR370 — Sets only for Multipack/Blind Box; the single product size is hidden when
                       // per-unit component sizes are in play.
-                      if (fld.key === 'set_count') return isMultiType(pieceTypeVal);
+                      if (fld.key === 'set_count') return false; // PR384 — Sets moved into the "Units in the box" section
                       if (usesComponents && (fld.key === 'size_p' || fld.key === 'size_l' || fld.key === 'size_t')) return false;
                       return true;
                     });
@@ -1182,33 +1189,59 @@ export default function CatalogBoard({
                     );
                   })()}
 
-                  {/* PR370 — per-unit rows for a Multipack / Blind Box (≥2 units): each sub-puzzle's piece
-                      count + product L×W×H. The piece count above auto-sums these. */}
-                  {usesComponents && (
+                  {/* PR384 — Multipack / Blind Box. The Sets count lives HERE (moved out of the grid), at the
+                      top of the units section; ≥2 units reveals a per-unit row (pieces · L×W×H, or ∅ diameter
+                      when the unit is round). "Same as #1" copies unit 1 to every unit as you type. */}
+                  {isMultiType(pieceTypeVal) && (
                     <div className="cat-comp">
-                      <div className="cat-grp-title" style={{ marginTop: 14 }}>Units in the box ({setCountVal}) — pieces &amp; size each</div>
-                      {Array.from({ length: setCountVal }).map((_, i) => {
-                        const c = components[i] ?? { pieces: null, p: null, l: null, t: null };
-                        const setC = (patch: Partial<CatalogueComponent>) => setComponents((arr) => {
-                          const n = arr.slice(); while (n.length < setCountVal) n.push({ pieces: null, p: null, l: null, t: null });
-                          n[i] = { ...(n[i] ?? { pieces: null, p: null, l: null, t: null }), ...patch }; return n;
-                        });
-                        const num = (v: string): number | null => (v.trim() === '' ? null : Number(v));
-                        return (
-                          <div className="cat-comp-row" key={i}>
-                            <span className="cat-comp-n">{i + 1}</span>
-                            <input className="no-spin cat-comp-pc" type="number" step="any" inputMode="numeric" placeholder="pieces" value={c.pieces ?? ''} disabled={busy} onChange={(e) => setC({ pieces: num(e.target.value) })} />
-                            <span className="cat-comp-sep">·</span>
-                            <input type="number" step="any" placeholder="L" value={c.p ?? ''} disabled={busy} onChange={(e) => setC({ p: num(e.target.value) })} />
-                            <span className="cat-comp-x">×</span>
-                            <input type="number" step="any" placeholder="W" value={c.l ?? ''} disabled={busy} onChange={(e) => setC({ l: num(e.target.value) })} />
-                            <span className="cat-comp-x">×</span>
-                            <input type="number" step="any" placeholder="H" value={c.t ?? ''} disabled={busy} onChange={(e) => setC({ t: num(e.target.value) })} />
-                            <span className="cat-comp-unit">cm</span>
-                          </div>
-                        );
-                      })}
-                      <div className="hint" style={{ marginTop: 4 }}>Piece count auto-sums these units ({componentsSum}).</div>
+                      <div className="cat-comp-head">
+                        <div className="cat-grp-title" style={{ margin: 0 }}>Units in the box</div>
+                        <label className="cat-comp-sets">
+                          <span>Sets</span>
+                          <input className="no-spin" type="number" step="1" min="1" inputMode="numeric" value={String(form['set_count'] ?? '')} disabled={busy}
+                            onChange={(e) => setForm((f) => ({ ...f, set_count: e.target.value }))} />
+                        </label>
+                      </div>
+                      {setCountVal >= 2 && (
+                        <>
+                          <label className="cat-comp-same">
+                            <input type="checkbox" checked={sameAll} disabled={busy}
+                              onChange={(e) => {
+                                const on = e.target.checked; setSameAll(on);
+                                if (on) setComponents((arr) => { const first = arr[0] ?? { pieces: null, p: null, l: null, t: null }; return Array.from({ length: setCountVal }, () => ({ ...first })); });
+                              }} />
+                            All units are the same as #1 (copy pieces &amp; size to the rest)
+                          </label>
+                          {Array.from({ length: setCountVal }).map((_, i) => {
+                            const c = components[i] ?? { pieces: null, p: null, l: null, t: null };
+                            const locked = busy || (sameAll && i > 0); // when synced, only unit 1 is editable
+                            const setC = (patch: Partial<CatalogueComponent>) => setComponents((arr) => {
+                              const n = arr.slice(); while (n.length < setCountVal) n.push({ pieces: null, p: null, l: null, t: null });
+                              const next = { ...(n[i] ?? { pieces: null, p: null, l: null, t: null }), ...patch };
+                              n[i] = next;
+                              if (sameAll) for (let j = 0; j < setCountVal; j++) n[j] = { ...next };
+                              return n;
+                            });
+                            const num = (v: string): number | null => (v.trim() === '' ? null : Number(v));
+                            return (
+                              <div className="cat-comp-row" key={i}>
+                                <span className="cat-comp-n">{i + 1}</span>
+                                <input className="no-spin cat-comp-pc" type="number" step="any" inputMode="numeric" placeholder="pieces" value={c.pieces ?? ''} disabled={locked} onChange={(e) => setC({ pieces: num(e.target.value) })} />
+                                <span className="cat-comp-sep">·</span>
+                                <label className="cat-comp-round" title="Round unit — enter its diameter">
+                                  <input type="checkbox" checked={!!c.round} disabled={locked} onChange={(e) => setC({ round: e.target.checked })} />∅
+                                </label>
+                                <input type="number" step="any" placeholder={c.round ? '∅' : 'L'} value={c.p ?? ''} disabled={locked} onChange={(e) => setC({ p: num(e.target.value) })} />
+                                <span className="cat-comp-x">×</span>
+                                <input type="number" step="any" placeholder="W" value={c.round ? '' : (c.l ?? '')} disabled={locked || !!c.round} onChange={(e) => setC({ l: num(e.target.value) })} />
+                                <span className="cat-comp-x">×</span>
+                                <input type="number" step="any" placeholder="H" value={c.round ? '' : (c.t ?? '')} disabled={locked || !!c.round} onChange={(e) => setC({ t: num(e.target.value) })} />
+                                <span className="cat-comp-unit">cm</span>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
                     </div>
                   )}
 

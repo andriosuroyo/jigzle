@@ -940,6 +940,14 @@ button.po-pick-btn:active { background: var(--paper); }
 .cat-comp-row input:not(.cat-comp-pc) { flex: 1 1 46px; }
 .cat-comp-sep, .cat-comp-x { color: var(--muted); font-size: 12px; flex-shrink: 0; }
 .cat-comp-unit { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+/* PR384 — Sets count in the units header, "same as #1" copy toggle, and a per-unit round checkbox. */
+.cat-comp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.cat-comp-sets { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.cat-comp-sets input { width: 60px; height: 34px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); text-align: center; }
+.cat-comp-same { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); cursor: pointer; margin-bottom: 10px; }
+.cat-comp-same input { width: 16px; height: 16px; flex-shrink: 0; }
+.cat-comp-round { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 13px; color: var(--muted); cursor: pointer; }
+.cat-comp-round input { width: 15px; height: 15px; }
 
 /* PR191 — SearchSelect: a searchable single-value combobox (Theme / Artist / classification types) */
 .ss { position: relative; }

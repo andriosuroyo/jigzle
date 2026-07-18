@@ -157,7 +157,8 @@ export type Payment = {
 };
 
 // 0098 — one sub-puzzle in a multipack / blind box: its piece count + product dimensions (cm).
-export type CatalogueComponent = { pieces: number | null; p: number | null; l: number | null; t: number | null };
+// PR384 — `round`: this unit is round; p is its diameter, l/t are dropped (mirrors the SKU-level toggle).
+export type CatalogueComponent = { pieces: number | null; p: number | null; l: number | null; t: number | null; round?: boolean };
 
 export type Catalogue = {
   item_code: string;
