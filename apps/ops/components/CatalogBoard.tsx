@@ -899,7 +899,8 @@ export default function CatalogBoard({
                   dimSeg = parts.length ? `${parts.join(' + ')} cm` : '';
                 } else {
                   const dimVals = [sSizeP, sSizeL, sSizeT].filter((v): v is number => v != null);
-                  dimSeg = dimVals.length ? `${dimVals.join(' x ')} cm` : '';
+                  // PR376 — a round item shows a single diameter; prefix it with ∅ ("∅ 73.5 cm").
+                  dimSeg = dimVals.length ? `${round ? '∅ ' : ''}${dimVals.join(' x ')} cm` : '';
                 }
                 const imgCount = imageUrls.map((u) => u.trim()).filter(Boolean).length;
                 const srcCount = sources.map((u) => u.trim()).filter(Boolean).length;
@@ -1104,7 +1105,7 @@ export default function CatalogBoard({
                           <div className="cat-dims">
                             <label className="cat-round">
                               <input type="checkbox" checked={round} onChange={(e) => setRound(e.target.checked)} />
-                              <span>Product is round / uses a diameter (⌀)</span>
+                              <span>Product is round / uses a diameter (∅)</span>
                             </label>
                             <div className="cat-grid">{dims.map(renderCell)}</div>
                           </div>
