@@ -1026,6 +1026,9 @@ img.sku-img { background: #e8e8e8; }
 .cat-tree-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: var(--brown); margin-left: 4px; }
 .cat-tree-count { flex-shrink: 0; font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 700; color: var(--brown-dark); }
 .cat-tree-chev { flex-shrink: 0; color: var(--muted); font-size: 18px; line-height: 1; }
+/* PR378 — leading visual on a geography/brand row: a region/country emoji, or a brand monogram avatar. */
+.cat-tree-ico { flex-shrink: 0; width: 26px; text-align: center; font-size: 21px; line-height: 1; }
+.cat-mono { flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; }
 .cat-facets { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
 .cat-facet-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 5px; }
 .cat-facet-opts { display: flex; flex-wrap: wrap; gap: 6px; }

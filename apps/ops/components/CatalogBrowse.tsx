@@ -7,26 +7,56 @@
 // Effect, Theme, Artist); picking a dimension shows its options as list rows with count pills; picking
 // an option shows the matching SKUs. Theme is special (PR187): tapping it expands INLINE into its main
 // themes (Character, Art, …), and tapping a main theme reveals that brand's themes under it (A–Z);
-// tapping one of those shows its SKUs. Region is derived from brands.country. The lightweight projection
-// loads once, lazily, and is cached for the session — everything after is client-side and instant.
+// tapping one of those shows its SKUs. Region is derived from brands.country.
+//
+// PR378 — the whole geography tree now renders from per-brand COUNTS only (getCatalogFacetData → a few
+// KB via the catalog_brand_counts RPC), cached in localStorage for instant repeat loads and revalidated
+// in the background (so newly-added SKUs are picked up). A brand's SKUs load on demand when it's opened.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
-import { getCatalogFacetData } from '@/app/catalog/actions';
+import { getCatalogFacetData, getBrandSkus } from '@/app/catalog/actions';
 import type { BrowseBrand, BrowseSku } from '@/app/catalog/types';
 
 const REGION_OF: Record<string, string> = {
   Japan: 'Asia', Taiwan: 'Asia', China: 'Asia', Korea: 'Asia', 'Hong Kong': 'Asia', Indonesia: 'Asia',
   USA: 'Americas', Canada: 'Americas', Brazil: 'Americas',
-  Europe: 'Europe', UK: 'Europe', Germany: 'Europe', Poland: 'Europe', Russia: 'Europe',
+  Europe: 'Europe', UK: 'Europe', Germany: 'Europe', Poland: 'Europe', Russia: 'Europe', Turkey: 'Europe',
 };
 const REGIONS = ['Asia', 'Americas', 'Europe', 'Rest of the World'] as const;
 const regionOf = (country: string | null): string => (country && REGION_OF[country]) || 'Rest of the World';
 const UNSPEC = 'Unspecified';
 const countryOf = (c: string | null): string => (c && c.trim()) || UNSPEC;
 const azUnspecLast = (a: string, b: string) => (a === UNSPEC ? 1 : b === UNSPEC ? -1 : a.localeCompare(b));
+
+// PR378 — a globe tilted toward each region; the catch-all keeps the neutral 🌐.
+const REGION_ICON: Record<string, string> = { Asia: '🌏', Americas: '🌎', Europe: '🌍', 'Rest of the World': '🌐' };
+// PR378 — a flag per known country. "Europe"/"Worldwide" aren't countries but appear as brand.country
+// values, so they get the EU flag / globe. Unknown / Unspecified fall back to a neutral flag.
+const COUNTRY_FLAG: Record<string, string> = {
+  Japan: '🇯🇵', Taiwan: '🇹🇼', China: '🇨🇳', Korea: '🇰🇷', 'Hong Kong': '🇭🇰', Indonesia: '🇮🇩',
+  USA: '🇺🇸', Canada: '🇨🇦', Brazil: '🇧🇷', Australia: '🇦🇺',
+  Europe: '🇪🇺', UK: '🇬🇧', Germany: '🇩🇪', Poland: '🇵🇱', Russia: '🇷🇺', Turkey: '🇹🇷', Worldwide: '🌐',
+};
+const countryFlag = (c: string): string => COUNTRY_FLAG[c] || '🏳️';
+
+// PR378 — brand "logo": a deterministic monogram avatar (initials + a stable colour from the prefix).
+// No asset upload needed; every brand gets a distinct mark. (A real logo image could layer on later via
+// a brands.logo_url without changing this fallback.)
+const MONO_COLORS = ['#7B9E89', '#C08457', '#6B8CAE', '#B0687A', '#9A7BAE', '#B79A3E', '#5FA0A0', '#A8735A'];
+function brandInitials(name: string): string {
+  const w = name.trim().split(/\s+/).filter(Boolean);
+  if (!w.length) return '?';
+  if (w.length === 1) return w[0].slice(0, 2).toUpperCase();
+  return (w[0][0] + w[1][0]).toUpperCase();
+}
+function brandColor(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return MONO_COLORS[h % MONO_COLORS.length];
+}
 
 const PIECE_BUCKETS: { key: string; lo: number; hi: number }[] = [
   { key: '< 100', lo: 0, hi: 100 },
@@ -69,8 +99,9 @@ const DIMS: { key: DimKey; label: string; valueOf: (s: BrowseSku) => string; buc
   { key: 'artist', label: 'Artist', valueOf: (s) => s.artist || UNSPEC },
 ];
 
-// session cache: the ~0.9 MB (gzipped) projection loads once and survives SPA navigation.
-let FACET_CACHE: { skus: BrowseSku[]; brands: BrowseBrand[] } | null = null;
+// session cache: the brand-count projection (a few KB) survives SPA navigation.
+let FACET_CACHE: { brands: BrowseBrand[] } | null = null;
+const LS_KEY = 'jz.catalog.browseBrands.v1'; // PR378 — stale-while-revalidate across page loads
 
 export default function CatalogBrowse({
   active,
@@ -81,9 +112,9 @@ export default function CatalogBrowse({
   onOpenSku: (code: string) => void;
   selectedCode: string | null;
 }) {
-  const [data, setData] = useState<{ skus: BrowseSku[]; brands: BrowseBrand[] } | null>(FACET_CACHE);
+  const [data, setData] = useState<{ brands: BrowseBrand[] } | null>(FACET_CACHE);
   const [loading, setLoading] = useState(false);
-  const loadedRef = useRef(FACET_CACHE != null);
+  const loadedRef = useRef(false);
 
   const [region, setRegion] = useState<string | null>(null);
   const [country, setCountry] = useState<string | null>(null);
@@ -95,43 +126,52 @@ export default function CatalogBrowse({
   const [themeMain, setThemeMain] = useState<string | null>(null);
   const [themeLeaf, setThemeLeaf] = useState<string | null>(null);
 
+  // PR378 — the opened brand's SKUs, fetched on demand; a req counter drops stale responses.
+  const [brandSkus, setBrandSkus] = useState<BrowseSku[]>([]);
+  const [skusLoading, setSkusLoading] = useState(false);
+  const brandReqRef = useRef(0);
+
+  // PR378 — brand counts: paint from localStorage instantly (stale), then revalidate in the background
+  // so newly-added SKUs are reflected. FACET_CACHE keeps it instant across SPA navigation within a session.
   useEffect(() => {
     if (!active || loadedRef.current) return;
     loadedRef.current = true;
-    setLoading(true);
-    getCatalogFacetData().then((d) => { FACET_CACHE = d; setData(d); }).catch(() => setData({ skus: [], brands: [] })).finally(() => setLoading(false));
+    if (!FACET_CACHE) {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        const cached = raw ? JSON.parse(raw) : null;
+        if (cached?.brands?.length) { FACET_CACHE = cached; setData(cached); }
+      } catch { /* ignore unavailable/corrupt storage */ }
+    }
+    if (!FACET_CACHE) setLoading(true);
+    getCatalogFacetData()
+      .then((d) => { FACET_CACHE = d; setData(d); try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch { /* quota */ } })
+      .catch(() => { if (!FACET_CACHE) setData({ brands: [] }); })
+      .finally(() => setLoading(false));
   }, [active]);
 
-  const rows = useMemo(() => {
-    if (!data) return [] as (BrowseSku & { _region: string; _country: string })[];
-    const byPrefix = new Map(data.brands.map((b) => [b.prefix, b]));
-    return data.skus.map((s) => {
-      const b = s.brand_prefix ? byPrefix.get(s.brand_prefix) : undefined;
-      return { ...s, _region: regionOf(b?.country ?? null), _country: countryOf(b?.country ?? null) };
-    });
-  }, [data]);
-  const brandName = useMemo(() => new Map((data?.brands ?? []).map((b) => [b.prefix, b.name])), [data]);
+  const brands = data?.brands ?? [];
+  const brandName = useMemo(() => new Map(brands.map((b) => [b.prefix, b.name])), [brands]);
 
-  // ── geography aggregates, sorted A–Z (PR187) ──
+  // ── geography aggregates from per-brand counts, sorted A–Z (PR378) ──
   const regionRows = useMemo(() => {
     const m = new Map<string, number>();
-    for (const s of rows) m.set(s._region, (m.get(s._region) ?? 0) + 1);
+    for (const b of brands) if (b.count > 0) { const r = regionOf(b.country); m.set(r, (m.get(r) ?? 0) + b.count); }
     return REGIONS.map((r) => ({ key: r, count: m.get(r) ?? 0 })).filter((r) => r.count > 0).sort((a, b) => a.key.localeCompare(b.key));
-  }, [rows]);
+  }, [brands]);
   const countryRows = useMemo(() => {
     if (!region) return [];
     const m = new Map<string, number>();
-    for (const s of rows) if (s._region === region) m.set(s._country, (m.get(s._country) ?? 0) + 1);
+    for (const b of brands) if (b.count > 0 && regionOf(b.country) === region) { const c = countryOf(b.country); m.set(c, (m.get(c) ?? 0) + b.count); }
     return [...m.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => azUnspecLast(a.key, b.key));
-  }, [rows, region]);
+  }, [brands, region]);
   const brandRows = useMemo(() => {
     if (!region || !country) return [];
-    const m = new Map<string, number>();
-    for (const s of rows) if (s._region === region && s._country === country && s.brand_prefix) m.set(s.brand_prefix, (m.get(s.brand_prefix) ?? 0) + 1);
-    return [...m.entries()].map(([prefix, count]) => ({ prefix, count, name: brandName.get(prefix) || prefix })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows, region, country, brandName]);
-
-  const brandSkus = useMemo(() => (brand ? rows.filter((s) => s.brand_prefix === brand.prefix) : []), [rows, brand]);
+    return brands
+      .filter((b) => b.count > 0 && regionOf(b.country) === region && countryOf(b.country) === country)
+      .map((b) => ({ prefix: b.prefix, count: b.count, name: b.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [brands, region, country]);
 
   // dimension list — each row shows its distinct-option count (empty dims hidden)
   const dimRows = useMemo(() => {
@@ -187,6 +227,12 @@ export default function CatalogBrowse({
   function pickBrand(prefix: string) {
     setBrand({ prefix, name: brandName.get(prefix) || prefix });
     setDim(null); setOption(null); setThemeOpen(false); setThemeMain(null); setThemeLeaf(null);
+    setBrandSkus([]); setSkusLoading(true);
+    const myReq = ++brandReqRef.current;
+    getBrandSkus(prefix)
+      .then((s) => { if (brandReqRef.current === myReq) setBrandSkus(s); })
+      .catch(() => { if (brandReqRef.current === myReq) setBrandSkus([]); })
+      .finally(() => { if (brandReqRef.current === myReq) setSkusLoading(false); });
   }
 
   if (loading && !data) return <div className="hint fq-empty">Loading catalog…</div>;
@@ -212,6 +258,9 @@ export default function CatalogBrowse({
     if (option != null) crumbs.push({ label: option });
   }
 
+  // a brand's SKUs are loading (or not yet loaded) → show a hint under the breadcrumb
+  const brandLoading = brand != null && skusLoading && brandSkus.length === 0;
+
   return (
     <div className="cat-browse">
       <nav className="cat-crumbs" aria-label="Browse path">
@@ -230,6 +279,7 @@ export default function CatalogBrowse({
         <ul className="cat-tree">
           {regionRows.map((r) => (
             <li key={r.key}><button className="cat-tree-row" onClick={() => { setRegion(r.key); }}>
+              <span className="cat-tree-ico" aria-hidden="true">{REGION_ICON[r.key] || '🌐'}</span>
               <span className="cat-tree-label">{r.key}</span><span className="cat-tree-count">{r.count.toLocaleString()}</span><span className="cat-tree-chev">›</span>
             </button></li>
           ))}
@@ -239,6 +289,7 @@ export default function CatalogBrowse({
         <ul className="cat-tree">
           {countryRows.map((r) => (
             <li key={r.key}><button className="cat-tree-row" onClick={() => { setCountry(r.key); }}>
+              <span className="cat-tree-ico" aria-hidden="true">{countryFlag(r.key)}</span>
               <span className="cat-tree-label">{r.key}</span><span className="cat-tree-count">{r.count.toLocaleString()}</span><span className="cat-tree-chev">›</span>
             </button></li>
           ))}
@@ -248,6 +299,7 @@ export default function CatalogBrowse({
         <ul className="cat-tree">
           {brandRows.map((b) => (
             <li key={b.prefix}><button className="cat-tree-row" onClick={() => pickBrand(b.prefix)}>
+              <span className="cat-mono" aria-hidden="true" style={{ background: brandColor(b.prefix) }}>{brandInitials(b.name)}</span>
               <span className="cat-tree-label">{b.name} <span className="cat-tree-sub">{b.prefix}</span></span>
               <span className="cat-tree-count">{b.count.toLocaleString()}</span><span className="cat-tree-chev">›</span>
             </button></li>
@@ -257,6 +309,7 @@ export default function CatalogBrowse({
 
       {/* Step 4: the brand's dimension list (Theme expands inline into main themes → brand's themes) */}
       {step === 'dim' && (
+        brandLoading ? <div className="hint fq-empty">Loading {brand?.name}…</div> : (
         <ul className="cat-tree">
           {dimRows.map(({ dim: d, options }) => {
             if (d.key === 'theme') {
@@ -289,6 +342,7 @@ export default function CatalogBrowse({
             );
           })}
         </ul>
+        )
       )}
 
       {/* Step 5: a dimension's options, as list rows with count pills */}
