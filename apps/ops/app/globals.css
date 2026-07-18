@@ -927,8 +927,10 @@ button.po-pick-btn:active { background: var(--paper); }
 .cat-bc-cell .cat-bc-chip { font-size: 14px; padding: 6px 11px; }
 .cat-bc-add-float { margin-left: auto; }
 /* PR366 — hide the native number-input spinner on Piece count (no "easy-adjust" up/down arrows). */
-.no-spin::-webkit-outer-spin-button, .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.no-spin { -moz-appearance: textfield; appearance: textfield; }
+/* PR376 — also drop the spinner on every Dimensions-panel number field (Product/Box L·W·H, real weight). */
+.no-spin::-webkit-outer-spin-button, .no-spin::-webkit-inner-spin-button,
+.cat-dims input[type="number"]::-webkit-outer-spin-button, .cat-dims input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.no-spin, .cat-dims input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 /* PR370 — Multipack / Blind Box per-unit rows (pieces · L × W × H) */
 .cat-comp { margin-top: 6px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .cat-comp-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
@@ -964,7 +966,6 @@ button.po-pick-btn:active { background: var(--paper); }
    card so the size group reads as separate from the classification fields above it. */
 .cat-dims { margin-top: 12px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
 .cat-dims .cat-round { margin-bottom: 10px; }
-.cat-dims .cat-grid input { background: var(--paper); }
 
 /* PR191 — the two AUTOFILLED classification fields (read-only, derived from the geometry) */
 .cat-auto { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
@@ -1911,6 +1912,17 @@ input.batch-field, select.batch-field {
 }
 /* PR250 — a catalogue SKU's code can't be recoded here: locked look (greyed fill, muted text, not-allowed). */
 .le-field input.le-locked { background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1; }
+/* PR376 — THE disabled/locked look for a standard form field, app-wide. Mirrors the Confirm "Source"
+   box (.po-ro-locked) and the .le-locked SKU-code field: paper fill + muted text so an uneditable field
+   (e.g. Product W when "round / uses a diameter" is on) reads clearly as disabled, not just faintly greyed. */
+.field:disabled,
+.le-field input:disabled,
+.po-field input[type=text]:disabled, .po-field input[type=number]:disabled, .po-field input[type=date]:disabled, .po-field input[type=tel]:disabled, .po-field select:disabled, .po-field textarea:disabled,
+.rcv-le-field input:disabled,
+.rcv-map-field input:disabled,
+.batch-field:disabled {
+  background: var(--paper); color: var(--muted); -webkit-text-fill-color: var(--muted); cursor: not-allowed; opacity: 1;
+}
 /* PR254 — the Qty stepper in the Edit PO row keeps its natural width; without this the full-width
    .le-field input standard (above) stretches the stepper and starves Priority (mirrors line ~697). */
 .le-field .qty-step input[type=number] { width: 46px; padding: 0; border-radius: 0; font-size: 14px; background: white; }
