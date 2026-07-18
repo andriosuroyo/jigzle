@@ -1568,6 +1568,8 @@ img.sku-img { background: #e8e8e8; }
 .cust-danger-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 /* PR325 — Fix-tab sub-tab strip (one underline tab per maintenance list) + the active list's heading */
 .cust-fix-tabs { margin-top: 12px; }
+/* PR380 — Catalog → Fix: the maintenance-list sub-tab strip (reuses .fq-filters). */
+.cat-fix-tabs { margin-bottom: 14px; }
 .cust-fix-head { margin-top: 14px; }
 /* ── Data health page ── */
 .dh-intro { margin: 12px 0 4px; line-height: 1.5; }

@@ -206,6 +206,23 @@ function buildPatch(orig: CatalogueRow, form: FormState): Partial<CatalogueRow> 
 
 type Tab = 'search' | 'browse' | 'fix';
 
+// PR380 — the Fix tab's maintenance lists, each its own lazy sub-tab (underline strip, Customer-Fix
+// style). 'needs' + 'shared' are always loaded (they drive the Fix tab badge); the rest fetch on open.
+type FixKey = 'needs' | 'shared' | 'untranslated' | 'nopieces' | 'implausible' | 'offlist' | 'submismatch' | 'noimage' | 'noweight' | 'dupes';
+const CAT_FIX_LISTS: { key: FixKey; label: string }[] = [
+  { key: 'needs', label: 'Needs review' },
+  { key: 'shared', label: 'Shared barcodes' },
+  { key: 'untranslated', label: 'Untranslated names' },
+  { key: 'nopieces', label: 'Missing piece count' },
+  { key: 'implausible', label: 'Implausible dims / weight' },
+  { key: 'offlist', label: 'Off-list classification' },
+  { key: 'submismatch', label: 'Sub ≠ product type' },
+  { key: 'noimage', label: 'Missing image' },
+  { key: 'noweight', label: 'Missing weight' },
+  { key: 'dupes', label: 'Likely duplicates' },
+];
+const CAT_FIX_KEYS = CAT_FIX_LISTS.map((l) => l.key);
+
 // PR185 — the item bodyview groups every field into sub-tabs (GROUPS) + a Barcodes tab, styled like the
 // system's tab lists. Short labels for the sub-tab row.
 const GROUP_TABS = ['Identity', 'Specs', 'Links']; // PR369 — Classification + Dimensions merged into Specs
@@ -271,14 +288,17 @@ export default function CatalogBoard({
   const [detailTab, setDetailTab] = useState(0); // PR185: which field sub-tab of the item bodyview
   const [needsReview, setNeedsReview] = useState<CatalogueListRow[]>(initialNeedsReview);
   const [shared, setShared] = useState<CollisionRow[]>(initialShared);
-  // PR208 — extra Fix data-quality lists, lazy-loaded the first time the Fix tab opens (keeps /catalog fast)
-  const [fixExtra, setFixExtra] = useState<{ untranslated: CatalogueListRow[]; puzzleNoPieces: CatalogueListRow[]; implausible: CatalogueListRow[]; offList: OffListRow[]; missingWeight: MissingWeightRow[] } | null>(null);
-  const fixLoadedRef = useRef(false);
-  // PR210 — likely-duplicate groups load separately (a full-catalogue scan) so the fast lists show first
+  // PR380 — each Fix list is its own sub-tab and loads ONLY when that sub-tab is opened (null = not
+  // fetched yet). Needs review (a prop) and Shared barcodes (loaded on mount for the tab badge) are
+  // always present; the rest lazy-load on demand — no more scanning every list when Fix opens.
+  const [fixList, setFixList] = useUrlTab<FixKey>('list', 'needs', CAT_FIX_KEYS);
+  const [untranslated, setUntranslated] = useState<CatalogueListRow[] | null>(null);
+  const [noPieces, setNoPieces] = useState<CatalogueListRow[] | null>(null);
+  const [implausible, setImplausible] = useState<CatalogueListRow[] | null>(null);
+  const [offList, setOffList] = useState<OffListRow[] | null>(null);
+  const [missingWeight, setMissingWeight] = useState<MissingWeightRow[] | null>(null);
   const [dupes, setDupes] = useState<DupGroup[] | null>(null);
-  // PR212 — missing-image list also loads separately (a moderate bucket scan)
   const [missingImg, setMissingImg] = useState<CatalogueListRow[] | null>(null);
-  // PR371 — sub type ↔ product type mismatch (a full-catalogue pair scan, loaded separately)
   const [subMismatch, setSubMismatch] = useState<import('@/app/catalog/actions').SubMismatchRow[] | null>(null);
 
   const [search, setSearch] = useState('');
@@ -424,23 +444,26 @@ export default function CatalogBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // PR208 — lazy-load the extra Fix lists the first time the Fix tab is opened.
+  // PR380 — load the SELECTED Fix sub-tab's list on demand (once; null → not fetched yet). Nothing else
+  // is scanned until you open it, so the Fix tab is cheap regardless of how many lists exist.
   useEffect(() => {
-    if (tab !== 'fix' || fixLoadedRef.current) return;
-    fixLoadedRef.current = true;
-    Promise.all([getUntranslated(), getPuzzleNoPieces(), getImplausibleDims(), getOffListClassification(), getMissingWeight()])
-      .then(([untranslated, puzzleNoPieces, implausible, offList, missingWeight]) => setFixExtra({ untranslated, puzzleNoPieces, implausible, offList, missingWeight }))
-      .catch(() => {});
-    getCatalogDuplicates().then(setDupes).catch(() => setDupes([])); // separate: full-catalogue scan
-    getMissingImage().then(setMissingImg).catch(() => setMissingImg([])); // separate: bucket scan
-    getSubTypeMismatch().then(setSubMismatch).catch(() => setSubMismatch([])); // PR371: full-catalogue pair scan
-  }, [tab]);
+    if (tab !== 'fix') return;
+    if (fixList === 'untranslated' && untranslated === null) getUntranslated().then(setUntranslated).catch(() => setUntranslated([]));
+    else if (fixList === 'nopieces' && noPieces === null) getPuzzleNoPieces().then(setNoPieces).catch(() => setNoPieces([]));
+    else if (fixList === 'implausible' && implausible === null) getImplausibleDims().then(setImplausible).catch(() => setImplausible([]));
+    else if (fixList === 'offlist' && offList === null) getOffListClassification().then(setOffList).catch(() => setOffList([]));
+    else if (fixList === 'noweight' && missingWeight === null) getMissingWeight().then(setMissingWeight).catch(() => setMissingWeight([]));
+    else if (fixList === 'submismatch' && subMismatch === null) getSubTypeMismatch().then(setSubMismatch).catch(() => setSubMismatch([]));
+    else if (fixList === 'noimage' && missingImg === null) getMissingImage().then(setMissingImg).catch(() => setMissingImg([]));
+    else if (fixList === 'dupes' && dupes === null) getCatalogDuplicates().then(setDupes).catch(() => setDupes([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, fixList]);
 
   // PR211 — accept a SKU's estimated weight into its real weight, then drop it from the list.
   async function acceptWeight(itemCode: string) {
     const { error } = await acceptEstimatedWeight(itemCode);
     if (error) return;
-    setFixExtra((prev) => (prev ? { ...prev, missingWeight: prev.missingWeight.filter((r) => r.item_code !== itemCode) } : prev));
+    setMissingWeight((prev) => (prev ? prev.filter((r) => r.item_code !== itemCode) : prev));
   }
 
   function switchTab(t: Tab) {
@@ -750,6 +773,22 @@ export default function CatalogBoard({
 
   // PR208 — shared renderer for a Fix data-quality list (mirrors the Needs-review list markup).
   const fixCount2 = (n: number) => (n >= 300 ? '300+' : String(n));
+  // PR380 — a Fix sub-tab's count pill: known for needs/shared (always loaded) and for any list already
+  // fetched; null (no pill) until a lazy list is opened.
+  const fixCountFor = (k: FixKey): number | null => {
+    switch (k) {
+      case 'needs': return needsReview.length;
+      case 'shared': return shared.length;
+      case 'untranslated': return untranslated?.length ?? null;
+      case 'nopieces': return noPieces?.length ?? null;
+      case 'implausible': return implausible?.length ?? null;
+      case 'offlist': return offList?.length ?? null;
+      case 'submismatch': return subMismatch?.length ?? null;
+      case 'noimage': return missingImg?.length ?? null;
+      case 'noweight': return missingWeight?.length ?? null;
+      case 'dupes': return dupes?.length ?? null;
+    }
+  };
   function renderFixList(rows: CatalogueListRow[], empty: string, badge: string) {
     return (
       <ul className="fq-list">
@@ -1408,165 +1447,186 @@ export default function CatalogBoard({
               <CatalogBrowse active={tab === 'browse'} onOpenSku={openSku} selectedCode={detail?.sku.item_code ?? null} />
             )}
 
-            {/* FIX — the two maintenance queues (resolve until each hits 0) */}
+            {/* FIX — maintenance lists, each its own lazy sub-tab (PR380). Only the selected list loads
+                + renders; needs-review / shared were already loaded (they drive the Fix tab badge). */}
             {tab === 'fix' && (
               <div className="cat-fix">
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Needs review ({needsReview.length})</div>
-                  <ul className="fq-list">
-                    {needsReview.length === 0 && <li><div className="hint fq-empty">All clear — nothing needs review.</div></li>}
-                    {needsReview.map((r) => (
-                      <li key={r.item_code}>
-                        <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
-                          <div className="cat-row">
-                            <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
-                            <div className="cat-row-main">
-                              <div className="fq-row-top">
-                                <span className="fq-id">{r.item_code}</span>
-                                <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>
-                              </div>
-                              <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
-                            </div>
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                <div className="fq-filters cat-fix-tabs" role="tablist" aria-label="Fix lists">
+                  {CAT_FIX_LISTS.map((l) => {
+                    const c = fixCountFor(l.key);
+                    return (
+                      <button key={l.key} role="tab" aria-selected={fixList === l.key} className={`fq-filter ${fixList === l.key ? 'active' : ''}`} onClick={() => setFixList(l.key)}>
+                        {l.label}{c != null && <span className="fq-filter-count">{fixCount2(c)}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
 
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Shared barcodes ({shared.length})</div>
-                  <ul className="fq-list">
-                    {shared.length === 0 && <li><div className="hint fq-empty">No shared barcodes.</div></li>}
-                    {shared.map((c) => (
-                      <li key={c.barcode}>
-                        <button className="fq-row" onClick={() => openCollision(c)} disabled={busy}>
-                          <div className="fq-row-top">
-                            <span className="fq-id">{c.barcode}</span>
-                            <span className="po-status forwarder">{c.n} SKUs</span>
-                          </div>
-                          <div className="fq-row-bot"><span>{c.item_codes.join(', ')}</span></div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-
-                {/* PR208 — extra data-quality lists (lazy-loaded on first Fix open) */}
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Untranslated names ({fixExtra ? fixCount2(fixExtra.untranslated.length) : '…'})</div>
-                  {!fixExtra ? <div className="hint">Loading…</div> : renderFixList(fixExtra.untranslated, 'All named items are translated.', 'no translation')}
-                </section>
-
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Puzzles missing piece count ({fixExtra ? fixCount2(fixExtra.puzzleNoPieces.length) : '…'})</div>
-                  {!fixExtra ? <div className="hint">Loading…</div> : renderFixList(fixExtra.puzzleNoPieces, 'Every puzzle has a piece count.', 'no piece count')}
-                </section>
-
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Implausible dimensions / weight ({fixExtra ? fixCount2(fixExtra.implausible.length) : '…'})</div>
-                  {!fixExtra ? <div className="hint">Loading…</div> : renderFixList(fixExtra.implausible, 'No out-of-range dimensions or weights.', 'check values')}
-                </section>
-
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Off-list classification ({fixExtra ? fixCount2(fixExtra.offList.length) : '…'})</div>
-                  {!fixExtra ? <div className="hint">Loading…</div> : (
+                {fixList === 'needs' && (
+                  <section className="cat-fix-sec">
                     <ul className="fq-list">
-                      {fixExtra.offList.length === 0 && <li><div className="hint fq-empty">All product/sub/piece types match the Settings lists.</div></li>}
-                      {fixExtra.offList.map((r, i) => (
-                        <li key={`${r.item_code}-${r.field}-${i}`}>
-                          <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
-                            <div className="cat-row">
-                              <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
-                              <div className="cat-row-main">
-                                <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.field.replace('_type', '')}: {r.value}</span></div>
-                                <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
-                              </div>
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-
-                {/* PR371 — the (product type · sub type) PAIR isn't in the Settings list (a valid sub-type
-                    filed under the wrong product type). Add the pairing in Settings, or fix the SKU. */}
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Sub type ≠ product type ({subMismatch ? fixCount2(subMismatch.length) : '…'})</div>
-                  {!subMismatch ? <div className="hint">Scanning the catalogue…</div> : (
-                    <ul className="fq-list">
-                      {subMismatch.length === 0 && <li><div className="hint fq-empty">Every sub type matches its product type in the Settings list.</div></li>}
-                      {subMismatch.map((r) => (
+                      {needsReview.length === 0 && <li><div className="hint fq-empty">All clear — nothing needs review.</div></li>}
+                      {needsReview.map((r) => (
                         <li key={r.item_code}>
                           <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
-                            <div className="cat-row">
-                              <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
-                              <div className="cat-row-main">
-                                <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.sub_type} ⁄ {r.product_type}</span></div>
-                                <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
-                              </div>
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Missing image ({missingImg ? fixCount2(missingImg.length) : '…'})</div>
-                  {!missingImg ? <div className="hint">Scanning images…</div> : renderFixList(missingImg, 'Every SKU has an image (or is marked “no picture available”).', 'no image')}
-                </section>
-
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Missing weight — estimate ready ({fixExtra ? fixCount2(fixExtra.missingWeight.length) : '…'})</div>
-                  {!fixExtra ? <div className="hint">Loading…</div> : (
-                    <ul className="fq-list">
-                      {fixExtra.missingWeight.length === 0 && <li><div className="hint fq-empty">No SKUs are missing a weight (with an estimate available).</div></li>}
-                      {fixExtra.missingWeight.map((r) => (
-                        <li key={r.item_code}>
-                          <div className="fq-row" style={{ cursor: 'default' }}>
                             <div className="cat-row">
                               <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
                               <div className="cat-row-main">
                                 <div className="fq-row-top">
-                                  <button className="btn-link" style={{ padding: 0 }} onClick={() => openSku(r.item_code)} disabled={busy}>{r.item_code}</button>
-                                  <span className="fq-cust">{r.name}</span>
+                                  <span className="fq-id">{r.item_code}</span>
+                                  <span className="po-status processing" style={{ marginLeft: 'auto' }}>needs review</span>
                                 </div>
-                                <div className="fq-row-bot">
-                                  <span>{r.pieces ? `${r.pieces} pc` : '—'} · est <b>{r.est_weight} g</b></span>
-                                  <button className="btn-brown" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: 12 }} onClick={() => acceptWeight(r.item_code)} disabled={busy}>accept</button>
+                                <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
+                              </div>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {fixList === 'shared' && (
+                  <section className="cat-fix-sec">
+                    <ul className="fq-list">
+                      {shared.length === 0 && <li><div className="hint fq-empty">No shared barcodes.</div></li>}
+                      {shared.map((c) => (
+                        <li key={c.barcode}>
+                          <button className="fq-row" onClick={() => openCollision(c)} disabled={busy}>
+                            <div className="fq-row-top">
+                              <span className="fq-id">{c.barcode}</span>
+                              <span className="po-status forwarder">{c.n} SKUs</span>
+                            </div>
+                            <div className="fq-row-bot"><span>{c.item_codes.join(', ')}</span></div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {fixList === 'untranslated' && (
+                  <section className="cat-fix-sec">
+                    {untranslated === null ? <div className="hint">Loading…</div> : renderFixList(untranslated, 'All named items are translated.', 'no translation')}
+                  </section>
+                )}
+
+                {fixList === 'nopieces' && (
+                  <section className="cat-fix-sec">
+                    {noPieces === null ? <div className="hint">Loading…</div> : renderFixList(noPieces, 'Every puzzle has a piece count.', 'no piece count')}
+                  </section>
+                )}
+
+                {fixList === 'implausible' && (
+                  <section className="cat-fix-sec">
+                    {implausible === null ? <div className="hint">Loading…</div> : renderFixList(implausible, 'No out-of-range dimensions or weights.', 'check values')}
+                  </section>
+                )}
+
+                {fixList === 'offlist' && (
+                  <section className="cat-fix-sec">
+                    {offList === null ? <div className="hint">Loading…</div> : (
+                      <ul className="fq-list">
+                        {offList.length === 0 && <li><div className="hint fq-empty">All product/sub/piece types match the Settings lists.</div></li>}
+                        {offList.map((r, i) => (
+                          <li key={`${r.item_code}-${r.field}-${i}`}>
+                            <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
+                              <div className="cat-row">
+                                <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                                <div className="cat-row-main">
+                                  <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.field.replace('_type', '')}: {r.value}</span></div>
+                                  <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
+                                </div>
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
+
+                {/* PR371 — the (product type · sub type) PAIR isn't in the Settings list (a valid sub-type
+                    filed under the wrong product type). Add the pairing in Settings, or fix the SKU. */}
+                {fixList === 'submismatch' && (
+                  <section className="cat-fix-sec">
+                    {subMismatch === null ? <div className="hint">Scanning the catalogue…</div> : (
+                      <ul className="fq-list">
+                        {subMismatch.length === 0 && <li><div className="hint fq-empty">Every sub type matches its product type in the Settings list.</div></li>}
+                        {subMismatch.map((r) => (
+                          <li key={r.item_code}>
+                            <button className="fq-row" onClick={() => openSku(r.item_code)} disabled={busy}>
+                              <div className="cat-row">
+                                <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                                <div className="cat-row-main">
+                                  <div className="fq-row-top"><span className="fq-id">{r.item_code}</span><span className="po-status processing" style={{ marginLeft: 'auto' }}>{r.sub_type} ⁄ {r.product_type}</span></div>
+                                  <div className="fq-row-bot"><span className="cat-row-name">{r.name}</span></div>
+                                </div>
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
+
+                {fixList === 'noimage' && (
+                  <section className="cat-fix-sec">
+                    {missingImg === null ? <div className="hint">Scanning images…</div> : renderFixList(missingImg, 'Every SKU has an image (or is marked “no picture available”).', 'no image')}
+                  </section>
+                )}
+
+                {fixList === 'noweight' && (
+                  <section className="cat-fix-sec">
+                    {missingWeight === null ? <div className="hint">Loading…</div> : (
+                      <ul className="fq-list">
+                        {missingWeight.length === 0 && <li><div className="hint fq-empty">No SKUs are missing a weight (with an estimate available).</div></li>}
+                        {missingWeight.map((r) => (
+                          <li key={r.item_code}>
+                            <div className="fq-row" style={{ cursor: 'default' }}>
+                              <div className="cat-row">
+                                <SkuImage status={imgMap[r.item_code]?.status} displayUrl={imgMap[r.item_code]?.displayUrl} name={r.name} size={SKU_IMG.sm} />
+                                <div className="cat-row-main">
+                                  <div className="fq-row-top">
+                                    <button className="btn-link" style={{ padding: 0 }} onClick={() => openSku(r.item_code)} disabled={busy}>{r.item_code}</button>
+                                    <span className="fq-cust">{r.name}</span>
+                                  </div>
+                                  <div className="fq-row-bot">
+                                    <span>{r.pieces ? `${r.pieces} pc` : '—'} · est <b>{r.est_weight} g</b></span>
+                                    <button className="btn-brown" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: 12 }} onClick={() => acceptWeight(r.item_code)} disabled={busy}>accept</button>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
 
-                <section className="cat-fix-sec">
-                  <div className="cat-grp-title">Likely duplicates ({dupes ? (dupes.length >= 200 ? '200+' : dupes.length) : '…'})</div>
-                  {!dupes ? <div className="hint">Scanning the catalogue…</div> : (
-                    <ul className="fq-list">
-                      {dupes.length === 0 && <li><div className="hint fq-empty">No likely duplicates (same name + brand + piece count).</div></li>}
-                      {dupes.map((g) => (
-                        <li key={g.members.map((m) => m.item_code).join(',')}>
-                          <div className="fq-row" style={{ cursor: 'default' }}>
-                            <div className="fq-row-top"><span className="fq-cust">{g.name}</span><span className="po-status forwarder" style={{ marginLeft: 'auto' }}>{g.members.length} SKUs</span></div>
-                            <div className="fq-row-bot" style={{ flexWrap: 'wrap', gap: 8 }}>
-                              {g.members.map((m) => (
-                                <button key={m.item_code} className="btn-link" style={{ padding: 0 }} onClick={() => openSku(m.item_code)} disabled={busy}>{m.item_code}</button>
-                              ))}
+                {fixList === 'dupes' && (
+                  <section className="cat-fix-sec">
+                    {dupes === null ? <div className="hint">Scanning the catalogue…</div> : (
+                      <ul className="fq-list">
+                        {dupes.length === 0 && <li><div className="hint fq-empty">No likely duplicates (same name + brand + piece count).</div></li>}
+                        {dupes.map((g) => (
+                          <li key={g.members.map((m) => m.item_code).join(',')}>
+                            <div className="fq-row" style={{ cursor: 'default' }}>
+                              <div className="fq-row-top"><span className="fq-cust">{g.name}</span><span className="po-status forwarder" style={{ marginLeft: 'auto' }}>{g.members.length} SKUs</span></div>
+                              <div className="fq-row-bot" style={{ flexWrap: 'wrap', gap: 8 }}>
+                                {g.members.map((m) => (
+                                  <button key={m.item_code} className="btn-link" style={{ padding: 0 }} onClick={() => openSku(m.item_code)} disabled={busy}>{m.item_code}</button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
               </div>
             )}
       </div>
