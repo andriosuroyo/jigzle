@@ -940,6 +940,14 @@ button.po-pick-btn:active { background: var(--paper); }
 .cat-comp-row input:not(.cat-comp-pc) { flex: 1 1 46px; }
 .cat-comp-sep, .cat-comp-x { color: var(--muted); font-size: 12px; flex-shrink: 0; }
 .cat-comp-unit { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+/* PR384 — Sets count in the units header, "same as #1" copy toggle, and a per-unit round checkbox. */
+.cat-comp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.cat-comp-sets { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.cat-comp-sets input { width: 60px; height: 34px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; background: white; color: var(--ink); text-align: center; }
+.cat-comp-same { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); cursor: pointer; margin-bottom: 10px; }
+.cat-comp-same input { width: 16px; height: 16px; flex-shrink: 0; }
+.cat-comp-round { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 13px; color: var(--muted); cursor: pointer; }
+.cat-comp-round input { width: 15px; height: 15px; }
 
 /* PR191 — SearchSelect: a searchable single-value combobox (Theme / Artist / classification types) */
 .ss { position: relative; }
@@ -1029,8 +1037,12 @@ img.sku-img { background: #e8e8e8; }
 /* PR383 — Browse SKU list: flow down the page (no 360px scroll window), white rows, and two row-major
    columns on desktop (SKU N left, N+1 right, N+2 next row left). */
 .cat-sku-list { height: auto; max-height: none; overflow: visible; padding: 6px 0; gap: 8px; }
-.cat-sku-list .fq-row { background: white; }
-@media (min-width: 720px) { .cat-sku-list { display: grid; grid-template-columns: 1fr 1fr; align-content: start; } }
+.cat-sku-list .fq-row { background: white; min-width: 0; }
+/* PR385 — minmax(0,1fr) lets the two columns shrink so a long name can't push the grid past the 1100px
+   content width; the code + name then clip with "…". */
+@media (min-width: 720px) { .cat-sku-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-content: start; } }
+.cat-sku-list > li, .cat-sku-list .cat-row, .cat-sku-list .fq-row-top, .cat-sku-list .fq-row-bot { min-width: 0; }
+.cat-sku-list .fq-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* PR378 — leading visual on a geography/brand row: a region/country emoji, or a brand monogram avatar. */
 .cat-tree-ico { flex-shrink: 0; width: 26px; text-align: center; font-size: 21px; line-height: 1; }
 .cat-mono { flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; }
