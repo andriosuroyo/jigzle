@@ -18,6 +18,7 @@ import ExportCourierSettings from '@/components/ExportCourierSettings';
 import CnAddressSettings from '@/components/CnAddressSettings';
 import DeclarationUserSettings from '@/components/DeclarationUserSettings';
 import SearchAliasSettings from '@/components/SearchAliasSettings';
+import BrandLogoSettings from '@/components/BrandLogoSettings';
 import FlagSelect from '@/components/FlagSelect';
 import { useOverlayClose } from '@/components/useOverlayClose';
 import type { Supplier, Forwarder } from '@jigzle/db/types';
@@ -196,7 +197,7 @@ const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SEC
 
 // ── categories: the landing grouping. A tab is either a generic settings list (kind) or the bespoke
 //    Suppliers editor (custom). ──
-type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'forwarders' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'cn_address' };
+type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'forwarders' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'brand_logos' } | { custom: 'cn_address' };
 type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
 
 const CATEGORIES: Category[] = [
@@ -205,7 +206,7 @@ const CATEGORIES: Category[] = [
   { key: 'inbound', title: 'Inbound', sub: 'Labels for the receiving flow and warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'inbound_labels' }, { kind: 'staff' }] },
   { key: 'purchasing', title: 'Purchasing', sub: 'Sources, shipment codes, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
-  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists and search aliases for the Catalog item editor and Items search.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { custom: 'search_alias' }] },
+  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brand logos for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
   { key: 'docgen', title: 'Doc Generator', sub: 'Reusable addresses for the customs documents.', tabs: [{ custom: 'cn_address' }] },
 ];
 const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
@@ -304,6 +305,7 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
     if (t.custom === 'suppliers') return 'Sources';
     if (t.custom === 'declaration_user') return 'Declaration users';
     if (t.custom === 'search_alias') return 'Search aliases';
+    if (t.custom === 'brand_logos') return 'Brand logos';
     if (t.custom === 'cn_address') return 'CN addresses';
     return 'Export couriers';
   }
@@ -542,6 +544,8 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
                     <DeclarationUserSettings embedded />
                   ) : t.custom === 'search_alias' ? (
                     <SearchAliasSettings embedded />
+                  ) : t.custom === 'brand_logos' ? (
+                    <BrandLogoSettings embedded />
                   ) : t.custom === 'cn_address' ? (
                     <CnAddressSettings embedded />
                   ) : (

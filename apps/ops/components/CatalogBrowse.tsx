@@ -17,6 +17,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import SkuImage from '@/components/SkuImage';
 import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
+import BrandAvatar from '@/components/BrandAvatar';
 import { getCatalogFacetData, getBrandSkus } from '@/app/catalog/actions';
 import type { BrowseBrand, BrowseSku } from '@/app/catalog/types';
 
@@ -42,21 +43,7 @@ const COUNTRY_FLAG: Record<string, string> = {
 };
 const countryFlag = (c: string): string => COUNTRY_FLAG[c] || '🏳️';
 
-// PR378 — brand "logo": a deterministic monogram avatar (initials + a stable colour from the prefix).
-// No asset upload needed; every brand gets a distinct mark. (A real logo image could layer on later via
-// a brands.logo_url without changing this fallback.)
-const MONO_COLORS = ['#7B9E89', '#C08457', '#6B8CAE', '#B0687A', '#9A7BAE', '#B79A3E', '#5FA0A0', '#A8735A'];
-function brandInitials(name: string): string {
-  const w = name.trim().split(/\s+/).filter(Boolean);
-  if (!w.length) return '?';
-  if (w.length === 1) return w[0].slice(0, 2).toUpperCase();
-  return (w[0][0] + w[1][0]).toUpperCase();
-}
-function brandColor(key: string): string {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return MONO_COLORS[h % MONO_COLORS.length];
-}
+// PR379 — the brand mark (logo image, else a monogram) lives in the shared <BrandAvatar>.
 
 const PIECE_BUCKETS: { key: string; lo: number; hi: number }[] = [
   { key: '< 100', lo: 0, hi: 100 },
@@ -99,6 +86,65 @@ const DIMS: { key: DimKey; label: string; valueOf: (s: BrowseSku) => string; buc
   { key: 'artist', label: 'Artist', valueOf: (s) => s.artist || UNSPEC },
 ];
 
+// PR381 — icons. Each DIMENSION has one fixed icon (same for every brand). Each OPTION gets a suitable
+// icon too: Artist options use the monogram avatar (initials + stable colour); the rest map by value
+// with a sensible fallback to the dimension's own icon.
+const DIM_ICON: Record<DimKey, string> = {
+  type: '🏷️', pieces: '🧩', material: '🧱', effect: '✨', theme: '🎨', artist: '🖌️',
+};
+const TYPE_ICON: Record<string, string> = {
+  'Jigsaw Puzzle': '🧩', '3D Puzzle': '🧊', 'Kids Puzzle': '🧸', "Children's Puzzle": '🧸',
+  'Board Game': '🎲', 'Accessories': '🧰', 'Wood Craft': '🪵', 'Wooden Puzzle': '🪵',
+  'Metal Puzzle': '⚙️', 'Sticker': '🏷️', 'Stationery': '✏️', 'Model Kit': '🛠️',
+};
+const MATERIAL_ICON: Record<string, string> = {
+  'Wooden': '🪵', 'Wood': '🪵', 'Crystal': '💎', 'Cork': '🟫', 'Foam': '🧽', 'Paper': '📄',
+  'Plastic': '🧊', 'Acrylic': '🧊', 'Metal': '⚙️', 'Glass': '🔷', 'Ceramic': '🏺', 'Fabric': '🧵', 'Cardboard': '📦',
+};
+function effectIcon(v: string): string {
+  const l = v.toLowerCase();
+  if (l.includes('glow')) return '🌙';
+  if (l.includes('2.5d')) return '🔲';
+  if (l.includes('3d')) return '🧊';
+  if (l.includes('metal') || l.includes('foil')) return '✨';
+  if (l.includes('holo') || l.includes('rainbow')) return '🌈';
+  if (l.includes('lenticular')) return '🎞️';
+  if (l.includes('activity')) return '🎯';
+  if (l.includes('number')) return '🔢';
+  return DIM_ICON.effect;
+}
+function themeIcon(main: string): string {
+  const l = main.toLowerCase();
+  if (l.includes('animal')) return '🐾';
+  if (l.includes('charact')) return '🦸';
+  if (l.includes('anime') || l.includes('manga')) return '🌸';
+  if (l.includes('art')) return '🖼️';
+  if (l.includes('land') || l.includes('scen') || l.includes('city') || l.includes('travel')) return '🏞️';
+  if (l.includes('flower') || l.includes('floral')) return '🌷';
+  if (l.includes('nature') || l.includes('plant')) return '🌿';
+  if (l.includes('food') || l.includes('sweet')) return '🍰';
+  if (l.includes('movie') || l.includes('film')) return '🎬';
+  if (l.includes('space') || l.includes('galaxy')) return '🚀';
+  if (l.includes('map')) return '🗺️';
+  if (l.includes('vehicle') || l.includes('car') || l.includes('train')) return '🚗';
+  if (l.includes('holiday') || l.includes('christmas')) return '🎄';
+  if (l.includes('fantasy') || l.includes('dragon')) return '🐉';
+  if (l.includes('religio') || l.includes('buddh')) return '🛕';
+  return DIM_ICON.theme;
+}
+// An option's icon (non-Artist; Artist renders a monogram avatar instead).
+function optionIcon(dimKey: DimKey, value: string): string {
+  if (value === UNSPEC) return '❔';
+  switch (dimKey) {
+    case 'type': return TYPE_ICON[value] ?? DIM_ICON.type;
+    case 'pieces': return DIM_ICON.pieces;
+    case 'material': return MATERIAL_ICON[value] ?? DIM_ICON.material;
+    case 'effect': return effectIcon(value);
+    case 'theme': return themeIcon(themeMainOf(value));
+    case 'artist': return DIM_ICON.artist;
+  }
+}
+
 // session cache: the brand-count projection (a few KB) survives SPA navigation.
 let FACET_CACHE: { brands: BrowseBrand[] } | null = null;
 const LS_KEY = 'jz.catalog.browseBrands.v1'; // PR378 — stale-while-revalidate across page loads
@@ -125,6 +171,7 @@ export default function CatalogBrowse({
   const [themeOpen, setThemeOpen] = useState(false);
   const [themeMain, setThemeMain] = useState<string | null>(null);
   const [themeLeaf, setThemeLeaf] = useState<string | null>(null);
+  const [allSkus, setAllSkus] = useState(false); // PR382 — "All SKUs": the brand's SKUs, unfiltered
 
   // PR378 — the opened brand's SKUs, fetched on demand; a req counter drops stale responses.
   const [brandSkus, setBrandSkus] = useState<BrowseSku[]>([]);
@@ -169,15 +216,16 @@ export default function CatalogBrowse({
     if (!region || !country) return [];
     return brands
       .filter((b) => b.count > 0 && regionOf(b.country) === region && countryOf(b.country) === country)
-      .map((b) => ({ prefix: b.prefix, count: b.count, name: b.name }))
+      .map((b) => ({ prefix: b.prefix, count: b.count, name: b.name, logo_url: b.logo_url }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [brands, region, country]);
 
   // dimension list — each row shows its distinct-option count (empty dims hidden)
+  // PR382 — "Unspecified" is dropped from every option list; those SKUs stay reachable via "All SKUs".
   const dimRows = useMemo(() => {
     return DIMS.map((d) => {
       const vals = new Set<string>();
-      for (const s of brandSkus) vals.add(d.valueOf(s));
+      for (const s of brandSkus) { const v = d.valueOf(s); if (v !== UNSPEC) vals.add(v); }
       return { dim: d, options: vals.size };
     }).filter((d) => d.options > 0);
   }, [brandSkus]);
@@ -187,7 +235,7 @@ export default function CatalogBrowse({
     if (!dim || dim === 'theme') return [];
     const d = DIMS.find((x) => x.key === dim)!;
     const m = new Map<string, number>();
-    for (const s of brandSkus) { const v = d.valueOf(s); m.set(v, (m.get(v) ?? 0) + 1); }
+    for (const s of brandSkus) { const v = d.valueOf(s); if (v !== UNSPEC) m.set(v, (m.get(v) ?? 0) + 1); }
     const opts = [...m.entries()].map(([value, count]) => ({ value, count }));
     if (d.bucket) {
       const rank = (v: string) => { const i = PIECE_BUCKETS.findIndex((b) => b.key === v); return i < 0 ? 99 : i; };
@@ -201,32 +249,33 @@ export default function CatalogBrowse({
   // theme: main themes (top segment), and the brand's themes under a main — both A–Z
   const mainThemes = useMemo(() => {
     const m = new Map<string, number>();
-    for (const s of brandSkus) { const seg = themeMainOf(s.theme); m.set(seg, (m.get(seg) ?? 0) + 1); }
-    return [...m.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => azUnspecLast(a.key, b.key));
+    for (const s of brandSkus) { const seg = themeMainOf(s.theme); if (seg !== UNSPEC) m.set(seg, (m.get(seg) ?? 0) + 1); }
+    return [...m.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => a.key.localeCompare(b.key));
   }, [brandSkus]);
   const subThemes = useMemo(() => {
     if (!themeMain) return [];
     const m = new Map<string, number>();
-    for (const s of brandSkus) { const t = normTheme(s.theme); if (themeMainOf(s.theme) === themeMain) m.set(t, (m.get(t) ?? 0) + 1); }
+    for (const s of brandSkus) { const t = normTheme(s.theme); if (t !== UNSPEC && themeMainOf(s.theme) === themeMain) m.set(t, (m.get(t) ?? 0) + 1); }
     return [...m.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value));
   }, [brandSkus, themeMain]);
 
   // the SKUs for the chosen leaf (a non-theme option, or a theme leaf)
   const results = useMemo(() => {
+    if (allSkus) return brandSkus;
     if (themeLeaf != null) return brandSkus.filter((s) => normTheme(s.theme) === themeLeaf);
     if (dim && dim !== 'theme' && option != null) {
       const d = DIMS.find((x) => x.key === dim)!;
       return brandSkus.filter((s) => d.valueOf(s) === option);
     }
     return [];
-  }, [brandSkus, dim, option, themeLeaf]);
+  }, [brandSkus, dim, option, themeLeaf, allSkus]);
 
-  const imgCodes = useMemo(() => results.slice(0, 300).map((r) => r.item_code), [results]);
+  const imgCodes = useMemo(() => results.map((r) => r.item_code), [results]);
   const imgMap = useSkuImages(imgCodes);
 
   function pickBrand(prefix: string) {
     setBrand({ prefix, name: brandName.get(prefix) || prefix });
-    setDim(null); setOption(null); setThemeOpen(false); setThemeMain(null); setThemeLeaf(null);
+    setDim(null); setOption(null); setThemeOpen(false); setThemeMain(null); setThemeLeaf(null); setAllSkus(false);
     setBrandSkus([]); setSkusLoading(true);
     const myReq = ++brandReqRef.current;
     getBrandSkus(prefix)
@@ -240,17 +289,20 @@ export default function CatalogBrowse({
   // which step to render
   const step: 'region' | 'country' | 'brand' | 'dim' | 'option' | 'skus' =
     !region ? 'region' : !country ? 'country' : !brand ? 'brand'
+      : allSkus ? 'skus'
       : themeLeaf != null ? 'skus'
       : dim == null ? 'dim'
       : option == null ? 'option'
       : 'skus';
 
   // breadcrumb (each step jumps back, clearing everything deeper)
-  const crumbs: { label: string; onClick?: () => void }[] = [{ label: 'Regions', onClick: () => { setRegion(null); setCountry(null); setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); } }];
-  if (region) crumbs.push({ label: region, onClick: () => { setCountry(null); setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); } });
-  if (country) crumbs.push({ label: country, onClick: () => { setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); } });
-  if (brand) crumbs.push({ label: brand.name, onClick: () => { setDim(null); setOption(null); setThemeLeaf(null); } });
-  if (themeLeaf != null) {
+  const crumbs: { label: string; onClick?: () => void }[] = [{ label: 'Regions', onClick: () => { setRegion(null); setCountry(null); setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); setAllSkus(false); } }];
+  if (region) crumbs.push({ label: region, onClick: () => { setCountry(null); setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); setAllSkus(false); } });
+  if (country) crumbs.push({ label: country, onClick: () => { setBrand(null); setDim(null); setOption(null); setThemeLeaf(null); setThemeOpen(false); setThemeMain(null); setAllSkus(false); } });
+  if (brand) crumbs.push({ label: brand.name, onClick: () => { setDim(null); setOption(null); setThemeLeaf(null); setAllSkus(false); } });
+  if (allSkus) {
+    crumbs.push({ label: 'All SKUs' });
+  } else if (themeLeaf != null) {
     crumbs.push({ label: 'Theme', onClick: () => { setThemeLeaf(null); setThemeOpen(true); } });
     crumbs.push({ label: themeLeaf });
   } else if (dim && dim !== 'theme') {
@@ -299,7 +351,7 @@ export default function CatalogBrowse({
         <ul className="cat-tree">
           {brandRows.map((b) => (
             <li key={b.prefix}><button className="cat-tree-row" onClick={() => pickBrand(b.prefix)}>
-              <span className="cat-mono" aria-hidden="true" style={{ background: brandColor(b.prefix) }}>{brandInitials(b.name)}</span>
+              <BrandAvatar name={b.name} prefix={b.prefix} logoUrl={b.logo_url} />
               <span className="cat-tree-label">{b.name} <span className="cat-tree-sub">{b.prefix}</span></span>
               <span className="cat-tree-count">{b.count.toLocaleString()}</span><span className="cat-tree-chev">›</span>
             </button></li>
@@ -316,17 +368,20 @@ export default function CatalogBrowse({
               return (
                 <Fragment key="theme">
                   <li><button className="cat-tree-row" onClick={() => setThemeOpen((o) => !o)}>
+                    <span className="cat-tree-ico" aria-hidden="true">{DIM_ICON.theme}</span>
                     <span className="cat-tree-label">Theme</span><span className="cat-tree-count">{mainThemes.length}</span>
                     <span className="cat-tree-chev">{themeOpen ? '▾' : '›'}</span>
                   </button></li>
                   {themeOpen && mainThemes.map((mt) => (
                     <Fragment key={mt.key}>
                       <li><button className="cat-tree-row cat-tree-nest1" onClick={() => setThemeMain((m) => (m === mt.key ? null : mt.key))}>
+                        <span className="cat-tree-ico" aria-hidden="true">{themeIcon(mt.key)}</span>
                         <span className="cat-tree-label">{mt.key}</span><span className="cat-tree-count">{mt.count}</span>
                         <span className="cat-tree-chev">{themeMain === mt.key ? '▾' : '›'}</span>
                       </button></li>
                       {themeMain === mt.key && subThemes.map((st) => (
                         <li key={st.value}><button className="cat-tree-row cat-tree-nest2" onClick={() => setThemeLeaf(st.value)}>
+                          <span className="cat-tree-ico" aria-hidden="true">{themeIcon(themeMainOf(st.value))}</span>
                           <span className="cat-tree-label">{st.value}</span><span className="cat-tree-count">{st.count}</span><span className="cat-tree-chev">›</span>
                         </button></li>
                       ))}
@@ -337,19 +392,29 @@ export default function CatalogBrowse({
             }
             return (
               <li key={d.key}><button className="cat-tree-row" onClick={() => setDim(d.key)}>
+                <span className="cat-tree-ico" aria-hidden="true">{DIM_ICON[d.key]}</span>
                 <span className="cat-tree-label">{d.label}</span><span className="cat-tree-count">{options}</span><span className="cat-tree-chev">›</span>
               </button></li>
             );
           })}
+          {/* PR382 — no further filtering: every SKU of the brand. */}
+          <li key="__all"><button className="cat-tree-row" onClick={() => setAllSkus(true)}>
+            <span className="cat-tree-ico" aria-hidden="true">📋</span>
+            <span className="cat-tree-label">All SKUs</span><span className="cat-tree-count">{brandSkus.length.toLocaleString()}</span><span className="cat-tree-chev">›</span>
+          </button></li>
         </ul>
         )
       )}
 
-      {/* Step 5: a dimension's options, as list rows with count pills */}
+      {/* Step 5: a dimension's options, as list rows with count pills. Artist options show a monogram
+          avatar (initials + stable colour); every other dimension shows a per-value icon (PR381). */}
       {step === 'option' && (
         <ul className="cat-tree">
           {optionRows.map((o) => (
             <li key={o.value}><button className="cat-tree-row" onClick={() => setOption(o.value)}>
+              {dim === 'artist' && o.value !== UNSPEC
+                ? <BrandAvatar name={o.value} prefix={o.value} />
+                : <span className="cat-tree-ico" aria-hidden="true">{optionIcon(dim!, o.value)}</span>}
               <span className="cat-tree-label">{o.value}</span><span className="cat-tree-count">{o.count.toLocaleString()}</span><span className="cat-tree-chev">›</span>
             </button></li>
           ))}
@@ -360,9 +425,11 @@ export default function CatalogBrowse({
       {step === 'skus' && (
         <>
           <div className="cat-results-head"><span>{results.length.toLocaleString()} SKU{results.length === 1 ? '' : 's'}</span></div>
-          <ul className="fq-list">
+          {/* PR383 — no fixed scroll window / no 300 cap: every SKU flows down the page (like Sales /
+              Purchasing lists), white rows, two row-major columns on desktop. */}
+          <ul className="fq-list cat-sku-list">
             {results.length === 0 && <li><div className="hint fq-empty">No SKUs.</div></li>}
-            {results.slice(0, 300).map((r) => (
+            {results.map((r) => (
               <li key={r.item_code}>
                 <button className={`fq-row ${selectedCode === r.item_code ? 'active' : ''}`} onClick={() => onOpenSku(r.item_code)}>
                   <div className="cat-row">
@@ -378,7 +445,6 @@ export default function CatalogBrowse({
                 </button>
               </li>
             ))}
-            {results.length > 300 && <li><div className="hint fq-empty">Showing the first 300.</div></li>}
           </ul>
         </>
       )}
