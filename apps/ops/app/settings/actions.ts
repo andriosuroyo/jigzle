@@ -16,7 +16,6 @@ import type {
   DeclarationUser,
   ExportCourier,
   SearchAlias,
-  InboundLabel,
   LocalCourier,
   PaymentMethod,
   ShipmentCourier,
@@ -33,7 +32,6 @@ const TABLE: Record<SettingsKind, string> = {
   payment: 'settings_payment_methods',
   courier: 'settings_courier_services',
   box: 'settings_box_presets',
-  inbound_labels: 'settings_inbound_labels',
   common_note: 'settings_common_notes',
   channel: 'settings_customer_channels',
   staff: 'settings_staff',
@@ -51,7 +49,6 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   payment: ['label', 'icon', 'is_active'],
   courier: ['courier', 'speed', 'label', 'icon', 'is_active'],
   box: ['code', 'dim_p', 'dim_l', 'dim_t', 'icon', 'is_active'],
-  inbound_labels: ['label', 'icon', 'is_active'],
   common_note: ['label', 'icon', 'is_active'],
   channel: ['label', 'icon', 'is_active'],
   staff: ['label', 'icon', 'is_active'],
@@ -100,11 +97,10 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
-    list<InboundLabel>(TABLE.inbound_labels),
     list<CommonNote>(TABLE.common_note),
     list<ChannelOption>(TABLE.channel),
     listSafe<StaffMember>(TABLE.staff),
@@ -114,7 +110,7 @@ export async function getSettings(): Promise<SettingsData> {
     listSafe<CatalogClassOption>(TABLE.cat_sub_type),
     listSafe<CatalogClassOption>(TABLE.cat_piece_type),
   ]);
-  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes };
+  return { paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes };
 }
 
 // PR371 — usage counts for the Catalog classification pick-lists (Settings badges): how many SKUs use
@@ -250,20 +246,6 @@ export async function getBoxPresets(): Promise<BoxPreset[]> {
     .order('id', { ascending: true });
   if (error) throw new Error(`getBoxPresets: ${error.message}`);
   return (data ?? []) as BoxPreset[];
-}
-
-// PR28: Inbound's per-line label picker reads this (mirrors how Fulfill reads courier services).
-export async function getInboundLabels(): Promise<InboundLabel[]> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from(TABLE.inbound_labels)
-    .select('*')
-    .is('user_id', null)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .order('id', { ascending: true });
-  if (error) throw new Error(`getInboundLabels: ${error.message}`);
-  return (data ?? []) as InboundLabel[];
 }
 
 // 0035: the Pending/Fulfill note editor reads this for its common-note dropdown.

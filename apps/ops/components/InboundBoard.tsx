@@ -27,7 +27,7 @@ import type {
   ReceiveConfirmData,
   ReceiveConfirmRow,
 } from '@/app/inbound/types';
-import type { InboundLabel, StaffMember } from '@/app/settings/types';
+import type { StaffMember } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
 import { isRealName } from '@/components/skuName';
 import BarcodePicker from '@/components/BarcodePicker';
@@ -102,8 +102,6 @@ function sellableOf(l: ReceiveLine): number {
 
 export default function InboundBoard({
   initialQueue,
-  // inboundLabels is still threaded from Settings but the per-line label picker was dropped (PR289);
-  // it's kept in the props shape so the shell/loader plumbing stays valid.
   staffOptions = [],
   userEmail,
   embedded = false,
@@ -112,7 +110,6 @@ export default function InboundBoard({
   adhocSignal = 0,
 }: {
   initialQueue: ReceiveQueueRow[];
-  inboundLabels: InboundLabel[];
   staffOptions?: StaffMember[];
   userEmail: string;
   // Inbound window (InboundShell): same embedded/onCountChange contract as OutboundBoard.

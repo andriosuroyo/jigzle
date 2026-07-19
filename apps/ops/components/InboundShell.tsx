@@ -12,21 +12,19 @@ import InboundBoard from '@/components/InboundBoard';
 import InboundHistoryBoard from '@/components/InboundHistoryBoard';
 import type { ReceiveQueueRow } from '@jigzle/db/types';
 import type { InboundHistoryRow } from '@/app/inbound/types';
-import type { InboundLabel, StaffMember } from '@/app/settings/types';
+import type { StaffMember } from '@/app/settings/types';
 
 type InboundTab = 'arrivals' | 'history';
 const TAB_LABELS: Record<InboundTab, string> = { arrivals: 'Active', history: 'History' };
 
 export default function InboundShell({
   initialQueue,
-  inboundLabels,
   historyRows,
   staffOptions,
   shipmentCouriers,
   userEmail,
 }: {
   initialQueue: ReceiveQueueRow[];
-  inboundLabels: InboundLabel[];
   historyRows: InboundHistoryRow[];
   staffOptions: StaffMember[];
   shipmentCouriers: string[]; // PR317 — Settings-managed courier list, for editing in History
@@ -84,7 +82,6 @@ export default function InboundShell({
           <InboundBoard
             embedded
             initialQueue={initialQueue}
-            inboundLabels={inboundLabels}
             staffOptions={staffOptions}
             userEmail={userEmail}
             onCountChange={onArrivalsCount}

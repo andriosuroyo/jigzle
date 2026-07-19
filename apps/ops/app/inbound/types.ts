@@ -53,7 +53,7 @@ export interface RecordReceiptLine {
   excluded: boolean; // legacy whole-line flag (kept for back-compat)
   excluded_qty: number | null; // how many of qty arrived damaged → 0 sellable
   exclude_reason: string | null; // short text reason ("damaged box")
-  label: string | null; // free text from settings_inbound_labels (PR28/0031)
+  label: string | null; // legacy free text (the inbound-labels pick-list was retired)
   dimension_weight: string | null;
 }
 export interface RecordReceiptInput {
