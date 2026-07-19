@@ -210,7 +210,7 @@ export default function OrderBoard({
   };
   // PR322 — dropsearch options for every Source/supplier picker (flag + name; value = supplier id string).
   const supplierOpts = useMemo(() => suppliers.map((s) => ({ value: String(s.supplier_id), label: `${s.flag ? `${s.flag} ` : ''}${s.name}` })), [suppliers]);
-  const [forwarders] = useState<Forwarder[]>(initialForwarders); // curated in Settings → Forwarders
+  const [forwarders] = useState<Forwarder[]>(initialForwarders); // shipment codes; auto-created when a new ship id is typed
   const [shipments, setShipments] = useState<OpenShipmentRow[]>(initialShipments);
 
   const [filterStatus, setFilterStatus] = useState('');
@@ -270,7 +270,7 @@ export default function OrderBoard({
   // inline + add supplier
   const [supForm, setSupForm] = useState<{ name: string; country: string; flag: string; type: SupplierType } | null>(null);
 
-  // group-into-shipment form (forwarders are managed in Settings → Forwarders; no inline add here)
+  // group-into-shipment form (the shipment code is derived from the typed ship id; unknown codes auto-create)
   const [grpForwarder, setGrpForwarder] = useState('');
   const [grpConsolCourier, setGrpConsolCourier] = useState('');   // PR274: consolidator courier (optional)
   const [grpConsolTracking, setGrpConsolTracking] = useState(''); // PR272: consolidator tracking (optional)

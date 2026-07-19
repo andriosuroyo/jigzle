@@ -13,7 +13,6 @@ import { PlusCircleIcon, TruckIcon, PlaneIcon } from '@/components/AddIcons';
 import type { ComponentType } from 'react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import SupplierSettings from '@/components/SupplierSettings';
-import ForwarderSettings from '@/components/ForwarderSettings';
 import ExportCourierSettings from '@/components/ExportCourierSettings';
 import CnAddressSettings from '@/components/CnAddressSettings';
 import DeclarationUserSettings from '@/components/DeclarationUserSettings';
@@ -21,7 +20,7 @@ import SearchAliasSettings from '@/components/SearchAliasSettings';
 import BrandLogoSettings from '@/components/BrandLogoSettings';
 import FlagSelect from '@/components/FlagSelect';
 import { useOverlayClose } from '@/components/useOverlayClose';
-import type { Supplier, Forwarder } from '@jigzle/db/types';
+import type { Supplier } from '@jigzle/db/types';
 import {
   addSetting,
   deleteSetting,
@@ -189,14 +188,14 @@ const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SEC
 
 // ── categories: the landing grouping. A tab is either a generic settings list (kind) or the bespoke
 //    Suppliers editor (custom). ──
-type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'forwarders' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'brand_logos' } | { custom: 'cn_address' };
+type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'brand_logos' } | { custom: 'cn_address' };
 type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
 
 const CATEGORIES: Category[] = [
   { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
   { key: 'shipping', title: 'Shipping', sub: 'Couriers, box presets and export couriers used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }, { custom: 'export_courier' }] },
   { key: 'inbound', title: 'Inbound', sub: 'Warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'staff' }] },
-  { key: 'purchasing', title: 'Purchasing', sub: 'Sources, shipment codes, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
+  { key: 'purchasing', title: 'Purchasing', sub: 'Sources, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
   { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brand logos for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
   { key: 'docgen', title: 'Doc Generator', sub: 'Reusable addresses for the customs documents.', tabs: [{ custom: 'cn_address' }] },
@@ -224,7 +223,7 @@ function suggestLabel(d: Record<string, string>): string {
   return `${(d.courier ?? '').trim()} ${(d.speed ?? '').trim()}`.replace(/\s+/g, ' ').trim();
 }
 
-export default function SettingsBoard({ initial, suppliers, forwarders, userEmail }: { initial: SettingsData; suppliers: Supplier[]; forwarders: Forwarder[]; userEmail: string }) {
+export default function SettingsBoard({ initial, suppliers, userEmail }: { initial: SettingsData; suppliers: Supplier[]; userEmail: string }) {
   const [lists, setLists] = useState<Record<SettingsKind, SettingRow[]>>({
     payment: initial.paymentMethods,
     courier: initial.courierServices,
@@ -286,13 +285,11 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
   // tab badge counts (live for generic lists; suppliers uses its initial count)
   function tabCount(t: CatTab): number {
     if ('kind' in t) return lists[t.kind].length;
-    if (t.custom === 'forwarders') return forwarders.length;
     if (t.custom === 'suppliers') return suppliers.length;
     return 0; // export_courier self-loads; no server-side initial count
   }
   function tabLabel(t: CatTab): string {
     if ('kind' in t) return SECTION_BY_KIND[t.kind].title;
-    if (t.custom === 'forwarders') return 'Shipment codes';
     if (t.custom === 'suppliers') return 'Sources';
     if (t.custom === 'declaration_user') return 'Declaration users';
     if (t.custom === 'search_alias') return 'Search aliases';
@@ -527,8 +524,6 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
                       {SECTION_BY_KIND[t.kind].sub && <div className="set-sec-sub">{SECTION_BY_KIND[t.kind].sub}</div>}
                       {renderKindList(SECTION_BY_KIND[t.kind])}
                     </>
-                  ) : t.custom === 'forwarders' ? (
-                    <ForwarderSettings initial={forwarders} embedded />
                   ) : t.custom === 'export_courier' ? (
                     <ExportCourierSettings embedded />
                   ) : t.custom === 'declaration_user' ? (
