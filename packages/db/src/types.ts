@@ -198,6 +198,7 @@ export type Catalogue = {
   has_image: boolean;
   image_urls: string[] | null;       // 0058 — up to 5 manually-entered Google-Drive image URLs (ordered)
   image_unavailable: boolean;        // 0071 — image searched for but not found (excluded from Fix "missing image")
+  image_link_state: string | null;   // 0108 — Drive-link health: 'ok' | 'broken' | null (validated by the Fix pass)
   est_weight: number | null;         // 0070 — estimated weight from piece count/size/material (Fix fallback)
   needs_review: boolean;             // 0015 — receive-time SKU stubs flagged for admin review
   created_at: string;

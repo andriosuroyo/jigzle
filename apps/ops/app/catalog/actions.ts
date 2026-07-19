@@ -748,13 +748,92 @@ export async function getMissingImage(): Promise<CatalogueListRow[]> {
     if (data.length < PAGE || noImg.length >= 8000) break;
   }
   if (!noImg.length) return [];
+  // PR387 — a SKU whose Drive link validated OK (image_link_state='ok') effectively HAS an image (it
+  // renders via the thumbnail fallback), so drop it from "missing image". Best-effort: pre-0108 the
+  // column is absent → the query errors → we skip the exclusion (no regression).
+  const okLinks = new Set<string>();
+  {
+    const { data } = await supabase.from('catalogue').select('item_code').eq('image_link_state', 'ok').limit(10000);
+    for (const r of (data ?? []) as { item_code: string }[]) okLinks.add(r.item_code);
+  }
+  const noImgFiltered = okLinks.size ? noImg.filter((c) => !okLinks.has(c)) : noImg;
   const out: CatalogueListRow[] = [];
-  for (let i = 0; i < noImg.length && out.length < FIX_CAP; i += 300) {
-    const { data, error } = await supabase.from('catalogue').select(LIST_COLS).in('item_code', noImg.slice(i, i + 300)).eq('image_unavailable', false).limit(FIX_CAP);
+  for (let i = 0; i < noImgFiltered.length && out.length < FIX_CAP; i += 300) {
+    const { data, error } = await supabase.from('catalogue').select(LIST_COLS).in('item_code', noImgFiltered.slice(i, i + 300)).eq('image_unavailable', false).limit(FIX_CAP);
     if (error) return []; // image_unavailable column missing (pre-0071) → degrade
     for (const c of (data ?? []) as CatNameRow[]) { out.push(toListRow(c)); if (out.length >= FIX_CAP) break; }
   }
   return out.slice(0, FIX_CAP);
+}
+
+// PR387 — SKUs whose Drive image link(s) failed validation ('broken'): they have image_urls but none
+// returned a real image. This is the persistent, searchable warning list; re-running validateDriveLinks
+// clears a SKU once its link is fixed or removed. Degrades to [] until 0108 is applied.
+export async function getBrokenImageLinks(): Promise<CatalogueListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from('catalogue').select(LIST_COLS).eq('image_link_state', 'broken').order('item_code').limit(FIX_CAP);
+  if (error) return []; // column missing (pre-0108) → degrade
+  return ((data ?? []) as CatNameRow[]).map(toListRow);
+}
+
+// PR387 — validate a batch of SKUs that carry Google-Drive image links, recording each SKU's link health
+// in image_link_state ('ok' | 'broken' | null). Batched + keyset-paginated so it never exceeds the
+// serverless time limit: the client loops with the returned cursor until { done: true }. A working link
+// (the Drive thumbnail returns an image) → 'ok' (the SKU stops counting as "missing image"); a SKU with
+// links but none working → 'broken' (surfaces in getBrokenImageLinks); a SKU whose links were cleared →
+// null. Pure HTTP + RLS-gated writes; no service-role, no Storage.
+const VALIDATE_BATCH = 40;
+function driveThumb(url: string): string | null {
+  const u = (url || '').trim();
+  if (!u) return null;
+  const id = u.match(/\/d\/([-\w]{10,})/)?.[1] ?? u.match(/[?&]id=([-\w]{10,})/)?.[1];
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w400` : (/^https?:\/\//.test(u) ? u : null);
+}
+async function linkReturnsImage(url: string): Promise<boolean> {
+  const target = driveThumb(url);
+  if (!target) return false;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const res = await fetch(target, { signal: ctrl.signal, redirect: 'follow' });
+    if (!res.ok) return false;
+    return (res.headers.get('content-type') || '').toLowerCase().startsWith('image/');
+  } catch {
+    return false; // network error / timeout / abort → treat as not returning an image
+  } finally {
+    clearTimeout(timer);
+  }
+}
+export async function validateDriveLinks(afterItemCode?: string | null): Promise<{ checked: number; ok: number; broken: number; lastItemCode: string | null; done: boolean }> {
+  const supabase = createSupabaseServerClient();
+  // one-time cleanup at the start of a full run: clear a stale 'broken'/'ok' on any SKU whose links were
+  // wholly removed (image_urls is null), so its warning disappears without needing a per-row re-check.
+  if (!afterItemCode) {
+    await supabase.from('catalogue').update({ image_link_state: null }).is('image_urls', null).not('image_link_state', 'is', null);
+  }
+  let q = supabase.from('catalogue').select('item_code,image_urls').not('image_urls', 'is', null).order('item_code').limit(VALIDATE_BATCH);
+  if (afterItemCode) q = q.gt('item_code', afterItemCode);
+  const { data, error } = await q;
+  if (error) return { checked: 0, ok: 0, broken: 0, lastItemCode: null, done: true }; // column missing → nothing to do
+  const rows = (data ?? []) as { item_code: string; image_urls: string[] | null }[];
+  if (!rows.length) return { checked: 0, ok: 0, broken: 0, lastItemCode: null, done: true };
+
+  let ok = 0, broken = 0;
+  await Promise.all(rows.map(async (r) => {
+    const links = (r.image_urls ?? []).map((u) => (u ?? '').trim()).filter(Boolean);
+    let state: 'ok' | 'broken' | null;
+    if (!links.length) state = null;               // empty array → no links → clear
+    else state = (await Promise.all(links.map(linkReturnsImage))).some(Boolean) ? 'ok' : 'broken';
+    if (state === 'ok') ok++; else if (state === 'broken') broken++;
+    await supabase.from('catalogue').update({ image_link_state: state }).eq('item_code', r.item_code);
+  }));
+
+  return {
+    checked: rows.length, ok, broken,
+    lastItemCode: rows[rows.length - 1].item_code,
+    done: rows.length < VALIDATE_BATCH,
+  };
 }
 
 // Likely duplicate SKUs — different item_codes that share the same normalized name + brand + piece
