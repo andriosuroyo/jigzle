@@ -187,14 +187,15 @@ const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SEC
 type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'brand_logos' } | { custom: 'cn_address' };
 type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
 
+// categories mirror the primary nav sections (Sales / Purchasing / Warehouse / Customer / Catalog /
+// Doc Generator). Keep the 'catalog' key stable — the usage-count lazy-load hooks on it.
 const CATEGORIES: Category[] = [
-  { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
-  { key: 'shipping', title: 'Shipping', sub: 'Couriers, box presets and export couriers used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }, { custom: 'export_courier' }] },
-  { key: 'inbound', title: 'Inbound', sub: 'Warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'staff' }] },
-  { key: 'purchasing', title: 'Purchasing', sub: 'Sources, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
+  { key: 'sales', title: 'Sales', sub: 'Payment methods, reusable notes and outbound couriers for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }, { kind: 'courier' }] },
+  { key: 'purchasing', title: 'Purchasing', sub: 'Sources and the local / shipper couriers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { kind: 'local_courier' }, { kind: 'ship_courier' }] },
+  { key: 'warehouse', title: 'Warehouse', sub: 'Box sizes, export couriers and warehouse staff for Inbound / Outbound.', tabs: [{ kind: 'box' }, { custom: 'export_courier' }, { kind: 'staff' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
-  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brand logos for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
-  { key: 'docgen', title: 'Doc Generator', sub: 'Reusable addresses for the customs documents.', tabs: [{ custom: 'cn_address' }] },
+  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brands for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
+  { key: 'docgen', title: 'Doc Generator', sub: 'Declaration signers and reusable addresses for the customs documents.', tabs: [{ custom: 'declaration_user' }, { custom: 'cn_address' }] },
 ];
 const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
 
@@ -289,7 +290,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     if (t.custom === 'suppliers') return 'Sources';
     if (t.custom === 'declaration_user') return 'Declaration users';
     if (t.custom === 'search_alias') return 'Search aliases';
-    if (t.custom === 'brand_logos') return 'Brand logos';
+    if (t.custom === 'brand_logos') return 'Brands';
     if (t.custom === 'cn_address') return 'CN addresses';
     return 'Export couriers';
   }
