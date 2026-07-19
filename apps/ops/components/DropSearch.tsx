@@ -47,7 +47,10 @@ export default function DropSearch({
   // a leading "— none —" row when clearable, so the value can be unset from the list itself.
   const allOpts = useMemo(() => (clearable ? [{ value: '', label: '— none —' }, ...options] : options), [clearable, options]);
   const showSearch = allOpts.length > searchThreshold || allowCreate;
-  const selected = useMemo(() => (value ? allOpts.find((o) => o.value === value) ?? null : null), [allOpts, value]);
+  // PR388 — if the stored value isn't in the options (e.g. the option lists haven't loaded yet, or the
+  // value was retired from the managed list), still SHOW it on the closed button rather than the "— pick —"
+  // placeholder, so a saved value never looks lost.
+  const selected = useMemo(() => (value ? allOpts.find((o) => o.value === value) ?? { value, label: value } : null), [allOpts, value]);
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     return s ? allOpts.filter((o) => (o.search ?? o.label).toLowerCase().includes(s)) : allOpts;

@@ -232,7 +232,6 @@ const CAT_FIX_KEYS = CAT_FIX_LISTS.map((l) => l.key);
 // PR185 — the item bodyview groups every field into sub-tabs (GROUPS) + a Barcodes tab, styled like the
 // system's tab lists. Short labels for the sub-tab row.
 const GROUP_TABS = ['Identity', 'Specs', 'Links']; // PR369 — Classification + Dimensions merged into Specs
-const SPECS_TAB_INDEX = GROUP_TABS.indexOf('Specs'); // PR373 — the only detail tab whose fields need the option lists
 type RightMode = 'sku' | 'collision' | null;
 
 // PR188 — the field dropdowns' option lists (distinct existing values). Loaded once per session, lazily,
@@ -885,12 +884,14 @@ export default function CatalogBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // PR373 — lazy-load the Specs-tab dropdown options the first time the Specs tab is opened on an item.
-  // These lists (distinct product_type / material / effect / artist / … across the catalogue) were the
-  // single heavy read on detail open; deferring them keeps opening an item — and its default Identity
-  // view — fast. Module-cached (OPTIONS_CACHE / SUBTYPES_CACHE) so it's fetched at most once per session.
+  // PR373 — lazy-load the SKU dropdown options once an item is open. These lists (distinct product_type /
+  // material / effect / artist / series / … across the catalogue) were the single heavy read on detail
+  // open; since PR373 they come from the small catalog_field_options RPC (a few KB), so loading them on
+  // open is cheap and module-cached (OPTIONS_CACHE / SUBTYPES_CACHE) — fetched at most once per session.
+  // PR388 — load on ANY tab, not just Specs: the Identity tab now has a select field (Series), so gating
+  // the load on the Specs tab left every Identity dropdown empty until Specs was opened.
   useEffect(() => {
-    if (mode !== 'sku' || detailTab !== SPECS_TAB_INDEX) return;
+    if (mode !== 'sku') return;
     if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
     if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
   }, [mode, detailTab]);
