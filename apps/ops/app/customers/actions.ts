@@ -59,6 +59,52 @@ function postalIndex(): Map<string, Set<string>> {
 // PostgREST caps a single response at ~1000 rows regardless of .limit(), so we PAGE through with
 // .range() until a short page comes back. Order by (name, customer_id) for a stable paging key — same
 // name across a page boundary must not duplicate or skip a row.
+// PR389 — the A–Z tab counts, without shipping any rows. A light one-column scan of `name`, bucketed by
+// first letter (non-letter / blank → '#'). The directory rows themselves load per-letter (below), so the
+// page no longer downloads every customer + every address up front.
+export async function getCustomerLetterCounts(): Promise<Record<string, number>> {
+  const supabase = createSupabaseServerClient();
+  const counts: Record<string, number> = {};
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from('customers').select('name').range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    for (const c of data as { name: string | null }[]) {
+      // key on the RAW first char (matches the per-letter `ilike 'L%'` query, so the pill == the row count)
+      const ch = (c.name?.[0] ?? '').toUpperCase();
+      const k = ch >= 'A' && ch <= 'Z' ? ch : '#';
+      counts[k] = (counts[k] ?? 0) + 1;
+    }
+    if (data.length < PAGE) break;
+  }
+  return counts;
+}
+
+// PR389 — the directory rows for ONE A–Z bucket (id / name / phone only; the address search-blob is NOT
+// needed for the list, only for search). Loaded on demand when a letter tab is opened. '#' = names that
+// don't start with a letter (or are blank/null).
+export async function getCustomersByLetter(letter: string): Promise<CustomerListRow[]> {
+  const supabase = createSupabaseServerClient();
+  const out: CustomerListRow[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    let q = supabase.from('customers').select('customer_id,name,phone');
+    q = letter === '#' ? q.or('name.is.null,name.imatch.^[^A-Za-z]') : q.ilike('name', `${letter}%`);
+    const { data, error } = await q
+      .order('name', { ascending: true })
+      .order('customer_id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    for (const c of data as { customer_id: number; name: string | null; phone: string | null }[]) {
+      out.push({ id: c.customer_id, name: c.name, phone: c.phone });
+    }
+    if (data.length < PAGE) break;
+  }
+  return out;
+}
+
+// PR190 — the full directory with each customer's address search-blob; used ONLY by the Search box (loaded
+// lazily on the first query), so name/phone/recipient search still spans every customer.
 export async function getCustomers(): Promise<CustomerListRow[]> {
   const supabase = createSupabaseServerClient();
   const PAGE = 1000;

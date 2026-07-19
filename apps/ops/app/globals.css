@@ -1519,7 +1519,7 @@ img.sku-img { background: #e8e8e8; }
 .flag-select-empty { padding: 8px 9px; font-size: 13px; color: var(--muted); }
 
 /* ── Customer directory (PR92) ── */
-.cust-search-wrap { padding: 8px; }
+.cust-search-wrap { padding: 8px 0; } /* PR389 — no horizontal inset: the search bar spans the full 1100px, aligned with the A–Z tabs + rows below */
 .cust-search { width: 100%; }
 .cust-az { gap: 1px; }
 .cust-az .fq-filter { padding: 9px 7px; font-size: 13px; }
