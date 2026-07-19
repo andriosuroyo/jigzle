@@ -21,6 +21,8 @@ import {
   getMissingWeight,
   acceptEstimatedWeight,
   getMissingImage,
+  getBrokenImageLinks,
+  validateDriveLinks,
   getSkuSources,
   setSkuSources,
   getSharedBarcodes,
@@ -211,7 +213,7 @@ type Tab = 'search' | 'browse' | 'fix';
 
 // PR380 — the Fix tab's maintenance lists, each its own lazy sub-tab (underline strip, Customer-Fix
 // style). 'needs' + 'shared' are always loaded (they drive the Fix tab badge); the rest fetch on open.
-type FixKey = 'needs' | 'shared' | 'untranslated' | 'nopieces' | 'implausible' | 'offlist' | 'submismatch' | 'noimage' | 'noweight' | 'dupes';
+type FixKey = 'needs' | 'shared' | 'untranslated' | 'nopieces' | 'implausible' | 'offlist' | 'submismatch' | 'noimage' | 'brokenlinks' | 'noweight' | 'dupes';
 const CAT_FIX_LISTS: { key: FixKey; label: string }[] = [
   { key: 'needs', label: 'Needs review' },
   { key: 'shared', label: 'Shared barcodes' },
@@ -221,6 +223,7 @@ const CAT_FIX_LISTS: { key: FixKey; label: string }[] = [
   { key: 'offlist', label: 'Off-list classification' },
   { key: 'submismatch', label: 'Sub ≠ product type' },
   { key: 'noimage', label: 'Missing image' },
+  { key: 'brokenlinks', label: 'Broken image links' },
   { key: 'noweight', label: 'Missing weight' },
   { key: 'dupes', label: 'Likely duplicates' },
 ];
@@ -229,7 +232,6 @@ const CAT_FIX_KEYS = CAT_FIX_LISTS.map((l) => l.key);
 // PR185 — the item bodyview groups every field into sub-tabs (GROUPS) + a Barcodes tab, styled like the
 // system's tab lists. Short labels for the sub-tab row.
 const GROUP_TABS = ['Identity', 'Specs', 'Links']; // PR369 — Classification + Dimensions merged into Specs
-const SPECS_TAB_INDEX = GROUP_TABS.indexOf('Specs'); // PR373 — the only detail tab whose fields need the option lists
 type RightMode = 'sku' | 'collision' | null;
 
 // PR188 — the field dropdowns' option lists (distinct existing values). Loaded once per session, lazily,
@@ -302,6 +304,8 @@ export default function CatalogBoard({
   const [missingWeight, setMissingWeight] = useState<MissingWeightRow[] | null>(null);
   const [dupes, setDupes] = useState<DupGroup[] | null>(null);
   const [missingImg, setMissingImg] = useState<CatalogueListRow[] | null>(null);
+  const [brokenLinks, setBrokenLinks] = useState<CatalogueListRow[] | null>(null);
+  const [validating, setValidating] = useState<string | null>(null); // PR387 — progress text while re-checking Drive links
   const [subMismatch, setSubMismatch] = useState<import('@/app/catalog/actions').SubMismatchRow[] | null>(null);
 
   const [search, setSearch] = useState('');
@@ -459,9 +463,34 @@ export default function CatalogBoard({
     else if (fixList === 'noweight' && missingWeight === null) getMissingWeight().then(setMissingWeight).catch(() => setMissingWeight([]));
     else if (fixList === 'submismatch' && subMismatch === null) getSubTypeMismatch().then(setSubMismatch).catch(() => setSubMismatch([]));
     else if (fixList === 'noimage' && missingImg === null) getMissingImage().then(setMissingImg).catch(() => setMissingImg([]));
+    else if (fixList === 'brokenlinks' && brokenLinks === null) getBrokenImageLinks().then(setBrokenLinks).catch(() => setBrokenLinks([]));
     else if (fixList === 'dupes' && dupes === null) getCatalogDuplicates().then(setDupes).catch(() => setDupes([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, fixList]);
+
+  // PR387 — re-check every SKU's Google-Drive image links: loop the batched validateDriveLinks (keyset
+  // cursor) so it never trips the serverless time limit, then refresh the broken-links + missing-image
+  // lists so working links drop out of "missing image" and dead links surface here.
+  async function recheckDriveLinks() {
+    if (validating !== null) return;
+    let after: string | null = null;
+    let checked = 0, broken = 0;
+    setValidating('Checking…');
+    try {
+      for (;;) {
+        const res = await validateDriveLinks(after);
+        checked += res.checked; broken += res.broken;
+        setValidating(`Checked ${checked}…`);
+        if (res.done || !res.lastItemCode) break;
+        after = res.lastItemCode;
+      }
+      setBrokenLinks(await getBrokenImageLinks().catch(() => []));
+      setMissingImg(null); // force a re-scan next time Missing image is opened
+      setValidating(checked ? `Checked ${checked} · ${broken} broken` : 'No Drive links to check');
+    } catch {
+      setValidating('Check failed — try again');
+    }
+  }
 
   // PR211 — accept a SKU's estimated weight into its real weight, then drop it from the list.
   async function acceptWeight(itemCode: string) {
@@ -795,6 +824,7 @@ export default function CatalogBoard({
       case 'offlist': return offList?.length ?? null;
       case 'submismatch': return subMismatch?.length ?? null;
       case 'noimage': return missingImg?.length ?? null;
+      case 'brokenlinks': return brokenLinks?.length ?? null;
       case 'noweight': return missingWeight?.length ?? null;
       case 'dupes': return dupes?.length ?? null;
     }
@@ -854,12 +884,14 @@ export default function CatalogBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // PR373 — lazy-load the Specs-tab dropdown options the first time the Specs tab is opened on an item.
-  // These lists (distinct product_type / material / effect / artist / … across the catalogue) were the
-  // single heavy read on detail open; deferring them keeps opening an item — and its default Identity
-  // view — fast. Module-cached (OPTIONS_CACHE / SUBTYPES_CACHE) so it's fetched at most once per session.
+  // PR373 — lazy-load the SKU dropdown options once an item is open. These lists (distinct product_type /
+  // material / effect / artist / series / … across the catalogue) were the single heavy read on detail
+  // open; since PR373 they come from the small catalog_field_options RPC (a few KB), so loading them on
+  // open is cheap and module-cached (OPTIONS_CACHE / SUBTYPES_CACHE) — fetched at most once per session.
+  // PR388 — load on ANY tab, not just Specs: the Identity tab now has a select field (Series), so gating
+  // the load on the Specs tab left every Identity dropdown empty until Specs was opened.
   useEffect(() => {
-    if (mode !== 'sku' || detailTab !== SPECS_TAB_INDEX) return;
+    if (mode !== 'sku') return;
     if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
     if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
   }, [mode, detailTab]);
@@ -1610,6 +1642,19 @@ export default function CatalogBoard({
                 {fixList === 'noimage' && (
                   <section className="cat-fix-sec">
                     {missingImg === null ? <div className="hint">Scanning images…</div> : renderFixList(missingImg, 'Every SKU has an image (or is marked “no picture available”).', 'no image')}
+                  </section>
+                )}
+
+                {fixList === 'brokenlinks' && (
+                  <section className="cat-fix-sec">
+                    {/* PR387 — re-check validates each SKU's Drive link: working links stop counting as
+                        "missing image"; dead links stay listed here (searchable by SKU) until fixed/removed. */}
+                    <div className="td-actions" style={{ marginBottom: 10 }}>
+                      <button className="btn-brown" onClick={recheckDriveLinks} disabled={busy || validating !== null}>
+                        {validating !== null ? validating : 'Re-check Drive links'}
+                      </button>
+                    </div>
+                    {brokenLinks === null ? <div className="hint">Loading…</div> : renderFixList(brokenLinks, 'No broken image links — every Drive link returns an image.', 'broken link')}
                   </section>
                 )}
 
