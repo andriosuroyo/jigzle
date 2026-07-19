@@ -7,7 +7,7 @@
 // Settings → Suppliers. The prefix can't be edited after creation — it's the join key for shipments.
 
 import { useState } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, DragEvent } from 'react';
 import { WarehouseIcon } from '@/components/AddIcons';
 import { addForwarder, deleteForwarder, reorderForwarders, updateForwarder, renameConsolidatorPrefix, getConsolidatorOpenShipmentCount } from '@/app/purchasing/actions';
 import { uploadSettingIcon } from '@/app/settings/actions';
@@ -21,23 +21,39 @@ const isLogoUrl = (s: string | null | undefined): boolean => !!s && /^(https?:\/
 // PR276 — compact logo cell: tap to set an emoji or upload an image (mirrors the generic settings icon).
 function LogoCell({ value, onChange, disabled = false }: { value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [emoji, setEmoji] = useState(value && !isLogoUrl(value) ? value : '');
+  // the saved logo splits into two draft slots — a typed emoji and an uploaded image URL. Both can be
+  // held at once; on save the image wins (mirrors the generic settings icon picker).
+  const initEmoji = value && !isLogoUrl(value) ? value : '';
+  const initImage = value && isLogoUrl(value) ? value : null;
+  const [emoji, setEmoji] = useState(initEmoji);
+  const [imageUrl, setImageUrl] = useState<string | null>(initImage);
+  const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
-  // PR307 — closing the logo picker with a typed-but-unsaved emoji routes through the discard confirm.
-  const logoClose = useOverlayClose({ open, onClose: () => setOpen(false), dirty: emoji !== (value && !isLogoUrl(value) ? value : '') });
-  async function pick(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+  // PR307 — closing the picker with a typed-but-unsaved emoji/image routes through the discard confirm.
+  const logoClose = useOverlayClose({ open, onClose: () => setOpen(false), dirty: emoji !== initEmoji || imageUrl !== initImage });
+  async function uploadFile(file: File) {
+    if (!file.type.startsWith('image/')) return; // ignore non-image drops
     setUploading(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
       const { url } = await uploadSettingIcon(fd);
-      onChange(url);
-      setOpen(false);
+      setImageUrl(url); // stage it; not committed until Save changes
     } catch { /* surfaced elsewhere */ } finally { setUploading(false); }
   }
+  async function pick(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) await uploadFile(file);
+  }
+  function onDrop(e: DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void uploadFile(file);
+  }
+  function save() { onChange(imageUrl || emoji.trim() || null); setOpen(false); }
+  function remove() { setEmoji(''); setImageUrl(null); onChange(null); setOpen(false); }
   return (
     <div className="set-ico-wrap">
       <button type="button" className="set-ico" onClick={() => setOpen(true)} disabled={disabled} aria-label="Set logo">
@@ -54,16 +70,33 @@ function LogoCell({ value, onChange, disabled = false }: { value: string | null;
             <div className="sc-modal-head sc-modal-head-row"><span className="sc-modal-title">Logo</span><button className="sc-modal-x" onClick={logoClose.requestClose} aria-label="Close">×</button></div>
             <div className="sc-modal-body">
               <div className="po-field">
-                <label>Emoji</label>
-                <input type="text" value={emoji} placeholder="🛒" onChange={(e) => setEmoji(e.target.value)} />
+                <label>Uploaded image</label>
+                {imageUrl ? (
+                  <div className="set-ico-uploaded">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- static Storage CDN logo, off the data path */}
+                    <img className="set-ico-uploaded-img" src={imageUrl} alt="" />
+                    <button className="set-ico-clear" onClick={() => setImageUrl(null)} disabled={uploading} aria-label="Remove uploaded image">✕</button>
+                  </div>
+                ) : (
+                  <label
+                    className={`set-ico-drop${dragOver ? ' over' : ''}${uploading ? ' disabled' : ''}`}
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+                    onDrop={onDrop}
+                  >
+                    {uploading ? 'Uploading…' : 'Drop an image here or click to upload'}
+                    <input type="file" accept="image/*" hidden onChange={pick} disabled={uploading} />
+                  </label>
+                )}
               </div>
-              <div className="sc-modal-foot" style={{ flexWrap: 'wrap', gap: 8 }}>
-                <button className="btn-primary" onClick={() => { onChange(emoji.trim() || null); setOpen(false); }}>Save emoji</button>
-                <label className="btn-secondary" style={{ cursor: 'pointer' }}>
-                  {uploading ? 'Uploading…' : 'Upload image'}
-                  <input type="file" accept="image/*" hidden onChange={pick} disabled={uploading} />
-                </label>
-                {value && <button className="btn-secondary danger" onClick={() => { setEmoji(''); onChange(null); setOpen(false); }}>Remove</button>}
+              <div className="po-field">
+                <label>Emoji</label>
+                <input type="text" value={emoji} placeholder="Insert an emoji here" onChange={(e) => setEmoji(e.target.value)} />
+              </div>
+              {imageUrl && emoji.trim() && <p className="hint set-ico-note">The uploaded image will be used.</p>}
+              <div className="confirm-actions" style={{ marginTop: 4 }}>
+                <button className="btn-primary" onClick={save} disabled={uploading}>Save changes</button>
+                <button className="btn-danger" onClick={remove} disabled={uploading}>Remove icon</button>
               </div>
             </div>
           </div>

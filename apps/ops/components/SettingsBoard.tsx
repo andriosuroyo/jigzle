@@ -7,7 +7,7 @@
 // picker). Single-field lists drop the redundant per-row field caption.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, DragEvent } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { PlusCircleIcon, TruckIcon, PlaneIcon } from '@/components/AddIcons';
 import type { ComponentType } from 'react';
@@ -593,9 +593,15 @@ function SettingRowEditor({
   onRemove: () => void;
 }) {
   const icon = (val(row, 'icon') as string | null) ?? null;
+  // the saved icon splits into two independent draft slots: a typed emoji and an uploaded image URL.
+  // Both can be held at once; on save the image wins (see saveIcon).
+  const initEmoji = icon && !isIconUrl(icon) ? icon : '';
+  const initImage = icon && isIconUrl(icon) ? icon : null;
   const [iconOpen, setIconOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [emoji, setEmoji] = useState(icon && !isIconUrl(icon) ? icon : '');
+  const [emoji, setEmoji] = useState(initEmoji);
+  const [imageUrl, setImageUrl] = useState<string | null>(initImage);
+  const [dragOver, setDragOver] = useState(false);
   const initDraft = (): Record<string, string> => {
     const d: Record<string, string> = {};
     for (const c of sec.cols) {
@@ -613,8 +619,8 @@ function SettingRowEditor({
   // single-field lists drop the redundant per-row caption (the tab title already names the list);
   // multi-field lists with a fixed column header drop them too (the header carries the captions).
   const showCaptions = sec.cols.length > 1 && !sec.colHeader;
-  // PR307 — the icon picker holds a typed-but-unsaved emoji; close (Esc/backdrop/×) confirms discard then.
-  const iconClose = useOverlayClose({ open: iconOpen, onClose: () => setIconOpen(false), dirty: emoji !== (icon && !isIconUrl(icon) ? icon : '') });
+  // PR307 — the icon picker holds a typed-but-unsaved emoji/image; close (Esc/backdrop/×) confirms discard then.
+  const iconClose = useOverlayClose({ open: iconOpen, onClose: () => setIconOpen(false), dirty: emoji !== initEmoji || imageUrl !== initImage });
 
   function onChange(key: string, value: string) {
     setDraft((prev) => {
@@ -646,27 +652,37 @@ function SettingRowEditor({
     if (Object.keys(patch).length) onSave(patch);
   }
 
-  function saveEmoji() {
-    onSave({ icon: emoji.trim() || null });
+  // save the whole picker: an uploaded image always wins over a typed emoji; else the emoji; else clear.
+  function saveIcon() {
+    onSave({ icon: imageUrl || emoji.trim() || null });
     setIconOpen(false);
   }
-  async function pickImage(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-picking the same file later
-    if (!file) return;
+  async function uploadFile(file: File) {
+    if (!file.type.startsWith('image/')) return; // ignore non-image drops
     setUploading(true);
     try {
       const url = await onUpload(file);
-      onSave({ icon: url });
-      setIconOpen(false);
+      setImageUrl(url); // stage it; not committed until Save changes
     } catch {
       /* error surfaced by the parent's upload handler */
     } finally {
       setUploading(false);
     }
   }
+  async function pickImage(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file later
+    if (file) await uploadFile(file);
+  }
+  function onDrop(e: DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void uploadFile(file);
+  }
   function removeIcon() {
     setEmoji('');
+    setImageUrl(null);
     onSave({ icon: null });
     setIconOpen(false);
   }
@@ -745,31 +761,39 @@ function SettingRowEditor({
               <button className="sc-modal-x" onClick={iconClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
-              <div className="set-ico-preview">
-                {icon ? (
-                  isIconUrl(icon)
-                    // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
-                    ? <img src={icon} alt="" />
-                    : <span className="set-ico-preview-emoji">{icon}</span>
+              {/* Uploaded image — a drop/click zone when empty; once an image is staged the zone is
+                  replaced by a square, centered preview with a red × to clear it. */}
+              <div className="po-field">
+                <label>Uploaded image</label>
+                {imageUrl ? (
+                  <div className="set-ico-uploaded">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path */}
+                    <img className="set-ico-uploaded-img" src={imageUrl} alt="" />
+                    <button className="set-ico-clear" onClick={() => setImageUrl(null)} disabled={busy || uploading} aria-label="Remove uploaded image">✕</button>
+                  </div>
                 ) : (
-                  <span className="hint">No icon yet</span>
+                  <label
+                    className={`set-ico-drop${dragOver ? ' over' : ''}${uploading ? ' disabled' : ''}`}
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+                    onDrop={onDrop}
+                  >
+                    {uploading ? 'Uploading…' : 'Drop an image here or click to upload'}
+                    <input type="file" accept="image/*" hidden disabled={busy || uploading} onChange={pickImage} />
+                  </label>
                 )}
               </div>
 
               <div className="po-field">
                 <label>Emoji</label>
-                <input type="text" value={emoji} maxLength={8} placeholder="🏦  📦  🎁" onChange={(e) => setEmoji(e.target.value)} />
+                <input type="text" value={emoji} maxLength={8} placeholder="Insert an emoji here" onChange={(e) => setEmoji(e.target.value)} />
               </div>
+              {imageUrl && emoji.trim() && <p className="hint set-ico-note">The uploaded image will be used.</p>}
 
               <div className="confirm-actions" style={{ marginTop: 4 }}>
-                <button className="btn-secondary" onClick={saveEmoji} disabled={busy || uploading}>Use emoji</button>
-                <label className={`btn-secondary set-ico-upload${uploading ? ' disabled' : ''}`}>
-                  {uploading ? 'Uploading…' : 'Upload image'}
-                  <input type="file" accept="image/*" hidden disabled={busy || uploading} onChange={pickImage} />
-                </label>
+                <button className="btn-primary" onClick={saveIcon} disabled={busy || uploading}>Save changes</button>
+                <button className="btn-danger" onClick={removeIcon} disabled={busy || uploading}>Remove icon</button>
               </div>
-
-              {icon && <button className="btn-link danger set-ico-remove" onClick={removeIcon} disabled={busy || uploading}>Remove icon</button>}
             </div>
           </div>
           {iconClose.confirm}

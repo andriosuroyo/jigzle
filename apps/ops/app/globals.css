@@ -226,7 +226,8 @@ input[type="checkbox"] { accent-color: var(--green); }
 .sc-modal-sm { max-width: 340px; }
 .confirm-q { font-size: 15px; font-weight: 700; color: var(--brown-dark); text-align: center; padding: 6px 0 14px; }
 .confirm-actions { display: flex; gap: 10px; }
-.confirm-actions .btn-secondary, .confirm-actions .btn-primary { flex: 1; justify-content: center; }
+.confirm-actions .btn-secondary, .confirm-actions .btn-primary, .confirm-actions .btn-danger { flex: 1; justify-content: center; }
+.confirm-actions .btn-danger { display: inline-flex; align-items: center; }
 
 /* To-forwarder quick-view cards: the To-buy Manual card as a tap-to-edit button (no checkbox) */
 .po-card-btn { width: 100%; text-align: left; cursor: pointer; }
@@ -1486,7 +1487,7 @@ img.sku-img { background: #e8e8e8; }
 .ds-opt.ds-none, .ds-opt.ds-create { color: var(--muted); font-style: italic; }
 .ds-empty { padding: 8px 9px; font-size: 13px; color: var(--muted); }
 /* PR322 — an uploaded/brand image icon inside a dropsearch option (couriers, payment, box presets). */
-.ds-ico-img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; display: block; }
+.ds-ico-img { width: 20px; height: 20px; border-radius: 4px; object-fit: contain; display: block; }
 /* PR322 — size variants migrated from IconSelect (now a DropSearch wrapper). Channel-width variants
    (.cust-channel-platform / .nc-channel-platform) target the passed className, so they carry over as-is. */
 .ds.box-preset { width: 96px; flex-shrink: 0; }
@@ -1732,15 +1733,20 @@ img.sku-img { background: #e8e8e8; }
 /* per-row icon cell (emoji or uploaded image) + its picker modal */
 .set-ico { flex-shrink: 0; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; padding: 0; }
 .set-ico:disabled { opacity: 0.5; cursor: not-allowed; }
-.set-ico-img { width: 100%; height: 100%; object-fit: cover; }
+/* uploaded icons sit centered inside their square cell, whole (never cropped) */
+.set-ico-img { width: 100%; height: 100%; object-fit: contain; }
 .set-ico-emoji { font-size: 18px; line-height: 1; }
 .set-ico-add { font-size: 18px; color: var(--muted); line-height: 1; }
-.set-ico-preview { display: flex; align-items: center; justify-content: center; height: 84px; margin-bottom: 12px; background: var(--paper); border-radius: 8px; }
-.set-ico-preview img { max-width: 84px; max-height: 84px; object-fit: contain; border-radius: 8px; }
-.set-ico-preview-emoji { font-size: 48px; line-height: 1; }
-.set-ico-upload { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
-.set-ico-upload.disabled { opacity: 0.5; cursor: not-allowed; }
-.set-ico-remove { margin-top: 12px; }
+/* icon picker (PR-icon-upload): drop-to-upload zone, shown until an image is staged */
+.set-ico-drop { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 88px; padding: 12px; background: var(--paper); border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: 13px; cursor: pointer; }
+.set-ico-drop.over { border-color: var(--orange); background: var(--orange-tint); color: var(--ink); }
+.set-ico-drop.disabled { opacity: 0.6; cursor: not-allowed; }
+/* staged uploaded image: a square box, image contained & centered, red × on the right to clear it */
+.set-ico-uploaded { position: relative; display: flex; align-items: center; justify-content: center; width: 88px; height: 88px; margin: 0 auto; padding: 6px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+.set-ico-uploaded-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.set-ico-clear { position: absolute; top: 50%; right: -11px; transform: translateY(-50%); width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--red); border-radius: 50%; background: white; color: var(--red); font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
+.set-ico-clear:disabled { opacity: 0.5; cursor: not-allowed; }
+.set-ico-note { margin: 6px 0 0; }
 
 /* ── PR26 — Fulfill 3-line item card (F5); PR28 §4c — Pattern A card primitive ── */
 /* Self-sufficient flex row (image left, description column beside). Combined with .result-item on
@@ -1795,7 +1801,7 @@ img.sku-img { background: #e8e8e8; }
 .icon-select-ph { color: var(--muted); }
 .icon-select-caret { flex-shrink: 0; color: var(--muted); font-size: 11px; }
 .icon-select.open .icon-select-caret { transform: rotate(180deg); }
-.icon-select-ico { width: 20px; height: 20px; flex-shrink: 0; border-radius: 4px; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; }
+.icon-select-ico { width: 20px; height: 20px; flex-shrink: 0; border-radius: 4px; object-fit: contain; display: inline-flex; align-items: center; justify-content: center; }
 .icon-select-ico.emoji { font-size: 16px; border-radius: 0; }
 .icon-select-list { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content; max-width: 280px; margin: 0; padding: 4px; list-style: none; background: white; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); max-height: 260px; overflow-y: auto; }
 .icon-select-opt { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 9px; border: none; border-radius: 6px; background: none; font-size: 14px; color: var(--ink); cursor: pointer; text-align: left; white-space: nowrap; }
