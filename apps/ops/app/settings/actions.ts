@@ -16,7 +16,6 @@ import type {
   DeclarationUser,
   ExportCourier,
   SearchAlias,
-  InboundLabel,
   LocalCourier,
   PaymentMethod,
   ShipmentCourier,
@@ -33,7 +32,6 @@ const TABLE: Record<SettingsKind, string> = {
   payment: 'settings_payment_methods',
   courier: 'settings_courier_services',
   box: 'settings_box_presets',
-  inbound_labels: 'settings_inbound_labels',
   common_note: 'settings_common_notes',
   channel: 'settings_customer_channels',
   staff: 'settings_staff',
@@ -51,7 +49,6 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   payment: ['label', 'icon', 'is_active'],
   courier: ['courier', 'speed', 'label', 'icon', 'is_active'],
   box: ['code', 'dim_p', 'dim_l', 'dim_t', 'icon', 'is_active'],
-  inbound_labels: ['label', 'icon', 'is_active'],
   common_note: ['label', 'icon', 'is_active'],
   channel: ['label', 'icon', 'is_active'],
   staff: ['label', 'icon', 'is_active'],
@@ -100,11 +97,10 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
-    list<InboundLabel>(TABLE.inbound_labels),
     list<CommonNote>(TABLE.common_note),
     list<ChannelOption>(TABLE.channel),
     listSafe<StaffMember>(TABLE.staff),
@@ -114,7 +110,7 @@ export async function getSettings(): Promise<SettingsData> {
     listSafe<CatalogClassOption>(TABLE.cat_sub_type),
     listSafe<CatalogClassOption>(TABLE.cat_piece_type),
   ]);
-  return { paymentMethods, courierServices, boxPresets, inboundLabels, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes };
+  return { paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes };
 }
 
 // PR371 — usage counts for the Catalog classification pick-lists (Settings badges): how many SKUs use
@@ -250,20 +246,6 @@ export async function getBoxPresets(): Promise<BoxPreset[]> {
     .order('id', { ascending: true });
   if (error) throw new Error(`getBoxPresets: ${error.message}`);
   return (data ?? []) as BoxPreset[];
-}
-
-// PR28: Inbound's per-line label picker reads this (mirrors how Fulfill reads courier services).
-export async function getInboundLabels(): Promise<InboundLabel[]> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from(TABLE.inbound_labels)
-    .select('*')
-    .is('user_id', null)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true })
-    .order('id', { ascending: true });
-  if (error) throw new Error(`getInboundLabels: ${error.message}`);
-  return (data ?? []) as InboundLabel[];
 }
 
 // 0035: the Pending/Fulfill note editor reads this for its common-note dropdown.
@@ -423,7 +405,7 @@ export async function addExportCourier(input: ExportCourierInput): Promise<Expor
   return data as ExportCourier;
 }
 
-export async function updateExportCourier(id: number, patch: Partial<Pick<ExportCourier, 'label' | 'is_active' | 'needs_address' | 'addr_recipient' | 'addr_phone' | 'addr_text'>>): Promise<ExportCourier> {
+export async function updateExportCourier(id: number, patch: Partial<Pick<ExportCourier, 'label' | 'icon' | 'is_active' | 'needs_address' | 'addr_recipient' | 'addr_phone' | 'addr_text'>>): Promise<ExportCourier> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase.from('settings_export_couriers').update(patch).eq('id', id).select(EXPORT_COLS).single();
   if (error) throw new Error(error.message);
@@ -559,25 +541,67 @@ export async function getSearchAliases(): Promise<SearchAlias[]> {
 // already existed) so the caller can append them. Returns { error } for expected failures, never throws.
 // PR379 — Settings → Catalog → Brand logos. A brand's optional logo_url (0104), shown in Browse in
 // place of the monogram. Global brands rows only; RLS (brands_all / is_allowed_user) gates the write.
-export type BrandLogoRow = { prefix: string; name: string; country: string | null; logo_url: string | null };
+export type BrandLogoRow = { prefix: string; name: string; country: string | null; description: string | null; logo_url: string | null };
 
 export async function getBrandLogos(): Promise<BrandLogoRow[]> {
   const supabase = createSupabaseServerClient();
-  // Degrades gracefully if 0104 isn't applied yet: retry without logo_url so the list still renders.
-  let res = await supabase.from('brands').select('prefix,name,country,logo_url').order('name');
+  // Degrades gracefully as later columns land: try the full shape, then drop description (0110), then
+  // logo_url (0104), so the list still renders on an older schema.
+  let res = await supabase.from('brands').select('prefix,name,country,description,logo_url').order('name');
+  if (res.error) res = await supabase.from('brands').select('prefix,name,country,logo_url').order('name') as typeof res;
   if (res.error) res = await supabase.from('brands').select('prefix,name,country').order('name') as typeof res;
   return ((res.data ?? []) as Partial<BrandLogoRow>[]).map((b) => ({
-    prefix: b.prefix as string, name: b.name || (b.prefix as string), country: b.country ?? null, logo_url: b.logo_url ?? null,
+    prefix: b.prefix as string, name: b.name || (b.prefix as string),
+    country: b.country ?? null, description: b.description ?? null, logo_url: b.logo_url ?? null,
   }));
 }
 
-export async function setBrandLogo(prefix: string, logoUrl: string): Promise<{ error: string | null }> {
+// PR — Brands are a managed Settings list (add / edit / delete). Prefix is the PK (immutable identity).
+export async function addBrand(input: { prefix: string; name?: string | null; country?: string | null; description?: string | null; logo_url?: string | null }): Promise<{ row: BrandLogoRow | null; error: string | null }> {
+  const prefix = input.prefix?.trim().toUpperCase();
+  if (!prefix) return { row: null, error: 'A brand prefix is required.' };
+  const supabase = createSupabaseServerClient();
+  const dup = await supabase.from('brands').select('prefix').eq('prefix', prefix).maybeSingle();
+  if (dup.data) return { row: null, error: `Brand "${prefix}" already exists.` };
+  const payload = { prefix, name: input.name?.trim() || null, country: input.country?.trim() || null, description: input.description?.trim() || null, logo_url: input.logo_url?.trim() || null };
+  let { error } = await supabase.from('brands').insert(payload);
+  if (error) { // degrade until 0110: retry without description so the brand still gets created
+    const { description: _drop, ...rest } = payload;
+    ({ error } = await supabase.from('brands').insert(rest));
+  }
+  if (error) return { row: null, error: error.message };
+  return { row: { prefix, name: payload.name || prefix, country: payload.country, description: payload.description, logo_url: payload.logo_url }, error: null };
+}
+
+export async function updateBrand(prefix: string, patch: Partial<Pick<BrandLogoRow, 'name' | 'country' | 'description' | 'logo_url'>>): Promise<{ error: string | null }> {
   const p = prefix?.trim();
   if (!p) return { error: 'A brand is required.' };
-  const url = logoUrl.trim();
-  if (url && !/^https?:\/\//i.test(url)) return { error: 'Enter a full image URL (http:// or https://).' };
+  if (patch.logo_url && !/^(https?:\/\/|\/)/i.test(patch.logo_url)) return { error: 'The logo must be an uploaded image or full URL.' };
+  const upd: Record<string, string | null> = {};
+  if (patch.name !== undefined) upd.name = patch.name?.trim() || null;
+  if (patch.country !== undefined) upd.country = patch.country?.trim() || null;
+  if (patch.description !== undefined) upd.description = patch.description?.trim() || null;
+  if (patch.logo_url !== undefined) upd.logo_url = patch.logo_url?.trim() || null;
+  if (!Object.keys(upd).length) return { error: null };
   const supabase = createSupabaseServerClient();
-  const { error } = await supabase.from('brands').update({ logo_url: url || null }).eq('prefix', p);
+  let { error } = await supabase.from('brands').update(upd).eq('prefix', p);
+  if (error && 'description' in upd) { // degrade until 0110: retry without description so name/country/logo still save
+    const { description: _drop, ...rest } = upd;
+    if (Object.keys(rest).length) ({ error } = await supabase.from('brands').update(rest).eq('prefix', p));
+    else error = null;
+  }
+  if (error) return { error: error.message };
+  return { error: null };
+}
+
+// Delete is blocked while any SKU still references the brand (catalogue.brand_prefix FK).
+export async function deleteBrand(prefix: string): Promise<{ error: string | null }> {
+  const p = prefix?.trim();
+  if (!p) return { error: 'A brand is required.' };
+  const supabase = createSupabaseServerClient();
+  const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true }).eq('brand_prefix', p);
+  if ((count ?? 0) > 0) return { error: `"${p}" is used by ${count} SKU${count === 1 ? '' : 's'} — reassign them before deleting.` };
+  const { error } = await supabase.from('brands').delete().eq('prefix', p);
   if (error) return { error: error.message };
   return { error: null };
 }

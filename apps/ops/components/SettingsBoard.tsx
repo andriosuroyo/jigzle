@@ -7,13 +7,12 @@
 // picker). Single-field lists drop the redundant per-row field caption.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, DragEvent } from 'react';
 import AppHeader from '@/components/AppHeader';
 import { PlusCircleIcon, TruckIcon, PlaneIcon } from '@/components/AddIcons';
 import type { ComponentType } from 'react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import SupplierSettings from '@/components/SupplierSettings';
-import ForwarderSettings from '@/components/ForwarderSettings';
 import ExportCourierSettings from '@/components/ExportCourierSettings';
 import CnAddressSettings from '@/components/CnAddressSettings';
 import DeclarationUserSettings from '@/components/DeclarationUserSettings';
@@ -21,7 +20,7 @@ import SearchAliasSettings from '@/components/SearchAliasSettings';
 import BrandLogoSettings from '@/components/BrandLogoSettings';
 import FlagSelect from '@/components/FlagSelect';
 import { useOverlayClose } from '@/components/useOverlayClose';
-import type { Supplier, Forwarder } from '@jigzle/db/types';
+import type { Supplier } from '@jigzle/db/types';
 import {
   addSetting,
   deleteSetting,
@@ -95,14 +94,6 @@ const SECTIONS: SectionDef[] = [
     noIcon: true,
   },
   {
-    kind: 'inbound_labels',
-    title: 'Inbound labels',
-    sub: 'Shown in the Inbound per-line label picker.',
-    cols: [{ key: 'label', label: 'Label', type: 'text', grow: true }],
-    sortKey: 'label',
-    blank: { label: '' },
-  },
-  {
     kind: 'common_note',
     title: 'Common notes',
     sub: 'Reusable shipment notes (gift wrap, free gift, …) offered in the Pending/Fulfill note picker.',
@@ -131,11 +122,9 @@ const SECTIONS: SectionDef[] = [
     title: 'Local couriers',
     sub: 'Domestic couriers for the local legs of the buying chain (supplier → hub, and onward) — suggested in Purchasing → Forward / Ship / History. Separate from the outbound Couriers list.',
     hasFlag: true,
-    colHeader: true,
     addIcon: TruckIcon,
     addLabel: 'Add courier',
     cols: [
-      { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
       { key: 'label', label: 'Local courier name', type: 'text', grow: true },
     ],
     sortKey: 'label',
@@ -146,11 +135,9 @@ const SECTIONS: SectionDef[] = [
     title: 'Shipper couriers',
     sub: 'International shippers carrying the goods to our warehouse (DHL, FedEx, MTE, Japan Post…) — picked as the Shipment courier on Purchasing → History.',
     hasFlag: true,
-    colHeader: true,
     addIcon: PlaneIcon,
     addLabel: 'Add courier',
     cols: [
-      { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
       { key: 'label', label: 'Shipper courier name', type: 'text', grow: true },
     ],
     sortKey: 'label',
@@ -197,17 +184,18 @@ const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SEC
 
 // ── categories: the landing grouping. A tab is either a generic settings list (kind) or the bespoke
 //    Suppliers editor (custom). ──
-type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'forwarders' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'brand_logos' } | { custom: 'cn_address' };
+type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'brand_logos' } | { custom: 'cn_address' };
 type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
 
+// categories mirror the primary nav sections (Sales / Purchasing / Warehouse / Customer / Catalog /
+// Doc Generator). Keep the 'catalog' key stable — the usage-count lazy-load hooks on it.
 const CATEGORIES: Category[] = [
-  { key: 'sales', title: 'Sales', sub: 'Payment methods and reusable notes for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }] },
-  { key: 'shipping', title: 'Shipping', sub: 'Couriers, box presets and export couriers used when shipping outbound.', tabs: [{ kind: 'courier' }, { kind: 'box' }, { custom: 'export_courier' }] },
-  { key: 'inbound', title: 'Inbound', sub: 'Labels for the receiving flow and warehouse staff (used in Inbound + Outbound).', tabs: [{ kind: 'inbound_labels' }, { kind: 'staff' }] },
-  { key: 'purchasing', title: 'Purchasing', sub: 'Sources, shipment codes, couriers and declaration signers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { custom: 'forwarders' }, { kind: 'local_courier' }, { kind: 'ship_courier' }, { custom: 'declaration_user' }] },
+  { key: 'sales', title: 'Sales', sub: 'Payment methods, reusable notes and outbound couriers for the Sales pipeline.', tabs: [{ kind: 'payment' }, { kind: 'common_note' }, { kind: 'courier' }] },
+  { key: 'purchasing', title: 'Purchasing', sub: 'Sources and the local / shipper couriers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { kind: 'local_courier' }, { kind: 'ship_courier' }] },
+  { key: 'warehouse', title: 'Warehouse', sub: 'Box sizes, export couriers and warehouse staff for Inbound / Outbound.', tabs: [{ kind: 'box' }, { custom: 'export_courier' }, { kind: 'staff' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
-  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brand logos for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
-  { key: 'docgen', title: 'Doc Generator', sub: 'Reusable addresses for the customs documents.', tabs: [{ custom: 'cn_address' }] },
+  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brands for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
+  { key: 'docgen', title: 'Doc Generator', sub: 'Declaration signers and reusable addresses for the customs documents.', tabs: [{ custom: 'declaration_user' }, { custom: 'cn_address' }] },
 ];
 const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
 
@@ -232,12 +220,11 @@ function suggestLabel(d: Record<string, string>): string {
   return `${(d.courier ?? '').trim()} ${(d.speed ?? '').trim()}`.replace(/\s+/g, ' ').trim();
 }
 
-export default function SettingsBoard({ initial, suppliers, forwarders, userEmail }: { initial: SettingsData; suppliers: Supplier[]; forwarders: Forwarder[]; userEmail: string }) {
+export default function SettingsBoard({ initial, suppliers, userEmail }: { initial: SettingsData; suppliers: Supplier[]; userEmail: string }) {
   const [lists, setLists] = useState<Record<SettingsKind, SettingRow[]>>({
     payment: initial.paymentMethods,
     courier: initial.courierServices,
     box: initial.boxPresets,
-    inbound_labels: initial.inboundLabels,
     common_note: initial.commonNotes,
     channel: initial.channels,
     staff: initial.staff,
@@ -295,17 +282,15 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
   // tab badge counts (live for generic lists; suppliers uses its initial count)
   function tabCount(t: CatTab): number {
     if ('kind' in t) return lists[t.kind].length;
-    if (t.custom === 'forwarders') return forwarders.length;
     if (t.custom === 'suppliers') return suppliers.length;
     return 0; // export_courier self-loads; no server-side initial count
   }
   function tabLabel(t: CatTab): string {
     if ('kind' in t) return SECTION_BY_KIND[t.kind].title;
-    if (t.custom === 'forwarders') return 'Shipment codes';
     if (t.custom === 'suppliers') return 'Sources';
     if (t.custom === 'declaration_user') return 'Declaration users';
     if (t.custom === 'search_alias') return 'Search aliases';
-    if (t.custom === 'brand_logos') return 'Brand logos';
+    if (t.custom === 'brand_logos') return 'Brands';
     if (t.custom === 'cn_address') return 'CN addresses';
     return 'Export couriers';
   }
@@ -432,9 +417,7 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
       <div className="set-list">
         {/* fixed column header (box presets; PR278 courier/consolidator lists) — shown once, not per row */}
         {sec.colHeader && rows.length > 0 && (
-          <div className={`set-colhead ${sec.hasFlag ? 'set-colhead-sup' : ''} ${sec.rowClass ?? ''}`} aria-hidden>
-            {sec.hasFlag && <div className="sup-flag-cell">Flag</div>}
-            {sec.hasFlag && !sec.noIcon && <div className="sup-flag-cell">Logo</div>}
+          <div className={`set-colhead ${sec.rowClass ?? ''}`} aria-hidden>
             <div className="set-fields">
               {sec.cols.map((c) => (
                 <div key={c.key} className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}${c.cls ? ' ' + c.cls : ''}`}>{c.label}</div>
@@ -536,8 +519,6 @@ export default function SettingsBoard({ initial, suppliers, forwarders, userEmai
                       {SECTION_BY_KIND[t.kind].sub && <div className="set-sec-sub">{SECTION_BY_KIND[t.kind].sub}</div>}
                       {renderKindList(SECTION_BY_KIND[t.kind])}
                     </>
-                  ) : t.custom === 'forwarders' ? (
-                    <ForwarderSettings initial={forwarders} embedded />
                   ) : t.custom === 'export_courier' ? (
                     <ExportCourierSettings embedded />
                   ) : t.custom === 'declaration_user' ? (
@@ -593,9 +574,21 @@ function SettingRowEditor({
   onRemove: () => void;
 }) {
   const icon = (val(row, 'icon') as string | null) ?? null;
+  // the saved icon splits into two independent draft slots: a typed emoji and an uploaded image URL.
+  // Both can be held at once; on save the image wins (see saveIcon).
+  const initEmoji = icon && !isIconUrl(icon) ? icon : '';
+  const initImage = icon && isIconUrl(icon) ? icon : null;
+  // PR — flag lists (local / shipper couriers) fold the country flag INTO the icon overlay: upload a
+  // logo OR pick a flag; the logo wins for display. flag/country are stored alongside icon (logo).
+  const initFlag = (val(row, 'flag') as string | null) ?? null;
+  const initCountry = (val(row, 'country') as string | null) ?? null;
   const [iconOpen, setIconOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [emoji, setEmoji] = useState(icon && !isIconUrl(icon) ? icon : '');
+  const [emoji, setEmoji] = useState(initEmoji);
+  const [imageUrl, setImageUrl] = useState<string | null>(initImage);
+  const [flag, setFlag] = useState<string | null>(initFlag);
+  const [country, setCountry] = useState<string | null>(initCountry);
+  const [dragOver, setDragOver] = useState(false);
   const initDraft = (): Record<string, string> => {
     const d: Record<string, string> = {};
     for (const c of sec.cols) {
@@ -613,8 +606,12 @@ function SettingRowEditor({
   // single-field lists drop the redundant per-row caption (the tab title already names the list);
   // multi-field lists with a fixed column header drop them too (the header carries the captions).
   const showCaptions = sec.cols.length > 1 && !sec.colHeader;
-  // PR307 — the icon picker holds a typed-but-unsaved emoji; close (Esc/backdrop/×) confirms discard then.
-  const iconClose = useOverlayClose({ open: iconOpen, onClose: () => setIconOpen(false), dirty: emoji !== (icon && !isIconUrl(icon) ? icon : '') });
+  // PR307 — the icon picker holds a typed-but-unsaved emoji/image; close (Esc/backdrop/×) confirms discard then.
+  const iconClose = useOverlayClose({
+    open: iconOpen,
+    onClose: () => { setIconOpen(false); setEmoji(initEmoji); setImageUrl(initImage); setFlag(initFlag); setCountry(initCountry); },
+    dirty: emoji !== initEmoji || imageUrl !== initImage || flag !== initFlag,
+  });
 
   function onChange(key: string, value: string) {
     setDraft((prev) => {
@@ -646,40 +643,55 @@ function SettingRowEditor({
     if (Object.keys(patch).length) onSave(patch);
   }
 
-  function saveEmoji() {
-    onSave({ icon: emoji.trim() || null });
+  // save the whole picker. Flag lists store the logo in `icon` and the flag/country separately (the
+  // logo wins for display, else the flag). Plain lists: uploaded image wins over a typed emoji.
+  function saveIcon() {
+    if (sec.hasFlag) onSave({ icon: imageUrl || null, flag: flag || null, country: country || null });
+    else onSave({ icon: imageUrl || emoji.trim() || null });
     setIconOpen(false);
   }
-  async function pickImage(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-picking the same file later
-    if (!file) return;
+  async function uploadFile(file: File) {
+    if (!file.type.startsWith('image/')) return; // ignore non-image drops
     setUploading(true);
     try {
       const url = await onUpload(file);
-      onSave({ icon: url });
-      setIconOpen(false);
+      setImageUrl(url); // stage it; not committed until Save changes
     } catch {
       /* error surfaced by the parent's upload handler */
     } finally {
       setUploading(false);
     }
   }
+  async function pickImage(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file later
+    if (file) await uploadFile(file);
+  }
+  function onDrop(e: DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void uploadFile(file);
+  }
   function removeIcon() {
     setEmoji('');
-    onSave({ icon: null });
+    setImageUrl(null);
+    if (sec.hasFlag) { setFlag(null); setCountry(null); onSave({ icon: null, flag: null, country: null }); }
+    else onSave({ icon: null });
     setIconOpen(false);
   }
 
-  const flag = (val(row, 'flag') as string | null) ?? null;
-
+  // what the row's icon cell shows — from PERSISTED row values (not unsaved modal state, so a discarded
+  // edit doesn't linger). Flag lists resolve logo (an uploaded image) first, then the flag.
+  const logo = isIconUrl(icon) ? icon : null;
+  const shownIcon = sec.hasFlag ? (logo ?? initFlag ?? (icon || null)) : icon;
   const iconBtn = (
     <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">
-      {icon ? (
-        isIconUrl(icon)
+      {shownIcon ? (
+        isIconUrl(shownIcon)
           // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
-          ? <img className="set-ico-img" src={icon} alt="" />
-          : <span className="set-ico-emoji">{icon}</span>
+          ? <img className="set-ico-img" src={shownIcon} alt="" />
+          : <span className="set-ico-emoji">{shownIcon}</span>
       ) : (
         <span className="set-ico-add">+</span>
       )}
@@ -687,14 +699,9 @@ function SettingRowEditor({
   );
 
   return (
-    <div className={`set-row${sec.hasFlag ? ' set-row-sup' : ''} ${sec.rowClass ?? ''}`}>
-      {/* PR275 — leading country flag (saves flag + derived country), for the courier / consolidator lists */}
-      {sec.hasFlag && (
-        <div className="sup-flag-cell"><FlagSelect value={flag} disabled={busy} onChange={({ flag, country }) => onSave({ flag, country })} /></div>
-      )}
-      {/* icon cell — tap to set an emoji or upload an image (hidden for lists that don't use icons).
-          PR278: the flag lists box it in a sup-flag-cell so its width lines up with the Consolidators list. */}
-      {!sec.noIcon && (sec.hasFlag ? <div className="sup-flag-cell">{iconBtn}</div> : iconBtn)}
+    <div className={`set-row ${sec.rowClass ?? ''}`}>
+      {/* single icon cell — tap to upload a logo, type an emoji, or (flag lists) pick a country flag */}
+      {!sec.noIcon && iconBtn}
 
       <div className="set-fields">
         {sec.cols.map((c) => (
@@ -745,31 +752,46 @@ function SettingRowEditor({
               <button className="sc-modal-x" onClick={iconClose.requestClose} aria-label="Close">×</button>
             </div>
             <div className="sc-modal-body">
-              <div className="set-ico-preview">
-                {icon ? (
-                  isIconUrl(icon)
-                    // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
-                    ? <img src={icon} alt="" />
-                    : <span className="set-ico-preview-emoji">{icon}</span>
+              {/* Uploaded image — a drop/click zone when empty; once an image is staged the zone is
+                  replaced by a square, centered preview with a red × to clear it. */}
+              <div className="po-field">
+                <label>Uploaded image</label>
+                {imageUrl ? (
+                  <div className="set-ico-uploaded">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path */}
+                    <img className="set-ico-uploaded-img" src={imageUrl} alt="" />
+                    <button className="set-ico-clear" onClick={() => setImageUrl(null)} disabled={busy || uploading} aria-label="Remove uploaded image">✕</button>
+                  </div>
                 ) : (
-                  <span className="hint">No icon yet</span>
+                  <label
+                    className={`set-ico-drop${dragOver ? ' over' : ''}${uploading ? ' disabled' : ''}`}
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+                    onDrop={onDrop}
+                  >
+                    {uploading ? 'Uploading…' : 'Drop an image here or click to upload'}
+                    <input type="file" accept="image/*" hidden disabled={busy || uploading} onChange={pickImage} />
+                  </label>
                 )}
               </div>
 
-              <div className="po-field">
-                <label>Emoji</label>
-                <input type="text" value={emoji} maxLength={8} placeholder="🏦  📦  🎁" onChange={(e) => setEmoji(e.target.value)} />
-              </div>
+              {sec.hasFlag ? (
+                <div className="po-field">
+                  <label>Country flag</label>
+                  <FlagSelect value={flag} disabled={busy || uploading} onChange={({ flag, country }) => { setFlag(flag); setCountry(country); }} />
+                </div>
+              ) : (
+                <div className="po-field">
+                  <label>Emoji</label>
+                  <input type="text" value={emoji} maxLength={8} placeholder="Insert an emoji here" onChange={(e) => setEmoji(e.target.value)} />
+                </div>
+              )}
+              {imageUrl && (sec.hasFlag ? flag : emoji.trim()) && <p className="hint set-ico-note">The uploaded image will be used.</p>}
 
               <div className="confirm-actions" style={{ marginTop: 4 }}>
-                <button className="btn-secondary" onClick={saveEmoji} disabled={busy || uploading}>Use emoji</button>
-                <label className={`btn-secondary set-ico-upload${uploading ? ' disabled' : ''}`}>
-                  {uploading ? 'Uploading…' : 'Upload image'}
-                  <input type="file" accept="image/*" hidden disabled={busy || uploading} onChange={pickImage} />
-                </label>
+                <button className="btn-primary" onClick={saveIcon} disabled={busy || uploading}>Save changes</button>
+                <button className="btn-danger" onClick={removeIcon} disabled={busy || uploading}>Remove icon</button>
               </div>
-
-              {icon && <button className="btn-link danger set-ico-remove" onClick={removeIcon} disabled={busy || uploading}>Remove icon</button>}
             </div>
           </div>
           {iconClose.confirm}

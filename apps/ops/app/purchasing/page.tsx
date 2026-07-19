@@ -50,7 +50,7 @@ export default async function OrderPage() {
       preorders={preorders}
       shipmentHistory={[]}
       localCouriers={localCouriers.map((c) => c.label)}
-      courierIcons={Object.fromEntries(localCouriers.filter((c) => c.icon).map((c) => [c.label, c.icon as string]))}
+      courierIcons={Object.fromEntries(localCouriers.map((c) => [c.label, c.icon || c.flag]).filter((e): e is [string, string] => !!e[1]))}
       shipmentCouriers={shipmentCouriers.map((c) => c.label)}
       userEmail={user?.email || ''}
     />

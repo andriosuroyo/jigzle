@@ -10,6 +10,8 @@ import { useEffect, useState } from 'react';
 import { TruckIcon } from '@/components/AddIcons';
 import { addExportCourier, deleteExportCourier, getExportCouriers, reorderExportCouriers, updateExportCourier } from '@/app/settings/actions';
 import type { ExportCourier } from '@/app/settings/types';
+import IconCell from '@/components/IconCell';
+import { useOverlayClose } from '@/components/useOverlayClose';
 
 export default function ExportCourierSettings({ embedded = false }: { embedded?: boolean }) {
   const [rows, setRows] = useState<ExportCourier[]>([]);
@@ -17,6 +19,11 @@ export default function ExportCourierSettings({ embedded = false }: { embedded?:
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err' | 'warn'; text: string } | null>(null);
   const [addLabel, setAddLabel] = useState<string | null>(null);
+  // PR — the per-row edit overlay: active / needs-address / address moved off the row into an overlay.
+  type EditDraft = Pick<ExportCourier, 'is_active' | 'needs_address' | 'addr_recipient' | 'addr_phone' | 'addr_text'>;
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<EditDraft | null>(null);
+  const editRow = rows.find((r) => r.id === editingId) ?? null;
 
   useEffect(() => {
     getExportCouriers().then(setRows).catch(() => {}).finally(() => setLoading(false));
@@ -62,6 +69,29 @@ export default function ExportCourierSettings({ embedded = false }: { embedded?:
     catch (e) { fail(e); } finally { setBusy(false); }
   }
 
+  function openEdit(r: ExportCourier) {
+    setEditingId(r.id);
+    setDraft({ is_active: r.is_active, needs_address: r.needs_address, addr_recipient: r.addr_recipient, addr_phone: r.addr_phone, addr_text: r.addr_text });
+  }
+  function closeEdit() { setEditingId(null); setDraft(null); }
+  const editDirty = !!(editRow && draft) && (
+    draft.is_active !== editRow.is_active ||
+    draft.needs_address !== editRow.needs_address ||
+    (draft.addr_recipient ?? '') !== (editRow.addr_recipient ?? '') ||
+    (draft.addr_phone ?? '') !== (editRow.addr_phone ?? '') ||
+    (draft.addr_text ?? '') !== (editRow.addr_text ?? '')
+  );
+  const editClose = useOverlayClose({ open: editingId !== null, onClose: closeEdit, dirty: editDirty });
+  async function saveEdit() {
+    if (editingId == null || !draft) return;
+    // if "needs address" is off, the address fields are irrelevant — persist them as null.
+    const p: Partial<EditDraft> = draft.needs_address
+      ? { ...draft, addr_recipient: draft.addr_recipient?.trim() || null, addr_phone: draft.addr_phone?.trim() || null, addr_text: draft.addr_text?.trim() || null }
+      : { is_active: draft.is_active, needs_address: false, addr_recipient: null, addr_phone: null, addr_text: null };
+    await patch(editingId, p);
+    closeEdit();
+  }
+
   const Wrap = embedded ? 'div' : 'section';
   return (
     <Wrap className={embedded ? '' : 'set-sec'}>
@@ -76,29 +106,54 @@ export default function ExportCourierSettings({ embedded = false }: { embedded?:
         {rows.map((r, i) => (
           <div key={r.id} className="set-row exc-row">
             <div className="exc-main">
+              <IconCell value={r.icon} disabled={busy} onChange={(v) => patch(r.id, { icon: v })} />
               <input className="exc-label" type="text" defaultValue={r.label} placeholder="courier name" disabled={busy}
                 onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== r.label) patch(r.id, { label: v }); }} />
-              <label className="exc-chk"><input type="checkbox" checked={r.is_active} disabled={busy} onChange={(e) => patch(r.id, { is_active: e.target.checked })} /> active</label>
-              <label className="exc-chk"><input type="checkbox" checked={r.needs_address} disabled={busy} onChange={(e) => patch(r.id, { needs_address: e.target.checked })} /> needs address</label>
+              {!r.is_active && <span className="exc-off">inactive</span>}
+              {r.needs_address && <span className="exc-tag">address</span>}
               <div className="set-row-ctl">
+                <button className="set-edit" aria-label="Edit" title="Edit" onClick={() => openEdit(r)} disabled={busy}>✎</button>
                 <button className="set-arrow" aria-label="Move up" onClick={() => move(i, -1)} disabled={busy || i === 0}>▲</button>
                 <button className="set-arrow" aria-label="Move down" onClick={() => move(i, 1)} disabled={busy || i === rows.length - 1}>▼</button>
                 <button className="set-del" aria-label="Remove" onClick={() => remove(r.id)} disabled={busy}>✕</button>
               </div>
             </div>
-            {r.needs_address && (
-              <div className="exc-addr">
-                <input type="text" placeholder="recipient name" defaultValue={r.addr_recipient ?? ''} disabled={busy}
-                  onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (r.addr_recipient ?? null)) patch(r.id, { addr_recipient: v }); }} />
-                <input type="text" placeholder="phone" defaultValue={r.addr_phone ?? ''} disabled={busy}
-                  onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (r.addr_phone ?? null)) patch(r.id, { addr_phone: v }); }} />
-                <textarea placeholder="full address" rows={2} defaultValue={r.addr_text ?? ''} disabled={busy}
-                  onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (r.addr_text ?? null)) patch(r.id, { addr_text: v }); }} />
-              </div>
-            )}
           </div>
         ))}
       </div>
+
+      {/* per-row edit overlay — active toggle + address block, keeping the row itself clean */}
+      {editRow && draft && (
+        <div className="sc-modal-backdrop" onClick={editClose.requestClose}>
+          <div className="sc-modal sc-modal-sm" role="dialog" aria-modal="true" aria-label="Edit export courier" onClick={(e) => e.stopPropagation()}>
+            <div className="sc-modal-head sc-modal-head-row">
+              <span className="sc-modal-title">{editRow.label || 'Export courier'}</span>
+              <button className="sc-modal-x" onClick={editClose.requestClose} aria-label="Close">×</button>
+            </div>
+            <div className="sc-modal-body">
+              <div className="exc-toggles">
+                <label className="exc-chk"><input type="checkbox" checked={draft.is_active} disabled={busy} onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })} /> Active</label>
+                <label className="exc-chk"><input type="checkbox" checked={draft.needs_address} disabled={busy} onChange={(e) => setDraft({ ...draft, needs_address: e.target.checked })} /> Needs address</label>
+              </div>
+              {draft.needs_address && (
+                <div className="exc-addr" style={{ marginTop: 4 }}>
+                  <div className="po-field"><label>Recipient name</label>
+                    <input type="text" placeholder="recipient name" value={draft.addr_recipient ?? ''} disabled={busy} onChange={(e) => setDraft({ ...draft, addr_recipient: e.target.value })} /></div>
+                  <div className="po-field"><label>Phone</label>
+                    <input type="text" placeholder="phone" value={draft.addr_phone ?? ''} disabled={busy} onChange={(e) => setDraft({ ...draft, addr_phone: e.target.value })} /></div>
+                  <div className="po-field"><label>Full address</label>
+                    <textarea placeholder="full address" rows={3} value={draft.addr_text ?? ''} disabled={busy} onChange={(e) => setDraft({ ...draft, addr_text: e.target.value })} /></div>
+                </div>
+              )}
+              <div className="confirm-actions" style={{ marginTop: 8 }}>
+                <button className="btn-primary" onClick={saveEdit} disabled={busy}>Save changes</button>
+                <button className="btn-secondary" onClick={editClose.requestClose} disabled={busy}>Cancel</button>
+              </div>
+            </div>
+          </div>
+          {editClose.confirm}
+        </div>
+      )}
 
       {addLabel !== null ? (
         <div className="subform" style={{ marginTop: 8 }}>

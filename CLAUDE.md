@@ -29,9 +29,11 @@ prefix (`forwarders.prefix`: SUB, PRI, IMA, MTE, LGB, CBL …) is NOT the same a
 **routing lane / shipment code** — a named channel that tells the operator *how a batch is handled*. A code
 can happen to be a supplier (PRI/Princess, IMA/Imaginatorium, LGB/LetsGoBuy), a consolidator (SUB/Superbuy),
 or a forwarder (MTE) — so the list is deliberately its own axis, **separate from Suppliers** (who you bought
-from); the same real-world name legitimately appears on both. In the UI this list is surfaced as
-**"Shipment codes"** (Settings → Purchasing) and the Create-shipment picker is labelled **"Shipment code"** —
-do NOT call it "Consolidator" or "Forwarder" as an entity/list. The words **Consolidator** and **Shipper**
+from); the same real-world name legitimately appears on both. The Create-shipment step is labelled
+**"Shipment code"** — do NOT call it "Consolidator" or "Forwarder" as an entity/list. There is **no longer a
+Settings management list** for shipment codes (PR — removed as redundant): a code is created just by typing a
+new Shipment ID in Purchasing → Create shipment (the prefix is derived from the leading letters and the
+`forwarders` row is auto-created via `addForwarder`). The words **Consolidator** and **Shipper**
 survive ONLY as the names of the physical *legs / tracking numbers* above (the "consolidator tracking" leg is
 user-coined and stays). The domestic courier list is just **"Local couriers"** (drop "& consolidator").
 

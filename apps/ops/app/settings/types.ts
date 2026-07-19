@@ -35,16 +35,6 @@ export interface BoxPreset {
   sort_order: number;
 }
 
-// PR28: the Inbound per-line label pick-list (same shape as PaymentMethod). Note: this REPLACES the
-// old `InboundLabel` string-union in @jigzle/db/types (dropped — the stored label is now free text).
-export interface InboundLabel {
-  id: number;
-  label: string;
-  icon: string | null;
-  is_active: boolean;
-  sort_order: number;
-}
-
 // 0035: the reusable shipment-note pick-list (gift wrap, free gift, …). Offered as a dropdown in the
 // Pending/Fulfill note editor alongside free text. Same shape as PaymentMethod (label is the note text).
 export interface CommonNote {
@@ -163,7 +153,6 @@ export interface SettingsData {
   paymentMethods: PaymentMethod[];
   courierServices: CourierService[];
   boxPresets: BoxPreset[];
-  inboundLabels: InboundLabel[];
   commonNotes: CommonNote[];
   channels: ChannelOption[];
   staff: StaffMember[];
@@ -175,9 +164,9 @@ export interface SettingsData {
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).
-export type SettingsKind = 'payment' | 'courier' | 'box' | 'inbound_labels' | 'common_note' | 'channel' | 'staff' | 'local_courier' | 'ship_courier' | 'cat_product_type' | 'cat_sub_type' | 'cat_piece_type';
+export type SettingsKind = 'payment' | 'courier' | 'box' | 'common_note' | 'channel' | 'staff' | 'local_courier' | 'ship_courier' | 'cat_product_type' | 'cat_sub_type' | 'cat_piece_type';
 
-export type SettingRow = PaymentMethod | CourierService | BoxPreset | InboundLabel | CommonNote | ChannelOption | StaffMember | LocalCourier | ShipmentCourier | CatalogClassOption;
+export type SettingRow = PaymentMethod | CourierService | BoxPreset | CommonNote | ChannelOption | StaffMember | LocalCourier | ShipmentCourier | CatalogClassOption;
 
 // permissive payload shapes for add/update — the actions whitelist columns per kind, so a stray key
 // can never reach an identity/system column (id / user_id / sort_order / created_at).
