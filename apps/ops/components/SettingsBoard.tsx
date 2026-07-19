@@ -122,11 +122,9 @@ const SECTIONS: SectionDef[] = [
     title: 'Local couriers',
     sub: 'Domestic couriers for the local legs of the buying chain (supplier → hub, and onward) — suggested in Purchasing → Forward / Ship / History. Separate from the outbound Couriers list.',
     hasFlag: true,
-    colHeader: true,
     addIcon: TruckIcon,
     addLabel: 'Add courier',
     cols: [
-      { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
       { key: 'label', label: 'Local courier name', type: 'text', grow: true },
     ],
     sortKey: 'label',
@@ -137,11 +135,9 @@ const SECTIONS: SectionDef[] = [
     title: 'Shipper couriers',
     sub: 'International shippers carrying the goods to our warehouse (DHL, FedEx, MTE, Japan Post…) — picked as the Shipment courier on Purchasing → History.',
     hasFlag: true,
-    colHeader: true,
     addIcon: PlaneIcon,
     addLabel: 'Add courier',
     cols: [
-      { key: 'prefix', label: 'Prefix', type: 'text', cls: 'fwd-prefix-cell' },
       { key: 'label', label: 'Shipper courier name', type: 'text', grow: true },
     ],
     sortKey: 'label',
@@ -420,9 +416,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
       <div className="set-list">
         {/* fixed column header (box presets; PR278 courier/consolidator lists) — shown once, not per row */}
         {sec.colHeader && rows.length > 0 && (
-          <div className={`set-colhead ${sec.hasFlag ? 'set-colhead-sup' : ''} ${sec.rowClass ?? ''}`} aria-hidden>
-            {sec.hasFlag && <div className="sup-flag-cell">Flag</div>}
-            {sec.hasFlag && !sec.noIcon && <div className="sup-flag-cell">Logo</div>}
+          <div className={`set-colhead ${sec.rowClass ?? ''}`} aria-hidden>
             <div className="set-fields">
               {sec.cols.map((c) => (
                 <div key={c.key} className={`set-f${c.grow ? ' grow' : ''}${c.type === 'number' ? ' num' : ''}${c.cls ? ' ' + c.cls : ''}`}>{c.label}</div>
@@ -583,10 +577,16 @@ function SettingRowEditor({
   // Both can be held at once; on save the image wins (see saveIcon).
   const initEmoji = icon && !isIconUrl(icon) ? icon : '';
   const initImage = icon && isIconUrl(icon) ? icon : null;
+  // PR — flag lists (local / shipper couriers) fold the country flag INTO the icon overlay: upload a
+  // logo OR pick a flag; the logo wins for display. flag/country are stored alongside icon (logo).
+  const initFlag = (val(row, 'flag') as string | null) ?? null;
+  const initCountry = (val(row, 'country') as string | null) ?? null;
   const [iconOpen, setIconOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [emoji, setEmoji] = useState(initEmoji);
   const [imageUrl, setImageUrl] = useState<string | null>(initImage);
+  const [flag, setFlag] = useState<string | null>(initFlag);
+  const [country, setCountry] = useState<string | null>(initCountry);
   const [dragOver, setDragOver] = useState(false);
   const initDraft = (): Record<string, string> => {
     const d: Record<string, string> = {};
@@ -606,7 +606,11 @@ function SettingRowEditor({
   // multi-field lists with a fixed column header drop them too (the header carries the captions).
   const showCaptions = sec.cols.length > 1 && !sec.colHeader;
   // PR307 — the icon picker holds a typed-but-unsaved emoji/image; close (Esc/backdrop/×) confirms discard then.
-  const iconClose = useOverlayClose({ open: iconOpen, onClose: () => setIconOpen(false), dirty: emoji !== initEmoji || imageUrl !== initImage });
+  const iconClose = useOverlayClose({
+    open: iconOpen,
+    onClose: () => { setIconOpen(false); setEmoji(initEmoji); setImageUrl(initImage); setFlag(initFlag); setCountry(initCountry); },
+    dirty: emoji !== initEmoji || imageUrl !== initImage || flag !== initFlag,
+  });
 
   function onChange(key: string, value: string) {
     setDraft((prev) => {
@@ -638,9 +642,11 @@ function SettingRowEditor({
     if (Object.keys(patch).length) onSave(patch);
   }
 
-  // save the whole picker: an uploaded image always wins over a typed emoji; else the emoji; else clear.
+  // save the whole picker. Flag lists store the logo in `icon` and the flag/country separately (the
+  // logo wins for display, else the flag). Plain lists: uploaded image wins over a typed emoji.
   function saveIcon() {
-    onSave({ icon: imageUrl || emoji.trim() || null });
+    if (sec.hasFlag) onSave({ icon: imageUrl || null, flag: flag || null, country: country || null });
+    else onSave({ icon: imageUrl || emoji.trim() || null });
     setIconOpen(false);
   }
   async function uploadFile(file: File) {
@@ -669,19 +675,22 @@ function SettingRowEditor({
   function removeIcon() {
     setEmoji('');
     setImageUrl(null);
-    onSave({ icon: null });
+    if (sec.hasFlag) { setFlag(null); setCountry(null); onSave({ icon: null, flag: null, country: null }); }
+    else onSave({ icon: null });
     setIconOpen(false);
   }
 
-  const flag = (val(row, 'flag') as string | null) ?? null;
-
+  // what the row's icon cell shows — from PERSISTED row values (not unsaved modal state, so a discarded
+  // edit doesn't linger). Flag lists resolve logo (an uploaded image) first, then the flag.
+  const logo = isIconUrl(icon) ? icon : null;
+  const shownIcon = sec.hasFlag ? (logo ?? initFlag ?? (icon || null)) : icon;
   const iconBtn = (
     <button type="button" className="set-ico" onClick={() => setIconOpen(true)} disabled={busy} aria-label="Set icon">
-      {icon ? (
-        isIconUrl(icon)
+      {shownIcon ? (
+        isIconUrl(shownIcon)
           // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
-          ? <img className="set-ico-img" src={icon} alt="" />
-          : <span className="set-ico-emoji">{icon}</span>
+          ? <img className="set-ico-img" src={shownIcon} alt="" />
+          : <span className="set-ico-emoji">{shownIcon}</span>
       ) : (
         <span className="set-ico-add">+</span>
       )}
@@ -689,14 +698,9 @@ function SettingRowEditor({
   );
 
   return (
-    <div className={`set-row${sec.hasFlag ? ' set-row-sup' : ''} ${sec.rowClass ?? ''}`}>
-      {/* PR275 — leading country flag (saves flag + derived country), for the courier / consolidator lists */}
-      {sec.hasFlag && (
-        <div className="sup-flag-cell"><FlagSelect value={flag} disabled={busy} onChange={({ flag, country }) => onSave({ flag, country })} /></div>
-      )}
-      {/* icon cell — tap to set an emoji or upload an image (hidden for lists that don't use icons).
-          PR278: the flag lists box it in a sup-flag-cell so its width lines up with the Consolidators list. */}
-      {!sec.noIcon && (sec.hasFlag ? <div className="sup-flag-cell">{iconBtn}</div> : iconBtn)}
+    <div className={`set-row ${sec.rowClass ?? ''}`}>
+      {/* single icon cell — tap to upload a logo, type an emoji, or (flag lists) pick a country flag */}
+      {!sec.noIcon && iconBtn}
 
       <div className="set-fields">
         {sec.cols.map((c) => (
@@ -770,11 +774,18 @@ function SettingRowEditor({
                 )}
               </div>
 
-              <div className="po-field">
-                <label>Emoji</label>
-                <input type="text" value={emoji} maxLength={8} placeholder="Insert an emoji here" onChange={(e) => setEmoji(e.target.value)} />
-              </div>
-              {imageUrl && emoji.trim() && <p className="hint set-ico-note">The uploaded image will be used.</p>}
+              {sec.hasFlag ? (
+                <div className="po-field">
+                  <label>Country flag</label>
+                  <FlagSelect value={flag} disabled={busy || uploading} onChange={({ flag, country }) => { setFlag(flag); setCountry(country); }} />
+                </div>
+              ) : (
+                <div className="po-field">
+                  <label>Emoji</label>
+                  <input type="text" value={emoji} maxLength={8} placeholder="Insert an emoji here" onChange={(e) => setEmoji(e.target.value)} />
+                </div>
+              )}
+              {imageUrl && (sec.hasFlag ? flag : emoji.trim()) && <p className="hint set-ico-note">The uploaded image will be used.</p>}
 
               <div className="confirm-actions" style={{ marginTop: 4 }}>
                 <button className="btn-primary" onClick={saveIcon} disabled={busy || uploading}>Save changes</button>
