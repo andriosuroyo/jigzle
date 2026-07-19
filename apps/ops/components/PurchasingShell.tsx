@@ -30,6 +30,7 @@ export default function PurchasingShell({
   preorders,
   shipmentHistory,
   localCouriers = [],
+  courierIcons = {},
   shipmentCouriers = [],
   userEmail,
 }: {
@@ -41,6 +42,7 @@ export default function PurchasingShell({
   preorders: PreorderRow[];
   shipmentHistory: ShipmentHistoryRow[];
   localCouriers?: string[]; // 0055 — To-forwarder's local-courier suggestions (Settings-managed)
+  courierIcons?: Record<string, string>; // PR390 — local courier → Settings icon, for the courier dropsearch
   shipmentCouriers?: string[]; // 0056 — History's international courier pick-list (Settings-managed)
   userEmail: string;
 }) {
@@ -100,6 +102,7 @@ export default function PurchasingShell({
             forwarders={forwarders}
             shipments={shipments}
             localCouriers={localCouriers}
+            courierIcons={courierIcons}
             onDetailOpenChange={setDetailOpen}
             userEmail={userEmail}
           />
@@ -113,6 +116,7 @@ export default function PurchasingShell({
             forwarders={forwarders}
             shipments={shipments}
             localCouriers={localCouriers}
+            courierIcons={courierIcons}
             onDetailOpenChange={setDetailOpen}
             userEmail={userEmail}
           />

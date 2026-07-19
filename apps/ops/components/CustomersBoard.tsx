@@ -30,6 +30,8 @@ import {
   deleteCustomerAddress,
   deleteEmptyStrays,
   getCustomerDetail,
+  getCustomers,
+  getCustomersByLetter,
   getDataHealth,
   getDuplicateGroups,
   updateCustomer,
@@ -52,12 +54,6 @@ function daysSince(s: string | null): number | null {
   if (Number.isNaN(t)) return null;
   return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
 }
-// the A–Z bucket key for a name (non-letter / blank → '#')
-function bucketOf(name: string | null): string {
-  const ch = (name?.trim()?.[0] ?? '').toUpperCase();
-  return ch >= 'A' && ch <= 'Z' ? ch : '#';
-}
-
 type Tab = 'search' | 'fix';
 
 // PR325 — the Fix tab's ten maintenance lists, each its own sub-tab (Buy-board style: an underline tab
@@ -112,16 +108,21 @@ function ChannelIcon({ icon }: { icon?: string | null }) {
     : <span aria-hidden>{icon}</span>;
 }
 
-export default function CustomersBoard({ initialCustomers, initialTiers, channelOptions, userEmail }: { initialCustomers: CustomerListRow[]; initialTiers: Record<number, Tier>; channelOptions: ChannelOption[]; userEmail: string }) {
+export default function CustomersBoard({ letterCounts, initialLetter, initialRows, initialTiers, channelOptions, userEmail }: { letterCounts: Record<string, number>; initialLetter: string; initialRows: CustomerListRow[]; initialTiers: Record<number, Tier>; channelOptions: ChannelOption[]; userEmail: string }) {
   // platform options for the Channels picker (icon + label), from Settings → Customer → Channel
   const channelSelectOptions: IconOption<string>[] = channelOptions.map((c) => ({ value: c.label, label: c.label, icon: c.icon }));
-  const [customers, setCustomers] = useState<CustomerListRow[]>(initialCustomers);
+  // PR389 — the directory loads per-letter, not all at once. `byLetter` caches each opened bucket's rows
+  // (seeded with the server-rendered first letter); the full list (`searchList`) loads lazily on first search.
+  const [byLetter, setByLetter] = useState<Record<string, CustomerListRow[]>>({ [initialLetter]: initialRows });
+  const [searchList, setSearchList] = useState<CustomerListRow[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   const tiers = initialTiers;
   // PR223 — the active tab is mirrored to ?tab= so the breadcrumb Refresh (a hard reload) stays put.
   const [tab, setTab] = useUrlTab<Tab>('tab', 'search', ['search', 'fix']);
   // PR325 — which of the ten Fix lists is showing (own URL param so a Refresh lands back on it)
   const [fixList, setFixList] = useUrlTab<FixList>('list', 'dupes', FIX_LIST_KEYS);
-  const [letter, setLetter] = useState<string>('A');
+  const [letter, setLetter] = useState<string>(initialLetter);
+  const [letterLoading, setLetterLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -180,7 +181,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   function onMerged(removedIds: number[]) {
     if (removedIds.length === 0) return;
     const gone = new Set(removedIds);
-    setCustomers((prev) => prev.filter((c) => !gone.has(c.id)));
+    removeFromLists(gone);
     if (selectedId != null && gone.has(selectedId)) { setSelectedId(null); setDetail(null); }
   }
 
@@ -232,8 +233,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
     setNotice(null);
     try {
       await deleteCustomer(detail.id);
-      const goneId = detail.id;
-      setCustomers((prev) => prev.filter((c) => c.id !== goneId));
+      removeFromLists(new Set([detail.id]));
       setConfirmDel(false);
       setSelectedId(null);
       setDetail(null);
@@ -271,27 +271,43 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
   const locWarn = useMemo(() => (addrEdit ? locationWarning(addrDraft, postal) : null),
     [addrEdit, postal, addrDraft.negara, addrDraft.kode_pos, addrDraft.provinsi, addrDraft.kelurahan, addrDraft.kecamatan, addrDraft.kota]);
 
-  // buckets: customers grouped by first letter, each name-sorted; counts per letter
-  const buckets = useMemo(() => {
-    const m = new Map<string, CustomerListRow[]>();
-    for (const c of customers) {
-      const k = bucketOf(c.name);
-      const arr = m.get(k) ?? (m.set(k, []).get(k) as CustomerListRow[]);
-      arr.push(c);
-    }
-    for (const arr of m.values()) arr.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
-    return m;
-  }, [customers]);
-  const hasHash = (buckets.get('#')?.length ?? 0) > 0;
-  const tabs = hasHash ? [...LETTERS, '#'] : LETTERS;
+  // A–Z tabs from the server-side counts (all letters shown; '#' only when present).
+  const tabs = useMemo(() => ((letterCounts['#'] ?? 0) > 0 ? [...LETTERS, '#'] : LETTERS), [letterCounts]);
+  const searching = query.trim().length > 0;
 
-  // when searching, the list spans all letters (match name OR phone digits); else it's the active letter.
-  // PR190 — no result cap: every match is shown.
+  // PR389 — open a letter: switch to it and fetch its rows the first time (cached thereafter).
+  function pickLetter(l: string) {
+    setLetter(l);
+    if (byLetter[l] === undefined && !letterLoading) {
+      setLetterLoading(true);
+      getCustomersByLetter(l)
+        .then((rows) => setByLetter((m) => ({ ...m, [l]: rows })))
+        .catch(() => setByLetter((m) => ({ ...m, [l]: [] })))
+        .finally(() => setLetterLoading(false));
+    }
+  }
+
+  // PR389 — the full directory (with address search-blob) loads lazily so search still spans every customer
+  // / recipient without paying that cost on the initial page load. PR390 — prefetch it the moment the search
+  // box is focused (before the first keystroke), so results feel instant; also runs if a query is set.
+  function loadSearchList() {
+    if (searchList === null && !searchLoading) {
+      setSearchLoading(true);
+      getCustomers().then(setSearchList).catch(() => setSearchList([])).finally(() => setSearchLoading(false));
+    }
+  }
+  useEffect(() => {
+    if (searching) loadSearchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searching]);
+
+  // when searching, the list spans all letters (match name OR phone digits OR address recipient). PR190 —
+  // no result cap: every match is shown. Null while the full list is still loading.
   const results = useMemo(() => {
     const s = query.trim().toLowerCase();
-    if (!s) return null;
+    if (!s || !searchList) return null;
     const digits = s.replace(/\D/g, '');
-    return customers
+    return searchList
       .filter((c) => {
         const byName = (c.name ?? '').toLowerCase().includes(s);
         const byPhone = digits.length >= 2 && (c.phone ?? '').includes(digits);
@@ -300,9 +316,19 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
         return byName || byPhone || byAddr;
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
-  }, [query, customers]);
+  }, [query, searchList]);
 
-  const shown = results ?? buckets.get(letter) ?? [];
+  const shown = searching ? (results ?? []) : (byLetter[letter] ?? []);
+
+  // PR389 — keep the loaded lists in sync after a mutation (merge/delete removes ids; a rename updates a name)
+  const removeFromLists = (ids: Set<number>) => {
+    setByLetter((m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.filter((c) => !ids.has(c.id))])));
+    setSearchList((l) => (l ? l.filter((c) => !ids.has(c.id)) : l));
+  };
+  const renameInLists = (id: number, name: string | null) => {
+    setByLetter((m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v.map((c) => (c.id === id ? { ...c, name } : c))])));
+    setSearchList((l) => (l ? l.map((c) => (c.id === id ? { ...c, name } : c)) : l));
+  };
 
   async function openCustomer(id: number) {
     setSelectedId(id);
@@ -354,7 +380,7 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
         ...('phone2' in patch ? { phone2_raw: patch.phone2 ?? null } : {}),
         ...('phone3' in patch ? { phone3_raw: patch.phone3 ?? null } : {}),
       } : d));
-      if ('name' in patch) setCustomers((prev) => prev.map((c) => (c.id === detail.id ? { ...c, name: patch.name ?? null } : c)));
+      if ('name' in patch) renameInLists(detail.id, patch.name ?? null);
       note('warn', 'Saved.');
     } catch (e) {
       fail(e);
@@ -708,32 +734,34 @@ export default function CustomersBoard({ initialCustomers, initialTiers, channel
         {tab === 'search' && (
           <>
             <div className="cust-search-wrap">
-              <SearchInput value={query} onChange={setQuery} placeholder="Search name, phone, or recipient…" />
+              <SearchInput value={query} onChange={setQuery} onFocus={loadSearchList} placeholder="Search name, phone, or recipient…" />
             </div>
 
             {/* A–Z tabs hide while searching (results span every letter) */}
-            {!results && (
+            {!searching && (
               <div className="fq-filters cust-az" role="tablist" aria-label="A–Z">
-                {tabs.map((l) => {
-                  const n = buckets.get(l)?.length ?? 0;
-                  return (
-                    <button
-                      key={l}
-                      role="tab"
-                      aria-selected={letter === l}
-                      className={`fq-filter ${letter === l ? 'active' : ''}`}
-                      onClick={() => setLetter(l)}
-                    >
-                      {l}<span className="fq-filter-count">{n}</span>
-                    </button>
-                  );
-                })}
+                {tabs.map((l) => (
+                  <button
+                    key={l}
+                    role="tab"
+                    aria-selected={letter === l}
+                    className={`fq-filter ${letter === l ? 'active' : ''}`}
+                    onClick={() => pickLetter(l)}
+                  >
+                    {l}<span className="fq-filter-count">{(letterCounts[l] ?? 0).toLocaleString('en-US')}</span>
+                  </button>
+                ))}
               </div>
             )}
 
-            {shown.length === 0 && (
-              <div className="hint fq-empty">{results ? `No matches for “${query.trim()}”.` : `No customers under “${letter}”.`}</div>
-            )}
+            {/* PR389 — loading / empty states for the lazily-loaded per-letter and search lists */}
+            {searching && !searchList ? (
+              <div className="hint fq-empty">Searching…</div>
+            ) : !searching && byLetter[letter] === undefined ? (
+              <div className="hint fq-empty">Loading “{letter}”…</div>
+            ) : shown.length === 0 ? (
+              <div className="hint fq-empty">{searching ? `No matches for “${query.trim()}”.` : `No customers under “${letter}”.`}</div>
+            ) : null}
             <ul className="fq-list">
               {shown.map((c) => {
                 const tier = tiers[c.id];

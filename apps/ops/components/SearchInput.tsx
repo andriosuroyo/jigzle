@@ -17,10 +17,11 @@ type Props = {
   className?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onClear?: () => void; // extra work on clear (e.g. drop results + refocus); the value reset is built in
+  onFocus?: () => void; // e.g. prefetch a lazily-loaded list the moment the field is focused
 };
 
 const SearchInput = forwardRef<HTMLInputElement, Props>(function SearchInput(
-  { value, onChange, placeholder, disabled, autoFocus, ariaLabel, className, onKeyDown, onClear },
+  { value, onChange, placeholder, disabled, autoFocus, ariaLabel, className, onKeyDown, onClear, onFocus },
   ref
 ) {
   return (
@@ -40,6 +41,7 @@ const SearchInput = forwardRef<HTMLInputElement, Props>(function SearchInput(
         autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
+        onFocus={onFocus}
       />
       {value && !disabled && (
         <button
