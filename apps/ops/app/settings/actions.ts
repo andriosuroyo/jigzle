@@ -423,7 +423,7 @@ export async function addExportCourier(input: ExportCourierInput): Promise<Expor
   return data as ExportCourier;
 }
 
-export async function updateExportCourier(id: number, patch: Partial<Pick<ExportCourier, 'label' | 'is_active' | 'needs_address' | 'addr_recipient' | 'addr_phone' | 'addr_text'>>): Promise<ExportCourier> {
+export async function updateExportCourier(id: number, patch: Partial<Pick<ExportCourier, 'label' | 'icon' | 'is_active' | 'needs_address' | 'addr_recipient' | 'addr_phone' | 'addr_text'>>): Promise<ExportCourier> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase.from('settings_export_couriers').update(patch).eq('id', id).select(EXPORT_COLS).single();
   if (error) throw new Error(error.message);

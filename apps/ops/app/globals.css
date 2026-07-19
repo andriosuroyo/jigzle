@@ -567,12 +567,16 @@ button.po-pick-btn:active { background: var(--paper); }
 /* ── Subform ── */
 .subform { display: flex; flex-direction: column; gap: 8px; background: var(--cream); border: 1px dashed var(--line); border-radius: 8px; padding: 10px; }
 .subform-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-/* PR191 — export-courier settings rows (label + toggles, optional address block) */
+/* PR191 — export-courier settings rows (icon + label + edit/sort/remove; toggles & address in overlay) */
 .exc-row { flex-direction: column; align-items: stretch; gap: 8px; }
-.exc-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.exc-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .exc-label { flex: 1 1 160px; min-width: 120px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: white; }
 .exc-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); white-space: nowrap; }
 .exc-chk input { width: auto; }
+.exc-toggles { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+/* compact status badges shown on the row (state lives in the edit overlay) */
+.exc-off { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: var(--paper); color: var(--muted); white-space: nowrap; }
+.exc-tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: var(--orange-tint); color: #8A5A1A; white-space: nowrap; }
 .exc-addr { display: flex; flex-direction: column; gap: 6px; padding-left: 4px; }
 .exc-addr input, .exc-addr textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; background: white; }
 .exc-addr textarea { resize: vertical; font-family: inherit; }
@@ -1434,6 +1438,8 @@ img.sku-img { background: #e8e8e8; }
 .set-usage { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--cream); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; min-width: 26px; text-align: center; }
 .set-arrow { width: 30px; height: 30px; line-height: 1; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--muted); font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .set-arrow:disabled { opacity: 0.35; cursor: not-allowed; }
+.set-edit { width: 30px; height: 30px; line-height: 1; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.set-edit:disabled { opacity: 0.35; cursor: not-allowed; }
 .set-del { width: 30px; height: 30px; line-height: 1; border: 1px solid var(--red); border-radius: 6px; background: var(--red-tint); color: var(--red); font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .set-del:active { background: #f3c9bf; }
 .set-del:disabled { opacity: 0.45; cursor: not-allowed; }
