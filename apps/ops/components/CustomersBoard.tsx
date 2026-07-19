@@ -287,14 +287,19 @@ export default function CustomersBoard({ letterCounts, initialLetter, initialRow
     }
   }
 
-  // PR389 — the full directory (with address search-blob) loads lazily the first time a query is typed, so
-  // search still spans every customer / recipient without paying that cost on the initial page load.
-  useEffect(() => {
-    if (searching && searchList === null && !searchLoading) {
+  // PR389 — the full directory (with address search-blob) loads lazily so search still spans every customer
+  // / recipient without paying that cost on the initial page load. PR390 — prefetch it the moment the search
+  // box is focused (before the first keystroke), so results feel instant; also runs if a query is set.
+  function loadSearchList() {
+    if (searchList === null && !searchLoading) {
       setSearchLoading(true);
       getCustomers().then(setSearchList).catch(() => setSearchList([])).finally(() => setSearchLoading(false));
     }
-  }, [searching, searchList, searchLoading]);
+  }
+  useEffect(() => {
+    if (searching) loadSearchList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searching]);
 
   // when searching, the list spans all letters (match name OR phone digits OR address recipient). PR190 —
   // no result cap: every match is shown. Null while the full list is still loading.
@@ -729,7 +734,7 @@ export default function CustomersBoard({ letterCounts, initialLetter, initialRow
         {tab === 'search' && (
           <>
             <div className="cust-search-wrap">
-              <SearchInput value={query} onChange={setQuery} placeholder="Search name, phone, or recipient…" />
+              <SearchInput value={query} onChange={setQuery} onFocus={loadSearchList} placeholder="Search name, phone, or recipient…" />
             </div>
 
             {/* A–Z tabs hide while searching (results span every letter) */}

@@ -168,6 +168,7 @@ export default function OrderBoard({
   embedded = false,
   bucket,
   localCouriers = [],
+  courierIcons = {},
   onDetailOpenChange,
   onCountChange,
 }: {
@@ -181,12 +182,32 @@ export default function OrderBoard({
   bucket?: 'forwarder' | 'ship';
   // 0055 — Settings-managed local (domestic) courier suggestions for the To-forwarder form.
   localCouriers?: string[];
+  // PR390 — courier name → its Settings icon (image URL or emoji/text), shown in the courier dropsearch.
+  courierIcons?: Record<string, string>;
   // PR153: report when a bucket's bodyview DETAIL is open (the shell hides the pipeline tabs).
   onDetailOpenChange?: (open: boolean) => void;
   onCountChange?: (n: number) => void;
 }) {
   const [queue, setQueue] = useState<OpenPORow[]>(initialQueue);
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
+
+  // PR390 — a local courier's Settings icon as a node for DropSearch options (image URL → <img>, else emoji/text).
+  const isCourierIconUrl = (s: string) => /^(https?:\/\/|\/)/.test(s);
+  const courierIconNode = (name: string) => {
+    const ic = courierIcons[name];
+    if (!ic) return undefined;
+    if (isCourierIconUrl(ic)) {
+      // eslint-disable-next-line @next/next/no-img-element -- static Storage CDN icon, off the data path
+      return <img className="ds-ico-img" src={ic} alt="" />;
+    }
+    return <span aria-hidden>{ic}</span>;
+  };
+  // DropSearch options from the shared local-courier list (+ keep an already-set value that isn't listed).
+  const courierOptions = (current?: string | null) => {
+    const list = localCouriers.length ? localCouriers : METHODS;
+    const all = [...list, ...(current && !list.includes(current) ? [current] : [])];
+    return all.map((m) => ({ value: m, label: m, icon: courierIconNode(m) }));
+  };
   // PR322 — dropsearch options for every Source/supplier picker (flag + name; value = supplier id string).
   const supplierOpts = useMemo(() => suppliers.map((s) => ({ value: String(s.supplier_id), label: `${s.flag ? `${s.flag} ` : ''}${s.name}` })), [suppliers]);
   const [forwarders] = useState<Forwarder[]>(initialForwarders); // curated in Settings → Forwarders
@@ -1328,12 +1349,14 @@ export default function OrderBoard({
             <div className="po-field">
               <label>Local courier &amp; tracking</label>
               <div className="po-inline2 po-inline-courier">
-                <input
-                  type="text"
-                  list="ship-methods"
+                <DropSearch
+                  value={form.method || null}
+                  onChange={(v) => setForm((f) => ({ ...f, method: v || '' }))}
+                  options={courierOptions(form.method)}
                   placeholder="courier"
-                  value={form.method}
-                  onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}
+                  clearable
+                  allowCreate
+                  ariaLabel="Local courier"
                 />
                 <input
                   type="text"
@@ -1342,7 +1365,6 @@ export default function OrderBoard({
                   onChange={(e) => setForm((f) => ({ ...f, tracking_to_forwarder: e.target.value }))}
                 />
               </div>
-              <datalist id="ship-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
             </div>
             <div className="po-field">
               <label>Marketplace ID</label>
@@ -1476,10 +1498,17 @@ export default function OrderBoard({
                 <div className="batch-group">
                   <div className="fd-section-head">Local courier &amp; tracking</div>
                   <div className="po-inline2 po-inline-courier">
-                    <input className="batch-field" type="text" list="batch-methods" placeholder="courier" value={batchMethod} onChange={(e) => setBatchMethod(e.target.value)} />
+                    <DropSearch
+                      value={batchMethod || null}
+                      onChange={(v) => setBatchMethod(v)}
+                      options={courierOptions(batchMethod)}
+                      placeholder="courier"
+                      clearable
+                      allowCreate
+                      ariaLabel="Local courier"
+                    />
                     <input className="batch-field" type="text" placeholder="tracking number" value={batchTracking} onChange={(e) => setBatchTracking(e.target.value)} />
                   </div>
-                  <datalist id="batch-methods">{(localCouriers.length ? localCouriers : METHODS).map((m) => <option key={m} value={m} />)}</datalist>
                 </div>
                 <div className="batch-group">
                   <div className="fd-section-head">Marketplace ID</div>
@@ -1530,9 +1559,8 @@ export default function OrderBoard({
                 {/* PR351 — optional Shipment ID (no-consolidation shortcut): styled exactly like Create
                     shipment step 2, but sits BELOW the item list. Leave blank to send items to Ship as
                     usual; type an id to group them into that shipment now and skip the Ship step. */}
-                <div className="batch-group">
+                <div className="batch-group" style={{ marginTop: 20 }}>
                   <div className="fd-section-head">Shipment ID</div>
-                  <div className="hint" style={{ marginBottom: 6 }}>Optional — set this only when there&rsquo;s no consolidation, to skip the Ship step.</div>
                   <input className="field" type="text" list="batch-shipids" placeholder='e.g. "SUB 193"' value={batchShipId} onChange={(e) => setBatchShipId(e.target.value)} />
                   <datalist id="batch-shipids">{shipIdOpts.map((s) => <option key={s} value={s} />)}</datalist>
                   {shipments.length > 0 && (
@@ -1941,7 +1969,7 @@ export default function OrderBoard({
                 <DropSearch
                   value={grpConsolCourier || null}
                   onChange={(v) => setGrpConsolCourier(v)}
-                  options={(() => { const list = localCouriers.length ? localCouriers : METHODS; return [...list, ...(grpConsolCourier && !list.includes(grpConsolCourier) ? [grpConsolCourier] : [])].map((m) => ({ value: m, label: m })); })()}
+                  options={courierOptions(grpConsolCourier)}
                   placeholder="— courier —"
                   clearable
                   ariaLabel="Consolidator courier"
