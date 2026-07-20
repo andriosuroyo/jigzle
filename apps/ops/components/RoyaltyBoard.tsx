@@ -34,12 +34,6 @@ export default function RoyaltyBoard({ entities, userEmail }: { entities: Royalt
   const codes = useMemo(() => (ledger?.lines.map((l) => l.item_code).filter(Boolean) as string[]) ?? [], [ledger]);
   const imgMap = useSkuImages(codes);
 
-  async function toggle(lineId: string, paid: boolean) {
-    setBusy(true); setError(null);
-    const { error } = await setRoyaltyPaid([lineId], paid);
-    if (error) setError(error); else await load(entity);
-    setBusy(false);
-  }
   async function markAllPaid() {
     if (!ledger) return;
     const unpaid = ledger.lines.filter((l) => !l.paid).map((l) => l.line_id);
@@ -94,35 +88,27 @@ export default function RoyaltyBoard({ entities, userEmail }: { entities: Royalt
           </div>
         )}
 
-        {/* the line cards */}
+        {/* the line cards — Sales-style: 36px image + exactly two left/right-justified lines */}
         {loading ? <div className="hint">Loading…</div> : !ledger ? null : ledger.lines.length === 0 ? (
           <div className="hint fq-empty">No paid-and-sent sales for {entity} yet.</div>
         ) : (
-          <ul className="fq-list">
+          <ul className="roy-list">
             {ledger.lines.map((l) => (
               <li key={l.line_id}>
-                <div className={`fq-row roy-card ${l.paid ? 'is-paid' : ''}`}>
-                  <div className="cat-row">
-                    <SkuImage status={l.item_code ? imgMap[l.item_code]?.status : undefined} displayUrl={l.item_code ? imgMap[l.item_code]?.displayUrl : undefined} name={l.name} size={SKU_IMG.sm} />
-                    <div className="cat-row-main">
-                      <div className="fq-row-top">
-                        <span className="fq-id">{l.item_code ?? '—'}</span>
-                        <span className={`po-status ${l.paid ? 'forwarder' : 'processing'}`} style={{ marginLeft: 'auto' }}>{l.paid ? 'Paid' : 'Unpaid'}</span>
-                      </div>
-                      <div className="fq-row-bot">
-                        <span className="cat-row-name">{l.name}</span>
-                      </div>
-                      <div className="roy-card-meta">
-                        <span>Sold {l.sold_date ? fmtNiceDate(l.sold_date) : '—'}</span>
-                        {l.qty > 1 && <span>×{l.qty}</span>}
-                        <span className="roy-card-amt">{fmtRp(l.royalty_idr)}</span>
-                      </div>
+                <div className={`roy-card ${l.paid ? 'is-paid' : ''}`}>
+                  <SkuImage status={l.item_code ? imgMap[l.item_code]?.status : undefined} displayUrl={l.item_code ? imgMap[l.item_code]?.displayUrl : undefined} name={l.name} size={SKU_IMG.sm} />
+                  <div className="roy-card-body">
+                    <div className="roy-line">
+                      <span className="roy-code">{l.item_code ?? '—'}</span>
+                      <span className="roy-sold">{l.sold_date ? fmtNiceDate(l.sold_date) : '—'}</span>
                     </div>
-                  </div>
-                  <div className="roy-card-act">
-                    {l.paid
-                      ? <button className="btn-secondary" onClick={() => toggle(l.line_id, false)} disabled={busy}>Mark unpaid</button>
-                      : <button className="btn-brown" onClick={() => toggle(l.line_id, true)} disabled={busy}>Mark paid</button>}
+                    <div className="roy-line">
+                      <span className="roy-name">{l.name}{l.qty > 1 ? ` ×${l.qty}` : ''}</span>
+                      <span className="roy-right">
+                        <span className="roy-amt">{fmtRp(l.royalty_idr)}</span>
+                        <span className={`po-status ${l.paid ? 'forwarder' : 'processing'}`}>{l.paid ? (l.paid_date ? `Paid ${fmtNiceDate(l.paid_date)}` : 'Paid') : 'Unpaid'}</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
               </li>

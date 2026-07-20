@@ -119,7 +119,9 @@ export async function syncRoyalties(): Promise<number> {
   if (!names.length) return 0;
 
   // Clover SKUs by these entities → item_code → { entity, pieces }
-  const { data: cat } = await supabase.from('catalogue').select('item_code,artist,piece_count_n').in('artist', names);
+  // A royalty is owed only for OUR OWN brand (Clover = prefix 'CLO') by one of the entities' artists —
+  // an entity name appearing as an artist on some other brand's SKU never accrues.
+  const { data: cat } = await supabase.from('catalogue').select('item_code,artist,piece_count_n').in('artist', names).eq('brand_prefix', 'CLO');
   const skuInfo = new Map<string, { entity: string; pieces: number | null }>();
   for (const r of (cat ?? []) as { item_code: string; artist: string | null; piece_count_n: number | null }[]) {
     if (r.artist) skuInfo.set(r.item_code, { entity: r.artist, pieces: r.piece_count_n });
@@ -152,7 +154,7 @@ export async function syncRoyalties(): Promise<number> {
   // current rate schedule → rate[entity][pieces]
   const { data: rateData } = await supabase.from('royalty_rate_rows').select('entity,pieces,royalty_idr');
   const rate = new Map<string, number>();
-  for (const r of (rateData ?? []) as { entity: string; pieces: number; royalty_idr: number }[]) rate.set(`${r.entity}${r.pieces}`, r.royalty_idr);
+  for (const r of (rateData ?? []) as { entity: string; pieces: number; royalty_idr: number }[]) rate.set(`${r.entity}|${r.pieces}`, r.royalty_idr);
 
   // existing ledger rows (line_id → {id, paid, royalty_idr})
   const { data: existing } = await supabase.from('royalty_paid').select('id,line_id,paid_date,royalty_idr');
@@ -161,24 +163,31 @@ export async function syncRoyalties(): Promise<number> {
     byLine.set(r.line_id, { id: r.id, paid: !!r.paid_date, royalty_idr: r.royalty_idr });
   }
 
-  // v1: accrue NEW qualifying lines only — never rewrite existing ledger rows, so imported history
-  // (incl. the historical unpaid amounts) is preserved exactly. Rate edits apply to new accruals.
+  // Accrue new qualifying lines, and keep UNPAID amounts on the current schedule. PAID rows are FROZEN
+  // (never touched), so a later rate change (e.g. 1000p Rp 150k -> 160k) never rewrites history — it
+  // only moves what is still owed. An unpaid line's amount = current per-unit rate x qty.
   const inserts: Record<string, unknown>[] = [];
+  const reconcile: { id: number; royalty_idr: number }[] = [];
   for (const l of lines) {
     if (!paidOrders.has(l.sales_id)) continue;
-    if (byLine.has(l.line_id)) continue; // already in the ledger — leave it untouched
     const info = skuInfo.get(l.item_code);
     if (!info) continue;
-    const desired = (info.pieces != null ? rate.get(`${info.entity}${info.pieces}`) : undefined) ?? 0;
-    inserts.push({
-      line_id: l.line_id, partner: info.entity, item_code: l.item_code, qty: l.qty ?? 1,
-      royalty_idr: desired * (l.qty ?? 1), fulfill_date: dateOf(l.shipped_at), paid_date: null,
-    });
+    const lineTotal = ((info.pieces != null ? rate.get(`${info.entity}|${info.pieces}`) : undefined) ?? 0) * (l.qty ?? 1);
+    const cur = byLine.get(l.line_id);
+    if (!cur) {
+      inserts.push({
+        line_id: l.line_id, partner: info.entity, item_code: l.item_code, qty: l.qty ?? 1,
+        royalty_idr: lineTotal, fulfill_date: dateOf(l.shipped_at), paid_date: null,
+      });
+    } else if (!cur.paid && cur.royalty_idr !== lineTotal) {
+      reconcile.push({ id: cur.id, royalty_idr: lineTotal }); // unpaid tracks current rate; paid frozen
+    }
   }
 
   for (let i = 0; i < inserts.length; i += 200) {
     await supabase.from('royalty_paid').insert(inserts.slice(i, i + 200));
   }
+  await Promise.all(reconcile.map((r) => supabase.from('royalty_paid').update({ royalty_idr: r.royalty_idr }).eq('id', r.id)));
   return inserts.length;
 }
 
@@ -211,6 +220,7 @@ export async function getRoyaltyLedger(entity: string): Promise<RoyaltyLedger> {
     item_code: r.item_code,
     name: r.item_code ? (names.get(r.item_code) ?? r.item_code) : '—',
     sold_date: shipped.get(r.line_id) ?? r.fulfill_date ?? null,
+    paid_date: r.paid_date ?? null,
     qty: r.qty ?? 1,
     royalty_idr: r.royalty_idr ?? 0,
     paid: !!r.paid_date,

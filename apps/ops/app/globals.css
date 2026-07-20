@@ -2237,7 +2237,7 @@ input.batch-field, select.batch-field {
 @keyframes crumb-spin { to { transform: rotate(360deg); } }
 
 /* ── Clover Royalty (PR392) ─────────────────────────────────────────────── */
-.roy-wrap { max-width: 900px; margin: 0 auto; padding: 12px 16px 40px; }
+.roy-wrap { max-width: 1100px; margin: 0 auto; padding: 12px 16px 40px; }
 .roy-entity-tabs { margin-bottom: 14px; }
 .roy-totals { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .roy-total-card { flex: 1 1 220px; background: var(--cream); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
@@ -2246,14 +2246,18 @@ input.batch-field, select.batch-field {
 .roy-total-idr { font-size: 22px; font-weight: 800; color: var(--ink); margin-top: 2px; }
 .roy-total-usd { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .roy-rate-note { opacity: 0.8; }
-/* line cards */
-.roy-card { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: default; }
-.roy-card .cat-row { flex: 1; min-width: 0; }
-.roy-card.is-paid { opacity: 0.72; }
-.roy-card-meta { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 3px; }
-.roy-card-amt { font-weight: 700; color: var(--brown); margin-left: auto; }
-.roy-card-act { flex-shrink: 0; }
-.roy-card-act button { white-space: nowrap; }
+/* line cards — full-height list (no internal scroll), Sales-style 2-line rows */
+.roy-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.roy-card { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; background: white; border: 1px solid var(--line); border-radius: 10px; }
+.roy-card.is-paid { opacity: 0.6; }
+.roy-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.roy-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.roy-code { font-weight: 700; font-size: 13px; color: var(--ink); white-space: nowrap; }
+.roy-sold { font-size: 12px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.roy-name { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roy-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.roy-amt { font-weight: 700; font-size: 13px; color: var(--brown); white-space: nowrap; }
+.roy-right .po-status { margin-left: 0; }
 /* rate schedule editor (Settings overlay) */
 .roy-rate-head { display: grid; grid-template-columns: 1fr 1fr 28px; gap: 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); padding: 0 2px 4px; }
 .roy-rate-list { display: flex; flex-direction: column; gap: 6px; }
