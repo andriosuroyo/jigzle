@@ -103,11 +103,10 @@ export async function deleteRoyaltyRate(id: number): Promise<{ error: string | n
 type CatNameRow = { item_code: string; translate_name: string | null; original_name: string | null; self_code: string | null };
 const nameOf = (c: CatNameRow): string => c.translate_name || c.original_name || c.self_code || c.item_code;
 
-async function fxRates(supabase: ReturnType<typeof createSupabaseServerClient>): Promise<{ USD: number | null; EUR: number | null }> {
-  const { data } = await supabase.from('currencies').select('code,rate_to_idr').in('code', ['USD', 'EUR']);
-  const m: Record<string, number> = {};
-  for (const r of (data ?? []) as { code: string; rate_to_idr: number }[]) { const v = Number(r.rate_to_idr); if (v > 0) m[r.code] = v; }
-  return { USD: m.USD ?? null, EUR: m.EUR ?? null };
+async function fxRates(supabase: ReturnType<typeof createSupabaseServerClient>): Promise<{ USD: number | null }> {
+  const { data } = await supabase.from('currencies').select('rate_to_idr').eq('code', 'USD').maybeSingle();
+  const v = data ? Number((data as { rate_to_idr: number }).rate_to_idr) : 0;
+  return { USD: v > 0 ? v : null };
 }
 
 // Accrue every PAID+SENT Clover line into royalty_paid, and reconcile UNPAID amounts to the current

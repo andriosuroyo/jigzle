@@ -15,12 +15,12 @@ import { fmtRp, fmtNiceDate, fmtNum } from '@jigzle/lib';
 import { getRoyaltyLedger, setRoyaltyPaid } from '@/app/royalty/actions';
 import type { RoyaltyEntity, RoyaltyLedger } from '@/app/royalty/types';
 
-// Foreign-currency display carries a +5% buffer so a payout budgeted here still covers FX drift.
+// Foreign-currency display uses a conservative rate (rate × 1.05) so the converted figure leaves a
+// 5% buffer for FX drift — i.e. amount = IDR / (rate_to_idr × 1.05).
 const FX_BUFFER = 1.05;
 const CCYS = [
   { code: 'IDR', flag: '🇮🇩' },
   { code: 'USD', flag: '🇺🇸' },
-  { code: 'EUR', flag: '🇪🇺' },
 ] as const;
 type Ccy = (typeof CCYS)[number]['code'];
 
@@ -37,8 +37,7 @@ export default function RoyaltyBoard({ entities, userEmail }: { entities: Royalt
     if (ccy === 'IDR') return fmtRp(idr);
     const rate = ledger?.rates?.[ccy] ?? null;
     if (!rate) return '—';
-    const sym = ccy === 'USD' ? '$' : '€';
-    return `${sym}${fmtNum((idr / rate) * FX_BUFFER, 2)}`;
+    return `$${fmtNum(idr / (rate * FX_BUFFER), 2)}`;
   }
 
   async function load(name: string) {
