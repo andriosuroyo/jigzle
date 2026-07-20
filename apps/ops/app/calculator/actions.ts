@@ -26,12 +26,13 @@ export async function getCalcMethods(): Promise<ShippingMethod[]> {
   return (data ?? []) as ShippingMethod[];
 }
 
-// Settings › Calculator › Rates — edit a method's flag / import tax rate. Error-as-data.
-export async function updateShippingMethod(id: string, patch: { flag?: string | null; import_tax_rate?: number | null }): Promise<{ error: string | null }> {
+// Settings › Calculator › Rates — edit a method's flag / import tax rate / tax-included default. Error-as-data.
+export async function updateShippingMethod(id: string, patch: { flag?: string | null; import_tax_rate?: number | null; tax_included?: boolean }): Promise<{ error: string | null }> {
   const supabase = createSupabaseServerClient();
   const upd: Record<string, unknown> = {};
   if (patch.flag !== undefined) upd.flag = (patch.flag ?? '').trim() || null;
   if (patch.import_tax_rate !== undefined) upd.import_tax_rate = patch.import_tax_rate;
+  if (patch.tax_included !== undefined) upd.tax_included = patch.tax_included;
   if (!Object.keys(upd).length) return { error: null };
   const { error } = await supabase.from('shipping_methods').update(upd).eq('id', id);
   if (error) return { error: error.message };

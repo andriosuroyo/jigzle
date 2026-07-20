@@ -24,7 +24,7 @@ export default function CalculatorRatesSettings({ embedded = false }: { embedded
   const fxUpdatedAt = currencies.reduce<string | null>((l, c) => (c.updated_at && (!l || c.updated_at > l) ? c.updated_at : l), null);
 
   // edit a method's flag / import tax rate, optimistically + persist
-  function patchMethod(id: string, patch: { flag?: string | null; import_tax_rate?: number | null }) {
+  function patchMethod(id: string, patch: { flag?: string | null; import_tax_rate?: number | null; tax_included?: boolean }) {
     setMethods((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
     void updateShippingMethod(id, patch).catch(() => {});
   }
@@ -80,7 +80,11 @@ export default function CalculatorRatesSettings({ embedded = false }: { embedded
                     <span className="calc-unit">%</span>
                   </span>
                 </label>
-                {m.tax_included && <span className="calc-pill tax">tax included in rate</span>}
+                <label className="calc-method-check">
+                  <input type="checkbox" checked={!!m.tax_included}
+                    onChange={(e) => patchMethod(m.id, { tax_included: e.target.checked })} />
+                  Import tax included (all-in)
+                </label>
                 {Number(m.warehouse_fee) > 0 && <span className="calc-pill">+{m.warehouse_fee} {m.source_currency} wh</span>}
               </div>
             </li>
