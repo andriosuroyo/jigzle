@@ -1123,6 +1123,8 @@ img.sku-img { background: #e8e8e8; }
 .cat-detail .fd-head { margin-bottom: 4px; }
 .cat-fix { display: flex; flex-direction: column; gap: 20px; }
 .cat-fix-sec .cat-grp-title { margin-bottom: 8px; }
+/* PR382 — Series-variants group: the conflicting spellings wrap onto their own lines under the brand. */
+.cat-seriesvar { flex-wrap: wrap; gap: 6px; }
 
 /* ── Success ── */
 .success-wrap { display: flex; justify-content: center; padding: 40px 18px; }
