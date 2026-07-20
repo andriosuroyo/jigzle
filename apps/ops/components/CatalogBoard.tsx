@@ -313,6 +313,7 @@ export default function CatalogBoard({
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
   const [recentEdits, setRecentEdits] = useState<CatalogueListRow[]>([]); // PR377: last-edited SKUs (updated_at desc)
+  const [recentEditsLoading, setRecentEditsLoading] = useState(true); // PR381: show "Loading…" until the first fetch resolves
   const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
   const [catSubTypes, setCatSubTypes] = useState<{ label: string; product_type: string }[]>(SUBTYPES_CACHE ?? []); // PR368: sub type ↔ product type
   const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: manual Google-Drive image URLs
@@ -413,7 +414,11 @@ export default function CatalogBoard({
   // fires on mount), so a SKU just saved surfaces at the top when you come back to Search.
   useEffect(() => {
     if (mode !== null) return;
-    getRecentEdits().then(setRecentEdits).catch(() => setRecentEdits([]));
+    setRecentEditsLoading(true);
+    getRecentEdits()
+      .then(setRecentEdits)
+      .catch(() => setRecentEdits([]))
+      .finally(() => setRecentEditsLoading(false));
   }, [mode]);
   function persistHistory(next: string[]) {
     setHistory(next);
@@ -1462,9 +1467,11 @@ export default function CatalogBoard({
                       </li>
                     ))}
                   </ul>
-                ) : history.length > 0 || recentEdits.length > 0 ? (
+                ) : (
                   // PR377 — idle Search view: recent searches + recent edits. Stacked on mobile
                   // (searches above, edits below); side-by-side columns on desktop (.cat-idle).
+                  // PR381 — Recent edits always renders (even before its fetch resolves), showing
+                  // an italic "Loading…" placeholder while the first load is in flight.
                   <div className="cat-idle">
                     {history.length > 0 && (
                       <div className="cat-history">
@@ -1485,11 +1492,13 @@ export default function CatalogBoard({
                         </ul>
                       </div>
                     )}
-                    {recentEdits.length > 0 && (
-                      <div className="cat-history">
-                        <div className="cat-history-head">
-                          <span>Recent edits</span>
-                        </div>
+                    <div className="cat-history">
+                      <div className="cat-history-head">
+                        <span>Recent edits</span>
+                      </div>
+                      {recentEditsLoading ? (
+                        <div className="hint" style={{ fontStyle: 'italic' }}>Loading…</div>
+                      ) : recentEdits.length > 0 ? (
                         <ul className="cat-history-list">
                           {recentEdits.map((r) => (
                             <li key={r.item_code} className="cat-history-row">
@@ -1501,11 +1510,11 @@ export default function CatalogBoard({
                             </li>
                           ))}
                         </ul>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="hint">No recent edits.</div>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <div className="hint fq-empty">Search by SKU code, brand, item name, or piece count.</div>
                 )}
               </div>
             )}
