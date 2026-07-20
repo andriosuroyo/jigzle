@@ -15,12 +15,31 @@ import { fmtRp, fmtNiceDate, fmtNum } from '@jigzle/lib';
 import { getRoyaltyLedger, setRoyaltyPaid } from '@/app/royalty/actions';
 import type { RoyaltyEntity, RoyaltyLedger } from '@/app/royalty/types';
 
+// Foreign-currency display carries a +5% buffer so a payout budgeted here still covers FX drift.
+const FX_BUFFER = 1.05;
+const CCYS = [
+  { code: 'IDR', flag: '🇮🇩' },
+  { code: 'USD', flag: '🇺🇸' },
+  { code: 'EUR', flag: '🇪🇺' },
+] as const;
+type Ccy = (typeof CCYS)[number]['code'];
+
 export default function RoyaltyBoard({ entities, userEmail }: { entities: RoyaltyEntity[]; userEmail: string }) {
   const [entity, setEntity] = useState<string>(entities[0]?.name ?? '');
   const [ledger, setLedger] = useState<RoyaltyLedger | null>(null);
+  const [ccy, setCcy] = useState<Ccy>('IDR');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Show an IDR amount in the selected currency. IDR is native; USD/EUR convert via the rate + buffer.
+  function fmtCcy(idr: number): string {
+    if (ccy === 'IDR') return fmtRp(idr);
+    const rate = ledger?.rates?.[ccy] ?? null;
+    if (!rate) return '—';
+    const sym = ccy === 'USD' ? '$' : '€';
+    return `${sym}${fmtNum((idr / rate) * FX_BUFFER, 2)}`;
+  }
 
   async function load(name: string) {
     if (!name) { setLedger(null); return; }
@@ -65,28 +84,30 @@ export default function RoyaltyBoard({ entities, userEmail }: { entities: Royalt
 
         {error && <div className="validation err" style={{ margin: '10px 0' }}>{error}</div>}
 
-        {/* unpaid totals (view-only) */}
+        {/* totals (view-only) + currency selector + Mark all */}
         <div className="roy-totals">
           <div className="roy-total-card">
             <div className="roy-total-label">Unpaid</div>
-            <div className="roy-total-idr">{fmtRp(ledger?.unpaid_idr ?? 0)}</div>
-            <div className="roy-total-usd">
-              {ledger?.unpaid_usd != null ? `≈ $${fmtNum(ledger.unpaid_usd, 2)}` : '—'}
-              {ledger?.usd_rate ? <span className="roy-rate-note"> · 1 USD = Rp {fmtNum(ledger.usd_rate, 0)}</span> : null}
-            </div>
+            <div className="roy-total-idr">{fmtCcy(ledger?.unpaid_idr ?? 0)}</div>
           </div>
           <div className="roy-total-card roy-total-paid">
             <div className="roy-total-label">Paid to date</div>
-            <div className="roy-total-idr">{fmtRp(ledger?.paid_idr ?? 0)}</div>
-            <div className="roy-total-usd">{ledger ? `${ledger.lines.length} lines · ${unpaidCount} unpaid` : ''}</div>
+            <div className="roy-total-idr">{fmtCcy(ledger?.paid_idr ?? 0)}</div>
+          </div>
+          <div className="roy-total-side">
+            <div className="roy-ccy" role="group" aria-label="Display currency">
+              {CCYS.map((c) => (
+                <button key={c.code} type="button" className={`roy-ccy-btn ${ccy === c.code ? 'active' : ''}`}
+                  aria-pressed={ccy === c.code} onClick={() => setCcy(c.code)}>
+                  <span aria-hidden="true">{c.flag}</span> {c.code}
+                </button>
+              ))}
+            </div>
+            {unpaidCount > 0 && (
+              <button className="btn-primary roy-markall" onClick={markAllPaid} disabled={busy}>Mark all {unpaidCount} as paid</button>
+            )}
           </div>
         </div>
-
-        {unpaidCount > 0 && (
-          <div className="td-actions" style={{ marginBottom: 10 }}>
-            <button className="btn-primary" onClick={markAllPaid} disabled={busy}>Mark all {unpaidCount} as paid</button>
-          </div>
-        )}
 
         {/* the line cards — Sales-style: 36px image + exactly two left/right-justified lines */}
         {loading ? <div className="hint">Loading…</div> : !ledger ? null : ledger.lines.length === 0 ? (

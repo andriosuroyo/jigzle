@@ -2239,13 +2239,18 @@ input.batch-field, select.batch-field {
 /* ── Clover Royalty (PR392) ─────────────────────────────────────────────── */
 .roy-wrap { max-width: 1100px; margin: 0 auto; padding: 12px 16px 40px; }
 .roy-entity-tabs { margin-bottom: 14px; }
-.roy-totals { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.roy-total-card { flex: 1 1 220px; background: var(--cream); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.roy-totals { display: flex; gap: 12px; flex-wrap: wrap; align-items: stretch; margin-bottom: 12px; }
+.roy-total-card { flex: 1 1 200px; background: var(--cream); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; }
 .roy-total-card.roy-total-paid { background: var(--paper); }
 .roy-total-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .roy-total-idr { font-size: 22px; font-weight: 800; color: var(--ink); margin-top: 2px; }
-.roy-total-usd { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.roy-rate-note { opacity: 0.8; }
+/* right side of the totals row: currency selector + Mark all */
+.roy-total-side { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 8px; margin-left: auto; }
+.roy-ccy { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: white; }
+.roy-ccy-btn { appearance: none; border: none; background: transparent; padding: 7px 12px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border-left: 1px solid var(--line); white-space: nowrap; }
+.roy-ccy-btn:first-child { border-left: none; }
+.roy-ccy-btn.active { background: var(--brown); color: white; }
+.roy-markall { white-space: nowrap; }
 /* line cards — full-height list (no internal scroll), Sales-style 2-line rows */
 .roy-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .roy-card { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; background: white; border: 1px solid var(--line); border-radius: 10px; }
