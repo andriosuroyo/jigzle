@@ -1709,22 +1709,35 @@ img.sku-img { background: #e8e8e8; }
 .calc-seg { display: flex; gap: 8px; }
 .calc-seg button { flex: 1; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
 .calc-seg button.active { background: var(--orange-tint); border-color: var(--orange); color: var(--brown-dark); }
-/* PR397 — coefficient in the headline (a small field, not a slider) */
-.calc-hl-coef { flex: 0 0 auto; max-width: 96px; }
-.calc-hl-coef input { width: 100%; padding: 6px 8px; border: 1px solid var(--orange); border-radius: 8px; background: rgba(255,255,255,0.6); color: var(--brown-dark); font-size: 20px; font-weight: 800; text-align: center; }
+/* PR397/PR398 — coefficient in the headline: a small adjustable field (no spinners), sized to sit
+   level with the Margin value so the three cells align. */
+.calc-headline { align-items: flex-start; }
+.calc-hl-coef { flex: 0 0 auto; }
+.calc-hl-coef input { width: 68px; margin-top: 1px; padding: 2px 8px; border: 1px solid var(--orange); border-radius: 8px; background: rgba(255,255,255,0.55); color: var(--brown-dark); font-size: 16px; font-weight: 800; text-align: center; line-height: 1.4; }
 /* PR397 — currency symbol prefix inside an input row ("元 279") */
 .calc-pre { flex-shrink: 0; color: var(--muted); font-weight: 700; }
 /* PR397 — read-only method info (display only, not fields) */
 .calc-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 14px; padding: 2px 0 2px; }
+.calc-meta.calc-meta-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } /* PR398 — 4-up desktop */
 .calc-meta-item { display: flex; flex-direction: column; min-width: 0; }
 .calc-meta-l { font-size: 10px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
 .calc-meta-v { font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .calc-meta-v.pos { color: var(--green); }
-/* PR397 — dimensions (P × L × T cm) + weight (g) on one line */
-.calc-dimwt { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.calc-meta-note { font-style: normal; font-weight: 500; color: var(--muted); }
+/* Tax include/exclude toggle (per-calc) */
+.calc-meta-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.calc-meta-check input { width: 16px; height: 16px; accent-color: var(--orange); cursor: pointer; }
+/* Import tax on its own line */
+.calc-meta-taxline { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
+.calc-meta-taxline .calc-meta-l { flex-shrink: 0; }
+/* PR397/PR398 — dimensions (P × L × T cm) on one line; weight below with vol/effective to its right */
+.calc-dimwt { display: flex; align-items: center; gap: 6px; }
 .calc-dimwt input { flex: 1 1 52px; min-width: 44px; text-align: center; }
-.calc-dimwt .calc-dimwt-w { flex: 1 1 72px; min-width: 60px; }
 .calc-x { color: var(--muted); font-weight: 700; }
+.calc-wtrow { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.calc-wt-input { width: 128px; flex-shrink: 0; }
+.calc-wt-notes { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); line-height: 1.4; min-width: 0; }
+@media (max-width: 640px) { .calc-meta.calc-meta-4 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 460px) { .calc-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* breakdown rows */
 .calc-brk { display: flex; flex-direction: column; }
@@ -1765,6 +1778,8 @@ img.sku-img { background: #e8e8e8; }
 .calc-method-flag { width: 48px; flex-shrink: 0; text-align: center; font-size: 18px; padding: 5px 4px; }
 .calc-method-edit { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .calc-method-edit label { display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; color: var(--muted); }
+.calc-method-check { gap: 6px; cursor: pointer; }
+.calc-method-check input { width: 15px; height: 15px; accent-color: var(--orange); cursor: pointer; }
 .calc-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .calc-pill { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: var(--paper); color: var(--brown-dark); }
 .calc-pill.tax { background: var(--green-tint); color: #3D6B26; }
