@@ -89,10 +89,7 @@ export default function CalculatorBoard({
 
   const method = methods.find((m) => m.id === methodId) || methods[0];
   const taxRate = method?.import_tax_rate ?? 18.25; // per-method, managed in Settings
-  // Tax-included is a per-method DEFAULT (Settings) that can be toggled per-calc here (e.g. an "all-in"
-  // MTE quote already bundles import tax). Resets to the method's default when the method changes.
-  const [taxIncluded, setTaxIncluded] = useState<boolean>(method?.tax_included ?? false);
-  useEffect(() => { setTaxIncluded(method?.tax_included ?? false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [methodId]);
+  // Whether import tax is charged is fixed per method in Settings (tax_included = bundled/all-in → 0).
 
   // persist form defaults (debounced); skip the initial mount so a page load doesn't write
   const firstPrefs = useRef(true);
@@ -105,7 +102,7 @@ export default function CalculatorBoard({
   }, [methodId, taxRate, coefficient, marketplaceActive, marketplaceRate]);
 
   const c = method
-    ? compute({ method: { ...method, tax_included: taxIncluded }, fx, tax_rate: taxRate, purchase_price: purchasePrice, local_shipping: localShipping, real_weight_g: realWeightG, box_p: boxP, box_l: boxL, box_t: boxT, coefficient, marketplace_active: marketplaceActive, marketplace_rate: marketplaceRate })
+    ? compute({ method, fx, tax_rate: taxRate, purchase_price: purchasePrice, local_shipping: localShipping, real_weight_g: realWeightG, box_p: boxP, box_l: boxL, box_t: boxT, coefficient, marketplace_active: marketplaceActive, marketplace_rate: marketplaceRate })
     : null;
 
   const validation = useMemo(() => {
@@ -155,29 +152,21 @@ export default function CalculatorBoard({
             <div className="calc-grid">
               {/* LEFT — inputs */}
               <div className="calc-col-inputs">
-                <div className="po-form">
+                {/* shipping method + its read-only datapoints, in one outlined box. Tax is fixed by the
+                    method's Settings (charge import tax → the rate, else 0%). */}
+                <div className="po-form calc-method-box">
                   <div className="po-field">
                     <label>Shipping method</label>
                     <select value={methodId} onChange={(e) => setMethodId(e.target.value)}>
                       {methods.map((m) => <option key={m.id} value={m.id}>{methodLabel(m)}</option>)}
                     </select>
                   </div>
-
-                  {/* method info: FX / Shipping / Extra are read-only; Tax is a per-calc include toggle */}
                   <div className="calc-meta calc-meta-4">
                     <Meta l="FX → IDR" v={c ? fmtNum(c.fx_source, 2) : '—'} />
                     <Meta l="Shipping" v={`${fmtNum(method.rate_per_kg, 0)} ${method.rate_currency}/kg`} />
                     <Meta l="Extra" v={`${sym}${fmtNum(method.warehouse_fee, 2)}`} />
-                    <div className="calc-meta-item">
-                      <span className="calc-meta-l">Tax</span>
-                      <label className="calc-meta-check"><input type="checkbox" checked={taxIncluded} onChange={(e) => setTaxIncluded(e.target.checked)} /> {taxIncluded ? 'Included' : 'Excluded'}</label>
-                    </div>
+                    <Meta l="Import tax" v={method.tax_included ? '0%' : `${fmtNum(taxRate, 2)}%`} />
                   </div>
-                  <div className="calc-meta-taxline">
-                    <span className="calc-meta-l">Import tax</span>
-                    <span className="calc-meta-v">{fmtNum(taxRate, 2)}%<em className="calc-meta-note">{taxIncluded ? ' · bundled in shipping — not added' : ' · added on top of cost'}</em></span>
-                  </div>
-                  <div className="hint">FX auto-updates · {fxUpdatedAt ? `refreshed ${new Date(fxUpdatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 'cached'} · manage in Settings › Calculator</div>
                 </div>
 
                 <div className="po-form">
@@ -225,7 +214,7 @@ export default function CalculatorBoard({
                   <div className="calc-brk">
                     <BrkRow m="A" desc="Item cost subtotal" sub="(purchase + local + warehouse) × FX" val={c.item_cost_idr} />
                     <BrkRow m="B" desc="Shipping cost" sub={`${fmtNum(c.effective_kg * 1000, 0)} g × ${fmtNum(method.rate_per_kg, 0)} ${method.rate_currency}/kg × FX`} val={c.shipping_cost_idr} />
-                    {taxIncluded
+                    {method.tax_included
                       ? <BrkRow m="C" desc="Import tax" sub="Included in shipping rate" val={0} muted />
                       : <BrkRow m="C" desc="Import tax" sub={`(A + B) × ${fmtNum(taxRate, 2)}%`} val={c.import_tax_idr} />}
                     {marketplaceActive
@@ -234,7 +223,7 @@ export default function CalculatorBoard({
                     <BrkRow m="Σ" desc="TOTAL COST" val={c.total_cost_idr} total />
                   </div>
                 )}
-                <div className={`validation ${validation.cls}`} style={{ marginTop: 12 }}>{validation.text}</div>
+                {validation.cls !== 'ok' && <div className={`validation ${validation.cls}`} style={{ marginTop: 12 }}>{validation.text}</div>}
                 <div className="calc-actions">
                   <button className="btn-secondary" onClick={reset}>Reset</button>
                 </div>
