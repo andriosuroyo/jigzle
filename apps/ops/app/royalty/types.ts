@@ -21,6 +21,7 @@ export interface RoyaltyLine {
   item_code: string | null;
   name: string;
   sold_date: string | null;   // when it became PAID + SENT (order_lines.shipped_at); null → fell back to fulfill_date
+  paid_date: string | null;   // when the royalty payout was recorded (null while unpaid)
   qty: number;
   royalty_idr: number;
   paid: boolean;
