@@ -2244,13 +2244,14 @@ input.batch-field, select.batch-field {
 .roy-total-card.roy-total-paid { background: var(--paper); }
 .roy-total-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .roy-total-idr { font-size: 22px; font-weight: 800; color: var(--ink); margin-top: 2px; }
-/* right side of the totals row: currency selector + Mark all */
-.roy-total-side { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 8px; margin-left: auto; }
-.roy-ccy { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: white; }
-.roy-ccy-btn { appearance: none; border: none; background: transparent; padding: 7px 12px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border-left: 1px solid var(--line); white-space: nowrap; }
+/* right side of the totals row: currency selector + Mark all. Fixed width sized for the widest 2-digit
+   "Mark all NN as paid" so the button (and the equal-width selector above it) never changes size. */
+.roy-total-side { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 8px; margin-left: auto; width: 12rem; }
+.roy-ccy { display: flex; width: 100%; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: white; }
+.roy-ccy-btn { flex: 1; appearance: none; border: none; background: transparent; padding: 7px 4px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border-left: 1px solid var(--line); white-space: nowrap; text-align: center; }
 .roy-ccy-btn:first-child { border-left: none; }
 .roy-ccy-btn.active { background: var(--brown); color: white; }
-.roy-markall { white-space: nowrap; }
+.roy-markall { width: 100%; white-space: nowrap; }
 /* line cards — full-height list (no internal scroll), Sales-style 2-line rows */
 .roy-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .roy-card { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; background: white; border: 1px solid var(--line); border-radius: 10px; }

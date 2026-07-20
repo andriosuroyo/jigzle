@@ -32,7 +32,7 @@ export interface RoyaltyLedger {
   unpaid_idr: number;
   paid_idr: number;
   // rate_to_idr for each foreign currency (1 unit = N IDR), for client-side display conversion. null if
-  // the currency row is missing. IDR is native (no conversion). See BUFFER in RoyaltyBoard.
-  rates: { USD: number | null; EUR: number | null };
+  // the currency row is missing. IDR is native (no conversion). See FX_BUFFER in RoyaltyBoard.
+  rates: { USD: number | null };
   synced: number;              // how many new qualifying lines were accrued on this load
 }
