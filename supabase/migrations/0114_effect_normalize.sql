@@ -1,4 +1,4 @@
--- 0114 — Effect standard (PR384): sentence-case each effect token, split multi-effects on , + / & ,
+-- 0114 — Effect standard (PR391): sentence-case each effect token, split multi-effects on , + / & ,
 -- de-dupe, sort alphabetically (case-insensitive), and re-join with " + ". Folds every legacy variant:
 --   "Glow in the Dark" / "Glow in The Dark"      → "Glow in the dark"
 --   "Glow in the dark, Silhouette"               → "Glow in the dark + Silhouette"

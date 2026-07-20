@@ -180,7 +180,7 @@ const SECTIONS: SectionDef[] = [
     blank: { label: '' },
   },
   {
-    // PR385 — the curated Effect vocabulary. Category is the HIDDEN grouping (Visual / Scent / Texture);
+    // PR391 — the curated Effect vocabulary. Category is the HIDDEN grouping (Visual / Scent / Texture);
     // staff only pick the label. Activities/formats (Coloring, Find hidden, Calendar…) live in Tags, not here.
     kind: 'cat_effect',
     title: 'Effects',
@@ -431,7 +431,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     const colOptions: Record<string, string[]> = {};
     for (const c of sec.cols) if (c.type === 'select') {
       if (c.optionsFrom) colOptions[c.key] = lists[c.optionsFrom].map((r) => String(val(r, 'label') ?? '')).filter(Boolean);
-      else if (c.options) colOptions[c.key] = c.options; // PR385 — a fixed option set (Effect category)
+      else if (c.options) colOptions[c.key] = c.options; // PR391 — a fixed option set (Effect category)
     }
     return (
       <div className="set-list">

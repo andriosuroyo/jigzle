@@ -62,10 +62,10 @@ const pieceBucket = (n: number | null): string => {
 const canonMaterial = (m: string | null): string => {
   const t = (m ?? '').trim();
   if (!t) return UNSPEC;
-  if (/^wood/i.test(t)) return 'Wood'; // PR383 — "Wood" is the canonical material (folds legacy "Wooden")
+  if (/^wood/i.test(t)) return 'Wood'; // PR391 — "Wood" is the canonical material (folds legacy "Wooden")
   return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
 };
-// PR384 — the shared Effect standard (sentence-case tokens, alphabetical, joined by " + ") so the
+// PR391 — the shared Effect standard (sentence-case tokens, alphabetical, joined by " + ") so the
 // facet groups every legacy case/separator variant under one canonical option.
 const canonEffect = (e: string | null): string => normalizeEffect(e) || UNSPEC;
 const normTheme = (theme: string | null): string => {

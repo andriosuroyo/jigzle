@@ -1,4 +1,4 @@
--- 0116 — Reclassify Effect (PR385). "Effect" had become a junk drawer holding three different axes.
+-- 0116 — Reclassify Effect (PR391). "Effect" had become a junk drawer holding three different axes.
 -- Keep Effect = sensory properties only; move ACTIVITY / FORMAT tokens to Tags (the chosen home). Runs
 -- AFTER 0114 (effect is already a " + "-joined set of sentence-cased tokens), so it works token-by-token:
 --   • scent synonyms  (Fragrant / Smell / Smell me)      → the effect "Scented"  (kept)

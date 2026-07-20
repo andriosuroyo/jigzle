@@ -929,7 +929,7 @@ button.po-pick-btn:active { background: var(--paper); }
 /* PR366 — Barcodes grid cell (right of Release date): big, readable codes with the Add-barcode button
    floated to their right; when none are linked the button sits under the header. */
 .cat-bc-cell-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 38px; }
-/* PR383 — the barcode reads at the standard field size (16px), so it's as large as every other field
+/* PR391 — the barcode reads at the standard field size (16px), so it's as large as every other field
    in the grid; padding grows to keep the chip ~34px tall and the copy icon scales up to match. */
 .cat-bc-cell .cat-bc-chip { font-size: 16px; padding: 6px 12px; }
 .cat-bc-cell .cat-bc-chip .copy-btn svg { width: 15px; height: 15px; }
@@ -1126,7 +1126,7 @@ img.sku-img { background: #e8e8e8; }
 .cat-detail .fd-head { margin-bottom: 4px; }
 .cat-fix { display: flex; flex-direction: column; gap: 20px; }
 .cat-fix-sec .cat-grp-title { margin-bottom: 8px; }
-/* PR382 — Series-variants group: the conflicting spellings wrap onto their own lines under the brand. */
+/* PR391 — Series-variants group: the conflicting spellings wrap onto their own lines under the brand. */
 .cat-seriesvar { flex-wrap: wrap; gap: 6px; }
 
 /* ── Success ── */

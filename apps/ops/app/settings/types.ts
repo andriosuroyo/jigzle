@@ -146,7 +146,7 @@ export interface CatalogClassOption {
   is_active: boolean;
   sort_order: number;
   product_type?: string | null; // PR368 — sub types only: the Product type this sub type belongs to (0097)
-  category?: string | null;     // PR385 — effects only: hidden grouping (Visual / Scent / Texture) (0115)
+  category?: string | null;     // PR391 — effects only: hidden grouping (Visual / Scent / Texture) (0115)
 }
 
 // what getSettings() returns — one ordered, active-only list per kind.
@@ -162,7 +162,7 @@ export interface SettingsData {
   catProductTypes: CatalogClassOption[];
   catSubTypes: CatalogClassOption[];
   catPieceTypes: CatalogClassOption[];
-  catEffects: CatalogClassOption[]; // PR385 — managed Effect pick-list (0115)
+  catEffects: CatalogClassOption[]; // PR391 — managed Effect pick-list (0115)
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).

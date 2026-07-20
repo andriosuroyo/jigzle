@@ -1,4 +1,4 @@
--- 0111 — Series standard (PR382): store the BARE line name, never the trailing "Series" / "シリーズ"
+-- 0111 — Series standard (PR391): store the BARE line name, never the trailing "Series" / "シリーズ"
 -- word. The field is already labelled SERIES, so "100th Anniversary Series" is redundant — this folds
 -- it (and any case/spacing variant of the suffix) down to "100th Anniversary", converging suffix-only
 -- duplicates onto one value. Idempotent — safe to re-run (a bare value is left untouched).

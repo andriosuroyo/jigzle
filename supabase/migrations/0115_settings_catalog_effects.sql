@@ -1,5 +1,5 @@
 -- 0115 — Settings › Catalog › Effects: a managed, curated pick-list for the SKU editor's Effect field
--- (PR385). Mirrors settings_catalog_product_types (0059): NULL user_id = global default, RLS via
+-- (PR391). Mirrors settings_catalog_product_types (0059): NULL user_id = global default, RLS via
 -- is_allowed_user(), sort_order / is_active. Adds a `category` column — the HIDDEN grouping (Visual /
 -- Scent / Texture) staff never have to think about, kept for future faceting/analytics. The editor's
 -- Effect picker unions these curated labels with the catalogue's distinct values (like the type lists),
@@ -10,7 +10,7 @@ create table if not exists public.settings_catalog_effects (
   id          bigint generated always as identity primary key,
   user_id     text,                          -- NULL = global default (this migration writes only NULL)
   label       text    not null,
-  category    text,                          -- hidden grouping: Visual / Scent / Texture (see PR385)
+  category    text,                          -- hidden grouping: Visual / Scent / Texture (see PR391)
   icon        text,
   is_active   boolean not null default true,
   sort_order  int     not null default 0,

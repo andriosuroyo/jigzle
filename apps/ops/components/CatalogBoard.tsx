@@ -224,7 +224,7 @@ const CAT_FIX_LISTS: { key: FixKey; label: string }[] = [
   { key: 'implausible', label: 'Implausible dims / weight' },
   { key: 'offlist', label: 'Off-list classification' },
   { key: 'submismatch', label: 'Sub ≠ product type' },
-  { key: 'seriesvar', label: 'Series variants' }, // PR382 — near-duplicate series within a brand
+  { key: 'seriesvar', label: 'Series variants' }, // PR391 — near-duplicate series within a brand
   { key: 'noimage', label: 'Missing image' },
   { key: 'brokenlinks', label: 'Broken image links' },
   { key: 'noweight', label: 'Missing weight' },
@@ -243,7 +243,7 @@ let OPTIONS_CACHE: Record<string, string[]> | null = null;
 // PR368 — managed Sub types with their linked Product type (0097). The Sub type picker offers only the
 // sub-types matching the selected product type. Session-cached like OPTIONS_CACHE.
 let SUBTYPES_CACHE: { label: string; product_type: string }[] | null = null;
-// PR382 — Series values grouped by brand (the picker is localised to the SKU's brand). Session-cached
+// PR391 — Series values grouped by brand (the picker is localised to the SKU's brand). Session-cached
 // like OPTIONS_CACHE; loaded lazily the first time an item is opened.
 let SERIES_BY_BRAND_CACHE: Record<string, string[]> | null = null;
 
@@ -313,17 +313,17 @@ export default function CatalogBoard({
   const [brokenLinks, setBrokenLinks] = useState<CatalogueListRow[] | null>(null);
   const [validating, setValidating] = useState<string | null>(null); // PR387 — progress text while re-checking Drive links
   const [subMismatch, setSubMismatch] = useState<import('@/app/catalog/actions').SubMismatchRow[] | null>(null);
-  const [seriesVariants, setSeriesVariants] = useState<SeriesVariantGroup[] | null>(null); // PR382
+  const [seriesVariants, setSeriesVariants] = useState<SeriesVariantGroup[] | null>(null); // PR391
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CatalogueListRow[]>([]);
   const [searching, setSearching] = useState(false);
   const [history, setHistory] = useState<string[]>([]); // PR182: per-device recent searches (newest first)
   const [recentEdits, setRecentEdits] = useState<CatalogueListRow[]>([]); // PR377: last-edited SKUs (updated_at desc)
-  const [recentEditsLoading, setRecentEditsLoading] = useState(true); // PR381: show "Loading…" until the first fetch resolves
+  const [recentEditsLoading, setRecentEditsLoading] = useState(true); // PR391: show "Loading…" until the first fetch resolves
   const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
   const [catSubTypes, setCatSubTypes] = useState<{ label: string; product_type: string }[]>(SUBTYPES_CACHE ?? []); // PR368: sub type ↔ product type
-  const [seriesByBrand, setSeriesByBrand] = useState<Record<string, string[]>>(SERIES_BY_BRAND_CACHE ?? {}); // PR382: brand-scoped Series picker
+  const [seriesByBrand, setSeriesByBrand] = useState<Record<string, string[]>>(SERIES_BY_BRAND_CACHE ?? {}); // PR391: brand-scoped Series picker
   const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: manual Google-Drive image URLs
   const [imgUnavailable, setImgUnavailable] = useState(false); // PR212: "no picture available" (0071)
   const [sources, setSources] = useState<string[]>([]);       // PR217: Links → Sources (sku_sources)
@@ -909,7 +909,7 @@ export default function CatalogBoard({
     if (mode !== 'sku') return;
     if (!OPTIONS_CACHE) getCatalogFieldOptions().then((o) => { OPTIONS_CACHE = o; setFieldOptions(o); }).catch(() => {});
     if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
-    // PR382 — Series picker is localised per brand; load the brand→series map (module-cached, once/session).
+    // PR391 — Series picker is localised per brand; load the brand→series map (module-cached, once/session).
     if (!SERIES_BY_BRAND_CACHE) getSeriesByBrand().then((m) => { SERIES_BY_BRAND_CACHE = m; setSeriesByBrand(m); }).catch(() => {});
   }, [mode, detailTab]);
 
@@ -1132,7 +1132,7 @@ export default function CatalogBoard({
                       // PR368 — Sub type is filtered to the sub-types linked to the SELECTED product type
                       // (managed list, 0097). Falls back to distinct catalogue values only when no managed
                       // sub-types exist yet (pre-migration), so the picker is never emptied unexpectedly.
-                      // PR382 — Series is localised per brand: offer only the series this SKU's brand
+                      // PR391 — Series is localised per brand: offer only the series this SKU's brand
                       // already uses (no cross-brand fallback — a brand with none gets an empty picker;
                       // you can still type a new value). Sub type stays filtered to the product type.
                       const opts = fld.key === 'sub_type'
@@ -1487,7 +1487,7 @@ export default function CatalogBoard({
                 ) : (
                   // PR377 — idle Search view: recent searches + recent edits. Stacked on mobile
                   // (searches above, edits below); side-by-side columns on desktop (.cat-idle).
-                  // PR381 — Recent edits always renders (even before its fetch resolves), showing
+                  // PR391 — Recent edits always renders (even before its fetch resolves), showing
                   // an italic "Loading…" placeholder while the first load is in flight.
                   <div className="cat-idle">
                     {history.length > 0 && (
@@ -1665,7 +1665,7 @@ export default function CatalogBoard({
                   </section>
                 )}
 
-                {/* PR382 — series in the SAME brand that differ only by case / spacing / a trailing plural
+                {/* PR391 — series in the SAME brand that differ only by case / spacing / a trailing plural
                     (e.g. "My First Puzzle" vs "My First Puzzles"). The same spelling across DIFFERENT
                     brands is fine, so groups never cross a brand. Read-only: open each SKU to reconcile. */}
                 {fixList === 'seriesvar' && (

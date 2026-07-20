@@ -34,7 +34,7 @@ function nameOf(c: CatNameRow): string {
   return c.translate_name || c.original_name || c.self_code || c.item_code;
 }
 
-// PR382 — Series standard: store the BARE line name, never the trailing "Series" / "シリーズ" word.
+// PR391 — Series standard: store the BARE line name, never the trailing "Series" / "シリーズ" word.
 // The field is already labelled SERIES, so "100th Anniversary Series" is redundant — collapse it to
 // "100th Anniversary" so suffix-variants converge to one value. Applied on save AND on read (so the
 // picker offers clean names even before the one-off backfill runs). Idempotent.
@@ -49,7 +49,7 @@ function normalizeSeries(raw: string | null | undefined): string {
   return s;
 }
 
-// PR382 — one paged scan of every (brand_prefix, series) pair that HAS a series. Bounded (only rows
+// PR391 — one paged scan of every (brand_prefix, series) pair that HAS a series. Bounded (only rows
 // with a series, a small slice of the catalogue) and shared by the brand-scoped picker + the Series-
 // variants Fix list. No RPC/migration needed — direct RLS-gated reads, like the rest of this module.
 async function fetchBrandSeriesRows(supabase: Supabase): Promise<{ brand_prefix: string | null; series: string }[]> {
@@ -265,7 +265,7 @@ async function unionManagedLists(supabase: Supabase, sets: Record<string, Set<st
     product_type: 'settings_catalog_product_types',
     sub_type: 'settings_catalog_sub_types',
     piece_type: 'settings_catalog_piece_types',
-    effect: 'settings_catalog_effects', // PR385 — curated Effect vocabulary (0115)
+    effect: 'settings_catalog_effects', // PR391 — curated Effect vocabulary (0115)
   };
   await Promise.all(
     Object.entries(MANAGED).map(async ([field, table]) => {
@@ -321,7 +321,7 @@ export async function getCatalogSubTypes(): Promise<{ label: string; product_typ
     .filter((r): r is { label: string; product_type: string } => !!r.label && !!r.product_type);
 }
 
-// ── PR382: Series is localised per brand. The editor's Series picker offers ONLY the series values
+// ── PR391: Series is localised per brand. The editor's Series picker offers ONLY the series values
 // already used by the SKU's own brand (series are a brand's own concept — "100th Anniversary" is a
 // Tenyo line). No cross-brand fallback: a brand with no series yet gets an empty picker (operators can
 // still type a genuinely new value). Values are normalised (bare, de-suffixed) + de-duped. ──
@@ -341,7 +341,7 @@ export async function getSeriesByBrand(): Promise<Record<string, string[]>> {
   return out;
 }
 
-// ── PR382: Series-variants Fix list, localised PER BRAND. Two series in the SAME brand that differ only
+// ── PR391: Series-variants Fix list, localised PER BRAND. Two series in the SAME brand that differ only
 // by case / spacing / punctuation / a trailing plural (e.g. "My First Puzzle" vs "My First Puzzles")
 // are near-duplicates to merge. The SAME two strings across DIFFERENT brands are both legitimate, so
 // clustering never crosses a brand. Returns one group per (brand, loose-key) that has ≥2 raw variants. ──
@@ -420,9 +420,9 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
   const { item_code: _ic, created_at: _ca, updated_at: _ua, ...rest } = patch as Record<string, unknown>;
   const upd: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) if (v !== undefined) upd[k] = v;
-  // PR382 — enforce the Series standard on write: strip the redundant trailing "Series" word.
+  // PR391 — enforce the Series standard on write: strip the redundant trailing "Series" word.
   if ('series' in upd) upd.series = normalizeSeries(upd.series as string | null) || null;
-  // PR384 — enforce the Effect standard on write: sentence-case tokens, sorted, joined with " + ".
+  // PR391 — enforce the Effect standard on write: sentence-case tokens, sorted, joined with " + ".
   if ('effect' in upd) upd.effect = normalizeEffect(upd.effect as string | null) || null;
   upd.updated_at = new Date().toISOString();
 

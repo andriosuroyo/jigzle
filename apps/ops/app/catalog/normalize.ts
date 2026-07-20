@@ -1,4 +1,4 @@
-// PR384 — Effect standard (shared by the save path AND the Browse facet so they never drift):
+// PR391 — Effect standard (shared by the save path AND the Browse facet so they never drift):
 //  • each effect token is SENTENCE CASE — first letter up, the rest down ("Glow in the dark").
 //  • multiple effects are split on , + / &, de-duped, sorted alphabetically (case-insensitive),
 //    and re-joined with " + "  →  "Glow in the dark + Silhouette".

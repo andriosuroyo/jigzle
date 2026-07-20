@@ -58,7 +58,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   cat_product_type: ['label', 'icon', 'is_active'],
   cat_sub_type: ['label', 'icon', 'is_active', 'product_type'], // PR368 — sub type ↔ product type link (0097)
   cat_piece_type: ['label', 'icon', 'is_active'],
-  cat_effect: ['label', 'icon', 'is_active', 'category'], // PR385 — effect + hidden category (0115)
+  cat_effect: ['label', 'icon', 'is_active', 'category'], // PR391 — effect + hidden category (0115)
 };
 
 // uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
