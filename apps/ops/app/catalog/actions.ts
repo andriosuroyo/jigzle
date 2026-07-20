@@ -8,6 +8,7 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import { isComplete } from './types';
+import { normalizeEffect } from './normalize';
 import type { BarcodeOwner, BrowseBrand, BrowseSku, CatalogueListRow, QuickAddResult, SkuDetail } from './types';
 
 const LIMIT = 200;
@@ -420,6 +421,8 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
   for (const [k, v] of Object.entries(rest)) if (v !== undefined) upd[k] = v;
   // PR382 — enforce the Series standard on write: strip the redundant trailing "Series" word.
   if ('series' in upd) upd.series = normalizeSeries(upd.series as string | null) || null;
+  // PR384 — enforce the Effect standard on write: sentence-case tokens, sorted, joined with " + ".
+  if ('effect' in upd) upd.effect = normalizeEffect(upd.effect as string | null) || null;
   upd.updated_at = new Date().toISOString();
 
   // Completion gate (PR18 §6): needs_review is DERIVED on every save — recompute it from the final

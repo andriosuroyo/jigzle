@@ -19,6 +19,7 @@ import { useSkuImages } from '@/components/useSkuImages';
 import { SKU_IMG } from '@/components/skuImageSizes';
 import BrandAvatar from '@/components/BrandAvatar';
 import { getCatalogFacetData, getBrandSkus } from '@/app/catalog/actions';
+import { normalizeEffect } from '@/app/catalog/normalize';
 import type { BrowseBrand, BrowseSku } from '@/app/catalog/types';
 
 const REGION_OF: Record<string, string> = {
@@ -64,12 +65,9 @@ const canonMaterial = (m: string | null): string => {
   if (/^wood/i.test(t)) return 'Wood'; // PR383 — "Wood" is the canonical material (folds legacy "Wooden")
   return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
 };
-const canonEffect = (e: string | null): string => {
-  const t = (e ?? '').trim();
-  if (!t) return UNSPEC;
-  const l = t.toLowerCase();
-  return l.charAt(0).toUpperCase() + l.slice(1);
-};
+// PR384 — the shared Effect standard (sentence-case tokens, alphabetical, joined by " + ") so the
+// facet groups every legacy case/separator variant under one canonical option.
+const canonEffect = (e: string | null): string => normalizeEffect(e) || UNSPEC;
 const normTheme = (theme: string | null): string => {
   const segs = (theme ?? '').split('/').map((x) => x.trim()).filter(Boolean);
   return segs.length ? segs.join(' / ') : UNSPEC;
