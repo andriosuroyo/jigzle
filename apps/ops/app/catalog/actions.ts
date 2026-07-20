@@ -8,6 +8,7 @@
 import { createSupabaseServerClient } from '@jigzle/db/server';
 import type { CatalogueRow, CollisionRow } from '@jigzle/db/types';
 import { isComplete } from './types';
+import { normalizeEffect } from './normalize';
 import type { BarcodeOwner, BrowseBrand, BrowseSku, CatalogueListRow, QuickAddResult, SkuDetail } from './types';
 
 const LIMIT = 200;
@@ -31,6 +32,42 @@ type CatNameRow = {
 
 function nameOf(c: CatNameRow): string {
   return c.translate_name || c.original_name || c.self_code || c.item_code;
+}
+
+// PR391 — Series standard: store the BARE line name, never the trailing "Series" / "シリーズ" word.
+// The field is already labelled SERIES, so "100th Anniversary Series" is redundant — collapse it to
+// "100th Anniversary" so suffix-variants converge to one value. Applied on save AND on read (so the
+// picker offers clean names even before the one-off backfill runs). Idempotent.
+function normalizeSeries(raw: string | null | undefined): string {
+  let s = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  // strip a trailing "Series" (EN) or "シリーズ" (JP), possibly repeated, ignoring case + spacing
+  for (;;) {
+    const next = s.replace(/[\s　]*(?:シリーズ|series)$/i, '').trim();
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
+
+// PR391 — one paged scan of every (brand_prefix, series) pair that HAS a series. Bounded (only rows
+// with a series, a small slice of the catalogue) and shared by the brand-scoped picker + the Series-
+// variants Fix list. No RPC/migration needed — direct RLS-gated reads, like the rest of this module.
+async function fetchBrandSeriesRows(supabase: Supabase): Promise<{ brand_prefix: string | null; series: string }[]> {
+  const PAGE = 1000;
+  const out: { brand_prefix: string | null; series: string }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('catalogue')
+      .select('brand_prefix,series')
+      .not('series', 'is', null)
+      .order('item_code')
+      .range(from, from + PAGE - 1);
+    if (error) break;
+    const rows = (data ?? []) as { brand_prefix: string | null; series: string | null }[];
+    for (const r of rows) { const v = (r.series ?? '').trim(); if (v) out.push({ brand_prefix: r.brand_prefix ?? null, series: v }); }
+    if (rows.length < PAGE) break;
+  }
+  return out;
 }
 
 const LIST_COLS = 'item_code,brand_prefix,translate_name,original_name,self_code,needs_review';
@@ -228,6 +265,7 @@ async function unionManagedLists(supabase: Supabase, sets: Record<string, Set<st
     product_type: 'settings_catalog_product_types',
     sub_type: 'settings_catalog_sub_types',
     piece_type: 'settings_catalog_piece_types',
+    effect: 'settings_catalog_effects', // PR391 — curated Effect vocabulary (0115)
   };
   await Promise.all(
     Object.entries(MANAGED).map(async ([field, table]) => {
@@ -283,6 +321,64 @@ export async function getCatalogSubTypes(): Promise<{ label: string; product_typ
     .filter((r): r is { label: string; product_type: string } => !!r.label && !!r.product_type);
 }
 
+// ── PR391: Series is localised per brand. The editor's Series picker offers ONLY the series values
+// already used by the SKU's own brand (series are a brand's own concept — "100th Anniversary" is a
+// Tenyo line). No cross-brand fallback: a brand with no series yet gets an empty picker (operators can
+// still type a genuinely new value). Values are normalised (bare, de-suffixed) + de-duped. ──
+export async function getSeriesByBrand(): Promise<Record<string, string[]>> {
+  const supabase = createSupabaseServerClient();
+  const rows = await fetchBrandSeriesRows(supabase);
+  const sets: Record<string, Set<string>> = {};
+  for (const r of rows) {
+    const brand = r.brand_prefix;
+    if (!brand) continue; // no brand → can't localise; skip (brand-less rows just don't seed a picker)
+    const v = normalizeSeries(r.series);
+    if (!v) continue;
+    (sets[brand] ??= new Set()).add(v);
+  }
+  const out: Record<string, string[]> = {};
+  for (const [b, set] of Object.entries(sets)) out[b] = [...set].sort((a, b) => a.localeCompare(b));
+  return out;
+}
+
+// ── PR391: Series-variants Fix list, localised PER BRAND. Two series in the SAME brand that differ only
+// by case / spacing / punctuation / a trailing plural (e.g. "My First Puzzle" vs "My First Puzzles")
+// are near-duplicates to merge. The SAME two strings across DIFFERENT brands are both legitimate, so
+// clustering never crosses a brand. Returns one group per (brand, loose-key) that has ≥2 raw variants. ──
+export type SeriesVariantGroup = { brand: string; values: { value: string; count: number }[] };
+// loose key: lowercase, drop everything but a-z0-9, then strip a trailing plural 's' — the coarse
+// identity that plural/spacing/case variants of the same line share.
+function seriesLooseKey(v: string): string {
+  const k = normalizeSeries(v).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return k.replace(/s$/, '');
+}
+export async function getSeriesVariants(): Promise<SeriesVariantGroup[]> {
+  const supabase = createSupabaseServerClient();
+  const rows = await fetchBrandSeriesRows(supabase);
+  // brand → looseKey → (rawValue → count). Count the NORMALISED value so suffix-only dupes fold away
+  // (they're fixed by the standard, not a variant to surface here).
+  const byBrand = new Map<string, Map<string, Map<string, number>>>();
+  for (const r of rows) {
+    if (!r.brand_prefix) continue;
+    const value = normalizeSeries(r.series);
+    if (!value) continue;
+    const key = seriesLooseKey(value);
+    if (!key) continue;
+    const keys = byBrand.get(r.brand_prefix) ?? byBrand.set(r.brand_prefix, new Map()).get(r.brand_prefix)!;
+    const vals = keys.get(key) ?? keys.set(key, new Map()).get(key)!;
+    vals.set(value, (vals.get(value) ?? 0) + 1);
+  }
+  const out: SeriesVariantGroup[] = [];
+  for (const [brand, keys] of byBrand) {
+    for (const vals of keys.values()) {
+      if (vals.size < 2) continue; // only real clusters (≥2 distinct spellings within the brand)
+      const values = [...vals.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count);
+      out.push({ brand, values });
+    }
+  }
+  return out.sort((a, b) => a.brand.localeCompare(b.brand));
+}
+
 // ── the edit pane: full SKU + its barcode links (with shared flags) ──
 export async function getSku(itemCode: string): Promise<SkuDetail | null> {
   const supabase = createSupabaseServerClient();
@@ -324,6 +420,10 @@ export async function updateSku(itemCode: string, patch: Partial<CatalogueRow>):
   const { item_code: _ic, created_at: _ca, updated_at: _ua, ...rest } = patch as Record<string, unknown>;
   const upd: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rest)) if (v !== undefined) upd[k] = v;
+  // PR391 — enforce the Series standard on write: strip the redundant trailing "Series" word.
+  if ('series' in upd) upd.series = normalizeSeries(upd.series as string | null) || null;
+  // PR391 — enforce the Effect standard on write: sentence-case tokens, sorted, joined with " + ".
+  if ('effect' in upd) upd.effect = normalizeEffect(upd.effect as string | null) || null;
   upd.updated_at = new Date().toISOString();
 
   // Completion gate (PR18 §6): needs_review is DERIVED on every save — recompute it from the final
