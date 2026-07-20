@@ -61,7 +61,7 @@ const pieceBucket = (n: number | null): string => {
 const canonMaterial = (m: string | null): string => {
   const t = (m ?? '').trim();
   if (!t) return UNSPEC;
-  if (/^wood/i.test(t)) return 'Wooden';
+  if (/^wood/i.test(t)) return 'Wood'; // PR383 — "Wood" is the canonical material (folds legacy "Wooden")
   return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
 };
 const canonEffect = (e: string | null): string => {
