@@ -30,8 +30,9 @@ export interface RoyaltyLine {
 export interface RoyaltyLedger {
   lines: RoyaltyLine[];
   unpaid_idr: number;
-  unpaid_usd: number | null;   // null when no USD rate is available
   paid_idr: number;
-  usd_rate: number | null;     // 1 USD = N IDR (from currencies)
+  // rate_to_idr for each foreign currency (1 unit = N IDR), for client-side display conversion. null if
+  // the currency row is missing. IDR is native (no conversion). See BUFFER in RoyaltyBoard.
+  rates: { USD: number | null; EUR: number | null };
   synced: number;              // how many new qualifying lines were accrued on this load
 }
