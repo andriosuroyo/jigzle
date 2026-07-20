@@ -81,9 +81,9 @@ export default function CalculatorRatesSettings({ embedded = false }: { embedded
                   </span>
                 </label>
                 <label className="calc-method-check">
-                  <input type="checkbox" checked={!!m.tax_included}
-                    onChange={(e) => patchMethod(m.id, { tax_included: e.target.checked })} />
-                  Import tax included (all-in)
+                  <input type="checkbox" checked={!m.tax_included}
+                    onChange={(e) => patchMethod(m.id, { tax_included: !e.target.checked })} />
+                  Charge import tax <span className="calc-method-hint">(off = all-in / bundled)</span>
                 </label>
                 {Number(m.warehouse_fee) > 0 && <span className="calc-pill">+{m.warehouse_fee} {m.source_currency} wh</span>}
               </div>

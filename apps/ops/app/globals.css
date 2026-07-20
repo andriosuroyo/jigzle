@@ -1692,7 +1692,7 @@ img.sku-img { background: #e8e8e8; }
 .calc-hl-cell { flex: 1; min-width: 0; }
 .calc-hl-label { font-size: 11px; font-weight: 600; color: var(--brown-dark); opacity: 0.8; }
 .calc-hl-value { font-size: 22px; font-weight: 800; color: var(--brown-dark); line-height: 1.15; word-break: break-word; }
-.calc-hl-value.sub { font-size: 16px; opacity: 0.85; }
+.calc-hl-value.sub { font-size: 22px; } /* PR399 — margin reads as large as the rec price */
 /* read-only computed value + input-with-unit rows */
 .calc-ro { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font-size: 14px; font-weight: 600; }
 .calc-ro.pos { color: var(--green); }
@@ -1713,7 +1713,7 @@ img.sku-img { background: #e8e8e8; }
    level with the Margin value so the three cells align. */
 .calc-headline { align-items: flex-start; }
 .calc-hl-coef { flex: 0 0 auto; }
-.calc-hl-coef input { width: 68px; margin-top: 1px; padding: 2px 8px; border: 1px solid var(--orange); border-radius: 8px; background: rgba(255,255,255,0.55); color: var(--brown-dark); font-size: 16px; font-weight: 800; text-align: center; line-height: 1.4; }
+.calc-hl-coef input { width: 68px; margin-top: 1px; padding: 3px 8px; border: 1px solid var(--orange); border-radius: 8px; background: white; color: var(--brown-dark); font-size: 20px; font-weight: 800; text-align: center; line-height: 1.15; }
 /* PR397 — currency symbol prefix inside an input row ("元 279") */
 .calc-pre { flex-shrink: 0; color: var(--muted); font-weight: 700; }
 /* PR397 — read-only method info (display only, not fields) */
@@ -1730,13 +1730,17 @@ img.sku-img { background: #e8e8e8; }
 /* Import tax on its own line */
 .calc-meta-taxline { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
 .calc-meta-taxline .calc-meta-l { flex-shrink: 0; }
-/* PR397/PR398 — dimensions (P × L × T cm) on one line; weight below with vol/effective to its right */
-.calc-dimwt { display: flex; align-items: center; gap: 6px; }
-.calc-dimwt input { flex: 1 1 52px; min-width: 44px; text-align: center; }
+/* PR399 — the shipping method + its datapoints, boxed */
+.calc-method-box { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--cream); }
+.calc-method-box > .po-field { margin-bottom: 12px; }
+/* PR397/PR398/PR399 — dimensions (P × L × T cm) on one line; weight below with vol/effective to its right.
+   Fixed, left-aligned field widths so the two rows read as a tidy grid (not stretched full-width). */
+.calc-dimwt { display: flex; align-items: center; gap: 8px; }
+.calc-dimwt input { flex: 0 1 84px; min-width: 52px; text-align: center; }
 .calc-x { color: var(--muted); font-weight: 700; }
-.calc-wtrow { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
-.calc-wt-input { width: 128px; flex-shrink: 0; }
-.calc-wt-notes { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); line-height: 1.4; min-width: 0; }
+.calc-wtrow { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.calc-wt-input { flex: 0 0 104px; }
+.calc-wt-notes { display: flex; flex-direction: column; gap: 1px; font-size: 11px; color: var(--muted); line-height: 1.4; }
 @media (max-width: 640px) { .calc-meta.calc-meta-4 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 460px) { .calc-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* breakdown rows */
@@ -1780,6 +1784,7 @@ img.sku-img { background: #e8e8e8; }
 .calc-method-edit label { display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; color: var(--muted); }
 .calc-method-check { gap: 6px; cursor: pointer; }
 .calc-method-check input { width: 15px; height: 15px; accent-color: var(--orange); cursor: pointer; }
+.calc-method-hint { font-weight: 500; opacity: 0.8; margin-left: 4px; }
 .calc-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .calc-pill { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: var(--paper); color: var(--brown-dark); }
 .calc-pill.tax { background: var(--green-tint); color: #3D6B26; }
