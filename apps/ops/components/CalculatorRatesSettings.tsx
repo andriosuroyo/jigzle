@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { fmtNum } from '@jigzle/lib';
 import type { Currency, ShippingMethod } from '@jigzle/db/types';
-import { getCalcCurrencies, getCalcMethods, refreshFx } from '@/app/calculator/actions';
+import { getCalcCurrencies, getCalcMethods, refreshFx, updateShippingMethod } from '@/app/calculator/actions';
 
 export default function CalculatorRatesSettings({ embedded = false }: { embedded?: boolean }) {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -22,6 +22,12 @@ export default function CalculatorRatesSettings({ embedded = false }: { embedded
   }, []);
 
   const fxUpdatedAt = currencies.reduce<string | null>((l, c) => (c.updated_at && (!l || c.updated_at > l) ? c.updated_at : l), null);
+
+  // edit a method's flag / import tax rate, optimistically + persist
+  function patchMethod(id: string, patch: { flag?: string | null; import_tax_rate?: number | null }) {
+    setMethods((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    void updateShippingMethod(id, patch).catch(() => {});
+  }
 
   async function doRefreshFx() {
     setFxStatus({ kind: 'fetching', text: 'Fetching from Frankfurter…' });
@@ -53,15 +59,28 @@ export default function CalculatorRatesSettings({ embedded = false }: { embedded
       )}
 
       <div className="fd-section-head" style={{ marginTop: 18 }}>Shipping methods</div>
+      <div className="set-sec-sub">Set each method’s flag (shown in the Calculator picker) and its import tax rate. Rates come from the shipping data.</div>
       {loading ? <div className="hint">Loading…</div> : (
         <ul className="calc-methods">
           {methods.map((m) => (
             <li key={m.id} className="calc-method">
-              <div className="calc-method-top"><span className="calc-method-name">{m.display}</span><span className="calc-method-rate">{fmtNum(Number(m.rate_per_kg), 0)} {m.rate_currency}/kg</span></div>
-              <div className="calc-pills">
-                <span className="calc-pill">{m.source_country}</span>
-                <span className="calc-pill">{m.rate_currency} rate</span>
-                {m.tax_included && <span className="calc-pill tax">tax included</span>}
+              <div className="calc-method-top">
+                <input className="calc-method-flag" value={m.flag ?? ''} maxLength={4} placeholder="🏳️"
+                  onChange={(e) => setMethods((prev) => prev.map((x) => (x.id === m.id ? { ...x, flag: e.target.value } : x)))}
+                  onBlur={(e) => patchMethod(m.id, { flag: e.target.value })} aria-label="Flag emoji" />
+                <span className="calc-method-name">{m.display}</span>
+                <span className="calc-method-rate">{fmtNum(Number(m.rate_per_kg), 0)} {m.rate_currency}/kg</span>
+              </div>
+              <div className="calc-method-edit">
+                <label>Import tax
+                  <span className="calc-inrow" style={{ display: 'inline-flex', width: 96, marginLeft: 6 }}>
+                    <input type="number" min={0} max={100} step={0.01} value={m.import_tax_rate ?? 0}
+                      onChange={(e) => setMethods((prev) => prev.map((x) => (x.id === m.id ? { ...x, import_tax_rate: +e.target.value || 0 } : x)))}
+                      onBlur={(e) => patchMethod(m.id, { import_tax_rate: +e.target.value || 0 })} />
+                    <span className="calc-unit">%</span>
+                  </span>
+                </label>
+                {m.tax_included && <span className="calc-pill tax">tax included in rate</span>}
                 {Number(m.warehouse_fee) > 0 && <span className="calc-pill">+{m.warehouse_fee} {m.source_currency} wh</span>}
               </div>
             </li>

@@ -18,6 +18,8 @@ export type ShippingMethod = {
   active: boolean;
   sort_order: number;
   notes: string;
+  flag: string | null;            // PR397 — country flag emoji shown in the Calculator's method picker (0119)
+  import_tax_rate: number | null; // PR397 — per-method import tax %, managed in Settings (0119)
 };
 
 export type SavedCalculation = {
