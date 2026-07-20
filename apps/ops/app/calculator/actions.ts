@@ -6,10 +6,25 @@
 // from the client).
 
 import { createSupabaseServerClient } from '@jigzle/db/server';
-import type { Currency, SavedCalculation, UserPrefs } from '@jigzle/db/types';
+import type { Currency, SavedCalculation, ShippingMethod, UserPrefs } from '@jigzle/db/types';
 
 type SaveCalcInput = Omit<SavedCalculation, 'id' | 'user_id' | 'created_at'>;
 type PrefsInput = Omit<UserPrefs, 'user_id' | 'updated_at'>;
+
+// ── Settings › Calculator › Rates loaders (self-loaded by CalculatorRatesSettings). Degrade to []. ──
+export async function getCalcCurrencies(): Promise<Currency[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.from('currencies').select('*');
+  if (error) return [];
+  return (data ?? []) as Currency[];
+}
+
+export async function getCalcMethods(): Promise<ShippingMethod[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.from('shipping_methods').select('*').eq('active', true).order('sort_order');
+  if (error) return [];
+  return (data ?? []) as ShippingMethod[];
+}
 
 // ── save a calculation (stamped with the signed-in user) ──
 export async function saveCalculation(input: SaveCalcInput): Promise<SavedCalculation> {
