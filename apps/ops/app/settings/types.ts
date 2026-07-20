@@ -146,6 +146,7 @@ export interface CatalogClassOption {
   is_active: boolean;
   sort_order: number;
   product_type?: string | null; // PR368 — sub types only: the Product type this sub type belongs to (0097)
+  category?: string | null;     // PR385 — effects only: hidden grouping (Visual / Scent / Texture) (0115)
 }
 
 // what getSettings() returns — one ordered, active-only list per kind.
@@ -161,10 +162,11 @@ export interface SettingsData {
   catProductTypes: CatalogClassOption[];
   catSubTypes: CatalogClassOption[];
   catPieceTypes: CatalogClassOption[];
+  catEffects: CatalogClassOption[]; // PR385 — managed Effect pick-list (0115)
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).
-export type SettingsKind = 'payment' | 'courier' | 'box' | 'common_note' | 'channel' | 'staff' | 'local_courier' | 'ship_courier' | 'cat_product_type' | 'cat_sub_type' | 'cat_piece_type';
+export type SettingsKind = 'payment' | 'courier' | 'box' | 'common_note' | 'channel' | 'staff' | 'local_courier' | 'ship_courier' | 'cat_product_type' | 'cat_sub_type' | 'cat_piece_type' | 'cat_effect';
 
 export type SettingRow = PaymentMethod | CourierService | BoxPreset | CommonNote | ChannelOption | StaffMember | LocalCourier | ShipmentCourier | CatalogClassOption;
 

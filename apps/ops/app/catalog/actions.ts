@@ -265,6 +265,7 @@ async function unionManagedLists(supabase: Supabase, sets: Record<string, Set<st
     product_type: 'settings_catalog_product_types',
     sub_type: 'settings_catalog_sub_types',
     piece_type: 'settings_catalog_piece_types',
+    effect: 'settings_catalog_effects', // PR385 — curated Effect vocabulary (0115)
   };
   await Promise.all(
     Object.entries(MANAGED).map(async ([field, table]) => {

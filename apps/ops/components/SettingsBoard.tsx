@@ -40,7 +40,7 @@ import type {
 // ── per-list column config ──
 // PR368 — `select` renders a dropdown whose options are another list's labels (optionsFrom), e.g. the
 // Sub types list picks a Product type from the cat_product_type list.
-type Col = { key: string; label: string; type: 'text' | 'number' | 'select'; optionsFrom?: SettingsKind; nullable?: boolean; grow?: boolean; cls?: string };
+type Col = { key: string; label: string; type: 'text' | 'number' | 'select'; optionsFrom?: SettingsKind; options?: string[]; nullable?: boolean; grow?: boolean; cls?: string };
 
 type SectionDef = {
   kind: SettingsKind;
@@ -179,6 +179,24 @@ const SECTIONS: SectionDef[] = [
     sortKey: 'label',
     blank: { label: '' },
   },
+  {
+    // PR385 — the curated Effect vocabulary. Category is the HIDDEN grouping (Visual / Scent / Texture);
+    // staff only pick the label. Activities/formats (Coloring, Find hidden, Calendar…) live in Tags, not here.
+    kind: 'cat_effect',
+    title: 'Effects',
+    sub: 'Special sensory effects shown in the Catalog item editor’s Effect picker. Category is an internal grouping only — staff just pick the effect.',
+    cols: [
+      { key: 'category', label: 'Category', type: 'select', options: ['Visual', 'Scent', 'Texture'], nullable: true, cls: 'set-f-ptype' },
+      { key: 'label', label: 'Effect', type: 'text', grow: true },
+    ],
+    colHeader: true,
+    sortKey: 'label',
+    sorts: [
+      { label: 'Sort by category', keys: ['category', 'label'] },
+      { label: 'Sort by effect', keys: ['label'] },
+    ],
+    blank: { label: '' },
+  },
 ];
 const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SECTIONS.map((s) => [s.kind, s])) as Record<SettingsKind, SectionDef>;
 
@@ -194,7 +212,7 @@ const CATEGORIES: Category[] = [
   { key: 'purchasing', title: 'Purchasing', sub: 'Sources and the local / shipper couriers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { kind: 'local_courier' }, { kind: 'ship_courier' }] },
   { key: 'warehouse', title: 'Warehouse', sub: 'Box sizes, export couriers and warehouse staff for Inbound / Outbound.', tabs: [{ kind: 'box' }, { custom: 'export_courier' }, { kind: 'staff' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
-  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brands for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
+  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brands for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { kind: 'cat_effect' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
   { key: 'docgen', title: 'Doc Generator', sub: 'Declaration signers and reusable addresses for the customs documents.', tabs: [{ custom: 'declaration_user' }, { custom: 'cn_address' }] },
 ];
 const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
@@ -233,6 +251,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     cat_product_type: initial.catProductTypes,
     cat_sub_type: initial.catSubTypes,
     cat_piece_type: initial.catPieceTypes,
+    cat_effect: initial.catEffects,
   });
   const [busy, setBusy] = useState(false);
   // notice tone follows the action: ok (green) = additive, err (red) = removed/failed, warn (yellow) = neutral edit.
@@ -410,8 +429,9 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     const rows = lists[sec.kind];
     // PR368 — options for any `select` column, drawn from another list's active labels (Sub type → Product type)
     const colOptions: Record<string, string[]> = {};
-    for (const c of sec.cols) if (c.type === 'select' && c.optionsFrom) {
-      colOptions[c.key] = lists[c.optionsFrom].map((r) => String(val(r, 'label') ?? '')).filter(Boolean);
+    for (const c of sec.cols) if (c.type === 'select') {
+      if (c.optionsFrom) colOptions[c.key] = lists[c.optionsFrom].map((r) => String(val(r, 'label') ?? '')).filter(Boolean);
+      else if (c.options) colOptions[c.key] = c.options; // PR385 — a fixed option set (Effect category)
     }
     return (
       <div className="set-list">

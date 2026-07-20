@@ -40,6 +40,7 @@ const TABLE: Record<SettingsKind, string> = {
   cat_product_type: 'settings_catalog_product_types',
   cat_sub_type: 'settings_catalog_sub_types',
   cat_piece_type: 'settings_catalog_piece_types',
+  cat_effect: 'settings_catalog_effects',
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -57,6 +58,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   cat_product_type: ['label', 'icon', 'is_active'],
   cat_sub_type: ['label', 'icon', 'is_active', 'product_type'], // PR368 — sub type ↔ product type link (0097)
   cat_piece_type: ['label', 'icon', 'is_active'],
+  cat_effect: ['label', 'icon', 'is_active', 'category'], // PR385 — effect + hidden category (0115)
 };
 
 // uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
@@ -97,7 +99,7 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes, catEffects] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
@@ -109,8 +111,9 @@ export async function getSettings(): Promise<SettingsData> {
     listSafe<CatalogClassOption>(TABLE.cat_product_type), // 0059 — degrades to [] until applied
     listSafe<CatalogClassOption>(TABLE.cat_sub_type),
     listSafe<CatalogClassOption>(TABLE.cat_piece_type),
+    listSafe<CatalogClassOption>(TABLE.cat_effect), // 0115 — degrades to [] until applied
   ]);
-  return { paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes };
+  return { paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes, catEffects };
 }
 
 // PR371 — usage counts for the Catalog classification pick-lists (Settings badges): how many SKUs use
