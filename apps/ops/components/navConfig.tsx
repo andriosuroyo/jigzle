@@ -118,6 +118,17 @@ const iconDocGen = svg(
   </>
 );
 
+// Clover Royalty — a four-leaf clover (petals) with a short stem
+const iconRoyalty = svg(
+  <>
+    <path d="M12 12c0-2.5-1-4-2.6-4A2.4 2.4 0 0 0 7 10.4C7 12 8.5 12 12 12z" />
+    <path d="M12 12c2.5 0 4-1 4-2.6A2.4 2.4 0 0 0 13.6 7C12 7 12 8.5 12 12z" />
+    <path d="M12 12c0 2.5 1 4 2.6 4A2.4 2.4 0 0 0 17 13.6C17 12 15.5 12 12 12z" />
+    <path d="M12 12c-2.5 0-4 1-4 2.6A2.4 2.4 0 0 0 10.4 17C12 17 12 15.5 12 12z" />
+    <line x1="12" y1="14" x2="12" y2="21" />
+  </>
+);
+
 // Customer — people (the customer directory)
 const iconCustomer = svg(
   <>
@@ -161,6 +172,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'calculator', href: '/calculator', label: 'Calculator', icon: iconCalculator, sub: 'Import cost & price calculator.' },
       { key: 'doc-generator', href: '/doc-generator', label: 'Doc Generator', icon: iconDocGen, sub: 'Generate invoices & shipping documents as PDF.' },
+      { key: 'royalty', href: '/royalty', label: 'Clover Royalty', icon: iconRoyalty, sub: 'Track royalties owed to Clover art studios per paid-and-sent sale.' },
       { key: 'settings', href: '/settings', label: 'Settings', icon: iconSettings, sub: 'Configurable lists.' },
     ],
   },

@@ -18,6 +18,7 @@ import CnAddressSettings from '@/components/CnAddressSettings';
 import DeclarationUserSettings from '@/components/DeclarationUserSettings';
 import SearchAliasSettings from '@/components/SearchAliasSettings';
 import BrandLogoSettings from '@/components/BrandLogoSettings';
+import RoyaltyEntitySettings from '@/components/RoyaltyEntitySettings';
 import FlagSelect from '@/components/FlagSelect';
 import { useOverlayClose } from '@/components/useOverlayClose';
 import type { Supplier } from '@jigzle/db/types';
@@ -202,7 +203,7 @@ const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SEC
 
 // ── categories: the landing grouping. A tab is either a generic settings list (kind) or the bespoke
 //    Suppliers editor (custom). ──
-type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'brand_logos' } | { custom: 'cn_address' };
+type CatTab = { kind: SettingsKind } | { custom: 'suppliers' } | { custom: 'export_courier' } | { custom: 'declaration_user' } | { custom: 'search_alias' } | { custom: 'brand_logos' } | { custom: 'cn_address' } | { custom: 'royalty_entity' };
 type Category = { key: string; title: string; sub: string; tabs: CatTab[] };
 
 // categories mirror the primary nav sections (Sales / Purchasing / Warehouse / Customer / Catalog /
@@ -214,6 +215,7 @@ const CATEGORIES: Category[] = [
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
   { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brands for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { kind: 'cat_effect' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
   { key: 'docgen', title: 'Doc Generator', sub: 'Declaration signers and reusable addresses for the customs documents.', tabs: [{ custom: 'declaration_user' }, { custom: 'cn_address' }] },
+  { key: 'royalty', title: 'Clover Royalty', sub: 'The art studios Clover pays royalties to, and each one’s piece-count → royalty schedule.', tabs: [{ custom: 'royalty_entity' }] },
 ];
 const tabKey = (t: CatTab): string => ('kind' in t ? t.kind : t.custom);
 
@@ -311,6 +313,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     if (t.custom === 'search_alias') return 'Search aliases';
     if (t.custom === 'brand_logos') return 'Brands';
     if (t.custom === 'cn_address') return 'CN addresses';
+    if (t.custom === 'royalty_entity') return 'Entities';
     return 'Export couriers';
   }
   // total settings in a category, for the landing card badge
@@ -549,6 +552,8 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
                     <BrandLogoSettings embedded />
                   ) : t.custom === 'cn_address' ? (
                     <CnAddressSettings embedded />
+                  ) : t.custom === 'royalty_entity' ? (
+                    <RoyaltyEntitySettings embedded />
                   ) : (
                     <SupplierSettings initial={suppliers} embedded />
                   )}
