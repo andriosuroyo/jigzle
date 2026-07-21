@@ -3,6 +3,22 @@
 Monorepo (npm workspaces + turbo). The main app is **`apps/ops`** (Next.js 14 App Router,
 Supabase). Shared packages live under `packages/*` (`@jigzle/db`, `@jigzle/lib`, `@jigzle/ui`).
 
+## Repo boundary — guard this repo's function (LOCKED)
+
+This repo is **Jigzle** only — the ops web app plus Jigzle's business planning and specs.
+Each domain has its **own repo and its own Claude environment**, so this CLAUDE.md stays
+specific to Jigzle. **Do not let another domain's working content land here.**
+
+- **Belongs here:** the ops/calculator apps, purchasing/sales/fulfillment/inventory, supplier
+  & import work, Jigzle specs and backlog (`docs/`, `docs/from-life/`).
+- **Does NOT belong here — REJECT and redirect** (point to the right repo, offer to hand it off there; do not save it here):
+  - **Trading** (XAUUSD, MT5, EAs, zones, trade diary) → **`28FX`** repo
+  - **MindHive** (tutoring business, `myhive` app, teachers, entity/legal) → **`MindHive`** repo
+  - **Personal life-admin** (finances, tax/SPT, travel, household) → **`life`** repo
+
+Referencing another domain in passing is fine; **storing another domain's working content
+here is not.** If asked to save cross-domain material, stop and say where it belongs.
+
 ## Purchasing route model (domain) — how a bought item reaches the warehouse
 
 A purchased item travels: **Item → Consolidator → Shipper → Jigzle** (our Indonesia warehouse).
