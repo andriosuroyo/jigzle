@@ -2241,6 +2241,10 @@ input.batch-field, select.batch-field {
 .sb-f input, .sb-card-r2 input { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; background: white; }
 .sb-card-r2 input { flex: 1 1 0; min-width: 0; }
 .sb-card-r2 .set-del { flex-shrink: 0; }
+/* PR — multi-box editor: per-box header (label + remove) and the full-width "+ Add box" button */
+.sb-box-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.sb-box-n { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.sb-box-add { width: 100%; display: inline-flex; align-items: center; justify-content: center; }
 
 /* PR207 — Catalog Search: brown "+ New item" button aligned right on the tab row */
 .btn-brown { background: var(--brown); color: #fff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }

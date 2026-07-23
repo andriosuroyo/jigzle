@@ -203,7 +203,7 @@ export default function PurchasingHistoryBoard({
     setBoxDraft([]);
     setShipItems([]);
     setShipItemsLoading(true);
-    getShipmentBoxes(s.ship_id).then((rows) => setBoxDraft([rows.length ? boxToDraft(rows[0]) : emptyBoxDraft()])).catch(() => setBoxDraft([emptyBoxDraft()]));
+    getShipmentBoxes(s.ship_id).then((rows) => setBoxDraft(rows.length ? rows.map(boxToDraft) : [emptyBoxDraft()])).catch(() => setBoxDraft([emptyBoxDraft()]));
     try {
       setShipItems(await getShipmentItems(s.ship_id));
     } catch {
@@ -477,15 +477,22 @@ export default function PurchasingHistoryBoard({
                   </div>
                 </div>
                 <div className="po-field">
-                  {/* PR273 — box is dimensions only: local courier/tracking removed (the leg's tracking
-                      lives in the Consolidator/Shipment sections), and no delete (one box per shipment). */}
+                  {/* PR — box dimensions: a shipment can carry more than one box. Each card is a
+                      dimensions-only row (local courier/tracking lives in the Consolidator/Shipment
+                      sections); the last box can't be removed, and "+ Add box" appends another. */}
                   <div className="fd-section-head">Box dimensions</div>
                   {boxErr && <div className="validation err">{boxErr}</div>}
-                  {(() => {
-                    const b = boxDraft[0] ?? emptyBoxDraft();
-                    const upd = (patch: Partial<BoxDraft>) => { setEditDirty(true); setBoxDraft((prev) => [{ ...(prev[0] ?? emptyBoxDraft()), ...patch }]); };
+                  {(boxDraft.length ? boxDraft : [emptyBoxDraft()]).map((b, i) => {
+                    const upd = (patch: Partial<BoxDraft>) => { setEditDirty(true); setBoxDraft((prev) => (prev.length ? prev : [emptyBoxDraft()]).map((row, j) => (j === i ? { ...row, ...patch } : row))); };
+                    const removeBox = () => { setEditDirty(true); setBoxDraft((prev) => prev.filter((_, j) => j !== i)); };
                     return (
-                      <div className="sb-card">
+                      <div className="sb-card" key={i}>
+                        {boxDraft.length > 1 && (
+                          <div className="sb-box-head">
+                            <span className="sb-box-n">Box {i + 1}</span>
+                            <button type="button" className="set-del" onClick={removeBox} aria-label={`Remove box ${i + 1}`}>×</button>
+                          </div>
+                        )}
                         <div className="sb-card-r1">
                           <label className="sb-f"><span>L (cm)</span><input type="text" inputMode="decimal" value={b.p} onChange={(e) => upd({ p: e.target.value })} /></label>
                           <label className="sb-f"><span>W (cm)</span><input type="text" inputMode="decimal" value={b.l} onChange={(e) => upd({ l: e.target.value })} /></label>
@@ -494,7 +501,8 @@ export default function PurchasingHistoryBoard({
                         </div>
                       </div>
                     );
-                  })()}
+                  })}
+                  <button type="button" className="btn-brown sb-box-add" onClick={() => { setEditDirty(true); setBoxDraft((prev) => [...(prev.length ? prev : [emptyBoxDraft()]), emptyBoxDraft()]); }}>+ Add box</button>
                 </div>
                 <div className="po-field">
                   <div className="fd-section-head">Shipment notes</div>

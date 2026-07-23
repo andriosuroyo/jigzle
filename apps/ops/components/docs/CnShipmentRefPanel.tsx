@@ -36,6 +36,7 @@ export default function CnShipmentRefPanel({ data, shipId }: { data: CnShipmentR
       </div>
       <div style={row}><span style={k}>Consolidator</span><span style={v}>{leg(data.consolidatorCourier, data.consolidatorTracking)}</span></div>
       <div style={row}><span style={k}>Shipment</span><span style={v}>{leg(data.shipmentCourier, data.shipmentTracking)}</span></div>
+      {data.note?.trim() && <div style={row}><span style={k}>Notes</span><span style={{ ...v, whiteSpace: 'pre-wrap' }}>{data.note.trim()}</span></div>}
       {boxTr && <div style={row}><span style={k}>Box tracking</span><span style={v}>{boxTr}</span></div>}
     </div>
   );
