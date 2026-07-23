@@ -46,9 +46,9 @@ export async function getCnShipmentRef(shipId: string): Promise<CnShipmentRef | 
   const boxes = ((boxData ?? []) as { dim_p: number | null; dim_l: number | null; dim_t: number | null; real_weight: number | null; tracking: string | null }[])
     .map((b) => ({ p: b.dim_p ?? null, l: b.dim_l ?? null, t: b.dim_t ?? null, w: b.real_weight ?? null, tracking: b.tracking ?? null }));
 
-  // shipment header — the consolidator + shipment tracking legs (degrades to nulls if columns absent)
-  const { data: sh } = await supabase.from('shipments').select('courier,tracking,consolidator_courier,consolidator_tracking,ship_date').eq('ship_id', sid).maybeSingle();
-  const s = (sh ?? {}) as { courier?: string | null; tracking?: string | null; consolidator_courier?: string | null; consolidator_tracking?: string | null; ship_date?: string | null };
+  // shipment header — the consolidator + shipment tracking legs + Purchasing note (degrades to nulls if columns absent)
+  const { data: sh } = await supabase.from('shipments').select('courier,tracking,consolidator_courier,consolidator_tracking,note,ship_date').eq('ship_id', sid).maybeSingle();
+  const s = (sh ?? {}) as { courier?: string | null; tracking?: string | null; consolidator_courier?: string | null; consolidator_tracking?: string | null; note?: string | null; ship_date?: string | null };
 
   return {
     itemLines: pos.length,
@@ -60,6 +60,7 @@ export async function getCnShipmentRef(shipId: string): Promise<CnShipmentRef | 
     consolidatorTracking: s.consolidator_tracking ?? null,
     shipmentCourier: s.courier ?? null,
     shipmentTracking: s.tracking ?? null,
+    note: s.note ?? null,
     shipDate: s.ship_date ?? null,
   };
 }

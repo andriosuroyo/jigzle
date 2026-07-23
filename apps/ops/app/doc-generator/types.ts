@@ -59,6 +59,7 @@ export type CnShipmentRef = {
   consolidatorTracking: string | null;
   shipmentCourier: string | null;
   shipmentTracking: string | null;
+  note: string | null;           // the shipment's Purchasing note (surfaced on the CN docs' ref panel)
   shipDate: string | null;
 };
 
