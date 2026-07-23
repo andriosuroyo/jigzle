@@ -229,6 +229,7 @@ export interface ShipmentBox {
   dim_l: number | null;
   dim_t: number | null;
   real_weight: number | null;      // kg (the CN Packing List reads kg)
+  description: string | null;      // PR — per-box 品名 (DESCRIPTION on the CN Packing List); 0120
   courier: string | null;          // PR261 — China-domestic box courier (paired with tracking)
   tracking: string | null;
 }

@@ -66,7 +66,7 @@ export default function DocGeneratorBoard({ userEmail }: { userEmail: string }) 
     getShipmentBoxes(sid)
       .then((rows) => {
         if (rows.length) {
-          setCnBoxes(rows.map((b) => ({ desc: '', p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', realWeight: b.real_weight?.toString() ?? '' })));
+          setCnBoxes(rows.map((b) => ({ desc: b.description ?? '', p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', realWeight: b.real_weight?.toString() ?? '' })));
           setCnBoxTracking([...new Set(rows.map((b) => (b.tracking ?? '').trim()).filter(Boolean))].join(', '));
         }
       })
