@@ -486,13 +486,12 @@ export default function PurchasingHistoryBoard({
                       lives in the Consolidator/Shipment sections, not per box. */}
                   <div className="fd-section-head">Box dimensions</div>
                   {boxErr && <div className="validation err">{boxErr}</div>}
-                  <div className="sb-hint">One row per box (cm / kg)</div>
                   {(() => {
                     const rowsView = boxDraft.length ? boxDraft : [emptyBoxDraft()];
                     return (
                       <>
                         <div className="sb-grid-head">
-                          <div /><div>Description</div><div>Length</div><div>Width</div><div>Height</div><div>Real wt</div><div />
+                          <div>Box</div><div>Description</div><div>L (cm)</div><div>W (cm)</div><div>H (cm)</div><div>Real wt (kg)</div><div />
                         </div>
                         {rowsView.map((b, i) => {
                           const upd = (patch: Partial<BoxDraft>) => { setEditDirty(true); setBoxDraft(rowsView.map((row, j) => (j === i ? { ...row, ...patch } : row))); };
