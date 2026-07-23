@@ -26,11 +26,12 @@ const courierDsOpts = (list: string[], cur: string) => [...list, ...(cur && !lis
 
 // PR206/PR261: box editor draft rows (string inputs) ⇄ ShipmentBox (numbers/null). real_weight is kg
 // (the CN Packing List reads kg). PR261 adds a per-box local courier alongside the tracking number.
-type BoxDraft = { p: string; l: string; t: string; w: string; courier: string; tracking: string };
-const emptyBoxDraft = (): BoxDraft => ({ p: '', l: '', t: '', w: '', courier: '', tracking: '' });
+// PR — a per-box `desc` (品名 / DESCRIPTION), one row per box like the CN Packing List (0120).
+type BoxDraft = { desc: string; p: string; l: string; t: string; w: string; courier: string; tracking: string };
+const emptyBoxDraft = (): BoxDraft => ({ desc: '', p: '', l: '', t: '', w: '', courier: '', tracking: '' });
 const numOrNull = (s: string): number | null => (s.trim() === '' ? null : Number(s));
-const boxToDraft = (b: ShipmentBox): BoxDraft => ({ p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', w: b.real_weight?.toString() ?? '', courier: b.courier ?? '', tracking: b.tracking ?? '' });
-const draftToBox = (d: BoxDraft): ShipmentBox => ({ dim_p: numOrNull(d.p), dim_l: numOrNull(d.l), dim_t: numOrNull(d.t), real_weight: numOrNull(d.w), courier: d.courier.trim() || null, tracking: d.tracking.trim() || null });
+const boxToDraft = (b: ShipmentBox): BoxDraft => ({ desc: b.description ?? '', p: b.dim_p?.toString() ?? '', l: b.dim_l?.toString() ?? '', t: b.dim_t?.toString() ?? '', w: b.real_weight?.toString() ?? '', courier: b.courier ?? '', tracking: b.tracking ?? '' });
+const draftToBox = (d: BoxDraft): ShipmentBox => ({ dim_p: numOrNull(d.p), dim_l: numOrNull(d.l), dim_t: numOrNull(d.t), real_weight: numOrNull(d.w), description: d.desc.trim() || null, courier: d.courier.trim() || null, tracking: d.tracking.trim() || null });
 
 // action-button icons (edit / delete), matching the To-buy detail style.
 const _ic = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 16, height: 16, 'aria-hidden': true };
@@ -41,10 +42,12 @@ const CheckIcon = () => (<svg {..._ic}><polyline points="20 6 9 17 4 12" /></svg
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
 
 const fmtDate = (s: string | null): string => fmtNiceDate(s) || '—';
-// one saved box rendered read-only (view mode): "40 × 30 × 25 cm · 12.5 kg" (PR273 — box is dims only)
+// one saved box rendered read-only (view mode): "Jigsaw puzzle · 40 × 30 × 25 cm · 12.5 kg"
+// (PR — leads with the per-box description when set; dims only otherwise).
 const boxSummary = (b: ShipmentBox): string => {
   const dims = [b.dim_p, b.dim_l, b.dim_t];
   const parts: string[] = [];
+  if (b.description?.trim()) parts.push(b.description.trim());
   if (dims.some((d) => d != null)) parts.push(`${dims.map((d) => (d ?? '–')).join(' × ')} cm`);
   if (b.real_weight != null) parts.push(`${b.real_weight} kg`);
   return parts.join(' · ') || '—';
@@ -477,31 +480,38 @@ export default function PurchasingHistoryBoard({
                   </div>
                 </div>
                 <div className="po-field">
-                  {/* PR — box dimensions: a shipment can carry more than one box. Each card is a
-                      dimensions-only row (local courier/tracking lives in the Consolidator/Shipment
-                      sections); the last box can't be removed, and "+ Add box" appends another. */}
+                  {/* PR — box dimensions as one row per box, mirroring the CN Packing List packages
+                      table (Description + L/W/H/real-wt). A shipment can carry more than one box; the
+                      last box can't be removed, and "+ Add box" appends another. Local courier/tracking
+                      lives in the Consolidator/Shipment sections, not per box. */}
                   <div className="fd-section-head">Box dimensions</div>
                   {boxErr && <div className="validation err">{boxErr}</div>}
-                  {(boxDraft.length ? boxDraft : [emptyBoxDraft()]).map((b, i) => {
-                    const upd = (patch: Partial<BoxDraft>) => { setEditDirty(true); setBoxDraft((prev) => (prev.length ? prev : [emptyBoxDraft()]).map((row, j) => (j === i ? { ...row, ...patch } : row))); };
-                    const removeBox = () => { setEditDirty(true); setBoxDraft((prev) => prev.filter((_, j) => j !== i)); };
+                  <div className="sb-hint">One row per box (cm / kg)</div>
+                  {(() => {
+                    const rowsView = boxDraft.length ? boxDraft : [emptyBoxDraft()];
                     return (
-                      <div className="sb-card" key={i}>
-                        {boxDraft.length > 1 && (
-                          <div className="sb-box-head">
-                            <span className="sb-box-n">Box {i + 1}</span>
-                            <button type="button" className="set-del" onClick={removeBox} aria-label={`Remove box ${i + 1}`}>×</button>
-                          </div>
-                        )}
-                        <div className="sb-card-r1">
-                          <label className="sb-f"><span>L (cm)</span><input type="text" inputMode="decimal" value={b.p} onChange={(e) => upd({ p: e.target.value })} /></label>
-                          <label className="sb-f"><span>W (cm)</span><input type="text" inputMode="decimal" value={b.l} onChange={(e) => upd({ l: e.target.value })} /></label>
-                          <label className="sb-f"><span>H (cm)</span><input type="text" inputMode="decimal" value={b.t} onChange={(e) => upd({ t: e.target.value })} /></label>
-                          <label className="sb-f"><span>Real wt (kg)</span><input type="text" inputMode="decimal" value={b.w} onChange={(e) => upd({ w: e.target.value })} /></label>
+                      <>
+                        <div className="sb-grid-head">
+                          <div /><div>Description</div><div>Length</div><div>Width</div><div>Height</div><div>Real wt</div><div />
                         </div>
-                      </div>
+                        {rowsView.map((b, i) => {
+                          const upd = (patch: Partial<BoxDraft>) => { setEditDirty(true); setBoxDraft(rowsView.map((row, j) => (j === i ? { ...row, ...patch } : row))); };
+                          const removeBox = () => { setEditDirty(true); setBoxDraft(rowsView.filter((_, j) => j !== i)); };
+                          return (
+                            <div className="sb-grid-row" key={i}>
+                              <div className="sb-grid-n">{i + 1}</div>
+                              <input type="text" value={b.desc} onChange={(e) => upd({ desc: e.target.value })} placeholder="Jigsaw puzzle" aria-label={`Box ${i + 1} description`} />
+                              <input type="text" inputMode="decimal" value={b.p} onChange={(e) => upd({ p: e.target.value })} aria-label={`Box ${i + 1} length`} />
+                              <input type="text" inputMode="decimal" value={b.l} onChange={(e) => upd({ l: e.target.value })} aria-label={`Box ${i + 1} width`} />
+                              <input type="text" inputMode="decimal" value={b.t} onChange={(e) => upd({ t: e.target.value })} aria-label={`Box ${i + 1} height`} />
+                              <input type="text" inputMode="decimal" value={b.w} onChange={(e) => upd({ w: e.target.value })} aria-label={`Box ${i + 1} real weight`} />
+                              <button type="button" className="sb-grid-del" onClick={removeBox} disabled={rowsView.length <= 1} aria-label={`Remove box ${i + 1}`}>×</button>
+                            </div>
+                          );
+                        })}
+                      </>
                     );
-                  })}
+                  })()}
                   <button type="button" className="btn-brown sb-box-add" onClick={() => { setEditDirty(true); setBoxDraft((prev) => [...(prev.length ? prev : [emptyBoxDraft()]), emptyBoxDraft()]); }}>+ Add box</button>
                 </div>
                 <div className="po-field">
