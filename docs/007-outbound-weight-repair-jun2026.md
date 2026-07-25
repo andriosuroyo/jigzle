@@ -82,9 +82,17 @@ the values, recoverable the same way June was.
 Everything else is ≤ 9 shipments per month — ordinary noise. July 2026 is **0% missing** once boxes are
 counted.
 
-Pre-2025 blanks (794 item rows: 249 in 2022, 160 in 2023, 385 in 2024) are accepted as unrecoverable —
-they predate the current warehouse process. `0121` marks them rather than leaving them
-indistinguishable from "not yet checked".
+Blanks that predate the app are accepted as unrecoverable and marked rather than left
+indistinguishable from "not yet checked":
+
+- `0121` — **794 rows to end-2024** (249 in 2022, 160 in 2023, 385 in 2024), legacy-system gaps.
+- `0123` — **27 rows in 2025**, 8 shipments across 7 ship-days. Unlike Nov 2024 and Jun 2026 these are
+  scattered one-offs rather than an import window, so they carry their own reason text and the two
+  causes stay distinguishable in the data.
+
+**821 rows waived in total.** Every waiver is guarded so it can only ever land on a row that is
+genuinely blank — verified post-apply: zero waived rows carry a weight. The only unwaived gaps left are
+Nov 2024 (the recoverable import window) and the 7 Jun 2026 shipments the sheet never recorded.
 
 ## 7. Why the marker is a separate column
 
