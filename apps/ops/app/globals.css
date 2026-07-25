@@ -626,6 +626,18 @@ button.po-pick-btn:active { background: var(--paper); }
 .sku-add .qty { width: 64px; } .sku-add .price { flex: 1; min-width: 0; }
 .sku-add input.price, .sku-add select { height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
 .sku-add .btn-secondary { flex-shrink: 0; height: 30px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; }
+/* PR404 — custom item (not in the catalogue) in the Items panel: the entry button, then a card that
+   reuses the SKU result card's shell (cream + border) with a name field above the qty/price/commit row. */
+.ci-open { justify-content: center; }
+.custom-item { gap: 8px; }
+.ci-head { font-size: 12px; font-weight: 700; color: var(--brown); }
+.ci-head em { font-style: normal; font-weight: 500; color: var(--muted); }
+.custom-item .po-field { margin-bottom: 0; }
+.ci-row { display: flex; align-items: center; gap: 6px; }
+.ci-row .qty-step button { width: 26px; height: 28px; font-size: 16px; }
+.ci-row .qty-step input { width: 36px; height: 28px; font-size: 14px; }
+.ci-row input.price { flex: 1; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: white; }
+.ci-row .btn-secondary, .ci-row .btn-primary { flex-shrink: 0; height: 30px; padding: 0 10px; font-size: 13px; display: inline-flex; align-items: center; }
 /* SA-1: "Confirm address later" checkbox row in the Address panel */
 .addr-later { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); margin-bottom: 8px; cursor: pointer; }
 /* PR343 — the box turns green when ticked (accent-color only paints the checked fill) */
@@ -640,6 +652,9 @@ button.po-pick-btn:active { background: var(--paper); }
 .li-name { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .li-avail { font-size: 11px; font-weight: 600; color: var(--green); }
 .li-avail.li-avail-zero { color: var(--muted); } /* no stock → not green */
+/* PR404 — a custom (not-in-the-catalogue) line has no SKU code: the slot reads as a plain muted label
+   rather than a mono code, so it never looks like a real item_code. Shared with the rail's line. */
+.li-code-custom { font-family: inherit; font-weight: 600; color: var(--muted); }
 .li-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
 .li-qty { font-weight: 700; font-size: 13px; color: var(--brown); }
 .li-total { font-weight: 700; font-size: 13px; }
@@ -650,6 +665,9 @@ button.po-pick-btn:active { background: var(--paper); }
 @media (max-width: 760px) {
   /* 44px tap targets on the primary order-entry controls (peripheral ones handled elsewhere) */
   .sku-add input, .sku-add select, .sku-add .btn-secondary { min-height: 44px; }
+  /* PR404 — same 44px tap targets on the custom-item row, stepper included (so the whole row lines up) */
+  .ci-row input.price, .ci-row .btn-secondary, .ci-row .btn-primary { min-height: 44px; }
+  .ci-row .qty-step button, .ci-row .qty-step input { height: 44px; }
   .app-header .signout { min-height: 44px; }
   /* PR160: those 44px controls make the three-line text column taller than the 72px md thumbnail, so
      the qty/price/add row (pinned bottom via margin-top:auto) overhangs the image instead of lining up

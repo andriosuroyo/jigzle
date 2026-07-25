@@ -66,8 +66,13 @@ export interface SkuHit {
 }
 
 // ── Panel 5: save the order (atomic, via the create_order RPC) ──
+// PR404 — item_code is nullable: an item the catalogue doesn't carry yet is saved as a CUSTOM line
+// (item_code null + the operator's typed name in item_code_raw), the same placeholder shape legacy
+// imported lines use and that Purchasing's manual To-buy items use (PR231). It gets a real SKU when
+// the goods actually arrive.
 export interface OrderLineInput {
-  item_code: string;
+  item_code: string | null;
+  item_code_raw?: string | null;
   qty: number;
   unit_price_idr: number;
   item_link?: string | null;
