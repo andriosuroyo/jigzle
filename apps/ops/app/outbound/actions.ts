@@ -295,7 +295,7 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
 
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,address_id,courier,courier_label,courier_tracking,line_note,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,item_code_raw,qty,address_id,courier,courier_label,courier_tracking,line_note,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .not('fulfilled_at', 'is', null)
     // PR-B §6: only ADDRESSED lines belong to Outbound. A cut-but-unaddressed line (courier null, still
@@ -308,6 +308,7 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
   const rows = (lineRows ?? []) as unknown as {
     line_id: string;
     item_code: string | null;
+    item_code_raw: string | null;
     qty: number;
     address_id: number | null;
     courier: string | null;
@@ -320,7 +321,8 @@ export async function getOrderForShip(salesId: string): Promise<ShipDetail | nul
   const lines: ShipLine[] = rows.map((r) => ({
     line_id: r.line_id,
     item_code: r.item_code,
-    name: skuName(one(r.catalogue as never), r.item_code ?? r.line_id),
+    // PR404 — an uncoded line (custom item / legacy import) carries its name in item_code_raw, not the line_id.
+    name: skuName(one(r.catalogue as never), r.item_code ?? r.item_code_raw ?? r.line_id),
     qty: r.qty,
     courier: r.courier,
     line_note: r.line_note,

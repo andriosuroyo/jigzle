@@ -17,7 +17,7 @@ import {
 import type { CustomerHit, LoyaltyReadout, SkuHit, Urgency } from '@/app/sales/types';
 import type { PaymentMethod, ChannelOption } from '@/app/settings/types';
 import SkuImage from '@/components/SkuImage';
-import { UserIcon, MapPinIcon } from '@/components/AddIcons';
+import { UserIcon, MapPinIcon, PackageIcon } from '@/components/AddIcons';
 import IconSelect from '@/components/IconSelect';
 import PhoneCountrySelect from '@/components/PhoneCountrySelect';
 import CountrySelect from '@/components/CountrySelect';
@@ -42,7 +42,10 @@ const URGENCY_OPTS: { key: Urgency; label: string }[] = [
   { key: 'high', label: 'High' },
 ];
 
-type Line = { item_code: string; name: string; qty: number; unit_price_idr: number; available: number; on_the_way: number };
+// PR404 — a line is either a catalogue SKU (item_code set) or a CUSTOM item the catalogue doesn't carry
+// yet (item_code null, the operator's typed name in `name`). A custom line has no stock record, so its
+// available / on_the_way are always 0 and it can never read as "in the warehouse".
+type Line = { item_code: string | null; name: string; qty: number; unit_price_idr: number; available: number; on_the_way: number };
 
 // PR260 — the persisted "new order" draft: the typed/selected content only (server-loaded loyalty +
 // addresses are re-fetched from the customer id on restore). One draft per operator (create-only, no
@@ -72,7 +75,8 @@ function payLabel(total: number, paid: number): string {
 
 // Live, DISPLAY-ONLY readiness preview (the rail). PR144: item readiness first (mirrors the Pending
 // dot — the weakest line wins), then the payment gate. The real routing (Fulfill vs Pending) is
-// decided server-side at save by submitOrder's live re-check.
+// decided server-side at save by submitOrder's live re-check. PR404: a custom line carries 0 available
+// / 0 on_the_way, so it reads "Need to order" here — which is exactly right, it still has to be bought.
 function deriveReadiness(lines: Line[], subtotal: number, paid: number): string {
   if (subtotal <= 0) return '—';
   if (!lines.every((l) => l.available + l.on_the_way >= l.qty)) return 'Need to order';
@@ -83,6 +87,9 @@ function deriveReadiness(lines: Line[], subtotal: number, paid: number): string 
 
 // Thousands separators for the price / DP inputs (display only; the state stores digits). PR24 §4.
 const fmtThousands = (d: string) => d.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+// PR404: elide a long searched-for term inside a button label (buttons never wrap).
+const ellip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 // Tint class for the rail's Status pill (mirrors the green/yellow/red pills used across Sales).
 function readinessClass(r: string): string {
@@ -167,6 +174,12 @@ export default function OrderEntry({
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
   const [draftPrice, setDraftPrice] = useState<Record<string, string>>({});
   const [lines, setLines] = useState<Line[]>([]);
+  // PR404 — custom item (the catalogue doesn't carry it yet): its own qty/price draft, because the SKU
+  // cards' draftQty/draftPrice maps are keyed by item_code, which a custom item hasn't got.
+  const [showCustom, setShowCustom] = useState(false);
+  const [cuName, setCuName] = useState('');
+  const [cuQty, setCuQty] = useState('1');
+  const [cuPrice, setCuPrice] = useState('');
 
   // Panel 4 — payment
   const [payMode, setPayMode] = useState<'none' | 'full' | 'dp'>('none');
@@ -246,8 +259,12 @@ export default function OrderEntry({
   const readiness = deriveReadiness(lines, subtotal, paid);
   const canSave = !!customer && lines.length > 0 && (addressId != null || confirmLater) && !saving;
 
-  // SKU images for the visible items (picker results + order lines) — one batch read, lazy.
-  const imgCodes = useMemo(() => [...skuResults.map((s) => s.item_code), ...lines.map((l) => l.item_code)], [skuResults, lines]);
+  // SKU images for the visible items (picker results + order lines) — one batch read, lazy. A custom
+  // line has no SKU, so it contributes no code (SkuImage falls back to its placeholder).
+  const imgCodes = useMemo(
+    () => [...skuResults.map((s) => s.item_code), ...lines.map((l) => l.item_code).filter((c): c is string => !!c)],
+    [skuResults, lines]
+  );
   const imgMap = useSkuImages(imgCodes);
 
   // ── live searches (debounced as you type — see the effects below) ──
@@ -441,6 +458,40 @@ export default function OrderEntry({
     setLines((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  // ── PR404 — custom item: an item the catalogue doesn't carry yet (a brand-new release, a one-off
+  // request). It takes qty + price exactly like a SKU line and saves uncoded (item_code null + the typed
+  // name in item_code_raw), the placeholder shape Purchasing already uses for a not-yet-known SKU
+  // (PR231); it gets a real SKU when the goods arrive. With no stock record it can never read as
+  // available, so the order lands in Pending (deriveReadiness → "Need to order"; submitOrder re-checks). ──
+  function openCustom() {
+    setShowCustom(true);
+    setCuName((n) => n || skuQuery.trim()); // prefill with whatever was searched for
+    setCuQty('1'); setCuPrice('');
+  }
+
+  function closeCustom() { setShowCustom(false); setCuName(''); setCuQty('1'); setCuPrice(''); }
+
+  function addCustomLine() {
+    const name = cuName.trim();
+    if (!name) { setError('Enter the item name.'); return; }
+    const qty = Math.max(1, parseInt(cuQty || '1', 10) || 1);
+    const price = Math.max(0, parseInt(cuPrice || '', 10) || 0);
+    if (price <= 0) { setError(`Enter a price for ${name}.`); return; }
+    setError(null);
+    setLines((prev) => {
+      // same merge rule as a SKU line: identical item + identical price stacks the quantity
+      const i = prev.findIndex((l) => !l.item_code && l.name === name && l.unit_price_idr === price);
+      if (i >= 0) {
+        const next = [...prev];
+        next[i] = { ...next[i], qty: next[i].qty + qty };
+        return next;
+      }
+      return [...prev, { item_code: null, name, qty, unit_price_idr: price, available: 0, on_the_way: 0 }];
+    });
+    closeCustom();
+    clearSkuSearch();
+  }
+
   // ── save + route (SA-3): submitOrder cuts at save when everything's in stock (→ Fulfill), else the
   //    order waits in Pending. Address may be deferred (SA-1, confirmLater → address_id null). ──
   async function handleSave() {
@@ -452,7 +503,13 @@ export default function OrderEntry({
         customer_id: customer.id,
         address_id: confirmLater ? null : addressId,
         urgency,
-        lines: lines.map((l) => ({ item_code: l.item_code, qty: l.qty, unit_price_idr: l.unit_price_idr })),
+        // PR404 — a custom line carries no item_code; its typed name travels as item_code_raw.
+        lines: lines.map((l) => ({
+          item_code: l.item_code,
+          item_code_raw: l.item_code ? null : l.name,
+          qty: l.qty,
+          unit_price_idr: l.unit_price_idr,
+        })),
         payment: paid > 0 ? { amount_idr: paid, method: payMethod || null } : null,
       });
       setResult({ sales_id: res.sales_id, total: subtotal, routed: res.routed, pay: payStatus });
@@ -472,6 +529,7 @@ export default function OrderEntry({
     setAddresses([]); setAddressId(null); setConfirmLater(false); setShowNewAddr(false);
     setNaRecipient(''); setNaContact(''); setNaAddr(''); setTidy(null);
     setSkuQuery(''); setSkuResults([]); setSkuSearched(false); setDraftQty({}); setDraftPrice({}); setLines([]);
+    setShowCustom(false); setCuName(''); setCuQty('1'); setCuPrice('');
     setPayMode('none'); setPayAmount(''); setPayMethod(paymentMethods[0]?.label ?? '');
     setUrgency(null);
     setError(null); setResult(null);
@@ -809,7 +867,7 @@ export default function OrderEntry({
               </div>
               {skuSearching && <div className="hint">Searching…</div>}
               {!skuSearching && skuSearched && skuResults.length === 0 && (
-                <div className="hint"><em>No results</em></div>
+                <div className="hint"><em>No results — not in the catalogue yet.</em></div>
               )}
               {skuResults.length > 0 && (
                 <ul className="result-list">
@@ -848,15 +906,56 @@ export default function OrderEntry({
                 </ul>
               )}
 
+              {/* PR404 — the catalogue never has everything a customer asks for (a brand-new release, a
+                  one-off request). Instead of blocking the order, take it as a custom item: type the name
+                  and set qty + price as usual. Entry button = brown; the card's commit is the orange CTA. */}
+              {!showCustom ? (
+                <button className="btn-brown btn-ico ci-open" onClick={openCustom} disabled={!customer}>
+                  {/* the label quotes what was searched for (elided past 24 chars — .btn-brown never wraps) */}
+                  <PackageIcon />{skuQuery.trim() ? `Add “${ellip(skuQuery.trim(), 24)}” as a custom item` : 'Add a custom item'}
+                </button>
+              ) : (
+                <div className="sku-result custom-item">
+                  <div className="ci-head">Custom item <em>(not in the catalogue — matched to a SKU when it arrives)</em></div>
+                  <div className="po-field">
+                    <label>Item name</label>
+                    <input
+                      type="text"
+                      value={cuName}
+                      autoFocus
+                      placeholder="e.g. F1069 Disneyparks Rapunzel 1000 pieces"
+                      onChange={(e) => setCuName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomLine(); } }}
+                    />
+                  </div>
+                  <div className="ci-row">
+                    <span className="qty-step">
+                      <button type="button" onClick={() => setCuQty(String(Math.max(1, (parseInt(cuQty || '1', 10) || 1) - 1)))} disabled={(parseInt(cuQty || '1', 10) || 1) <= 1} aria-label="decrease">−</button>
+                      <input type="number" inputMode="numeric" min={1} value={cuQty} onChange={(e) => setCuQty(e.target.value)} />
+                      <button type="button" onClick={() => setCuQty(String((parseInt(cuQty || '1', 10) || 1) + 1))} aria-label="increase">+</button>
+                    </span>
+                    {/* price: text + thousands grouping; state stores digits only (PR24 §4) */}
+                    <input className="price" type="text" inputMode="numeric" placeholder="Rp price"
+                      value={fmtThousands(cuPrice)}
+                      onChange={(e) => setCuPrice(e.target.value.replace(/\D/g, ''))} />
+                    <button className="btn-secondary" onClick={closeCustom}>Cancel</button>
+                    <button className="btn-primary" onClick={addCustomLine}>Add item</button>
+                  </div>
+                </div>
+              )}
+
               {lines.length > 0 && (
                 <ul className="lines-list">
                   {lines.map((l, i) => (
-                    <li key={`${l.item_code}-${i}`} className="line-item">
-                      <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+                    <li key={`${l.item_code ?? 'custom'}-${i}`} className="line-item">
+                      <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
                       <div className="li-main">
-                        <span className="li-code">{l.item_code}</span>
+                        {/* PR404 — a custom line has no SKU: label it as one and say it still needs buying. */}
+                        <span className={`li-code ${l.item_code ? '' : 'li-code-custom'}`}>{l.item_code ?? 'Custom item'}</span>
                         <span className="li-name">{l.name}</span>
-                        <span className={`li-avail ${l.available > 0 ? '' : 'li-avail-zero'}`}>available {l.available}</span>
+                        {l.item_code
+                          ? <span className={`li-avail ${l.available > 0 ? '' : 'li-avail-zero'}`}>available {l.available}</span>
+                          : <span className="li-avail li-avail-zero">not in the catalogue — needs buying</span>}
                       </div>
                       <div className="li-right">
                         <span className="li-qty">{l.qty}×</span>
@@ -937,10 +1036,10 @@ export default function OrderEntry({
             {lines.length > 0 && (
               <ul className="rail-lines">
                 {lines.map((l, i) => (
-                  <li key={`${l.item_code}-${i}`} className="rail-line">
-                    <SkuImage status={imgMap[l.item_code]?.status} displayUrl={imgMap[l.item_code]?.displayUrl} name={l.name} size={SKU_IMG.sm} />
+                  <li key={`${l.item_code ?? 'custom'}-${i}`} className="rail-line">
+                    <SkuImage status={imgMap[l.item_code ?? '']?.status} displayUrl={imgMap[l.item_code ?? '']?.displayUrl} name={l.name} size={SKU_IMG.sm} />
                     <div className="rail-line-main">
-                      <span className="rail-line-code">{l.item_code}</span>
+                      <span className={`rail-line-code ${l.item_code ? '' : 'li-code-custom'}`}>{l.item_code ?? 'Custom item'}</span>
                       <span className="rail-line-name">{l.name}</span>
                     </div>
                     <span className="rail-line-qty">×{l.qty}</span>

@@ -32,7 +32,11 @@ function catName(c: { original_name: string | null; translate_name: string | nul
 
 // F4: a coded line with no catalogue name falls back to line_note → item_link host/slug → the literal
 // "Unmatched item". NEVER the raw line_id.
-function fallbackName(lineNote: string | null, itemLink: string | null): string {
+// PR404: an UNCODED line (a custom item the catalogue doesn't carry yet, or a legacy import) carries its
+// name in item_code_raw — that comes first, so such a line reads as itself, not "Unmatched item".
+function fallbackName(rawCode: string | null, lineNote: string | null, itemLink: string | null): string {
+  const raw = rawCode?.trim();
+  if (raw) return raw;
   const note = lineNote?.trim();
   if (note) return note;
   const link = linkLabel(itemLink);
@@ -67,7 +71,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
   // the cut, not-yet-addressed (courier null), unshipped lines — the set Fulfill addresses + sends out
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,line_note,item_link,courier_tracking,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,item_code_raw,qty,line_note,item_link,courier_tracking,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .not('fulfilled_at', 'is', null)
     .is('courier', null)
@@ -79,6 +83,7 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
   const rows = (lineRows ?? []) as unknown as {
     line_id: string;
     item_code: string | null;
+    item_code_raw: string | null;
     qty: number;
     line_note: string | null;
     item_link: string | null;
@@ -89,8 +94,8 @@ export async function getOrderForFulfill(salesId: string): Promise<FulfillDetail
   const lines: FulfillCutLine[] = rows.map((r) => ({
     line_id: r.line_id,
     item_code: r.item_code,
-    // F4: catalogue name if matched, else line_note → item_link → "Unmatched item" (never line_id)
-    name: catName(one(r.catalogue as never)) || fallbackName(r.line_note, r.item_link),
+    // F4: catalogue name if matched, else item_code_raw → line_note → item_link → "Unmatched item" (never line_id)
+    name: catName(one(r.catalogue as never)) || fallbackName(r.item_code_raw, r.line_note, r.item_link),
     qty: r.qty,
     line_note: r.line_note,
   }));

@@ -52,7 +52,7 @@ export async function getPending(): Promise<PendingOrder[]> {
   // order's uncut lines only (a partial order's already-cut lines live in Fulfill/Outbound, not here).
   const { data, error } = await supabase
     .from('orders')
-    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customers(name,phone),order_lines!inner(line_id,item_code,qty,unit_price_idr,line_note,catalogue(original_name,translate_name,self_code))')
+    .select('sales_id,order_date,status,payment_status,sales_total_idr,paid_idr,customers(name,phone),order_lines!inner(line_id,item_code,item_code_raw,qty,unit_price_idr,line_note,catalogue(original_name,translate_name,self_code))')
     .neq('status', 'Cancelled')
     .is('order_lines.fulfilled_at', null)
     .is('order_lines.shipped_at', null)
@@ -82,6 +82,7 @@ export async function getPending(): Promise<PendingOrder[]> {
     const lineRows = (o.order_lines ?? []) as unknown as {
       line_id: string;
       item_code: string | null;
+      item_code_raw: string | null;
       qty: number;
       unit_price_idr: number | null;
       line_note: string | null;
@@ -93,7 +94,9 @@ export async function getPending(): Promise<PendingOrder[]> {
       return {
         line_id: r.line_id,
         item_code: r.item_code,
-        name: nameOf(one(r.catalogue as never), r.item_code ?? r.line_id),
+        // PR404 — an uncoded line (a custom item, or a legacy import) carries its name in item_code_raw;
+        // show that rather than the opaque line_id, which read as gibberish on the card.
+        name: nameOf(one(r.catalogue as never), r.item_code ?? r.item_code_raw ?? r.line_id),
         qty: r.qty,
         unit_price_idr: r.unit_price_idr ?? null,
         line_note: r.line_note,
@@ -248,7 +251,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
 
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty,address_id,courier,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
+    .select('line_id,item_code,item_code_raw,qty,address_id,courier,courier_label,courier_tracking,catalogue(original_name,translate_name,self_code)')
     .eq('sales_id', salesId)
     .not('shipped_at', 'is', null)
     .eq('is_cancelled', false)
@@ -257,6 +260,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
   const lr = (lineRows ?? []) as unknown as {
     line_id: string;
     item_code: string | null;
+    item_code_raw: string | null;
     qty: number;
     address_id: number | null;
     courier: string | null;
@@ -267,7 +271,7 @@ export async function getOrderSummary(salesId: string): Promise<OrderSummary | n
   const lines: ShippedLineSummary[] = lr.map((r) => ({
     line_id: r.line_id,
     item_code: r.item_code,
-    name: nameOf(one(r.catalogue as never), r.item_code ?? r.line_id),
+    name: nameOf(one(r.catalogue as never), r.item_code ?? r.item_code_raw ?? r.line_id), // PR404: uncoded → its raw name
     qty: r.qty,
     // imported/legacy orders store the courier in `courier`; the structured `courier_label` (added later)
     // is only set by Fulfill going forward. Fall back so old shipments still show their courier.

@@ -240,8 +240,11 @@ export async function searchSkus(q: string): Promise<SkuHit[]> {
 //   • every coded line has Σqty ≤ available AND fully paid → cut all lines now (cut_order_lines) → Fulfill.
 //   • any coded line short, or not fully paid              → cut nothing → the order waits in Pending.
 // An address may be null here (SA-1 "confirm address later"); create_order (0033) permits it and
-// Fulfill confirms the address before Outbound. Lines with no item_code carry no stock gate (the
-// per-code constraint simply doesn't include them) and never block the Fulfill route.
+// Fulfill confirms the address before Outbound.
+// PR404 — a CUSTOM line (no item_code: an item the catalogue doesn't carry yet) has no stock record at
+// all, so it can't be "in the warehouse": it always keeps the new order in Pending, where the operator
+// buys/handles it. This gate is scoped to the save path — the wider "an uncoded line carries no stock
+// gate" rule for legacy lines (Pending's lineStatus, getPreorders) is unchanged.
 export async function submitOrder(payload: CreateOrderInput): Promise<SubmitResult> {
   if (!payload.lines?.length) throw new Error('submitOrder: at least one line is required');
   const supabase = createSupabaseServerClient();
@@ -259,13 +262,31 @@ export async function submitOrder(payload: CreateOrderInput): Promise<SubmitResu
   // read back the lines the RPC created
   const { data: lineRows } = await supabase
     .from('order_lines')
-    .select('line_id,item_code,qty')
+    .select('line_id,item_code,item_code_raw,qty')
     .eq('sales_id', salesId)
     .eq('is_cancelled', false);
-  const lines = (lineRows ?? []) as { line_id: string; item_code: string | null; qty: number }[];
+  const lines = (lineRows ?? []) as { line_id: string; item_code: string | null; item_code_raw: string | null; qty: number }[];
   if (!lines.length) return { sales_id: salesId, routed: 'pending' };
 
-  // live availability re-check: Σqty per item_code ≤ available (uncoded lines carry no gate)
+  // PR404 — carry the custom lines' typed names into item_code_raw. Migration 0123 teaches create_order
+  // to write them itself; until it's applied this patch keeps a custom line's name from being lost (and
+  // once it is applied, the rows already carry the name so nothing here fires). create_order numbers its
+  // lines {sales_id}-{n} in payload order, which is what maps a saved row back to its input.
+  const rawByLineId = new Map<string, string>();
+  payload.lines.forEach((l, i) => {
+    const raw = l.item_code_raw?.trim();
+    if (!l.item_code && raw) rawByLineId.set(`${salesId}-${i + 1}`, raw);
+  });
+  if (rawByLineId.size) {
+    await Promise.all(
+      lines
+        .filter((l) => !l.item_code && !l.item_code_raw && rawByLineId.has(l.line_id))
+        .map((l) => supabase.from('order_lines').update({ item_code_raw: rawByLineId.get(l.line_id) }).eq('line_id', l.line_id))
+    );
+  }
+
+  // live availability re-check: Σqty per item_code ≤ available. A custom line (no item_code) has no
+  // stock record → it can never read as available, so the order stays in Pending (PR404).
   const needByCode = new Map<string, number>();
   for (const l of lines) if (l.item_code) needByCode.set(l.item_code, (needByCode.get(l.item_code) ?? 0) + l.qty);
   const codes = [...needByCode.keys()];
@@ -274,7 +295,7 @@ export async function submitOrder(payload: CreateOrderInput): Promise<SubmitResu
     const { data: sc } = await supabase.from('stock_check').select('item_code,available').in('item_code', codes);
     for (const r of sc ?? []) availByCode.set(r.item_code as string, (r.available as number) ?? 0);
   }
-  let allAvailable = true;
+  let allAvailable = lines.every((l) => !!l.item_code); // a custom line is never sendable at save (PR404)
   for (const [code, need] of needByCode) {
     if ((availByCode.get(code) ?? 0) < need) { allAvailable = false; break; }
   }
