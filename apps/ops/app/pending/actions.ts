@@ -35,10 +35,14 @@ function nameOf(
 
 const PENDING_LIMIT = 200;
 
-// per-line readiness from available / on_the_way vs qty (FP-2/FP-3). An uncoded line carries no stock
-// gate → always 'available' / ready (a custom item the operator handles manually).
+// per-line readiness from available / on_the_way vs qty (FP-2/FP-3).
+// PR405 — an UNCODED line (no item_code: a PR404 custom item, or a legacy import) has no stock record
+// at all, so it can never be in the warehouse: it reads 'uncatalogued' and is never ready. It used to
+// return 'available', which painted a phantom line green and armed Send to fulfill for goods nobody had
+// bought — cut_order_lines would then stamp it fulfilled with no stock to move. This now agrees with
+// submitOrder's save-path gate (sales/actions.ts), which already refused to cut an uncoded line.
 function lineStatus(coded: boolean, available: number, onTheWay: number, qty: number): LineStatus {
-  if (!coded) return 'available';
+  if (!coded) return 'uncatalogued';
   if (available >= qty) return 'available';
   if (available + onTheWay >= qty) return 'on_the_way';
   return 'to_order';
@@ -106,8 +110,8 @@ export async function getPending(): Promise<PendingOrder[]> {
         ready: status === 'available',
       };
     });
-    // dot = worst line: any to_order → red; else any on_the_way → yellow; else green
-    const dot: OrderDot = lines.some((l) => l.status === 'to_order')
+    // dot = worst line: any to_order/uncatalogued → red; else any on_the_way → yellow; else green
+    const dot: OrderDot = lines.some((l) => l.status === 'to_order' || l.status === 'uncatalogued')
       ? 'red'
       : lines.some((l) => l.status === 'on_the_way')
         ? 'yellow'

@@ -99,6 +99,7 @@ const PencilIcon = () => (<svg {..._ic}><path d="M12 20h9" /><path d="M16.5 3.5a
 type BuyTarget = {
   kind: SubTab;
   item_code: string;
+  item_code_raw: string | null; // PR405/PR231 — set instead of item_code when the SKU isn't catalogued yet
   name: string;
   qty: number;
   po_id: number | null;        // present for a manual PO
@@ -300,7 +301,7 @@ export default function ToBuyBoard({
       if (t.kind === 'manual' && t.po_id != null) await setPOStatus(t.po_id, 'Processing');
       else if (t.kind === 'sales') {
         if (t.oos_po_id != null) { try { await deletePO(t.oos_po_id); } catch { /* best-effort */ } }
-        await buyPreorder({ item_code: t.item_code, qty: t.qty, customer_id: t.customer_id, supplier_id: supplierId });
+        await buyPreorder({ item_code: t.item_code || null, item_code_raw: t.item_code_raw, qty: t.qty, customer_id: t.customer_id, supplier_id: supplierId });
       }
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed.'); await refresh(); }
     finally { setBusy(false); }
@@ -331,7 +332,7 @@ export default function ToBuyBoard({
       } else if (detail.kind === 'sales') {
         const lineId = String(sel?.id);
         if (checked) {
-          const { po_id } = await markSkuSoldOut({ item_code: detail.target.item_code, customer_id: detail.target.customer_id, qty: detail.target.qty, sales_id: detail.target.sales_id });
+          const { po_id } = await markSkuSoldOut({ item_code: detail.target.item_code || null, item_code_raw: detail.target.item_code_raw, customer_id: detail.target.customer_id, qty: detail.target.qty, sales_id: detail.target.sales_id });
           setPreorders((prev) => prev.map((p) => (p.line_id === lineId ? { ...p, out_of_stock: true, oos_po_id: po_id } : p)));
         } else if (detail.oos_po_id != null) {
           await deletePO(detail.oos_po_id);
@@ -365,14 +366,15 @@ export default function ToBuyBoard({
       return { kind: 'manual' as const, po_id: p.po_id, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: p.supplier_id,
         wf: p.with_forwarder, otw: p.on_the_way, avail: p.available, context: `PO #${p.po_id}`, note: p.item_note,
         qtyEditable: true, canDelete: true, out_of_stock: p.out_of_stock, oos_po_id: null as number | null,
-        target: { kind: 'manual' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link, out_of_stock: p.out_of_stock, oos_po_id: null } };
+        target: { kind: 'manual' as const, item_code: p.item_code ?? '', item_code_raw: p.item_code_raw, name: p.name, qty: p.qty, po_id: p.po_id, customer_id: null, sales_id: null, product_link: p.product_link, out_of_stock: p.out_of_stock, oos_po_id: null } };
     }
     const p = preorders.find((x) => x.line_id === sel.id);
     if (!p) return null;
-    return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, code: p.item_code ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: null as number | null,
+    // PR405 — an uncoded preorder shows its placeholder as the code (same as the Manual tab does).
+    return { kind: 'sales' as const, po_id: null as number | null, item_code: p.item_code, code: p.item_code ?? p.item_code_raw ?? '', name: p.name, qty: p.qty, urgency: p.urgency, supplier_id: null as number | null,
       wf: 0, otw: 0, avail: p.available, context: `${p.customer_name || 'no customer'} · ${fmtDate(p.order_date)}`, note: p.line_note as string | null,
       qtyEditable: false, canDelete: false, out_of_stock: p.out_of_stock, oos_po_id: p.oos_po_id,
-      target: { kind: 'sales' as const, item_code: p.item_code ?? '', name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link, out_of_stock: p.out_of_stock, oos_po_id: p.oos_po_id } };
+      target: { kind: 'sales' as const, item_code: p.item_code ?? '', item_code_raw: p.item_code_raw, name: p.name, qty: p.qty, po_id: null, customer_id: p.customer_id, sales_id: p.sales_id, product_link: p.product_link, out_of_stock: p.out_of_stock, oos_po_id: p.oos_po_id } };
   }, [sel, planned, preorders]);
 
   // PR221 — load the catalogue "where to buy" links when the detail overlay opens (keyed on the SKU code,
@@ -396,7 +398,9 @@ export default function ToBuyBoard({
   }, [sel]);
 
   // a new/unknown manual SKU has no catalogue name (and no image / nothing to edit) — drive the header off this.
-  const detailHasName = detail ? isRealName(detail.name, detail.item_code) : false;
+  // PR405: compare against the DISPLAYED code (which falls back to the placeholder), so an uncoded item
+  // — whose name IS its placeholder — doesn't print the same string twice in the header.
+  const detailHasName = detail ? isRealName(detail.name, detail.code) : false;
 
   // PR240 — inline edit (all tabs; PR254). Seeds the draft from the current row; saveEdit routes the
   // write by kind (Manual/OOS → the PO; From Sales → its order priority + line note).
@@ -515,7 +519,7 @@ export default function ToBuyBoard({
           <ul className="po-cards">
             {/* PR150 card: l1 SKU + date, l2 name + customer id (no order id), l3 qty/Buy/Done. */}
             {preorders.map((p) => {
-              const code = p.item_code || '—';
+              const code = p.item_code || p.item_code_raw || '—'; // PR405: uncoded → its placeholder
               return (
               <li key={p.line_id}>
                 <button className={`po-card po-card-btn po-card-mini${urgClass(p.urgency)}`} onClick={() => setSel({ kind: 'sales', id: p.line_id })}>

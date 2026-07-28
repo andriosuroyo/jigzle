@@ -112,9 +112,12 @@ export interface PreorderRow {
   customer_name: string | null;
   order_date: string | null;
   item_code: string | null;
+  // PR405 — an UNCODED line (item_code NULL: a PR404 custom item / a legacy import) carries its typed
+  // code here, the same placeholder shape as a Planned item (PR231). Resolved to a real SKU at Inbound.
+  item_code_raw: string | null;
   name: string;
   qty: number;
-  available: number; // live stock_check.available (≤ 0 for a preorder)
+  available: number; // live stock_check.available (≤ 0 for a preorder; always 0 for an uncoded line)
   urgency: Urgency | null; // from the order (orders.urgency)
   line_note: string | null; // the order line's note (order_lines.line_note) — editable via Edit PO (PR254)
   product_link: string | null; // the order line's item_link, if any (used by the Buy overlay)
