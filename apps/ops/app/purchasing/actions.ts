@@ -778,16 +778,21 @@ export async function setPlannedQty(poId: number, qty: number): Promise<void> {
 // ── PR73: mark a SKU sold out straight from the From-Sales card (no PO exists yet) by creating a
 // 'Sold out' PO for that item + customer. It then both shows in the Out-of-Stock list and covers the
 // preorder (an open, non-Received PO for the SKU + customer), so the line drops off From Sales. ──
-export async function markSkuSoldOut(input: { item_code: string; customer_id: number | null; qty: number; sales_id?: string | null; note?: string | null }): Promise<{ po_id: number }> {
+// PR405 — an uncoded preorder (a PR404 custom item the catalogue doesn't carry) has no item_code to FK,
+// so it marks sold out as a PLACEHOLDER PO (item_code_raw, item_code NULL) exactly like a Planned item
+// created from an unknown code (PR231). Exactly one of the two is set.
+export async function markSkuSoldOut(input: { item_code: string | null; item_code_raw?: string | null; customer_id: number | null; qty: number; sales_id?: string | null; note?: string | null }): Promise<{ po_id: number }> {
   const supabase = createSupabaseServerClient();
-  const item_code = input.item_code?.trim();
-  if (!item_code) throw new Error('markSkuSoldOut: an item code is required');
+  const item_code = input.item_code?.trim() || null;
+  const item_code_raw = item_code ? null : input.item_code_raw?.trim() || null;
+  if (!item_code && !item_code_raw) throw new Error('markSkuSoldOut: an item code is required');
   const qty = Number(input.qty);
   const today = todayJakarta();
   const { data, error } = await supabase
     .from('purchase_orders')
     .insert({
       item_code,
+      item_code_raw,
       qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
       status: 'Sold out',
       status_since: today,
@@ -806,16 +811,20 @@ export async function markSkuSoldOut(input: { item_code: string; customer_id: nu
 
 // ── Buy a preorder (decision #2): create a Processing PO linked to the customer who ordered it, so it
 // enters To forwarder and drops off the preorder list (covered by an open PO for that SKU + customer). ──
-export async function buyPreorder(input: { item_code: string; qty: number; customer_id: number | null; supplier_id?: number | null }): Promise<{ po_id: number }> {
+// PR405 — an uncoded preorder spawns a PLACEHOLDER PO (item_code_raw, item_code NULL), the PR231 shape
+// Inbound already knows how to reconcile to a real SKU on receive. Exactly one of the two is set.
+export async function buyPreorder(input: { item_code: string | null; item_code_raw?: string | null; qty: number; customer_id: number | null; supplier_id?: number | null }): Promise<{ po_id: number }> {
   const supabase = createSupabaseServerClient();
-  const item_code = input.item_code?.trim();
-  if (!item_code) throw new Error('buyPreorder: an item code is required');
+  const item_code = input.item_code?.trim() || null;
+  const item_code_raw = item_code ? null : input.item_code_raw?.trim() || null;
+  if (!item_code && !item_code_raw) throw new Error('buyPreorder: an item code is required');
   const qty = Number(input.qty);
   const today = todayJakarta();
   const { data, error } = await supabase
     .from('purchase_orders')
     .insert({
       item_code,
+      item_code_raw,
       qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
       status: 'Processing',
       status_since: today,
@@ -1198,17 +1207,21 @@ export async function groupIntoShipment(payload: GroupShipmentInput): Promise<{ 
 export async function getPreorders(): Promise<PreorderRow[]> {
   const supabase = createSupabaseServerClient();
 
-  // unfulfilled, live order lines with a resolved SKU (no stock gate exists for code-less lines).
+  // unfulfilled, live order lines.
+  // PR405 — UNCODED lines are included now. They used to be filtered out (`.not('item_code','is',null)`),
+  // which meant an item the catalogue doesn't carry yet — a PR404 custom item, or a legacy import — was
+  // never listed as something to buy, even though it is exactly that. Such a line carries its typed name
+  // in item_code_raw (the PR231 placeholder) and has no stock record, so it is always a preorder.
   // Paged (PostgREST caps a response at 1000) with a stable order so nothing is silently dropped.
-  type LineRow = { line_id: string; sales_id: string; item_code: string; qty: number; item_link: string | null; line_note: string | null };
+  type LineRow = { line_id: string; sales_id: string; item_code: string | null; item_code_raw: string | null; qty: number; item_link: string | null; line_note: string | null };
   const rows: LineRow[] = [];
   for (let from = 0; from < 8000; from += 1000) {
     const { data: lines } = await supabase
       .from('order_lines')
-      .select('line_id,sales_id,item_code,qty,item_link,line_note')
+      .select('line_id,sales_id,item_code,item_code_raw,qty,item_link,line_note')
       .is('fulfilled_at', null)
       .eq('is_cancelled', false)
-      .not('item_code', 'is', null)
+      .or('item_code.not.is.null,item_code_raw.not.is.null') // one of the two must identify the item
       .order('line_id', { ascending: true })
       .range(from, from + 999);
     const page = (lines ?? []) as LineRow[];
@@ -1218,7 +1231,9 @@ export async function getPreorders(): Promise<PreorderRow[]> {
   if (!rows.length) return [];
 
   const salesIds = [...new Set(rows.map((r) => r.sales_id))];
-  const codes = [...new Set(rows.map((r) => r.item_code))];
+  const codes = [...new Set(rows.map((r) => r.item_code).filter((c): c is string => !!c))];
+  // the placeholder codes of the uncoded lines — their own key space (they have no catalogue row)
+  const raws = [...new Set(rows.filter((r) => !r.item_code).map((r) => r.item_code_raw?.trim()).filter((s): s is string => !!s))];
 
   // orders (skip Cancelled/Complete), catalogue names, customers, and live availability — in parallel
   const orderById = new Map<string, { order_date: string | null; status: string | null; customer_id: number | null; urgency: Urgency | null }>();
@@ -1250,16 +1265,32 @@ export async function getPreorders(): Promise<PreorderRow[]> {
   // a preorder drops once an OPEN, being-BOUGHT PO for the same SKU + customer covers it (decision #2).
   // PR304 — a 'Sold out' PO no longer drops the line: instead it FLAGS the preorder out-of-stock (and the
   // line stays visible), so out-of-stock is an inline flag on From Sales. Key by `item_code|customer_id`.
+  // PR405 — an uncoded line has no item_code to key on, so it keys on its placeholder instead
+  // (`raw:<code>|customer_id`). A placeholder PO (PR231, item_code_raw) covers it the same way, which is
+  // what makes Done/Out-of-stock drop an uncoded row off the list just like a coded one.
+  const keyOf = (code: string | null, raw: string | null, cust: number | null): string | null => {
+    if (cust == null) return null;
+    const id = code?.trim() || (raw?.trim() ? `raw:${raw.trim().toLowerCase()}` : null);
+    return id ? `${id}|${cust}` : null;
+  };
   const coveredKeys = new Set<string>();
   const soldOutPoByKey = new Map<string, number>();
   {
-    const data = await inBatches(codes, (b) => supabase
-      .from('purchase_orders').select('po_id,item_code,customer_id,status')
-      .in('item_code', b).not('customer_id', 'is', null).or('status.is.null,status.neq.Received')
-      .then((r) => (r.data ?? []) as { po_id: number; item_code: string | null; customer_id: number | null; status: string | null }[]));
+    type PoRow = { po_id: number; item_code: string | null; item_code_raw: string | null; customer_id: number | null; status: string | null };
+    const PO_SELECT = 'po_id,item_code,item_code_raw,customer_id,status';
+    const data: PoRow[] = [
+      ...(await inBatches(codes, (b) => supabase
+        .from('purchase_orders').select(PO_SELECT)
+        .in('item_code', b).not('customer_id', 'is', null).or('status.is.null,status.neq.Received')
+        .then((r) => (r.data ?? []) as PoRow[]))),
+      ...(await inBatches(raws, (b) => supabase
+        .from('purchase_orders').select(PO_SELECT)
+        .in('item_code_raw', b).is('item_code', null).not('customer_id', 'is', null).or('status.is.null,status.neq.Received')
+        .then((r) => (r.data ?? []) as PoRow[]))),
+    ];
     for (const p of data) {
-      if (!p.item_code || p.customer_id == null) continue;
-      const key = `${p.item_code}|${p.customer_id}`;
+      const key = keyOf(p.item_code, p.item_code_raw, p.customer_id);
+      if (!key) continue;
       if (p.status === 'Sold out') soldOutPoByKey.set(key, p.po_id); // flag, don't cover
       else coveredKeys.add(key); // being bought → drops off
     }
@@ -1269,9 +1300,11 @@ export async function getPreorders(): Promise<PreorderRow[]> {
   for (const r of rows) {
     const order = orderById.get(r.sales_id);
     if (!order || order.status === 'Cancelled' || order.status === 'Complete') continue;
-    const available = availByCode.get(r.item_code) ?? 0;
+    const raw = r.item_code_raw?.trim() || null;
+    // PR405 — an uncoded line has no stock record at all, so it is always short (available 0).
+    const available = r.item_code ? availByCode.get(r.item_code) ?? 0 : 0;
     if (available > 0) continue; // in stock → not a preorder
-    const key = order.customer_id != null ? `${r.item_code}|${order.customer_id}` : null;
+    const key = keyOf(r.item_code, raw, order.customer_id);
     if (key && coveredKeys.has(key)) continue; // already being bought → drops off
     const oosPoId = key ? soldOutPoByKey.get(key) ?? null : null;
     out.push({
@@ -1281,7 +1314,8 @@ export async function getPreorders(): Promise<PreorderRow[]> {
       customer_name: order.customer_id != null ? customerById.get(order.customer_id) ?? null : null,
       order_date: order.order_date,
       item_code: r.item_code,
-      name: nameByCode.get(r.item_code) ?? r.item_code,
+      item_code_raw: r.item_code ? null : raw, // PR405: only an uncoded line carries a placeholder
+      name: r.item_code ? nameByCode.get(r.item_code) ?? r.item_code : raw ?? r.line_id,
       qty: r.qty,
       available,
       urgency: order.urgency,

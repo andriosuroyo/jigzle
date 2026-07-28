@@ -24,7 +24,9 @@ const FILTERS: { key: DotFilter; label: string }[] = [
   { key: 'yellow', label: 'On the way' },
   { key: 'green', label: 'Ready' },
 ];
-const STATUS_LABEL: Record<string, string> = { available: 'available', on_the_way: 'on the way', to_order: 'to order' };
+// PR405 — 'uncatalogued' is a line with no SKU (custom item / legacy import): no stock record to read,
+// so it's never ready and always needs buying.
+const STATUS_LABEL: Record<string, string> = { available: 'available', on_the_way: 'on the way', to_order: 'to order', uncatalogued: 'not in catalogue' };
 const fmtIDR = (n: number | null | undefined): string => 'Rp ' + (n ?? 0).toLocaleString('id-ID');
 // thousands-group a digit string for the price field (state stores digits only)
 const fmtThousands = (d: string) => d.replace(/\D/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -97,7 +99,8 @@ export default function PendingBoard({
       (o) =>
         (o.customer_name ?? '').toLowerCase().includes(q) ||
         o.sales_id.toLowerCase().includes(q) ||
-        o.lines.some((l) => (l.item_code ?? '').toLowerCase().includes(q))
+        // PR405: match the line NAME too — an uncoded line has no item_code, so it was unsearchable here.
+        o.lines.some((l) => (l.item_code ?? '').toLowerCase().includes(q) || l.name.toLowerCase().includes(q))
     );
   }, [orders, filter, search]);
 

@@ -1966,6 +1966,8 @@ img.sku-img { background: #e8e8e8; }
 .pend-status.available { color: var(--green); background: var(--green-tint, #E8F3EC); }
 .pend-status.on_the_way { color: #9C6F1C; background: var(--yellow-tint); }
 .pend-status.to_order { color: var(--red); background: #FBEAEA; }
+/* PR405 — no SKU at all (custom item / legacy import): red like to_order, it must be bought. */
+.pend-status.uncatalogued { color: var(--red); background: #FBEAEA; }
 .pend-delete { color: var(--red); }
 
 /* ── PR224 — Pending detail: per-line editor, header order-id chip, icon action row ── */

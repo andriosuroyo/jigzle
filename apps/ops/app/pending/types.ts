@@ -25,8 +25,10 @@ export interface OrderRow {
 //   available  = available ≥ qty
 //   on_the_way = short, but available + on_the_way ≥ qty (incoming will cover it)
 //   to_order   = short and even with incoming it won't cover (must order more)
-export type LineStatus = 'available' | 'on_the_way' | 'to_order';
-// Order dot = worst line: any to_order → red; else any on_the_way → yellow; else green.
+//   uncatalogued = the line has NO SKU at all (PR405): a PR404 custom item or a legacy import, so there
+//     is no stock record to read — it can never be in the warehouse and must be bought.
+export type LineStatus = 'available' | 'on_the_way' | 'to_order' | 'uncatalogued';
+// Order dot = worst line: any to_order/uncatalogued → red; else any on_the_way → yellow; else green.
 export type OrderDot = 'red' | 'yellow' | 'green';
 
 export interface PendingLine {
