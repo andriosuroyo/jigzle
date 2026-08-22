@@ -199,7 +199,21 @@ const SECTIONS: SectionDef[] = [
     ],
     blank: { label: '' },
   },
+  {
+    // PR406 — the curated Theme vocabulary (0125). Theme is the SKU's SUBJECT axis ("Character / Disney /
+    // Frozen"), back on the Catalog editor's Specs tab and already faceted in Browse. Seeded from every
+    // theme the catalogue uses, so this list runs long — the filter box above it is how you find a value.
+    kind: 'cat_theme',
+    title: 'Themes',
+    sub: 'Themes shown in the Catalog item editor’s Theme picker. Hierarchical paths (“Character / Disney / Frozen”) are the house convention — keep the “ / ” separator.',
+    cols: [{ key: 'label', label: 'Theme', type: 'text', grow: true }],
+    sortKey: 'label',
+    blank: { label: '' },
+  },
 ];
+// PR406 — a list longer than this shows a filter box; at most LIST_CAP rows render at once.
+const LIST_FILTER_MIN = 20;
+const LIST_CAP = 100;
 const SECTION_BY_KIND: Record<SettingsKind, SectionDef> = Object.fromEntries(SECTIONS.map((s) => [s.kind, s])) as Record<SettingsKind, SectionDef>;
 
 // ── categories: the landing grouping. A tab is either a generic settings list (kind) or the bespoke
@@ -214,7 +228,7 @@ const CATEGORIES: Category[] = [
   { key: 'purchasing', title: 'Purchasing', sub: 'Sources and the local / shipper couriers for the buying pipeline.', tabs: [{ custom: 'suppliers' }, { kind: 'local_courier' }, { kind: 'ship_courier' }] },
   { key: 'warehouse', title: 'Warehouse', sub: 'Box sizes, export couriers and warehouse staff for Inbound / Outbound.', tabs: [{ kind: 'box' }, { custom: 'export_courier' }, { kind: 'staff' }] },
   { key: 'customer', title: 'Customer', sub: 'Contact channels shown on the customer profile.', tabs: [{ kind: 'channel' }] },
-  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brands for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { kind: 'cat_effect' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
+  { key: 'catalog', title: 'Catalog', sub: 'Classification pick-lists, search aliases and brands for the Catalog item editor, Items search and Browse.', tabs: [{ kind: 'cat_product_type' }, { kind: 'cat_sub_type' }, { kind: 'cat_piece_type' }, { kind: 'cat_effect' }, { kind: 'cat_theme' }, { custom: 'search_alias' }, { custom: 'brand_logos' }] },
   { key: 'docgen', title: 'Doc Generator', sub: 'Declaration signers and reusable addresses for the customs documents.', tabs: [{ custom: 'declaration_user' }, { custom: 'cn_address' }] },
   { key: 'royalty', title: 'Clover Royalty', sub: 'The art studios Clover pays royalties to, and each one’s piece-count → royalty schedule.', tabs: [{ custom: 'royalty_entity' }] },
   { key: 'calculator', title: 'Calculator', sub: 'Live FX rates and shipping-method rates used by the pricing Calculator.', tabs: [{ custom: 'calc_rates' }] },
@@ -256,8 +270,14 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     cat_sub_type: initial.catSubTypes,
     cat_piece_type: initial.catPieceTypes,
     cat_effect: initial.catEffects,
+    cat_theme: initial.catThemes,
   });
   const [busy, setBusy] = useState(false);
+  // PR406 — per-list filter text (only rendered for a long list, see renderKindList), and the ids added
+  // in this session: a fresh row is always rendered even when the list is past its render cap, so
+  // "+ add" on a long list (Themes) never appears to do nothing.
+  const [listFilter, setListFilter] = useState<Record<string, string>>({});
+  const [freshIds, setFreshIds] = useState<Record<string, number[]>>({});
   // notice tone follows the action: ok (green) = additive, err (red) = removed/failed, warn (yellow) = neutral edit.
   const [notice, setNotice] = useState<{ tone: 'ok' | 'err' | 'warn'; text: string } | null>(null);
 
@@ -269,7 +289,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
 
   // PR371 — SKU usage counts for the Catalog classification lists (shown as a small badge per row).
   // Lazily loaded the first time the Catalog category opens (one bounded-concurrency catalogue scan).
-  const [usage, setUsage] = useState<{ product: Record<string, number>; sub: Record<string, number>; piece: Record<string, number> } | null>(null);
+  const [usage, setUsage] = useState<{ product: Record<string, number>; sub: Record<string, number>; piece: Record<string, number>; theme: Record<string, number> } | null>(null);
   const usageLoadedRef = useRef(false);
   useEffect(() => {
     if (catKey !== 'catalog' || usageLoadedRef.current) return;
@@ -282,6 +302,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     const label = String(val(row, 'label') ?? '');
     if (kind === 'cat_product_type') return usage.product[label];
     if (kind === 'cat_piece_type') return usage.piece[label];
+    if (kind === 'cat_theme') return usage.theme[label]; // PR406
     if (kind === 'cat_sub_type') return usage.sub[String(val(row, 'product_type') ?? '') + '|' + label];
     return undefined;
   };
@@ -391,6 +412,7 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
     try {
       const row = await addSetting(kind, blank);
       setRows(kind, (rows) => [...rows, row]);
+      setFreshIds((f) => ({ ...f, [kind]: [...(f[kind] ?? []), row.id] })); // PR406 — keep it visible past the cap
       note('ok', 'Added.');
     } catch (e) {
       fail(e);
@@ -439,8 +461,30 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
       if (c.optionsFrom) colOptions[c.key] = lists[c.optionsFrom].map((r) => String(val(r, 'label') ?? '')).filter(Boolean);
       else if (c.options) colOptions[c.key] = c.options; // PR391 — a fixed option set (Effect category)
     }
+    // PR406 — long lists (Themes seeds ~900 curated values) get a filter box and render at most LIST_CAP
+    // rows at a time, so the tab stays responsive. Short lists (every other one today) are unchanged.
+    // Row indices are taken against the FULL list, so the up/down reorder still moves the real neighbour.
+    const rawFilter = (listFilter[sec.kind] ?? '').trim();
+    const q = rawFilter.toLowerCase();
+    const matched = q
+      ? rows.filter((r) => sec.cols.some((c) => String(val(r, c.key) ?? '').toLowerCase().includes(q)))
+      : rows;
+    const capped = matched.slice(0, LIST_CAP);
+    const fresh = new Set(freshIds[sec.kind] ?? []);
+    const shown = capped.length < matched.length
+      ? [...capped, ...matched.slice(LIST_CAP).filter((r) => fresh.has(r.id))]
+      : capped;
     return (
       <div className="set-list">
+        {rows.length > LIST_FILTER_MIN && (
+          <input
+            className="field"
+            style={{ margin: '8px 0' }}
+            placeholder={`Filter ${sec.title.toLowerCase()}…`}
+            value={listFilter[sec.kind] ?? ''}
+            onChange={(e) => setListFilter((f) => ({ ...f, [sec.kind]: e.target.value }))}
+          />
+        )}
         {/* fixed column header (box presets; PR278 courier/consolidator lists) — shown once, not per row */}
         {sec.colHeader && rows.length > 0 && (
           <div className={`set-colhead ${sec.rowClass ?? ''}`} aria-hidden>
@@ -453,22 +497,29 @@ export default function SettingsBoard({ initial, suppliers, userEmail }: { initi
           </div>
         )}
         {rows.length === 0 && <div className="hint">No rows yet — add one below.</div>}
-        {rows.map((row, i) => (
-          <SettingRowEditor
-            key={row.id}
-            sec={sec}
-            row={row}
-            options={colOptions}
-            count={rowUsage(sec.kind, row)}
-            first={i === 0}
-            last={i === rows.length - 1}
-            busy={busy}
-            onSave={(patch) => saveRow(sec.kind, row.id, patch)}
-            onUpload={uploadIcon}
-            onMove={(dir) => move(sec.kind, i, dir)}
-            onRemove={() => remove(sec.kind, row.id)}
-          />
-        ))}
+        {rows.length > 0 && matched.length === 0 && <div className="hint">No match for “{rawFilter}”.</div>}
+        {shown.map((row) => {
+          const i = rows.indexOf(row);
+          return (
+            <SettingRowEditor
+              key={row.id}
+              sec={sec}
+              row={row}
+              options={colOptions}
+              count={rowUsage(sec.kind, row)}
+              first={i === 0}
+              last={i === rows.length - 1}
+              busy={busy}
+              onSave={(patch) => saveRow(sec.kind, row.id, patch)}
+              onUpload={uploadIcon}
+              onMove={(dir) => move(sec.kind, i, dir)}
+              onRemove={() => remove(sec.kind, row.id)}
+            />
+          );
+        })}
+        {matched.length > capped.length && (
+          <div className="hint">Showing the first {capped.length} of {matched.length} — type in the filter to narrow it down.</div>
+        )}
         <div className="set-toolbar">
           {(() => { const AddIcon = sec.addIcon ?? PlusCircleIcon; return (
             <button className="btn-brown btn-ico" onClick={() => add(sec.kind, sec.blank)} disabled={busy}><AddIcon />{sec.addLabel ?? 'add'}</button>

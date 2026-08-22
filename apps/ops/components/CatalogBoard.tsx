@@ -8,6 +8,7 @@ import type { CatalogueRow, CatalogueComponent, CollisionRow } from '@jigzle/db/
 import {
   addBarcode,
   getBarcodeOwners,
+  getBrandOptions,
   getCatalogFieldOptions,
   getCatalogSubTypes,
   getSeriesByBrand,
@@ -42,6 +43,7 @@ import type { OffListRow, DupGroup, MissingWeightRow, SeriesVariantGroup } from 
 import CatalogBrowse from '@/components/CatalogBrowse';
 import { saveDraft, loadDraft, clearDraft } from '@/components/draftStore';
 import SearchSelect from '@/components/SearchSelect';
+import DropSearch from '@/components/DropSearch';
 import SearchInput from '@/components/SearchInput';
 import ConfirmModal from '@/components/ConfirmModal';
 import SkuImage from '@/components/SkuImage';
@@ -71,10 +73,13 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
   {
     title: 'Identity & naming',
     fields: [
-      // PR366 — Brand prefix field removed: the SKU code (its leading segment) serves that role, and
-      // brand_prefix is still stored/derived on the row (just no longer hand-edited here).
       { key: 'original_name', label: 'Original name', kind: 'text' },
       { key: 'translate_name', label: 'Translated name', kind: 'text' },
+      // PR406 — Brand is editable again (PR366 had dropped it, leaving no way to set one from the app —
+      // a brand-less SKU was stuck on Needs review). `brands` picker, not free text: brand_prefix is an
+      // FK, so brands are still created in Settings → Catalog → Brands. Rendered by its own branch in
+      // renderCell (the stored value is a prefix, the row reads as the name) — see BRAND_KEY below.
+      { key: 'brand_prefix', label: 'Brand', kind: 'text', w: 'half' },
       // PR386 — the sub-series a SKU belongs to (e.g. "Where's That? Series"), kept OUT of the translated
       // name so titles stay short; franchise/character live in Tags. Select over existing series values.
       { key: 'series', label: 'Series', kind: 'text', select: true, list: 'series', w: 'half' },
@@ -97,9 +102,11 @@ const GROUPS: { title: string; fields: FieldDef[] }[] = [
       { key: 'piece_count_n', label: 'Piece count', kind: 'number', w: 'half' },
       { key: 'material', label: 'Material', kind: 'text', select: true, list: 'material', w: 'half' },
       { key: 'effect', label: 'Effect', kind: 'text', select: true, list: 'effect', w: 'half' },
-      // PR366 — Theme removed: redundant with Tags. The `theme` column is left untouched (Browse still
-      // facets on existing values); it's just no longer edited here.
-      { key: 'artist', label: 'Artist', kind: 'text', select: true, list: 'artist' },
+      // PR406 — Theme is back (PR366 dropped it as "redundant with Tags", but it stayed the single
+      // subject axis Browse facets on). Now a curated pick-list — Settings → Catalog → Themes (0125) —
+      // unioned with the catalogue's distinct values, so no existing value is ever lost.
+      { key: 'theme', label: 'Theme', kind: 'text', select: true, list: 'theme', w: 'half' },
+      { key: 'artist', label: 'Artist', kind: 'text', select: true, list: 'artist', w: 'half' },
       { key: 'size_p', label: 'Product L (cm)', kind: 'number', w: 'third' },
       { key: 'size_l', label: 'Product W (cm)', kind: 'number', w: 'third' },
       { key: 'size_t', label: 'Product H (cm)', kind: 'number', w: 'third' },
@@ -246,6 +253,11 @@ let SUBTYPES_CACHE: { label: string; product_type: string }[] | null = null;
 // PR391 — Series values grouped by brand (the picker is localised to the SKU's brand). Session-cached
 // like OPTIONS_CACHE; loaded lazily the first time an item is opened.
 let SERIES_BY_BRAND_CACHE: Record<string, string[]> | null = null;
+// PR406 — the brands pick-list for the Identity tab's Brand field (prefix → name). Session-cached like
+// the others; brand_prefix is an FK, so this list is the ONLY set of values the field may take.
+let BRANDS_CACHE: { prefix: string; name: string }[] | null = null;
+// the one field whose stored value (a brand prefix) differs from what the picker shows (the brand name).
+const BRAND_KEY = 'brand_prefix';
 
 const MAX_IMAGE_URLS = 8; // storage/save still tolerates up to 8 (legacy rows) — see LINK_FIELDS
 // PR375 — the Links tab shows 6 slots each for images and sources. The save paths keep their higher
@@ -324,6 +336,7 @@ export default function CatalogBoard({
   const [fieldOptions, setFieldOptions] = useState<Record<string, string[]>>(OPTIONS_CACHE ?? {}); // PR188: dropdown values
   const [catSubTypes, setCatSubTypes] = useState<{ label: string; product_type: string }[]>(SUBTYPES_CACHE ?? []); // PR368: sub type ↔ product type
   const [seriesByBrand, setSeriesByBrand] = useState<Record<string, string[]>>(SERIES_BY_BRAND_CACHE ?? {}); // PR391: brand-scoped Series picker
+  const [brands, setBrands] = useState<{ prefix: string; name: string }[]>(BRANDS_CACHE ?? []); // PR406: Identity Brand picker
   const [imageUrls, setImageUrls] = useState<string[]>([]); // PR189: manual Google-Drive image URLs
   const [imgUnavailable, setImgUnavailable] = useState(false); // PR212: "no picture available" (0071)
   const [sources, setSources] = useState<string[]>([]);       // PR217: Links → Sources (sku_sources)
@@ -911,6 +924,8 @@ export default function CatalogBoard({
     if (!SUBTYPES_CACHE) getCatalogSubTypes().then((s) => { SUBTYPES_CACHE = s; setCatSubTypes(s); }).catch(() => {});
     // PR391 — Series picker is localised per brand; load the brand→series map (module-cached, once/session).
     if (!SERIES_BY_BRAND_CACHE) getSeriesByBrand().then((m) => { SERIES_BY_BRAND_CACHE = m; setSeriesByBrand(m); }).catch(() => {});
+    // PR406 — the Identity tab's Brand picker (brands table; ~260 rows), module-cached once per session.
+    if (!BRANDS_CACHE) getBrandOptions().then((b) => { BRANDS_CACHE = b; setBrands(b); }).catch(() => {});
   }, [mode, detailTab]);
 
   // PR370 — multipack render state (Specs tab): the Sets field + per-unit component rows appear only for
@@ -1135,17 +1150,34 @@ export default function CatalogBoard({
                       // PR391 — Series is localised per brand: offer only the series this SKU's brand
                       // already uses (no cross-brand fallback — a brand with none gets an empty picker;
                       // you can still type a new value). Sub type stays filtered to the product type.
+                      // PR406 — Series follows the brand CURRENTLY selected in the form (not the saved
+                      // row), so picking a brand immediately offers that brand's series.
                       const opts = fld.key === 'sub_type'
                         ? (catSubTypes.length
                             ? catSubTypes.filter((s) => s.product_type === String(form['product_type'] ?? '').trim()).map((s) => s.label).sort((a, b) => a.localeCompare(b))
                             : (fld.list ? fieldOptions[fld.list] : undefined))
                         : fld.key === 'series'
-                        ? (seriesByBrand[detail?.sku.brand_prefix ?? ''] ?? [])
+                        ? (seriesByBrand[String(form[BRAND_KEY] ?? '').trim() || (detail?.sku.brand_prefix ?? '')] ?? [])
                         : (fld.list ? fieldOptions[fld.list] : undefined);
                       const listId = fld.list ? `dl-${fld.list}` : undefined;
                       return (
                         <div className={`po-field pf-${w}`} key={k} style={{ marginBottom: 0 }}>
-                          {fld.fixed ? (
+                          {k === BRAND_KEY ? (
+                            // PR406 — Brand: the stored value is the prefix, the row reads as the brand
+                            // name (prefix). No inline create — brand_prefix is an FK to brands(prefix),
+                            // so a new brand is added in Settings → Catalog → Brands first.
+                            <>
+                              <label>{label}</label>
+                              <DropSearch
+                                value={String(form[k] ?? '') || null}
+                                onChange={(v) => setForm((f) => ({ ...f, [k]: v }))}
+                                options={brands.map((b) => ({ value: b.prefix, label: b.name === b.prefix ? b.prefix : `${b.name} · ${b.prefix}`, search: `${b.name} ${b.prefix}` }))}
+                                disabled={busy}
+                                clearable
+                                ariaLabel="Brand"
+                              />
+                            </>
+                          ) : fld.fixed ? (
                             <>
                               <label>{label}</label>
                               <select value={String(form[k] ?? '')} disabled={busy} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}>

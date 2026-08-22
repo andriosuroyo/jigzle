@@ -227,6 +227,20 @@ export async function getBrandSkus(brandPrefix: string): Promise<BrowseSku[]> {
   return skus;
 }
 
+// ── PR406: the brand pick-list for the item editor's Identity tab. `catalogue.brand_prefix` is an FK to
+// brands(prefix), so the picker must offer EXISTING brands only (a brand is created in Settings → Catalog
+// → Brands, never by typing here). ~260 rows, two columns — cheap enough to load with the SKU and cache
+// for the session. Degrades to [] on any error, so the editor still opens (the field just shows the
+// stored prefix). ──
+export async function getBrandOptions(): Promise<{ prefix: string; name: string }[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.from('brands').select('prefix,name').order('name');
+  if (error) return [];
+  return ((data ?? []) as { prefix: string; name: string | null }[])
+    .filter((b) => !!b.prefix)
+    .map((b) => ({ prefix: b.prefix, name: (b.name ?? '').trim() || b.prefix }));
+}
+
 // ── PR188: distinct existing values per field, for the item editor's dropdowns (datalists). One paged
 // scan of the relevant columns (no GROUP BY over PostgREST); the response is just the sorted distinct
 // value lists (small). The client caches it for the session. ──
@@ -266,6 +280,7 @@ async function unionManagedLists(supabase: Supabase, sets: Record<string, Set<st
     sub_type: 'settings_catalog_sub_types',
     piece_type: 'settings_catalog_piece_types',
     effect: 'settings_catalog_effects', // PR391 — curated Effect vocabulary (0115)
+    theme: 'settings_catalog_themes',   // PR406 — curated Theme vocabulary (0125)
   };
   await Promise.all(
     Object.entries(MANAGED).map(async ([field, table]) => {
@@ -755,8 +770,10 @@ export async function getImplausibleDims(): Promise<CatalogueListRow[]> {
 }
 
 // Off-list classification — a product/sub/piece type value that isn't in the Settings pick-list
-// (a typo, or a value that should be added to the list). Only these three fields have a canonical
-// Settings list; theme/artist/material are free-text and can't be judged this way.
+// (a typo, or a value that should be added to the list). artist/material are free text and can't be
+// judged this way. PR406 gave Theme a Settings list too, but it is deliberately NOT scanned here: it
+// holds ~900 labels (seeded from the catalogue itself, so nothing is off-list on day one anyway) and
+// the `not.in.(…)` filter below would grow into a tens-of-KB query string.
 export type OffListRow = CatalogueListRow & { field: 'product_type' | 'sub_type' | 'piece_type'; value: string };
 export async function getOffListClassification(): Promise<OffListRow[]> {
   const supabase = createSupabaseServerClient();

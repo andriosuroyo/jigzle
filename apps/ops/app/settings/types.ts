@@ -163,10 +163,11 @@ export interface SettingsData {
   catSubTypes: CatalogClassOption[];
   catPieceTypes: CatalogClassOption[];
   catEffects: CatalogClassOption[]; // PR391 — managed Effect pick-list (0115)
+  catThemes: CatalogClassOption[];  // PR406 — managed Theme pick-list (0125)
 }
 
 // discriminator threaded through the write actions (maps to a table server-side).
-export type SettingsKind = 'payment' | 'courier' | 'box' | 'common_note' | 'channel' | 'staff' | 'local_courier' | 'ship_courier' | 'cat_product_type' | 'cat_sub_type' | 'cat_piece_type' | 'cat_effect';
+export type SettingsKind = 'payment' | 'courier' | 'box' | 'common_note' | 'channel' | 'staff' | 'local_courier' | 'ship_courier' | 'cat_product_type' | 'cat_sub_type' | 'cat_piece_type' | 'cat_effect' | 'cat_theme';
 
 export type SettingRow = PaymentMethod | CourierService | BoxPreset | CommonNote | ChannelOption | StaffMember | LocalCourier | ShipmentCourier | CatalogClassOption;
 

@@ -41,6 +41,7 @@ const TABLE: Record<SettingsKind, string> = {
   cat_sub_type: 'settings_catalog_sub_types',
   cat_piece_type: 'settings_catalog_piece_types',
   cat_effect: 'settings_catalog_effects',
+  cat_theme: 'settings_catalog_themes', // PR406 — curated Theme vocabulary (0125)
 };
 
 // editable columns per kind — anything outside this set is dropped before a write so a stray key can
@@ -59,6 +60,7 @@ const WRITABLE: Record<SettingsKind, string[]> = {
   cat_sub_type: ['label', 'icon', 'is_active', 'product_type'], // PR368 — sub type ↔ product type link (0097)
   cat_piece_type: ['label', 'icon', 'is_active'],
   cat_effect: ['label', 'icon', 'is_active', 'category'], // PR391 — effect + hidden category (0115)
+  cat_theme: ['label', 'icon', 'is_active'], // PR406 — curated Theme vocabulary (0125)
 };
 
 // uploaded-icon storage (public-read bucket, like sku-images). 0041 creates the bucket + RLS.
@@ -99,7 +101,7 @@ export async function getSettings(): Promise<SettingsData> {
     return (data ?? []) as T[];
   }
 
-  const [paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes, catEffects] = await Promise.all([
+  const [paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes, catEffects, catThemes] = await Promise.all([
     list<PaymentMethod>(TABLE.payment),
     list<CourierService>(TABLE.courier),
     list<BoxPreset>(TABLE.box),
@@ -112,19 +114,21 @@ export async function getSettings(): Promise<SettingsData> {
     listSafe<CatalogClassOption>(TABLE.cat_sub_type),
     listSafe<CatalogClassOption>(TABLE.cat_piece_type),
     listSafe<CatalogClassOption>(TABLE.cat_effect), // 0115 — degrades to [] until applied
+    listSafe<CatalogClassOption>(TABLE.cat_theme), // 0125 — degrades to [] until applied
   ]);
-  return { paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes, catEffects };
+  return { paymentMethods, courierServices, boxPresets, commonNotes, channels, staff, localCouriers, shipmentCouriers, catProductTypes, catSubTypes, catPieceTypes, catEffects, catThemes };
 }
 
 // PR371 — usage counts for the Catalog classification pick-lists (Settings badges): how many SKUs use
-// each Product type / Piece type (by label) and each Sub type (by product_type + label pair). One
-// bounded-concurrency paged scan of the three columns; lazily loaded when the Catalog category opens.
+// each Product type / Piece type / Theme (by label) and each Sub type (by product_type + label pair). One
+// bounded-concurrency paged scan of the four columns; lazily loaded when the Catalog category opens.
 // Degrades to empty maps on any error (badges just don't show). Sub-type key = `${pt}${label}`.
-export async function getCatalogClassUsage(): Promise<{ product: Record<string, number>; sub: Record<string, number>; piece: Record<string, number> }> {
+export async function getCatalogClassUsage(): Promise<{ product: Record<string, number>; sub: Record<string, number>; piece: Record<string, number>; theme: Record<string, number> }> {
   const supabase = createSupabaseServerClient();
   const product: Record<string, number> = {};
   const sub: Record<string, number> = {};
   const piece: Record<string, number> = {};
+  const theme: Record<string, number> = {}; // PR406 — Themes list badge
   try {
     const { count } = await supabase.from('catalogue').select('item_code', { count: 'exact', head: true });
     const total = count ?? 0;
@@ -135,21 +139,23 @@ export async function getCatalogClassUsage(): Promise<{ product: Record<string, 
       const batch = await Promise.all(
         Array.from({ length: Math.min(CONC, pages - start) }, (_, k) => {
           const from = (start + k) * PAGE;
-          return supabase.from('catalogue').select('product_type,sub_type,piece_type').order('item_code').range(from, from + PAGE - 1);
+          return supabase.from('catalogue').select('product_type,sub_type,piece_type,theme').order('item_code').range(from, from + PAGE - 1);
         }),
       );
       for (const { data } of batch)
-        for (const r of (data ?? []) as { product_type: string | null; sub_type: string | null; piece_type: string | null }[]) {
+        for (const r of (data ?? []) as { product_type: string | null; sub_type: string | null; piece_type: string | null; theme: string | null }[]) {
           const pt = (r.product_type ?? '').trim();
           const st = (r.sub_type ?? '').trim();
           const pc = (r.piece_type ?? '').trim();
+          const th = (r.theme ?? '').trim();
           if (pt) product[pt] = (product[pt] ?? 0) + 1;
           if (st) { const key = pt + '|' + st; sub[key] = (sub[key] ?? 0) + 1; } // '|' never appears in a type label
           if (pc) piece[pc] = (piece[pc] ?? 0) + 1;
+          if (th) theme[th] = (theme[th] ?? 0) + 1;
         }
     }
   } catch { /* degrade to whatever was counted */ }
-  return { product, sub, piece };
+  return { product, sub, piece, theme };
 }
 
 // 0056: Purchasing History's shipment-courier pick-list (degrades to [] until 0056 is applied).
