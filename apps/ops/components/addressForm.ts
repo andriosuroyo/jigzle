@@ -27,8 +27,8 @@ export function previewRawAddress(d: RegionDraft): string {
 
 export type LocWarn = { tone: 'red' | 'yellow'; text: string; suggest?: string[] };
 
-// RED: the postcode is known to the dataset but its province contradicts the entered Province (Greater-
-// Jakarta merged; mismatch-only). YELLOW: an Indonesia address with a filled region but no postcode — a
+// RED: the postcode is known to the dataset but its province contradicts the entered Province (Jakarta's
+// two spellings count as one; mismatch-only). YELLOW: an Indonesia address with a filled region but no postcode — a
 // heads-up with a suggested code from the dataset (shown, never auto-filled).
 export function locationWarning(d: RegionDraft, postal: PostalData | null): LocWarn | null {
   if (!postal || !isIndonesia(d.negara)) return null;

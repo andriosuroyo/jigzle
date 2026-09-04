@@ -266,8 +266,8 @@ export default function CustomersBoard({ letterCounts, initialLetter, initialRow
   }, [addrEdit, addrDraft.negara, postal]);
 
   // PR333 — live location check shown under the Postcode field (non-blocking). RED: the postcode is known
-  // to the dataset but its province contradicts the entered Province (Greater-Jakarta merged). YELLOW: an
-  // Indonesia address with a filled region but no postcode — a heads-up with a suggested code (not filled).
+  // to the dataset but its province contradicts the entered Province (Jakarta's two spellings count as one).
+  // YELLOW: an Indonesia address with a filled region but no postcode — a heads-up with a suggested code.
   const locWarn = useMemo(() => (addrEdit ? locationWarning(addrDraft, postal) : null),
     [addrEdit, postal, addrDraft.negara, addrDraft.kode_pos, addrDraft.provinsi, addrDraft.kelurahan, addrDraft.kecamatan, addrDraft.kota]);
 
@@ -959,7 +959,7 @@ export default function CustomersBoard({ letterCounts, initialLetter, initialRow
                   <div className="validation ok">No address has a postcode whose province contradicts the dataset.</div>
                 ) : (
                   <>
-                    <div className="hint" style={{ marginBottom: 6 }}>The stated province doesn’t match the province the dataset lists for that postcode (Jakarta ⇄ Jawa Barat are treated as one). Either the postcode or the province is wrong — open each to check.</div>
+                    <div className="hint" style={{ marginBottom: 6 }}>The stated province doesn’t match the province the dataset lists for that postcode (only Jakarta’s two spellings count as one). Either the postcode or the province is wrong — open each to check.</div>
                     <ul className="fq-list">{health.postcodeMismatch.map((c) => flaggedRow(c))}</ul>
                     {health.postcodeMismatchCount > health.postcodeMismatch.length && (
                       <div className="hint" style={{ padding: '4px 8px' }}>Showing first {health.postcodeMismatch.length} of {health.postcodeMismatchCount}.</div>

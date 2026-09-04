@@ -37,13 +37,13 @@ const hitOf = (d: PostalData, i: number): PostalHit => {
   return { urban: r[0], sub_district: r[1], city: r[2], province: d.provinces[r[3]] ?? '', postal: r[4] };
 };
 
-// PR333 — client-side province canonicalization; mirrors the server `normProv` used by the Fix-tab
-// crosscheck. Greater Jakarta (DKI / Jawa Barat / Banten) collapses to one bucket so the operator's
-// "Jawa Barat" convention doesn't false-flag against the dataset's Jakarta labelling.
+// PR333/PR407 — client-side province canonicalization; mirrors the server `normProv` used by the Fix-tab
+// crosscheck. Only Jakarta's own two spellings ("DKI Jakarta" as we store it, "Daerah Khusus Ibukota
+// Jakarta" as the dataset files it) collapse to one bucket. Jawa Barat and Banten are separate provinces.
 export function normProvince(s: string | null | undefined): string {
   const v = (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (!v) return '';
-  if (/jakarta|jawa barat|banten/.test(v)) return '@jabodetabek';
+  if (/jakarta/.test(v)) return '@dkijakarta';
   return v.replace(/^(provinsi|prov\.?|daerah istimewa|d\.?i\.?)\s+/, '');
 }
 

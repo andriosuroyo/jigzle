@@ -26,13 +26,15 @@ import type {
 import { collapseRegionDuplicates, normalizeProvince } from './types';
 
 // ── PR321: postcode ↔ province crosscheck data ──
-// Normalize a province for comparison. The DKI Jakarta / Jawa Barat / Banten trio (Greater Jakarta) is
-// collapsed to ONE bucket, per the operator's convention of labelling Jakarta addresses "Jawa Barat" —
-// so those don't false-flag against a dataset that files them under "Daerah Khusus Ibukota Jakarta".
+// Normalize a province for comparison. Only the SPELLINGS of Jakarta's own province ("DKI Jakarta" as we
+// store it, "Daerah Khusus Ibukota Jakarta" as the dataset files it) collapse to one bucket. PR333 also
+// threw Jawa Barat and Banten into that bucket, to stop the old "Jakarta = Jawa Barat" convention
+// false-flagging; PR407 corrected the data, so those two are real, distinct provinces again and a
+// Jakarta postcode carrying "Jawa Barat" now flags the way it always should have.
 function normProv(s: string | null | undefined): string {
   const v = (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
   if (!v) return '';
-  if (/jakarta|jawa barat|banten/.test(v)) return '@jabodetabek';
+  if (/jakarta/.test(v)) return '@dkijakarta';
   return v.replace(/^(provinsi|prov\.?|daerah istimewa|d\.?i\.?)\s+/, '');
 }
 // postcode → set of (normalized) provinces, read ONCE from the bundled Indonesia dataset (public/). Cached
@@ -258,7 +260,7 @@ export async function updateCustomer(customerId: number, patch: CustomerPatch): 
 // ── addresses: add / edit / delete (overlay) ──
 function addrFields(input: AddressInput): Record<string, unknown> {
   const street = input.street?.trim() || null;
-  // PR330 province normalize (DKI → Jawa Barat) then PR331 collapse of an exact repeat of the level above
+  // PR407 province normalize (long Jakarta spelling → DKI Jakarta) then PR331 collapse of a repeat of the level above
   // (e.g. Subdistrict == City → blank Subdistrict). Backstop on every save regardless of entry path.
   const region = collapseRegionDuplicates({
     provinsi: normalizeProvince(input.provinsi),
@@ -618,7 +620,7 @@ export async function getDataHealth(): Promise<DataHealth> {
     .map((r) => ({ id: r.customer_id, name: r.name, phone: dispPhone(r) }));
 
   // ── PR321: postcode crosschecks (Indonesia addresses only). Step 1 — the stated PROVINCE contradicts
-  // the dataset's province(s) for that postcode (Greater-Jakarta merged, so DKI↔Jawa Barat doesn't flag).
+  // the dataset's province(s) for that postcode (only Jakarta's own two spellings are treated as equal).
   // Step 2 — a filled address that is MISSING a postcode (flag for manual dissection; never auto-assumed).
   const pidx = postalIndex();
   const postcodeMismatchIds = new Set<number>();
