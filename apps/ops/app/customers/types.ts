@@ -87,8 +87,8 @@ export interface DataHealth {
   blankNames: FlaggedCustomer[];
   oddPhoneCount: number;          // records carrying a raw number that doesn't normalize (likely a typo)
   oddPhones: FlaggedCustomer[];
-  // PR321 — a stated postcode whose province contradicts the dataset for that postcode (DKI↔Jawa Barat
-  // merged, so Greater-Jakarta doesn't false-flag).
+  // PR321 — a stated postcode whose province contradicts the dataset for that postcode (only Jakarta's own
+  // two spellings are treated as equal — PR407).
   postcodeMismatchCount: number;
   postcodeMismatch: FlaggedCustomer[];
   // PR321 — a filled Indonesia address with NO postcode (flag for manual dissection; never auto-assumed).
@@ -96,13 +96,14 @@ export interface DataHealth {
   missingPostcode: FlaggedCustomer[];
 }
 
-// PR330 — Greater Jakarta is stored as "Jawa Barat" (the business's routing convention). Any
-// "DKI Jakarta" / "Daerah Khusus Ibukota Jakarta" — e.g. what the postcode autofill hands back — is
-// rewritten on entry AND on save, so the one-time 0083 backfill doesn't become whack-a-mole. Returns the
-// trimmed province (callers apply their own `|| null`).
+// PR407 — the five Jakarta cities sit in their OWN province, and it is stored as "DKI Jakarta". PR330 had
+// them stored as "Jawa Barat" (read as a routing convention); that was simply wrong — Jakarta is not part of
+// Jawa Barat — so 0126 backfilled them and this function now canonicalizes the other way. The dataset's long
+// spelling "Daerah Khusus Ibukota Jakarta" — what the postcode autofill hands back — is shortened on entry
+// AND on save, so one spelling wins. Returns the trimmed province (callers apply their own `|| null`).
 export function normalizeProvince(p: string | null | undefined): string {
   const v = (p ?? '').trim();
-  return /^(dki jakarta|daerah khusus ibukota jakarta)$/i.test(v) ? 'Jawa Barat' : v;
+  return /^(dki jakarta|daerah khusus ibukota jakarta)$/i.test(v) ? 'DKI Jakarta' : v;
 }
 
 // PR331/PR334/PR336 — Indonesian admin levels nest Province ⊃ City ⊃ Subdistrict ⊃ Ward, and a seat often
