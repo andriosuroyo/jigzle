@@ -247,6 +247,8 @@ export default function OutboundHistoryBoard({
                   <span className="fq-headline">{o.customer || '—'}</span>
                   <span className="fq-id-sub">{fmtDate(o.ship_date)}</span>
                 </div>
+                {/* PR408 — the headline is the customer; name a different recipient (dropship) on its own line */}
+                {o.shipped_to && <div className="fq-shipto">Shipped to: {o.shipped_to}</div>}
                 <div className="fq-row-bot">
                   {/* SKU codes (CSV rows carry no tracking) — like the Fulfill rows, helps SKU search. */}
                   <span className="ff-items-skus">{o.item_count} {o.item_count === 1 ? 'item' : 'items'}{o.sku_codes.length ? ` (${o.sku_codes.join(', ')})` : ''}</span>

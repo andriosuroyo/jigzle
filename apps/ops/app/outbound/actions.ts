@@ -75,17 +75,63 @@ export async function getShipQueue(): Promise<ShipQueueRow[]> {
 }
 
 // PostgREST .or()/.ilike() interpolate into a filter grammar — strip operator chars from user input.
+// PR408: only the FALLBACK search path uses this now (search_outbound_history RPC not applied yet); the
+// RPC takes the text as a plain parameter, so brackets etc. are searched as typed.
 function sanitize(q: string): string {
   return q.replace(/[,()*\\]/g, ' ').trim();
 }
 
+// PR408 — compare a recipient with the customer name ignoring case, spacing and the trailing "(last4)"
+// ID code, so "Tessa S" and "Tessa S (1895)" count as the same person (no "Shipped to" line).
+function nameKey(s: string | null | undefined): string {
+  return (s ?? '').toLowerCase().replace(/\s*\(\d{2,}\)\s*$/, '').replace(/\s+/g, ' ').trim();
+}
+
 // ── Outbound History — the full shipped log, read from outbound_shipments (canonical). One row per
 // SHIPMENT (item rows grouped: by send_id for app ships, else a composite of the repeated shipment-level
-// fields for CSV/legacy rows). Newest first, capped at HISTORY_LIMIT shipments. Search matches customer /
-// courier / note / SKU (item_code). Read-only; each row carries its full detail (no sales_id to re-fetch
-// CSV rows by). ──
+// fields for CSV/legacy rows). Newest first, capped at HISTORY_LIMIT shipments. Read-only; each row carries
+// its full detail (no sales_id to re-fetch CSV rows by).
+// PR408 — a search goes through the search_outbound_history RPC (0130): the text is passed as data
+// (brackets work, so the full "Tessa S (1895)" label matches), it also matches the LINKED customer's name
+// (app ships carry no customer_ref), and shipments come back ranked — customer name equal → customer name
+// contains → recipient contains → SKU / note / courier — newest first in each group, with the 100-shipment
+// cap applied AFTER that order. If the RPC isn't there yet, fall back to the old PostgREST filter. ──
+type HistoryItemRow = {
+  customer_ref: string | null;
+  recipient_name: string | null;
+  ship_date: string | null;
+  address: string | null;
+  courier: string | null;
+  weight_gram: number | null;
+  qty: number | null;
+  item_code: string | null;
+  item_code_raw: string | null;
+  note: string | null;
+  verify_method: string | null;
+  scanned_barcode: string | null;
+  sales_id: string | null;
+  customer_id: number | null;
+  send_id: string | null;
+  dispatched_at: string | null;
+  staff: string | null;
+  match_rank?: number | null; // PR408: RPC only — the shipment's place in the ranked result
+};
+
 export async function getOutboundHistory(query = '', month?: string): Promise<ShipmentHistoryRow[]> {
   const supabase = createSupabaseServerClient();
+  const text = query.trim();
+  const isMonth = !!month && /^\d{4}-\d{2}$/.test(month);
+
+  // PR408 — ranked search via the RPC (search only; a month fetch keeps the plain newest-first read)
+  if (text && !isMonth) {
+    const { data, error } = await supabase.rpc('search_outbound_history', { p_q: text, p_limit: HISTORY_LIMIT });
+    if (!error && data) {
+      const rows = (data as HistoryItemRow[]).slice().sort((a, b) => (a.match_rank ?? 0) - (b.match_rank ?? 0));
+      return buildHistoryRows(supabase, rows, false);
+    }
+    // RPC missing (0130 not applied) → fall through to the legacy filter below
+  }
+
   const raw = sanitize(query);
 
   // pull a generous recent window of item rows; group into shipments, then cap. ~2.2 items/shipment, so
@@ -120,26 +166,16 @@ export async function getOutboundHistory(query = '', month?: string): Promise<Sh
   let { data, error } = await fetchWith(`${baseCols},staff`);
   if (error) ({ data, error } = await fetchWith(baseCols)); // staff column absent → retry without it
   if (error || !data) return [];
+  return buildHistoryRows(supabase, data as unknown as HistoryItemRow[], isMonth);
+}
 
-  const items = data as unknown as {
-    customer_ref: string | null;
-    recipient_name: string | null;
-    ship_date: string | null;
-    address: string | null;
-    courier: string | null;
-    weight_gram: number | null;
-    qty: number | null;
-    item_code: string | null;
-    item_code_raw: string | null;
-    note: string | null;
-    verify_method: string | null;
-    scanned_barcode: string | null;
-    sales_id: string | null;
-    customer_id: number | null;
-    send_id: string | null;
-    dispatched_at: string | null;
-    staff: string | null;
-  }[];
+// Group item rows (already in display order) into shipments and resolve names / boxes / customers.
+// `wholeMonth`: a month fetch shows all its shipments; otherwise cap at HISTORY_LIMIT.
+async function buildHistoryRows(
+  supabase: ReturnType<typeof createSupabaseServerClient>,
+  items: HistoryItemRow[],
+  wholeMonth: boolean
+): Promise<ShipmentHistoryRow[]> {
   if (!items.length) return [];
 
   // resolve catalogue names for coded items
@@ -183,7 +219,7 @@ export async function getOutboundHistory(query = '', month?: string): Promise<Sh
   }
 
   type Group = {
-    key: string; ship_date: string | null; customer: string | null; address: string | null;
+    key: string; ship_date: string | null; customer_ref: string | null; recipient_name: string | null; address: string | null;
     courier: string | null; weight_gram: number | null; send_id: string | null; customer_id: number | null;
     dispatched_at: string | null; // PR198: set once the send is handed to the courier
     staff: string | null; items: ShipmentHistoryItem[]; codes: string[]; notes: Set<string>;
@@ -195,9 +231,9 @@ export async function getOutboundHistory(query = '', month?: string): Promise<Sh
       : `C:${it.customer_ref ?? ''}|${it.ship_date ?? ''}|${it.address ?? ''}|${it.courier ?? ''}|${it.weight_gram ?? ''}`;
     let g = groups.get(key);
     if (!g) {
-      if (!month && groups.size >= HISTORY_LIMIT) continue; // window cap for the recent view; a month fetch shows all its shipments
+      if (!wholeMonth && groups.size >= HISTORY_LIMIT) continue; // window cap for the recent view; a month fetch shows all its shipments
       g = {
-        key, ship_date: it.ship_date, customer: it.recipient_name || it.customer_ref,
+        key, ship_date: it.ship_date, customer_ref: it.customer_ref, recipient_name: it.recipient_name,
         address: it.address, courier: it.courier, weight_gram: it.weight_gram, send_id: it.send_id,
         customer_id: it.customer_id, dispatched_at: it.dispatched_at, staff: it.staff, items: [], codes: [], notes: new Set(),
       };
@@ -221,15 +257,20 @@ export async function getOutboundHistory(query = '', month?: string): Promise<Sh
     const realFromBoxes = boxes.reduce((s, b) => s + (b.real_weight ?? 0), 0);
     const chargeFromBoxes = boxes.reduce((s, b) => s + (b.chargeable_weight ?? 0), 0);
     const cust = g.customer_id != null ? custById.get(g.customer_id) ?? null : null;
+    const shippedName = g.recipient_name || g.customer_ref; // the Shipped-to block's lead name (unchanged)
+    // PR408 — the headline is always the CUSTOMER: the ID label when linked; an unlinked legacy row shows
+    // its customer_ref, and the recipient only when customer_ref is empty.
+    const headline = cust ? customerIdLabel(cust.name, cust.phone) : (g.customer_ref?.trim() || g.recipient_name || null);
+    const recip = g.recipient_name?.trim() || null;
+    const shippedTo = recip && nameKey(recip) !== nameKey(headline) && (!cust || nameKey(recip) !== nameKey(cust.name)) ? recip : null;
     return {
       key: g.key,
       send_id: g.send_id, // PR195: present for app ships (→ cancellable); null for CSV/legacy rows
       dispatched_at: g.dispatched_at, // PR198: set once handed to the courier (packed → dispatched)
       ship_date: g.ship_date,
-      // header identity: the customer ID label when the customer resolves; legacy rows fall back to
-      // the shipped-to name they carry
-      customer: cust ? customerIdLabel(cust.name, cust.phone) : g.customer,
-      recipient: g.customer || (cust ? customerLabel(cust.name, cust.phone) : null),
+      customer: headline,
+      shipped_to: shippedTo,
+      recipient: shippedName || (cust ? customerLabel(cust.name, cust.phone) : null),
       phone: cust?.phone ?? null,
       address: g.address,
       courier: g.courier,
