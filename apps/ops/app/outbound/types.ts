@@ -100,7 +100,8 @@ export interface ShipmentHistoryRow {
   send_id: string | null;          // PR195: app ships carry a send_id → cancellable; CSV/legacy rows are null
   dispatched_at: string | null;    // PR198: null = packed (cancellable); set = dispatched (point of no return)
   ship_date: string | null;
-  customer: string | null;         // PR155: the CUSTOMER ID label ("Name (last4)") when resolvable
+  customer: string | null;         // PR155/PR408: the headline — CUSTOMER ID label when linked, else customer_ref (recipient only if that's empty)
+  shipped_to: string | null;       // PR408: recipient name when it differs from the customer (list row's 2nd line), else null
   recipient: string | null;        // PR155: recipient name — leads the Shipped-to block
   phone: string | null;            // PR155: customer phone — ends the Shipped-to block
   address: string | null;          // verbatim, as shipped (the CSV address text / order address)
